@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -15,7 +14,6 @@ import { Plus, CalendarDays, CheckCircle2, Clock, AlertCircle } from "lucide-rea
 import {
   useAccountingPeriods,
   useCreateAccountingPeriod,
-  useToggleAccountingStep,
   getMonthName,
   type AccountingPeriod,
 } from "@/hooks/useAccountingPeriods";
@@ -26,6 +24,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { StepDetailRow } from "./StepDetailRow";
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; className: string }> = {
   pendiente: { label: "Pendiente", icon: Clock, className: "bg-muted text-muted-foreground" },
@@ -41,10 +40,9 @@ function PeriodCard({
   projectId: string;
 }) {
   const [open, setOpen] = useState(period.status !== "completado");
-  const toggleStep = useToggleAccountingStep();
   const completed = period.steps.filter((s) => s.completed).length;
   const total = period.steps.length;
-  const pct = Math.round((completed / total) * 100);
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
   const config = STATUS_CONFIG[period.status] || STATUS_CONFIG.pendiente;
   const StatusIcon = config.icon;
 
@@ -83,38 +81,13 @@ function PeriodCard({
           <CardContent className="pt-0 pb-4">
             <div className="space-y-2">
               {period.steps.map((step, idx) => (
-                <label
+                <StepDetailRow
                   key={step.key}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-colors cursor-pointer hover:bg-muted/50",
-                    step.completed && "opacity-60"
-                  )}
-                >
-                  <Checkbox
-                    checked={step.completed}
-                    onCheckedChange={(checked) =>
-                      toggleStep.mutate({
-                        periodId: period.id,
-                        projectId,
-                        stepKey: step.key,
-                        completed: !!checked,
-                      })
-                    }
-                  />
-                  <span className="flex items-center gap-2 flex-1">
-                    <span className="text-muted-foreground text-xs font-mono w-5">
-                      {idx + 1}.
-                    </span>
-                    <span className={cn(step.completed && "line-through")}>
-                      {step.label}
-                    </span>
-                  </span>
-                  {step.completed && step.completed_at && (
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(step.completed_at).toLocaleDateString("es-MX")}
-                    </span>
-                  )}
-                </label>
+                  step={step}
+                  index={idx}
+                  periodId={period.id}
+                  projectId={projectId}
+                />
               ))}
             </div>
           </CardContent>
@@ -123,7 +96,6 @@ function PeriodCard({
     </Card>
   );
 }
-
 export function AccountingDashboard({ projectId }: { projectId: string }) {
   const { data: periods, isLoading } = useAccountingPeriods(projectId);
   const createPeriod = useCreateAccountingPeriod();
