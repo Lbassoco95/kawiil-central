@@ -55,10 +55,10 @@ const Dashboard = () => {
   );
 
   const stats = [
-    { label: "Clientes activos", value: activeClients, icon: Users, color: "text-primary" },
-    { label: "Tareas pendientes", value: pendingTasks, icon: CheckSquare, color: "text-accent-foreground" },
-    { label: "Proyectos activos", value: activeProjects, icon: FolderKanban, color: "text-primary" },
-    { label: "Por vencer (7 días)", value: dueSoon, icon: AlertTriangle, color: "text-destructive" },
+    { label: "Clientes activos", value: activeClients, icon: Users, color: "text-primary", href: "/clientes" },
+    { label: "Tareas pendientes", value: pendingTasks, icon: CheckSquare, color: "text-accent-foreground", href: "/tareas" },
+    { label: "Proyectos activos", value: activeProjects, icon: FolderKanban, color: "text-primary", href: "/proyectos" },
+    { label: "Por vencer (7 días)", value: dueSoon, icon: AlertTriangle, color: "text-destructive", href: "/tareas" },
   ];
 
   return (
@@ -72,7 +72,11 @@ const Dashboard = () => {
         {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
-            <Card key={stat.label}>
+            <Card
+              key={stat.label}
+              className="cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => navigate(stat.href)}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {stat.label}
