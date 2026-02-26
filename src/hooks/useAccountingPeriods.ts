@@ -22,6 +22,7 @@ export interface AccountingStep {
   date?: string | null;
   notes?: string | null;
   document_ids?: string[];
+  time_spent_seconds?: number;
 }
 
 export interface AccountingPeriod {
@@ -199,7 +200,7 @@ export function useUpdateStepDetails() {
       periodId: string;
       projectId: string;
       stepKey: string;
-      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids">>;
+      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds">>;
     }) => {
       const { data: period, error: fetchErr } = await supabase
         .from("accounting_periods")

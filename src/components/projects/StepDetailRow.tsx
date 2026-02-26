@@ -1,7 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,9 +21,10 @@ import {
   ChevronDown,
   Upload,
   FileText,
-  Clock,
   Loader2,
-  X,
+  Play,
+  Pause,
+  Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -48,6 +48,21 @@ const STEP_STATUS_STYLES: Record<StepStatus, string> = {
   completado: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
 };
 
+function formatTime(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatTimeCompact(totalSeconds: number): string {
+  if (totalSeconds === 0) return "";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 interface StepDetailRowProps {
   step: AccountingStep;
   index: number;
@@ -58,6 +73,11 @@ interface StepDetailRowProps {
 export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [displaySeconds, setDisplaySeconds] = useState(step.time_spent_seconds || 0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const baseSecondsRef = useRef<number>(step.time_spent_seconds || 0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toggleStep = useToggleAccountingStep();
   const updateDetails = useUpdateStepDetails();
@@ -67,8 +87,52 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
   const stepStatus = step.step_status || "pendiente";
   const stepDate = step.date ? new Date(step.date) : undefined;
   const docIds = step.document_ids || [];
+  const savedTime = step.time_spent_seconds || 0;
 
-  // Fetch documents for this step
+  // Sync base when step data changes from server
+  useEffect(() => {
+    if (!timerRunning) {
+      baseSecondsRef.current = step.time_spent_seconds || 0;
+      setDisplaySeconds(step.time_spent_seconds || 0);
+    }
+  }, [step.time_spent_seconds, timerRunning]);
+
+  const startTimer = useCallback(() => {
+    if (timerRunning) return;
+    baseSecondsRef.current = displaySeconds;
+    startTimeRef.current = Date.now();
+    setTimerRunning(true);
+    timerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      setDisplaySeconds(baseSecondsRef.current + elapsed);
+    }, 1000);
+  }, [timerRunning, displaySeconds]);
+
+  const stopTimer = useCallback(() => {
+    if (!timerRunning) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+    setTimerRunning(false);
+    const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+    const total = baseSecondsRef.current + elapsed;
+    baseSecondsRef.current = total;
+    setDisplaySeconds(total);
+    // Save to DB
+    updateDetails.mutate({
+      periodId,
+      projectId,
+      stepKey: step.key,
+      updates: { time_spent_seconds: total },
+    });
+  }, [timerRunning, periodId, projectId, step.key, updateDetails]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
   const { data: stepDocuments = [] } = useQuery({
     queryKey: ["step-documents", periodId, step.key],
     queryFn: async () => {
@@ -84,33 +148,25 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
   });
 
   const handleStatusChange = (newStatus: string) => {
-    const isCompleted = newStatus === "completado";
-    // If marking as completed via status, also toggle the checkbox
-    if (isCompleted && !step.completed) {
+    if (newStatus === "completado" && !step.completed) {
       toggleStep.mutate({ periodId, projectId, stepKey: step.key, completed: true });
     }
     updateDetails.mutate({
-      periodId,
-      projectId,
-      stepKey: step.key,
+      periodId, projectId, stepKey: step.key,
       updates: { step_status: newStatus as StepStatus },
     });
   };
 
   const handleDateChange = (date: Date | undefined) => {
     updateDetails.mutate({
-      periodId,
-      projectId,
-      stepKey: step.key,
+      periodId, projectId, stepKey: step.key,
       updates: { date: date ? date.toISOString() : null },
     });
   };
 
   const handleNotesChange = (notes: string) => {
     updateDetails.mutate({
-      periodId,
-      projectId,
-      stepKey: step.key,
+      periodId, projectId, stepKey: step.key,
       updates: { notes: notes || null },
     });
   };
@@ -124,38 +180,21 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
       const filePath = `${orgId}/${projectId}/${periodId}/${step.key}/${Date.now()}_${file.name}`;
 
-      const { error: uploadErr } = await supabase.storage
-        .from("documents")
-        .upload(filePath, file);
+      const { error: uploadErr } = await supabase.storage.from("documents").upload(filePath, file);
       if (uploadErr) throw uploadErr;
 
-      // Create document record
       const { data: doc, error: docErr } = await supabase
         .from("documents")
         .insert({
-          name: file.name,
-          file_path: filePath,
-          mime_type: file.type,
-          file_size: file.size,
-          organization_id: orgId!,
-          project_id: projectId,
-          uploaded_by: user.id,
-          document_type: "contabilidad",
-          source: "supabase" as const,
+          name: file.name, file_path: filePath, mime_type: file.type, file_size: file.size,
+          organization_id: orgId!, project_id: projectId, uploaded_by: user.id,
+          document_type: "contabilidad", source: "supabase" as const,
         })
-        .select()
-        .single();
+        .select().single();
       if (docErr) throw docErr;
 
-      // Link document to step
       const newDocIds = [...docIds, doc.id];
-      updateDetails.mutate({
-        periodId,
-        projectId,
-        stepKey: step.key,
-        updates: { document_ids: newDocIds },
-      });
-
+      updateDetails.mutate({ periodId, projectId, stepKey: step.key, updates: { document_ids: newDocIds } });
       queryClient.invalidateQueries({ queryKey: ["step-documents", periodId, step.key] });
       toast.success(`Archivo "${file.name}" subido`);
     } catch (err: any) {
@@ -180,31 +219,26 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
           <Checkbox
             checked={step.completed}
             onCheckedChange={(checked) =>
-              toggleStep.mutate({
-                periodId,
-                projectId,
-                stepKey: step.key,
-                completed: !!checked,
-              })
+              toggleStep.mutate({ periodId, projectId, stepKey: step.key, completed: !!checked })
             }
           />
         </div>
-        <span className="text-muted-foreground text-xs font-mono w-5">
-          {index + 1}.
-        </span>
-        <span className={cn("flex-1", step.completed && "line-through")}>
-          {step.label}
-        </span>
+        <span className="text-muted-foreground text-xs font-mono w-5">{index + 1}.</span>
+        <span className={cn("flex-1", step.completed && "line-through")}>{step.label}</span>
         <div className="flex items-center gap-2 shrink-0">
+          {(savedTime > 0 || timerRunning) && (
+            <Badge variant="outline" className={cn("text-xs gap-1 font-mono", timerRunning && "border-primary text-primary animate-pulse")}>
+              <Timer className="h-3 w-3" />
+              {timerRunning ? formatTime(displaySeconds) : formatTimeCompact(savedTime)}
+            </Badge>
+          )}
           {stepStatus !== "pendiente" && (
             <Badge variant="outline" className={cn("text-xs", STEP_STATUS_STYLES[stepStatus])}>
               {STEP_STATUS_OPTIONS.find((o) => o.value === stepStatus)?.label}
             </Badge>
           )}
           {stepDate && (
-            <span className="text-xs text-muted-foreground">
-              {format(stepDate, "dd/MM/yy")}
-            </span>
+            <span className="text-xs text-muted-foreground">{format(stepDate, "dd/MM/yy")}</span>
           )}
           {docIds.length > 0 && (
             <Badge variant="secondary" className="text-xs gap-1">
@@ -213,10 +247,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
             </Badge>
           )}
           <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 text-muted-foreground transition-transform",
-              expanded && "rotate-180"
-            )}
+            className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", expanded && "rotate-180")}
           />
         </div>
       </div>
@@ -224,19 +255,39 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
       {/* Expanded details */}
       {expanded && (
         <div className="border-t border-border/50 bg-muted/20 px-4 py-3 space-y-3">
+          {/* Timer */}
+          <div className="flex items-center gap-3 rounded-md border border-border/50 bg-background px-3 py-2">
+            <Timer className="h-4 w-4 text-muted-foreground" />
+            <span className="font-mono text-sm font-medium flex-1">{formatTime(displaySeconds)}</span>
+            <Button
+              variant={timerRunning ? "destructive" : "default"}
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={timerRunning ? stopTimer : startTimer}
+            >
+              {timerRunning ? (
+                <>
+                  <Pause className="h-3 w-3" />
+                  Pausar
+                </>
+              ) : (
+                <>
+                  <Play className="h-3 w-3" />
+                  Iniciar
+                </>
+              )}
+            </Button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Status */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Estatus</label>
               <Select value={stepStatus} onValueChange={handleStatusChange}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {STEP_STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -249,10 +300,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className={cn(
-                      "h-8 w-full justify-start text-left text-xs font-normal",
-                      !stepDate && "text-muted-foreground"
-                    )}
+                    className={cn("h-8 w-full justify-start text-left text-xs font-normal", !stepDate && "text-muted-foreground")}
                   >
                     <CalendarIcon className="mr-2 h-3 w-3" />
                     {stepDate ? format(stepDate, "PPP", { locale: es }) : "Seleccionar fecha"}
@@ -286,12 +334,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-muted-foreground">Documentos</label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
+              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
               <Button
                 variant="outline"
                 size="sm"
@@ -299,11 +342,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
                 disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
               >
-                {uploading ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Upload className="h-3 w-3" />
-                )}
+                {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                 Subir archivo
               </Button>
             </div>
@@ -311,10 +350,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
             {stepDocuments.length > 0 && (
               <div className="space-y-1">
                 {stepDocuments.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center gap-2 rounded px-2 py-1.5 text-xs bg-background border border-border/50"
-                  >
+                  <div key={doc.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs bg-background border border-border/50">
                     <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="truncate flex-1">{doc.name}</span>
                     <span className="text-muted-foreground shrink-0">
