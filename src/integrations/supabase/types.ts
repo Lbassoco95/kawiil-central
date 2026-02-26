@@ -419,6 +419,7 @@ export type Database = {
           description: string | null
           end_date: string | null
           id: string
+          lawsuit_details: Json | null
           name: string
           organization_id: string
           responsible_user_id: string | null
@@ -435,6 +436,7 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          lawsuit_details?: Json | null
           name: string
           organization_id: string
           responsible_user_id?: string | null
@@ -451,6 +453,7 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          lawsuit_details?: Json | null
           name?: string
           organization_id?: string
           responsible_user_id?: string | null

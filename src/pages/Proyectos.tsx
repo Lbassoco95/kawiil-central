@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, FolderKanban } from "lucide-react";
+import { Search, FolderKanban, Scale } from "lucide-react";
 import { useProjects } from "@/hooks/useProjects";
 import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
+import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
 import { useState, useMemo } from "react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -39,6 +40,7 @@ const Proyectos = () => {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useProjects();
   const [search, setSearch] = useState("");
+  const [lawsuitOpen, setLawsuitOpen] = useState(false);
 
   const filtered = useMemo(() => {
     if (!projects) return [];
@@ -59,7 +61,14 @@ const Proyectos = () => {
             <h1 className="text-2xl font-bold text-foreground">Proyectos</h1>
             <p className="text-sm text-muted-foreground">Proyectos por cliente o internos</p>
           </div>
-          <ProjectFormDialog />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setLawsuitOpen(true)}>
+              <Scale className="mr-2 h-4 w-4" />
+              Nuevo juicio
+            </Button>
+            <ProjectFormDialog />
+          </div>
+          <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
         </div>
 
         <div className="flex items-center gap-3">

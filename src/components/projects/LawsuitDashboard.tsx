@@ -1,0 +1,474 @@
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  ChevronDown,
+  ChevronRight,
+  Scale,
+  Calendar,
+  Plus,
+  Trash2,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
+} from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { format, isPast, isToday, addDays, isBefore } from "date-fns";
+import { es } from "date-fns/locale";
+
+interface LawsuitStage {
+  key: string;
+  label: string;
+  status: string;
+  date: string | null;
+  notes: string;
+  completed_at: string | null;
+}
+
+interface LawsuitDeadline {
+  id: string;
+  title: string;
+  date: string;
+  type: string;
+  completed: boolean;
+  notes: string;
+}
+
+interface LawsuitDetails {
+  lawsuit_type: string;
+  case_number: string | null;
+  court: string | null;
+  plaintiff: string | null;
+  defendant: string | null;
+  stages: LawsuitStage[];
+  deadlines: LawsuitDeadline[];
+}
+
+interface LawsuitDashboardProps {
+  projectId: string;
+  lawsuitDetails: LawsuitDetails;
+}
+
+const STAGE_STATUS_OPTIONS = [
+  { value: "pendiente", label: "Pendiente", color: "bg-muted text-muted-foreground" },
+  { value: "en_progreso", label: "En progreso", color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
+  { value: "completado", label: "Completado", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "no_aplica", label: "No aplica", color: "bg-muted text-muted-foreground line-through" },
+];
+
+const DEADLINE_TYPE_LABELS: Record<string, string> = {
+  termino: "Término",
+  audiencia: "Audiencia",
+  entrega: "Entrega de documentos",
+  vencimiento: "Vencimiento",
+};
+
+const LAWSUIT_TYPE_LABELS: Record<string, string> = {
+  laboral: "Laboral",
+  mercantil: "Mercantil",
+  civil: "Civil",
+  fiscal: "Fiscal",
+  penal: "Penal",
+  administrativo: "Administrativo",
+  familiar: "Familiar",
+};
+
+export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboardProps) {
+  const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
+  const [newDeadline, setNewDeadline] = useState({ title: "", date: "", type: "termino", notes: "" });
+  const queryClient = useQueryClient();
+
+  const updateLawsuit = useMutation({
+    mutationFn: async (updated: LawsuitDetails) => {
+      const { error } = await supabase
+        .from("projects")
+        .update({ lawsuit_details: updated } as any)
+        .eq("id", projectId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+    },
+    onError: (e) => toast.error("Error: " + e.message),
+  });
+
+  const updateStageStatus = (key: string, status: string) => {
+    const updated = {
+      ...lawsuitDetails,
+      stages: lawsuitDetails.stages.map((s) =>
+        s.key === key
+          ? { ...s, status, completed_at: status === "completado" ? new Date().toISOString() : null }
+          : s
+      ),
+    };
+    updateLawsuit.mutate(updated);
+  };
+
+  const updateStageField = (key: string, field: "date" | "notes", value: string) => {
+    const updated = {
+      ...lawsuitDetails,
+      stages: lawsuitDetails.stages.map((s) =>
+        s.key === key ? { ...s, [field]: value || null } : s
+      ),
+    };
+    updateLawsuit.mutate(updated);
+  };
+
+  const addDeadline = () => {
+    if (!newDeadline.title || !newDeadline.date) return;
+    const dl: LawsuitDeadline = {
+      id: crypto.randomUUID(),
+      ...newDeadline,
+      completed: false,
+    };
+    const updated = { ...lawsuitDetails, deadlines: [...(lawsuitDetails.deadlines || []), dl] };
+    updateLawsuit.mutate(updated);
+    setNewDeadline({ title: "", date: "", type: "termino", notes: "" });
+    setDeadlineDialogOpen(false);
+    toast.success("Término agregado");
+  };
+
+  const toggleDeadline = (id: string) => {
+    const updated = {
+      ...lawsuitDetails,
+      deadlines: (lawsuitDetails.deadlines || []).map((d) =>
+        d.id === id ? { ...d, completed: !d.completed } : d
+      ),
+    };
+    updateLawsuit.mutate(updated);
+  };
+
+  const removeDeadline = (id: string) => {
+    const updated = {
+      ...lawsuitDetails,
+      deadlines: (lawsuitDetails.deadlines || []).filter((d) => d.id !== id),
+    };
+    updateLawsuit.mutate(updated);
+  };
+
+  const completedStages = lawsuitDetails.stages.filter((s) => s.status === "completado").length;
+  const totalStages = lawsuitDetails.stages.filter((s) => s.status !== "no_aplica").length;
+  const upcomingDeadlines = (lawsuitDetails.deadlines || [])
+    .filter((d) => !d.completed)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const urgentDeadlines = upcomingDeadlines.filter(
+    (d) => isBefore(new Date(d.date), addDays(new Date(), 7))
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Scale className="h-4 w-4" />
+              <span>Tipo</span>
+            </div>
+            <p className="text-lg font-semibold mt-1">
+              {LAWSUIT_TYPE_LABELS[lawsuitDetails.lawsuit_type] || lawsuitDetails.lawsuit_type}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Expediente</span>
+            </div>
+            <p className="text-lg font-semibold mt-1">{lawsuitDetails.case_number || "—"}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Avance</span>
+            </div>
+            <p className="text-lg font-semibold mt-1">
+              {completedStages}/{totalStages} etapas
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {urgentDeadlines.length > 0 ? (
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+              ) : (
+                <Calendar className="h-4 w-4" />
+              )}
+              <span>Términos próximos</span>
+            </div>
+            <p className={`text-lg font-semibold mt-1 ${urgentDeadlines.length > 0 ? "text-destructive" : ""}`}>
+              {urgentDeadlines.length}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Case info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Datos del juicio</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Juzgado/Tribunal</span>
+            <span className="text-right">{lawsuitDetails.court || "—"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">No. Expediente</span>
+            <span>{lawsuitDetails.case_number || "—"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Actor</span>
+            <span>{lawsuitDetails.plaintiff || "—"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Demandado</span>
+            <span>{lawsuitDetails.defendant || "—"}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Procedural stages */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Etapas procesales</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {lawsuitDetails.stages.map((stage) => {
+            const statusOpt = STAGE_STATUS_OPTIONS.find((s) => s.value === stage.status);
+            const isExpanded = expandedStage === stage.key;
+
+            return (
+              <Collapsible
+                key={stage.key}
+                open={isExpanded}
+                onOpenChange={() => setExpandedStage(isExpanded ? null : stage.key)}
+              >
+                <CollapsibleTrigger className="flex items-center w-full gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors text-left">
+                  {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                  <span className={`flex-1 text-sm font-medium ${stage.status === "no_aplica" ? "line-through text-muted-foreground" : ""}`}>
+                    {stage.label}
+                  </span>
+                  {stage.date && (
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(stage.date), "dd MMM yyyy", { locale: es })}
+                    </span>
+                  )}
+                  <Badge variant="outline" className={`text-xs ${statusOpt?.color}`}>
+                    {statusOpt?.label}
+                  </Badge>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pl-10 pr-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Estado</Label>
+                      <Select
+                        value={stage.status}
+                        onValueChange={(v) => updateStageStatus(stage.key, v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STAGE_STATUS_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Fecha</Label>
+                      <Input
+                        type="date"
+                        className="h-8 text-xs"
+                        value={stage.date || ""}
+                        onChange={(e) => updateStageField(stage.key, "date", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Notas</Label>
+                    <Textarea
+                      className="text-xs min-h-[60px]"
+                      placeholder="Notas de esta etapa..."
+                      value={stage.notes || ""}
+                      onChange={(e) => updateStageField(stage.key, "notes", e.target.value)}
+                    />
+                  </div>
+                  {stage.completed_at && (
+                    <p className="text-xs text-muted-foreground">
+                      Completado: {format(new Date(stage.completed_at), "dd/MM/yyyy HH:mm", { locale: es })}
+                    </p>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {/* Deadlines / Términos */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Términos y fechas clave</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => setDeadlineDialogOpen(true)}>
+            <Plus className="h-3 w-3 mr-1" /> Agregar
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {(!lawsuitDetails.deadlines || lawsuitDetails.deadlines.length === 0) ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              Sin términos registrados. Agrega fechas importantes del proceso.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {[...lawsuitDetails.deadlines]
+                .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                .map((dl) => {
+                  const dlDate = new Date(dl.date);
+                  const isOverdue = !dl.completed && isPast(dlDate) && !isToday(dlDate);
+                  const isUrgent = !dl.completed && isBefore(dlDate, addDays(new Date(), 3));
+
+                  return (
+                    <div
+                      key={dl.id}
+                      className={`flex items-center gap-3 rounded-md border p-3 ${
+                        dl.completed ? "opacity-50" : isOverdue ? "border-destructive bg-destructive/5" : isUrgent ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10" : ""
+                      }`}
+                    >
+                      <button
+                        className={`shrink-0 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          dl.completed ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground"
+                        }`}
+                        onClick={() => toggleDeadline(dl.id)}
+                      >
+                        {dl.completed && <CheckCircle2 className="h-3 w-3" />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${dl.completed ? "line-through" : ""}`}>
+                            {dl.title}
+                          </span>
+                          <Badge variant="outline" className="text-xs">
+                            {DEADLINE_TYPE_LABELS[dl.type] || dl.type}
+                          </Badge>
+                        </div>
+                        {dl.notes && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{dl.notes}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1 text-xs">
+                          {isOverdue && <AlertTriangle className="h-3 w-3 text-destructive" />}
+                          {isUrgent && !isOverdue && <Clock className="h-3 w-3 text-yellow-600" />}
+                          <span className={isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}>
+                            {format(dlDate, "dd MMM yyyy", { locale: es })}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => removeDeadline(dl.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add deadline dialog */}
+      <Dialog open={deadlineDialogOpen} onOpenChange={setDeadlineDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Agregar término / fecha clave</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Título *</Label>
+              <Input
+                placeholder="Ej: Término para contestar demanda"
+                value={newDeadline.title}
+                onChange={(e) => setNewDeadline((p) => ({ ...p, title: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Fecha *</Label>
+                <Input
+                  type="date"
+                  value={newDeadline.date}
+                  onChange={(e) => setNewDeadline((p) => ({ ...p, date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select
+                  value={newDeadline.type}
+                  onValueChange={(v) => setNewDeadline((p) => ({ ...p, type: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(DEADLINE_TYPE_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Notas</Label>
+              <Textarea
+                placeholder="Detalles adicionales..."
+                value={newDeadline.notes}
+                onChange={(e) => setNewDeadline((p) => ({ ...p, notes: e.target.value }))}
+                rows={2}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDeadlineDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={addDeadline} disabled={!newDeadline.title || !newDeadline.date}>
+                Agregar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
