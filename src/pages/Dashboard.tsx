@@ -1,15 +1,66 @@
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckSquare, Users, FolderKanban, AlertTriangle } from "lucide-react";
-
-const stats = [
-  { label: "Clientes activos", value: "—", icon: Users, color: "text-info" },
-  { label: "Tareas pendientes", value: "—", icon: CheckSquare, color: "text-warning" },
-  { label: "Proyectos activos", value: "—", icon: FolderKanban, color: "text-success" },
-  { label: "Por vencer (7 días)", value: "—", icon: AlertTriangle, color: "text-destructive" },
-];
+import { Badge } from "@/components/ui/badge";
+import { CheckSquare, Users, FolderKanban, AlertTriangle, ArrowRight } from "lucide-react";
+import { useClients } from "@/hooks/useClients";
+import { useProjects } from "@/hooks/useProjects";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { useMemo } from "react";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { data: clients } = useClients();
+  const { data: projects } = useProjects();
+
+  const { data: tasks } = useQuery({
+    queryKey: ["dashboard-tasks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .in("status", ["pendiente", "en_progreso", "en_revision"])
+        .order("due_date", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const activeClients = useMemo(
+    () => clients?.filter((c) => c.status === "activo").length ?? 0,
+    [clients]
+  );
+  const activeProjects = useMemo(
+    () => projects?.filter((p) => p.status === "activo").length ?? 0,
+    [projects]
+  );
+  const pendingTasks = tasks?.length ?? 0;
+
+  const dueSoon = useMemo(() => {
+    if (!tasks) return 0;
+    const in7Days = new Date();
+    in7Days.setDate(in7Days.getDate() + 7);
+    return tasks.filter(
+      (t) => t.due_date && new Date(t.due_date) <= in7Days
+    ).length;
+  }, [tasks]);
+
+  const myTasks = useMemo(
+    () => tasks?.filter((t) => t.assigned_to === user?.id).slice(0, 5) ?? [],
+    [tasks, user]
+  );
+
+  const stats = [
+    { label: "Clientes activos", value: activeClients, icon: Users, color: "text-primary" },
+    { label: "Tareas pendientes", value: pendingTasks, icon: CheckSquare, color: "text-accent-foreground" },
+    { label: "Proyectos activos", value: activeProjects, icon: FolderKanban, color: "text-primary" },
+    { label: "Por vencer (7 días)", value: dueSoon, icon: AlertTriangle, color: "text-destructive" },
+  ];
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -35,53 +86,87 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* Placeholder sections */}
         <div className="grid gap-6 lg:grid-cols-2">
+          {/* My Tasks */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Mis tareas</CardTitle>
+              <button
+                onClick={() => navigate("/tareas")}
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                Ver todas <ArrowRight className="h-3 w-3" />
+              </button>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Las tareas asignadas a ti aparecerán aquí.
-              </p>
+              {myTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No tienes tareas pendientes asignadas.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {myTasks.map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between rounded-md border p-3 text-sm"
+                    >
+                      <span className="truncate flex-1">{t.title}</span>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {t.due_date && (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(t.due_date).toLocaleDateString("es-MX")}
+                          </span>
+                        )}
+                        <Badge variant="outline" className="text-xs">
+                          {t.priority}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Próximos vencimientos</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Las tareas y entregables próximos a vencer aparecerán aquí.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Recent clients */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Contabilidad</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Clientes recientes</CardTitle>
+              <button
+                onClick={() => navigate("/clientes")}
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                Ver todos <ArrowRight className="h-3 w-3" />
+              </button>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">Declaraciones y obligaciones pendientes.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Legal</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Contratos y revisiones en curso.</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">PLD/FT</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">Cumplimiento y expedientes pendientes.</p>
+              {!clients || clients.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Sin clientes registrados aún.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {clients.slice(0, 5).map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between rounded-md border p-3 text-sm cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => navigate(`/clientes/${c.id}`)}
+                    >
+                      <span className="truncate flex-1">{c.name}</span>
+                      <Badge
+                        variant="outline"
+                        className={
+                          c.status === "activo"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-muted text-muted-foreground"
+                        }
+                      >
+                        {c.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
