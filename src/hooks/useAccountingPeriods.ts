@@ -62,7 +62,28 @@ export function useCreateAccountingPeriod() {
 
   return useMutation({
     mutationFn: async ({ projectId, year, month }: { projectId: string; year: number; month: number }) => {
+      // Fetch project to get tax obligations
+      const { data: project, error: projErr } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", projectId)
+        .single();
+      if (projErr) throw projErr;
+
+      const taxObligations = (project as any).tax_obligations as { key: string; label: string }[] | null;
+      
+      // Build extra steps from tax obligations
+      const extraSteps = (taxObligations ?? []).map((o) => ({
+        key: `decl_${o.key}`,
+        label: `Declaración: ${o.label}`,
+        completed: false,
+        completed_at: null,
+        completed_by: null,
+      }));
+
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
+
+      // Insert with default steps; we'll append extra steps via update if needed
       const { data, error } = await supabase
         .from("accounting_periods")
         .insert({
@@ -74,6 +95,18 @@ export function useCreateAccountingPeriod() {
         .select()
         .single();
       if (error) throw error;
+
+      // Append tax obligation steps to the default steps
+      if (extraSteps.length > 0) {
+        const currentSteps = data.steps as any as AccountingStep[];
+        const allSteps = [...currentSteps, ...extraSteps];
+        const { error: updateErr } = await supabase
+          .from("accounting_periods")
+          .update({ steps: allSteps as any })
+          .eq("id", data.id);
+        if (updateErr) throw updateErr;
+      }
+
       return data;
     },
     onSuccess: (_, vars) => {
