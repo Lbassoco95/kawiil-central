@@ -47,25 +47,50 @@ export function useCreateClient() {
 
       if (error) throw error;
 
-      // Auto-create accounting project for softlanding/backoffice clients
+      // Auto-create projects based on contracted services
       const services = client.services || [];
-      const hasAccounting = services.includes("softlanding") || services.includes("contabilidad");
-      if (hasAccounting && data) {
-        const area = services.includes("softlanding") ? "softlanding" : "contabilidad";
-        const projectName = `Contabilidad - ${data.name}`;
-        const { error: projectError } = await supabase
-          .from("projects")
-          .insert({
-            name: projectName,
-            client_id: data.id,
-            area,
-            organization_id: orgId!,
-            created_by: user!.id,
-            responsible_user_id: client.responsible_user_id || user!.id,
-            tax_obligations: [],
-          } as any);
-        if (projectError) {
-          console.error("Error creating auto project:", projectError);
+      if (data) {
+        const projectsToCreate: Array<{ name: string; area: string }> = [];
+
+        // Contabilidad project for backoffice/softlanding
+        if (services.includes("contabilidad") || services.includes("softlanding")) {
+          projectsToCreate.push({
+            name: `Contabilidad - ${data.name}`,
+            area: services.includes("softlanding") ? "softlanding" : "contabilidad",
+          });
+        }
+
+        // Legal project for backoffice/softlanding
+        if (services.includes("legal")) {
+          projectsToCreate.push({
+            name: `Legal - ${data.name}`,
+            area: "legal",
+          });
+        }
+
+        // Compliance project for PLD/FT
+        if (services.includes("pld_ft")) {
+          projectsToCreate.push({
+            name: `Cumplimiento PLD/FT - ${data.name}`,
+            area: "pld_ft",
+          });
+        }
+
+        for (const proj of projectsToCreate) {
+          const { error: projectError } = await supabase
+            .from("projects")
+            .insert({
+              name: proj.name,
+              client_id: data.id,
+              area: proj.area,
+              organization_id: orgId!,
+              created_by: user!.id,
+              responsible_user_id: client.responsible_user_id || user!.id,
+              tax_obligations: [],
+            } as any);
+          if (projectError) {
+            console.error(`Error creating auto project (${proj.area}):`, projectError);
+          }
         }
       }
 
