@@ -1,0 +1,1 @@
+ALTER TABLE public.clients ADD COLUMN dropbox_folder_path text;
