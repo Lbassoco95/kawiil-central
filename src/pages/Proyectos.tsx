@@ -4,8 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, FolderKanban } from "lucide-react";
+import { Search, FolderKanban } from "lucide-react";
 import { useProjects } from "@/hooks/useProjects";
+import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
 import { useState, useMemo } from "react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -58,10 +59,7 @@ const Proyectos = () => {
             <h1 className="text-2xl font-bold text-foreground">Proyectos</h1>
             <p className="text-sm text-muted-foreground">Proyectos por cliente o internos</p>
           </div>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo proyecto
-          </Button>
+          <ProjectFormDialog />
         </div>
 
         <div className="flex items-center gap-3">
@@ -95,12 +93,7 @@ const Proyectos = () => {
                     ? "Intenta con otro término."
                     : "Crea tu primer proyecto para organizar tareas."}
                 </p>
-                {!search && (
-                  <Button className="mt-4">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Crear proyecto
-                  </Button>
-                )}
+                {!search && <ProjectFormDialog />}
               </div>
             </CardContent>
           </Card>
