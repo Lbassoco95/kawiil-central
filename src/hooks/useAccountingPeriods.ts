@@ -3,12 +3,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+export type StepStatus = "pendiente" | "en_progreso" | "en_espera_cliente" | "completado";
+
+export const STEP_STATUS_OPTIONS: { value: StepStatus; label: string }[] = [
+  { value: "pendiente", label: "Pendiente" },
+  { value: "en_progreso", label: "En progreso" },
+  { value: "en_espera_cliente", label: "En espera del cliente" },
+  { value: "completado", label: "Completado" },
+];
+
 export interface AccountingStep {
   key: string;
   label: string;
   completed: boolean;
   completed_at: string | null;
   completed_by: string | null;
+  step_status?: StepStatus;
+  date?: string | null;
+  notes?: string | null;
+  document_ids?: string[];
 }
 
 export interface AccountingPeriod {
@@ -46,7 +59,6 @@ export function useAccountingPeriods(projectId: string | undefined) {
         .order("year", { ascending: false })
         .order("month", { ascending: false });
       if (error) throw error;
-      // Cast steps from Json to AccountingStep[]
       return (data as any[]).map((d) => ({
         ...d,
         steps: d.steps as AccountingStep[],
@@ -62,7 +74,6 @@ export function useCreateAccountingPeriod() {
 
   return useMutation({
     mutationFn: async ({ projectId, year, month }: { projectId: string; year: number; month: number }) => {
-      // Fetch project to get tax obligations
       const { data: project, error: projErr } = await supabase
         .from("projects")
         .select("*")
@@ -72,18 +83,20 @@ export function useCreateAccountingPeriod() {
 
       const taxObligations = (project as any).tax_obligations as { key: string; label: string }[] | null;
       
-      // Build extra steps from tax obligations
       const extraSteps = (taxObligations ?? []).map((o) => ({
         key: `decl_${o.key}`,
         label: `Declaración: ${o.label}`,
         completed: false,
         completed_at: null,
         completed_by: null,
+        step_status: "pendiente" as StepStatus,
+        date: null,
+        notes: null,
+        document_ids: [],
       }));
 
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
 
-      // Insert with default steps; we'll append extra steps via update if needed
       const { data, error } = await supabase
         .from("accounting_periods")
         .insert({
@@ -96,16 +109,20 @@ export function useCreateAccountingPeriod() {
         .single();
       if (error) throw error;
 
-      // Append tax obligation steps to the default steps
-      if (extraSteps.length > 0) {
-        const currentSteps = data.steps as any as AccountingStep[];
-        const allSteps = [...currentSteps, ...extraSteps];
-        const { error: updateErr } = await supabase
-          .from("accounting_periods")
-          .update({ steps: allSteps as any })
-          .eq("id", data.id);
-        if (updateErr) throw updateErr;
-      }
+      // Enrich default steps with new fields + append tax obligation steps
+      const currentSteps = (data.steps as any as AccountingStep[]).map((s) => ({
+        ...s,
+        step_status: s.step_status || ("pendiente" as StepStatus),
+        date: s.date || null,
+        notes: s.notes || null,
+        document_ids: s.document_ids || [],
+      }));
+      const allSteps = [...currentSteps, ...extraSteps];
+      const { error: updateErr } = await supabase
+        .from("accounting_periods")
+        .update({ steps: allSteps as any })
+        .eq("id", data.id);
+      if (updateErr) throw updateErr;
 
       return data;
     },
@@ -134,7 +151,6 @@ export function useToggleAccountingStep() {
       stepKey: string;
       completed: boolean;
     }) => {
-      // Fetch current steps
       const { data: period, error: fetchErr } = await supabase
         .from("accounting_periods")
         .select("steps")
@@ -149,12 +165,55 @@ export function useToggleAccountingStep() {
               completed,
               completed_at: completed ? new Date().toISOString() : null,
               completed_by: completed ? user!.id : null,
+              step_status: completed ? ("completado" as StepStatus) : s.step_status,
             }
           : s
       );
 
       const allDone = steps.every((s) => s.completed);
-      const anyStarted = steps.some((s) => s.completed);
+      const anyStarted = steps.some((s) => s.completed || s.step_status !== "pendiente");
+
+      const { error } = await supabase
+        .from("accounting_periods")
+        .update({
+          steps: steps as any,
+          status: allDone ? "completado" : anyStarted ? "en_progreso" : "pendiente",
+        })
+        .eq("id", periodId);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["accounting-periods", vars.projectId] });
+    },
+    onError: (error) => {
+      toast.error("Error al actualizar paso: " + error.message);
+    },
+  });
+}
+
+export function useUpdateStepDetails() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ periodId, projectId, stepKey, updates }: {
+      periodId: string;
+      projectId: string;
+      stepKey: string;
+      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids">>;
+    }) => {
+      const { data: period, error: fetchErr } = await supabase
+        .from("accounting_periods")
+        .select("steps")
+        .eq("id", periodId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const steps = (period.steps as any as AccountingStep[]).map((s) =>
+        s.key === stepKey ? { ...s, ...updates } : s
+      );
+
+      const allDone = steps.every((s) => s.completed);
+      const anyStarted = steps.some((s) => s.completed || (s.step_status && s.step_status !== "pendiente"));
 
       const { error } = await supabase
         .from("accounting_periods")
