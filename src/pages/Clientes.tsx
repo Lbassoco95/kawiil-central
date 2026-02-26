@@ -17,6 +17,7 @@ const SERVICE_LABELS: Record<ServiceArea, string> = {
   legal: "Legal",
   softlanding: "Soft Landing",
   pld_ft: "PLD/FT",
+  juicios: "Juicios",
 };
 
 const STATUS_STYLES: Record<ClientStatus, string> = {

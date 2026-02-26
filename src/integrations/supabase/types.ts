@@ -582,7 +582,12 @@ export type Database = {
       client_type: "persona_moral" | "persona_fisica"
       document_source: "supabase" | "dropbox"
       project_status: "activo" | "pausado" | "completado" | "cancelado"
-      service_area: "contabilidad" | "legal" | "softlanding" | "pld_ft"
+      service_area:
+        | "contabilidad"
+        | "legal"
+        | "softlanding"
+        | "pld_ft"
+        | "juicios"
       task_priority: "urgente" | "alta" | "media" | "baja"
       task_status:
         | "pendiente"
@@ -722,7 +727,13 @@ export const Constants = {
       client_type: ["persona_moral", "persona_fisica"],
       document_source: ["supabase", "dropbox"],
       project_status: ["activo", "pausado", "completado", "cancelado"],
-      service_area: ["contabilidad", "legal", "softlanding", "pld_ft"],
+      service_area: [
+        "contabilidad",
+        "legal",
+        "softlanding",
+        "pld_ft",
+        "juicios",
+      ],
       task_priority: ["urgente", "alta", "media", "baja"],
       task_status: [
         "pendiente",

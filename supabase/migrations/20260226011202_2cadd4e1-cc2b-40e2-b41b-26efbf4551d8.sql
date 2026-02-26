@@ -1,0 +1,1 @@
+ALTER TYPE public.service_area ADD VALUE IF NOT EXISTS 'juicios';
