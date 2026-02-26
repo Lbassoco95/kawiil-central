@@ -46,10 +46,34 @@ export function useCreateClient() {
         .single();
 
       if (error) throw error;
+
+      // Auto-create accounting project for softlanding/backoffice clients
+      const services = client.services || [];
+      const hasAccounting = services.includes("softlanding") || services.includes("contabilidad");
+      if (hasAccounting && data) {
+        const area = services.includes("softlanding") ? "softlanding" : "contabilidad";
+        const projectName = `Contabilidad - ${data.name}`;
+        const { error: projectError } = await supabase
+          .from("projects")
+          .insert({
+            name: projectName,
+            client_id: data.id,
+            area,
+            organization_id: orgId!,
+            created_by: user!.id,
+            responsible_user_id: client.responsible_user_id || user!.id,
+            tax_obligations: [],
+          } as any);
+        if (projectError) {
+          console.error("Error creating auto project:", projectError);
+        }
+      }
+
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Cliente creado exitosamente");
     },
     onError: (error) => {
