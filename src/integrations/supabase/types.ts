@@ -59,6 +59,10 @@ export type Database = {
         Row: {
           address: string | null
           client_type: Database["public"]["Enums"]["client_type"]
+          contact_email: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          contact_position: string | null
           created_at: string
           created_by: string | null
           email: string | null
@@ -77,6 +81,10 @@ export type Database = {
         Insert: {
           address?: string | null
           client_type?: Database["public"]["Enums"]["client_type"]
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          contact_position?: string | null
           created_at?: string
           created_by?: string | null
           email?: string | null
@@ -95,6 +103,10 @@ export type Database = {
         Update: {
           address?: string | null
           client_type?: Database["public"]["Enums"]["client_type"]
+          contact_email?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          contact_position?: string | null
           created_at?: string
           created_by?: string | null
           email?: string | null

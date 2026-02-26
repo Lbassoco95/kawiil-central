@@ -51,9 +51,15 @@ const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 type ServicePackage = "softlanding" | "backoffice" | "individual";
 
 const PACKAGE_LABELS: Record<ServicePackage, string> = {
-  softlanding: "Soft Landing",
   backoffice: "Backoffice",
+  softlanding: "Soft Landing",
   individual: "Individual",
+};
+
+const PACKAGE_DESCRIPTIONS: Record<ServicePackage, string> = {
+  backoffice: "Servicio contable, administrativo y legal",
+  softlanding: "Backoffice + representación legal, domicilio fiscal y gestión de tesorería",
+  individual: "Selección individual de servicios",
 };
 
 const PACKAGE_INCLUDED_SERVICES: Record<ServicePackage, ServiceArea[]> = {
@@ -98,6 +104,10 @@ const clientSchema = z.object({
   primary_area: z.enum(ALL_SERVICE_AREAS).optional().nullable(),
   responsible_user_id: z.string().uuid().optional().nullable().or(z.literal("")),
   status: z.enum(["activo", "inactivo", "prospecto"] as const),
+  contact_name: z.string().trim().max(200).optional().or(z.literal("")),
+  contact_email: z.string().trim().email("Email inválido").optional().or(z.literal("")),
+  contact_phone: z.string().trim().max(20).optional().or(z.literal("")),
+  contact_position: z.string().trim().max(200).optional().or(z.literal("")),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
@@ -135,6 +145,10 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       primary_area: null,
       responsible_user_id: "",
       status: "activo",
+      contact_name: "",
+      contact_email: "",
+      contact_phone: "",
+      contact_position: "",
     },
   });
 
@@ -169,6 +183,10 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       primary_area: values.primary_area || null,
       responsible_user_id: values.responsible_user_id || null,
       status: values.status,
+      contact_name: values.contact_name || null,
+      contact_email: values.contact_email || null,
+      contact_phone: values.contact_phone || null,
+      contact_position: values.contact_position || null,
     });
     form.reset();
     onOpenChange(false);
@@ -359,8 +377,11 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                     </SelectContent>
                   </Select>
                   <FormMessage />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {PACKAGE_DESCRIPTIONS[field.value as ServicePackage]}
+                  </p>
                   {servicePackage !== "individual" && includedServices.length > 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground">
                       Incluye: {includedServices.map((s) => SERVICE_LABELS[s]).join(", ")}
                     </p>
                   )}
@@ -479,6 +500,65 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                 )}
               />
             )}
+
+            {/* Contact person */}
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Persona de contacto del cliente</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="contact_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre del contacto</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nombre completo" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="contact_position"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cargo</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Director, Gerente, etc." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="contact_email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email del contacto</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="contacto@empresa.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="contact_phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Teléfono del contacto</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+52 999 123 4567" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             {/* Notes */}
             <FormField
