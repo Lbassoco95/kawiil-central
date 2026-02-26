@@ -105,8 +105,6 @@ const clientSchema = z.object({
   responsible_user_id: z.string().uuid().optional().nullable().or(z.literal("")),
   status: z.enum(["activo", "inactivo", "prospecto"] as const),
   contact_name: z.string().trim().max(200).optional().or(z.literal("")),
-  contact_email: z.string().trim().email("Email inválido").optional().or(z.literal("")),
-  contact_phone: z.string().trim().max(20).optional().or(z.literal("")),
   contact_position: z.string().trim().max(200).optional().or(z.literal("")),
 });
 
@@ -146,8 +144,6 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       responsible_user_id: "",
       status: "activo",
       contact_name: "",
-      contact_email: "",
-      contact_phone: "",
       contact_position: "",
     },
   });
@@ -184,8 +180,6 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       responsible_user_id: values.responsible_user_id || null,
       status: values.status,
       contact_name: values.contact_name || null,
-      contact_email: values.contact_email || null,
-      contact_phone: values.contact_phone || null,
       contact_position: values.contact_position || null,
     });
     form.reset();
@@ -526,32 +520,6 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                       <FormLabel>Cargo</FormLabel>
                       <FormControl>
                         <Input placeholder="Director, Gerente, etc." {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="contact_email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email del contacto</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="contacto@empresa.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="contact_phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Teléfono del contacto</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+52 999 123 4567" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
