@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,18 +29,17 @@ import {
 } from "@/components/ui/select";
 import { useCreateClient } from "@/hooks/useClients";
 import { useOrgProfiles } from "@/hooks/useClients";
-import { Constants } from "@/integrations/supabase/types";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientType = Database["public"]["Enums"]["client_type"];
-type ClientStatus = Database["public"]["Enums"]["client_status"];
 
 const SERVICE_LABELS: Record<ServiceArea, string> = {
   contabilidad: "Contabilidad",
   legal: "Legal",
   softlanding: "Soft Landing",
   pld_ft: "PLD/FT",
+  juicios: "Juicios",
 };
 
 const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
@@ -48,26 +47,55 @@ const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   persona_fisica: "Persona Física",
 };
 
+// Package definitions
+type ServicePackage = "softlanding" | "backoffice" | "individual";
+
+const PACKAGE_LABELS: Record<ServicePackage, string> = {
+  softlanding: "Soft Landing",
+  backoffice: "Backoffice",
+  individual: "Individual",
+};
+
+const PACKAGE_INCLUDED_SERVICES: Record<ServicePackage, ServiceArea[]> = {
+  softlanding: ["contabilidad", "legal", "softlanding"],
+  backoffice: ["contabilidad", "legal"],
+  individual: [],
+};
+
+// Extra services that can be added on top of a package
+const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
+  { value: "pld_ft", label: "PLD/FT" },
+  { value: "juicios", label: "Juicios" },
+];
+
+// For individual mode, these are the selectable services
+const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
+  { value: "contabilidad", label: "Contabilidad" },
+  { value: "legal", label: "Legal" },
+  { value: "pld_ft", label: "PLD/FT" },
+  { value: "juicios", label: "Juicios" },
+];
+
+const ALL_SERVICE_AREAS = [
+  "contabilidad",
+  "legal",
+  "softlanding",
+  "pld_ft",
+  "juicios",
+] as const;
+
 const clientSchema = z.object({
   name: z.string().trim().min(1, "El nombre es requerido").max(200),
   client_type: z.enum(["persona_moral", "persona_fisica"] as const),
-  rfc: z
-    .string()
-    .trim()
-    .max(13)
-    .optional()
-    .or(z.literal("")),
+  rfc: z.string().trim().max(13).optional().or(z.literal("")),
   email: z.string().trim().email("Email inválido").optional().or(z.literal("")),
   phone: z.string().trim().max(20).optional().or(z.literal("")),
   address: z.string().trim().max(500).optional().or(z.literal("")),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
-  services: z
-    .array(z.enum(["contabilidad", "legal", "softlanding", "pld_ft"] as const))
-    .min(1, "Selecciona al menos un servicio"),
-  primary_area: z
-    .enum(["contabilidad", "legal", "softlanding", "pld_ft"] as const)
-    .optional()
-    .nullable(),
+  service_package: z.enum(["softlanding", "backoffice", "individual"] as const),
+  extra_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
+  individual_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
+  primary_area: z.enum(ALL_SERVICE_AREAS).optional().nullable(),
   responsible_user_id: z.string().uuid().optional().nullable().or(z.literal("")),
   status: z.enum(["activo", "inactivo", "prospecto"] as const),
 });
@@ -77,6 +105,14 @@ type ClientFormValues = z.infer<typeof clientSchema>;
 interface ClientFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+function computeServices(values: ClientFormValues): ServiceArea[] {
+  const pkg = values.service_package;
+  const base = PACKAGE_INCLUDED_SERVICES[pkg] || [];
+  const extras = pkg === "individual" ? values.individual_services : values.extra_services;
+  const combined = new Set<ServiceArea>([...base, ...extras]);
+  return Array.from(combined);
 }
 
 export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) {
@@ -93,16 +129,34 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       phone: "",
       address: "",
       notes: "",
-      services: [],
+      service_package: "backoffice",
+      extra_services: [],
+      individual_services: [],
       primary_area: null,
       responsible_user_id: "",
       status: "activo",
     },
   });
 
-  const selectedServices = form.watch("services");
+  const servicePackage = form.watch("service_package");
+  const extraServices = form.watch("extra_services");
+  const individualServices = form.watch("individual_services");
+
+  const allServices = computeServices(form.getValues());
+
+  // Reset extras when package changes
+  useEffect(() => {
+    form.setValue("extra_services", []);
+    form.setValue("individual_services", []);
+    form.setValue("primary_area", null);
+  }, [servicePackage, form]);
 
   const onSubmit = async (values: ClientFormValues) => {
+    const services = computeServices(values);
+    if (services.length === 0) {
+      form.setError("individual_services", { message: "Selecciona al menos un servicio" });
+      return;
+    }
     await createClient.mutateAsync({
       name: values.name,
       client_type: values.client_type,
@@ -111,7 +165,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       phone: values.phone || null,
       address: values.address || null,
       notes: values.notes || null,
-      services: values.services,
+      services,
       primary_area: values.primary_area || null,
       responsible_user_id: values.responsible_user_id || null,
       status: values.status,
@@ -119,6 +173,8 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
     form.reset();
     onOpenChange(false);
   };
+
+  const includedServices = PACKAGE_INCLUDED_SERVICES[servicePackage] || [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -279,48 +335,122 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
               />
             </div>
 
-            {/* Services */}
+            {/* Service Package */}
             <FormField
               control={form.control}
-              name="services"
-              render={() => (
+              name="service_package"
+              render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Servicios contratados *</FormLabel>
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    {(
-                      Constants.public.Enums.service_area as readonly ServiceArea[]
-                    ).map((service) => (
-                      <FormField
-                        key={service}
-                        control={form.control}
-                        name="services"
-                        render={({ field }) => (
-                          <FormItem className="flex items-center space-x-2 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(service)}
-                                onCheckedChange={(checked) => {
-                                  const updated = checked
-                                    ? [...(field.value || []), service]
-                                    : field.value?.filter((s) => s !== service) || [];
-                                  field.onChange(updated);
-                                }}
-                              />
-                            </FormControl>
-                            <FormLabel className="font-normal cursor-pointer">
-                              {SERVICE_LABELS[service]}
-                            </FormLabel>
-                          </FormItem>
-                        )}
-                      />
-                    ))}
-                  </div>
+                  <FormLabel>Paquete de servicios *</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {(Object.entries(PACKAGE_LABELS) as [ServicePackage, string][]).map(
+                        ([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
+                  {servicePackage !== "individual" && includedServices.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Incluye: {includedServices.map((s) => SERVICE_LABELS[s]).join(", ")}
+                    </p>
+                  )}
                 </FormItem>
               )}
             />
 
-            {selectedServices.length > 1 && (
+            {/* Extra services for packages */}
+            {servicePackage !== "individual" && (
+              <FormField
+                control={form.control}
+                name="extra_services"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Servicios adicionales</FormLabel>
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      {EXTRA_SERVICES.map((service) => (
+                        <FormField
+                          key={service.value}
+                          control={form.control}
+                          name="extra_services"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(service.value)}
+                                  onCheckedChange={(checked) => {
+                                    const updated = checked
+                                      ? [...(field.value || []), service.value]
+                                      : field.value?.filter((s) => s !== service.value) || [];
+                                    field.onChange(updated);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">
+                                {service.label}
+                              </FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Individual services selection */}
+            {servicePackage === "individual" && (
+              <FormField
+                control={form.control}
+                name="individual_services"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Servicios contratados *</FormLabel>
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      {INDIVIDUAL_SERVICES.map((service) => (
+                        <FormField
+                          key={service.value}
+                          control={form.control}
+                          name="individual_services"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 space-y-0">
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(service.value)}
+                                  onCheckedChange={(checked) => {
+                                    const updated = checked
+                                      ? [...(field.value || []), service.value]
+                                      : field.value?.filter((s) => s !== service.value) || [];
+                                    field.onChange(updated);
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">
+                                {service.label}
+                              </FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Primary area - show when multiple services */}
+            {allServices.length > 1 && (
               <FormField
                 control={form.control}
                 name="primary_area"
@@ -329,7 +459,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                     <FormLabel>Área principal</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value || ""}
+                      value={field.value || ""}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -337,7 +467,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {selectedServices.map((s) => (
+                        {allServices.map((s) => (
                           <SelectItem key={s} value={s}>
                             {SERVICE_LABELS[s]}
                           </SelectItem>
