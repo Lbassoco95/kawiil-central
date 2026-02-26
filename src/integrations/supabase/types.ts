@@ -424,6 +424,7 @@ export type Database = {
           responsible_user_id: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["project_status"]
+          tax_obligations: Json | null
           updated_at: string
         }
         Insert: {
@@ -439,6 +440,7 @@ export type Database = {
           responsible_user_id?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
+          tax_obligations?: Json | null
           updated_at?: string
         }
         Update: {
@@ -454,6 +456,7 @@ export type Database = {
           responsible_user_id?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
+          tax_obligations?: Json | null
           updated_at?: string
         }
         Relationships: [

@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN tax_obligations jsonb DEFAULT '[]'::jsonb;
