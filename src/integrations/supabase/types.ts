@@ -63,6 +63,7 @@ export type Database = {
           contact_position: string | null
           created_at: string
           created_by: string | null
+          dropbox_folder_path: string | null
           email: string | null
           id: string
           name: string
@@ -83,6 +84,7 @@ export type Database = {
           contact_position?: string | null
           created_at?: string
           created_by?: string | null
+          dropbox_folder_path?: string | null
           email?: string | null
           id?: string
           name: string
@@ -103,6 +105,7 @@ export type Database = {
           contact_position?: string | null
           created_at?: string
           created_by?: string | null
+          dropbox_folder_path?: string | null
           email?: string | null
           id?: string
           name?: string

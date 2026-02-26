@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ const STATUS_LABELS: Record<ClientStatus, string> = {
 };
 
 const Clientes = () => {
+  const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const { data: clients, isLoading } = useClients();
@@ -108,7 +110,7 @@ const Clientes = () => {
         ) : (
           <div className="grid gap-4">
             {filtered.map((client) => (
-              <Card key={client.id} className="hover:shadow-md transition-shadow cursor-pointer">
+              <Card key={client.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/clientes/${client.id}`)}>
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1 min-w-0 flex-1">
