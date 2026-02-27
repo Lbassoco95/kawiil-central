@@ -1,4 +1,7 @@
 project_id = "apfjafxiykkiydepmswk"
 
-[functions.savio-webhook]
-verify_jwt = false
+[functions]
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.savio-webhook]
+    verify_jwt = false
