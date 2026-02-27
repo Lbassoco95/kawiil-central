@@ -36,9 +36,7 @@ export function AppSidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 h-14 border-b border-sidebar-border">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg kawiil-gradient">
-          <span className="text-sm font-bold text-primary-foreground">K</span>
-        </div>
+        <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-8 w-8" />
         {!collapsed && (
           <span className="font-semibold text-sidebar-accent-foreground text-base tracking-tight">
             Kawiil OS
