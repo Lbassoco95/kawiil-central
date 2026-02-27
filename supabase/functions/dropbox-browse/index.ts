@@ -5,6 +5,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Cache the team root namespace ID
+let cachedRootNamespaceId: string | null = null;
+
+async function getTeamRootNamespaceId(token: string): Promise<string | null> {
+  if (cachedRootNamespaceId) return cachedRootNamespaceId;
+
+  try {
+    const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const account = await response.json();
+    // If the account has a team with a root namespace, use it
+    const rootNsId = account?.root_info?.root_namespace_id;
+    if (rootNsId && account?.root_info?.['.tag'] === 'team') {
+      cachedRootNamespaceId = rootNsId;
+      console.log('Using team root namespace:', rootNsId);
+      return rootNsId;
+    }
+    return null;
+  } catch (e) {
+    console.error('Error getting team namespace:', e);
+    return null;
+  }
+}
+
+function getDropboxHeaders(token: string, rootNamespaceId: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+  if (rootNamespaceId) {
+    headers['Dropbox-API-Path-Root'] = JSON.stringify({
+      ".tag": "root",
+      "root": rootNamespaceId
+    });
+  }
+  return headers;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -18,13 +63,14 @@ serve(async (req) => {
 
     const { path = "", action = "list" } = await req.json();
 
+    // Get team root namespace
+    const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN);
+    const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId);
+
     if (action === "list") {
       const response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
+        headers: dbxHeaders,
         body: JSON.stringify({
           path: path || "",
           recursive: false,
@@ -44,7 +90,7 @@ serve(async (req) => {
         id: entry.id,
         name: entry.name,
         path: entry.path_display,
-        type: entry['.tag'], // "file" or "folder"
+        type: entry['.tag'],
         size: entry.size || null,
         modified: entry.client_modified || null,
       }));
@@ -55,15 +101,11 @@ serve(async (req) => {
     }
 
     if (action === "get_link") {
-      // Try to create a shared link, or get existing one
       let shareUrl = "";
       try {
         const response = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
+          headers: dbxHeaders,
           body: JSON.stringify({ path }),
         });
 
@@ -72,14 +114,10 @@ serve(async (req) => {
           shareUrl = data.url;
         } else {
           const errorBody = await response.json();
-          // If link already exists, fetch it
           if (errorBody?.error?.['.tag'] === 'shared_link_already_exists') {
             const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-              },
+              headers: dbxHeaders,
               body: JSON.stringify({ path, direct_only: true }),
             });
             if (listRes.ok) {
