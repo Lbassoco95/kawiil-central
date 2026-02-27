@@ -33,12 +33,22 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle2,
+  Link2,
+  ExternalLink,
+  FolderOpen,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, isPast, isToday, addDays, isBefore } from "date-fns";
 import { es } from "date-fns/locale";
+
+interface StageAttachment {
+  id: string;
+  type: "dropbox" | "link";
+  name: string;
+  url: string;
+}
 
 interface LawsuitStage {
   key: string;
@@ -47,6 +57,7 @@ interface LawsuitStage {
   date: string | null;
   notes: string;
   completed_at: string | null;
+  attachments?: StageAttachment[];
 }
 
 interface LawsuitDeadline {
@@ -80,6 +91,25 @@ const STAGE_STATUS_OPTIONS = [
   { value: "no_aplica", label: "No aplica", color: "bg-muted text-muted-foreground line-through" },
 ];
 
+const STAGE_TEMPLATES = [
+  { value: "demanda", label: "Demanda" },
+  { value: "contestacion", label: "Contestación" },
+  { value: "reconvencion", label: "Reconvención" },
+  { value: "pruebas", label: "Ofrecimiento de pruebas" },
+  { value: "desahogo", label: "Desahogo de pruebas" },
+  { value: "alegatos", label: "Alegatos" },
+  { value: "sentencia", label: "Sentencia" },
+  { value: "apelacion", label: "Apelación" },
+  { value: "amparo", label: "Amparo" },
+  { value: "ejecucion", label: "Ejecución" },
+  { value: "audiencia", label: "Audiencia" },
+  { value: "requerimiento", label: "Requerimiento" },
+  { value: "notificacion", label: "Notificación" },
+  { value: "incidente", label: "Incidente" },
+  { value: "recurso", label: "Recurso" },
+  { value: "custom", label: "Personalizada..." },
+];
+
 const DEADLINE_TYPE_LABELS: Record<string, string> = {
   termino: "Término",
   audiencia: "Audiencia",
@@ -100,7 +130,12 @@ const LAWSUIT_TYPE_LABELS: Record<string, string> = {
 export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboardProps) {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
+  const [stageDialogOpen, setStageDialogOpen] = useState(false);
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState<string | null>(null);
   const [newDeadline, setNewDeadline] = useState({ title: "", date: "", type: "termino", notes: "" });
+  const [newStageTemplate, setNewStageTemplate] = useState("contestacion");
+  const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
+  const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
   const queryClient = useQueryClient();
 
   const updateLawsuit = useMutation({
@@ -134,6 +169,70 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
       ...lawsuitDetails,
       stages: lawsuitDetails.stages.map((s) =>
         s.key === key ? { ...s, [field]: value || null } : s
+      ),
+    };
+    updateLawsuit.mutate(updated);
+  };
+
+  const addStage = () => {
+    const template = STAGE_TEMPLATES.find((t) => t.value === newStageTemplate);
+    const label = newStageTemplate === "custom" ? newStageCustomLabel : template?.label || newStageTemplate;
+    if (!label.trim()) return;
+
+    const newStage: LawsuitStage = {
+      key: `${newStageTemplate}_${Date.now()}`,
+      label,
+      status: "pendiente",
+      date: null,
+      notes: "",
+      completed_at: null,
+      attachments: [],
+    };
+    const updated = { ...lawsuitDetails, stages: [...lawsuitDetails.stages, newStage] };
+    updateLawsuit.mutate(updated);
+    setStageDialogOpen(false);
+    setNewStageCustomLabel("");
+    toast.success("Etapa agregada");
+  };
+
+  const removeStage = (key: string) => {
+    const updated = {
+      ...lawsuitDetails,
+      stages: lawsuitDetails.stages.filter((s) => s.key !== key),
+    };
+    updateLawsuit.mutate(updated);
+    toast.success("Etapa eliminada");
+  };
+
+  const addAttachment = (stageKey: string) => {
+    if (!newAttachment.name || !newAttachment.url) return;
+    const attachment: StageAttachment = {
+      id: crypto.randomUUID(),
+      type: newAttachment.url.includes("dropbox.com") ? "dropbox" : "link",
+      name: newAttachment.name,
+      url: newAttachment.url,
+    };
+    const updated = {
+      ...lawsuitDetails,
+      stages: lawsuitDetails.stages.map((s) =>
+        s.key === stageKey
+          ? { ...s, attachments: [...(s.attachments || []), attachment] }
+          : s
+      ),
+    };
+    updateLawsuit.mutate(updated);
+    setNewAttachment({ name: "", url: "" });
+    setAttachmentDialogOpen(null);
+    toast.success("Archivo vinculado");
+  };
+
+  const removeAttachment = (stageKey: string, attachmentId: string) => {
+    const updated = {
+      ...lawsuitDetails,
+      stages: lawsuitDetails.stages.map((s) =>
+        s.key === stageKey
+          ? { ...s, attachments: (s.attachments || []).filter((a) => a.id !== attachmentId) }
+          : s
       ),
     };
     updateLawsuit.mutate(updated);
@@ -260,11 +359,15 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Etapas procesales</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => setStageDialogOpen(true)}>
+            <Plus className="h-3 w-3 mr-1" /> Agregar etapa
+          </Button>
         </CardHeader>
         <CardContent className="space-y-1">
           {lawsuitDetails.stages.map((stage) => {
             const statusOpt = STAGE_STATUS_OPTIONS.find((s) => s.value === stage.status);
             const isExpanded = expandedStage === stage.key;
+            const attachments = stage.attachments || [];
 
             return (
               <Collapsible
@@ -277,6 +380,12 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
                   <span className={`flex-1 text-sm font-medium ${stage.status === "no_aplica" ? "line-through text-muted-foreground" : ""}`}>
                     {stage.label}
                   </span>
+                  {attachments.length > 0 && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Link2 className="h-3 w-3" />
+                      {attachments.length}
+                    </span>
+                  )}
                   {stage.date && (
                     <span className="text-xs text-muted-foreground">
                       {format(new Date(stage.date), "dd MMM yyyy", { locale: es })}
@@ -323,11 +432,81 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
                       onChange={(e) => updateStageField(stage.key, "notes", e.target.value)}
                     />
                   </div>
-                  {stage.completed_at && (
-                    <p className="text-xs text-muted-foreground">
-                      Completado: {format(new Date(stage.completed_at), "dd/MM/yyyy HH:mm", { locale: es })}
-                    </p>
-                  )}
+
+                  {/* Attachments section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs flex items-center gap-1">
+                        <FolderOpen className="h-3 w-3" /> Archivos vinculados
+                      </Label>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 text-xs px-2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAttachmentDialogOpen(stage.key);
+                        }}
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Agregar link
+                      </Button>
+                    </div>
+                    {attachments.length > 0 ? (
+                      <div className="space-y-1">
+                        {attachments.map((att) => (
+                          <div
+                            key={att.id}
+                            className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs bg-muted/30"
+                          >
+                            {att.type === "dropbox" ? (
+                              <FolderOpen className="h-3 w-3 text-blue-500 shrink-0" />
+                            ) : (
+                              <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                            )}
+                            <span className="flex-1 truncate">{att.name}</span>
+                            <a
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeAttachment(stage.key, att.id);
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">Sin archivos vinculados</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    {stage.completed_at && (
+                      <p className="text-xs text-muted-foreground">
+                        Completado: {format(new Date(stage.completed_at), "dd/MM/yyyy HH:mm", { locale: es })}
+                      </p>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs text-destructive hover:text-destructive ml-auto"
+                      onClick={() => removeStage(stage.key)}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" /> Eliminar etapa
+                    </Button>
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             );
@@ -409,6 +588,88 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
           )}
         </CardContent>
       </Card>
+
+      {/* Add stage dialog */}
+      <Dialog open={stageDialogOpen} onOpenChange={setStageDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Agregar etapa procesal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Tipo de etapa *</Label>
+              <Select value={newStageTemplate} onValueChange={setNewStageTemplate}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STAGE_TEMPLATES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {newStageTemplate === "custom" && (
+              <div className="space-y-2">
+                <Label>Nombre de la etapa *</Label>
+                <Input
+                  placeholder="Ej: Segunda contestación"
+                  value={newStageCustomLabel}
+                  onChange={(e) => setNewStageCustomLabel(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setStageDialogOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={addStage}
+                disabled={newStageTemplate === "custom" && !newStageCustomLabel.trim()}
+              >
+                Agregar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add attachment dialog */}
+      <Dialog open={!!attachmentDialogOpen} onOpenChange={() => setAttachmentDialogOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Vincular archivo o link</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Pega un enlace de Dropbox o cualquier URL al documento relacionado con esta etapa.
+          </p>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Nombre del archivo *</Label>
+              <Input
+                placeholder="Ej: Escrito de contestación"
+                value={newAttachment.name}
+                onChange={(e) => setNewAttachment((p) => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>URL / Link de Dropbox *</Label>
+              <Input
+                placeholder="https://www.dropbox.com/..."
+                value={newAttachment.url}
+                onChange={(e) => setNewAttachment((p) => ({ ...p, url: e.target.value }))}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAttachmentDialogOpen(null)}>Cancelar</Button>
+              <Button
+                onClick={() => attachmentDialogOpen && addAttachment(attachmentDialogOpen)}
+                disabled={!newAttachment.name || !newAttachment.url}
+              >
+                Vincular
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add deadline dialog */}
       <Dialog open={deadlineDialogOpen} onOpenChange={setDeadlineDialogOpen}>
