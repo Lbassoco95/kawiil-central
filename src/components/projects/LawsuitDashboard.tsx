@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DropboxFilePicker } from "./DropboxFilePicker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,6 +133,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState<string | null>(null);
+  const [dropboxPickerStage, setDropboxPickerStage] = useState<string | null>(null);
   const [newDeadline, setNewDeadline] = useState({ title: "", date: "", type: "termino", notes: "" });
   const [newStageTemplate, setNewStageTemplate] = useState("contestacion");
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
@@ -632,6 +634,32 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
         </DialogContent>
       </Dialog>
 
+      {/* Dropbox file picker */}
+      <DropboxFilePicker
+        open={!!dropboxPickerStage}
+        onClose={() => setDropboxPickerStage(null)}
+        onSelect={(file) => {
+          if (dropboxPickerStage) {
+            const attachment = {
+              id: crypto.randomUUID(),
+              type: "dropbox" as const,
+              name: file.name,
+              url: file.url,
+            };
+            const updated = {
+              ...lawsuitDetails,
+              stages: lawsuitDetails.stages.map((s) =>
+                s.key === dropboxPickerStage
+                  ? { ...s, attachments: [...(s.attachments || []), attachment] }
+                  : s
+              ),
+            };
+            updateLawsuit.mutate(updated);
+            toast.success("Archivo de Dropbox vinculado");
+          }
+        }}
+      />
+
       {/* Add attachment dialog */}
       <Dialog open={!!attachmentDialogOpen} onOpenChange={() => setAttachmentDialogOpen(null)}>
         <DialogContent>
@@ -639,9 +667,32 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
             <DialogTitle>Vincular archivo o link</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Pega un enlace de Dropbox o cualquier URL al documento relacionado con esta etapa.
+            Pega un enlace manualmente o busca directamente en Dropbox.
           </p>
           <div className="space-y-4 pt-2">
+            {/* Dropbox browse button */}
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-2"
+              onClick={() => {
+                const stageKey = attachmentDialogOpen;
+                setAttachmentDialogOpen(null);
+                setDropboxPickerStage(stageKey);
+              }}
+            >
+              <FolderOpen className="h-4 w-4" />
+              Buscar en Dropbox
+            </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">o pegar link</span>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Nombre del archivo *</Label>
               <Input
@@ -651,7 +702,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails }: LawsuitDashboard
               />
             </div>
             <div className="space-y-2">
-              <Label>URL / Link de Dropbox *</Label>
+              <Label>URL / Link *</Label>
               <Input
                 placeholder="https://www.dropbox.com/..."
                 value={newAttachment.url}
