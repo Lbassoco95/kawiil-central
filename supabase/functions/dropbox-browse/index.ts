@@ -138,18 +138,78 @@ function rankFolderCandidate(entry: any, targetName: string) {
   return score;
 }
 
+function splitPathSegments(path: string): string[] {
+  return (path || '')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function buildPathFromSegments(segments: string[]): string {
+  return segments.length > 0 ? `/${segments.join('/')}` : '';
+}
+
+async function findBestFolderMatchInPath(
+  headers: Record<string, string>,
+  parentPath: string,
+  targetSegment: string,
+) {
+  const targetName = normalizeName(targetSegment);
+  const entries = await listAllFolderEntries(headers, parentPath);
+  const folders = entries.filter((entry: any) => entry['.tag'] === 'folder');
+
+  const ranked = folders
+    .map((entry: any) => ({ entry, score: rankFolderCandidate(entry, targetName) }))
+    .filter((item: any) => item.score > 0)
+    .sort((a: any, b: any) => b.score - a.score);
+
+  return ranked[0]?.entry ?? null;
+}
+
+async function resolveFolderPathBySegments(headers: Record<string, string>, requestedPath: string) {
+  const segments = splitPathSegments(requestedPath);
+  if (segments.length === 0) return '';
+
+  let currentPath = '';
+
+  for (const segment of segments) {
+    const candidate = await findBestFolderMatchInPath(headers, currentPath, segment);
+    if (!candidate) return currentPath || null;
+
+    const candidatePath =
+      candidate.path_display ||
+      buildPathFromSegments([...splitPathSegments(currentPath), String(candidate.name || '')]);
+
+    currentPath = candidatePath;
+  }
+
+  return currentPath;
+}
+
 async function resolvePathAndList(headers: Record<string, string>, requestedPath: string) {
-  const firstTry = await listFolderRequest(headers, { path: requestedPath || '' });
+  const normalizedRequestedPath = buildPathFromSegments(splitPathSegments(requestedPath));
+  const firstTry = await listFolderRequest(headers, { path: normalizedRequestedPath });
   if (firstTry.ok) {
-    return { data: firstTry.data, resolvedPath: requestedPath || '' };
+    return { data: firstTry.data, resolvedPath: normalizedRequestedPath };
   }
 
   const isNotFound = firstTry.status === 409 && (firstTry.raw || '').includes('path/not_found');
-  if (!isNotFound || !requestedPath) {
+  if (!isNotFound || !normalizedRequestedPath) {
     throw new Error(`Dropbox API error [${firstTry.status}]: ${firstTry.raw}`);
   }
 
-  const targetName = normalizeName(requestedPath.split('/').filter(Boolean).pop() || requestedPath);
+  const segmentResolvedPath = await resolveFolderPathBySegments(headers, normalizedRequestedPath);
+  if (segmentResolvedPath) {
+    const segmentTry = await listFolderRequest(headers, { path: segmentResolvedPath });
+    if (segmentTry.ok) {
+      if (segmentResolvedPath !== normalizedRequestedPath) {
+        console.log(`Path not found for "${normalizedRequestedPath}". Resolved by segments to: "${segmentResolvedPath}"`);
+      }
+      return { data: segmentTry.data, resolvedPath: segmentResolvedPath };
+    }
+  }
+
+  const targetName = normalizeName(splitPathSegments(normalizedRequestedPath).pop() || normalizedRequestedPath);
   const rootEntries = await listAllFolderEntries(headers, '');
   const folders = rootEntries.filter((entry: any) => entry['.tag'] === 'folder');
 
@@ -164,7 +224,7 @@ async function resolvePathAndList(headers: Record<string, string>, requestedPath
 
   const candidate = ranked[0].entry;
   const candidatePath = candidate.path_display || `/${candidate.name}`;
-  console.log(`Path not found for "${requestedPath}". Using best match: "${candidatePath}"`);
+  console.log(`Path not found for "${normalizedRequestedPath}". Using best root match: "${candidatePath}"`);
 
   const candidateTry = await listFolderRequest(headers, { path: candidatePath });
   if (!candidateTry.ok) {

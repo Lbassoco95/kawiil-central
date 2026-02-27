@@ -84,6 +84,7 @@ interface LawsuitDashboardProps {
   projectId: string;
   lawsuitDetails: LawsuitDetails;
   dropboxInitialPath?: string | null;
+  lockDropboxToInitialPath?: boolean;
 }
 
 const STAGE_STATUS_OPTIONS = [
@@ -129,7 +130,7 @@ const LAWSUIT_TYPE_LABELS: Record<string, string> = {
   familiar: "Familiar",
 };
 
-export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath }: LawsuitDashboardProps) {
+export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false }: LawsuitDashboardProps) {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
@@ -639,7 +640,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       <DropboxFilePicker
         open={!!dropboxPickerStage}
         initialPath={dropboxInitialPath || ""}
-        lockToInitialPath={Boolean(dropboxInitialPath)}
+        lockToInitialPath={Boolean(lockDropboxToInitialPath && dropboxInitialPath?.trim())}
         onClose={() => setDropboxPickerStage(null)}
         onSelect={(file) => {
           if (dropboxPickerStage) {
