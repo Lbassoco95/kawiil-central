@@ -8,6 +8,7 @@ import {
   Head,
   Heading,
   Html,
+  Img,
   Preview,
   Text,
 } from 'npm:@react-email/components@0.0.22'
@@ -23,9 +24,7 @@ export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => 
     <Body style={main}>
       <Container style={container}>
         <div style={logoContainer}>
-          <div style={logoBox}>
-            <span style={logoText}>K</span>
-          </div>
+          <Img src="https://apfjafxiykkiydepmswk.supabase.co/storage/v1/object/public/email-assets/kawiil-logo.png" alt="Kawiil" width="56" height="56" style={logoImg} />
         </div>
         <Heading style={h1}>Código de verificación</Heading>
         <Text style={text}>Usa el siguiente código para confirmar tu identidad:</Text>
@@ -43,16 +42,7 @@ export default ReauthenticationEmail
 const main = { backgroundColor: '#ffffff', fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }
 const container = { padding: '40px 25px' }
 const logoContainer = { textAlign: 'center' as const, marginBottom: '24px' }
-const logoBox = {
-  display: 'inline-block',
-  width: '48px',
-  height: '48px',
-  borderRadius: '12px',
-  background: 'linear-gradient(135deg, hsl(239, 84%, 67%) 0%, hsl(271, 81%, 56%) 100%)',
-  textAlign: 'center' as const,
-  lineHeight: '48px',
-}
-const logoText = { color: '#ffffff', fontSize: '20px', fontWeight: 'bold' as const }
+const logoImg = { display: 'inline-block' }
 const h1 = {
   fontSize: '22px',
   fontWeight: 'bold' as const,
