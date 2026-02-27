@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, CheckSquare, Calendar, User, Flag } from "lucide-react";
-import { useTasks } from "@/hooks/useTasks";
+import { Plus, Search, CheckSquare, Calendar, User, Flag, Trash2 } from "lucide-react";
+import { useTasks, useDeleteTask } from "@/hooks/useTasks";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -32,6 +33,8 @@ const Tareas = () => {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const deleteTask = useDeleteTask();
 
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
@@ -115,6 +118,14 @@ const Tareas = () => {
                         )}
                       </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -141,6 +152,14 @@ const Tareas = () => {
 
       <TaskFormDialog open={showCreate} onOpenChange={setShowCreate} />
       <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`¿Eliminar tarea "${deleteTarget?.title}"?`}
+        description="Se eliminará la tarea permanentemente junto con sus comentarios y asignaciones."
+        onConfirm={async () => { if (deleteTarget) { await deleteTask.mutateAsync(deleteTarget.id); setDeleteTarget(null); } }}
+        isPending={deleteTask.isPending}
+      />
     </AppLayout>
   );
 };

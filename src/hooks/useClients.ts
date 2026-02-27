@@ -108,6 +108,22 @@ export function useCreateClient() {
   });
 }
 
+export function useDeleteClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("clients").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Cliente eliminado");
+    },
+    onError: (error) => toast.error("Error al eliminar cliente: " + error.message),
+  });
+}
+
 export function useOrgProfiles() {
   const { user } = useAuth();
 
