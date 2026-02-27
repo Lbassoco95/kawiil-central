@@ -638,8 +638,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       {/* Dropbox file picker */}
       <DropboxFilePicker
         open={!!dropboxPickerStage}
-        initialPath={dropboxInitialPath || "/Kawiil Mx"}
-        lockToInitialPath
+        initialPath={dropboxInitialPath || ""}
+        lockToInitialPath={Boolean(dropboxInitialPath)}
         onClose={() => setDropboxPickerStage(null)}
         onSelect={(file) => {
           if (dropboxPickerStage) {

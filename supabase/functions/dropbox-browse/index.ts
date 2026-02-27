@@ -57,17 +57,29 @@ function normalizeName(value: string): string {
     .trim();
 }
 
-async function listFolderRequest(headers: Record<string, string>, folderPath: string) {
-  const response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
+async function listFolderRequest(
+  headers: Record<string, string>,
+  options: { path?: string; cursor?: string },
+) {
+  const isContinue = Boolean(options.cursor);
+  const endpoint = isContinue
+    ? 'https://api.dropboxapi.com/2/files/list_folder/continue'
+    : 'https://api.dropboxapi.com/2/files/list_folder';
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      path: folderPath,
-      recursive: false,
-      include_media_info: false,
-      include_deleted: false,
-      limit: 100,
-    }),
+    body: JSON.stringify(
+      isContinue
+        ? { cursor: options.cursor }
+        : {
+            path: options.path ?? '',
+            recursive: false,
+            include_media_info: false,
+            include_deleted: false,
+            limit: 2000,
+          },
+    ),
   });
 
   const raw = await response.text();
@@ -86,8 +98,48 @@ async function listFolderRequest(headers: Record<string, string>, folderPath: st
   };
 }
 
+async function listAllFolderEntries(headers: Record<string, string>, folderPath: string) {
+  const entries: any[] = [];
+  let cursor: string | null = null;
+
+  do {
+    const page = await listFolderRequest(
+      headers,
+      cursor ? { cursor } : { path: folderPath },
+    );
+
+    if (!page.ok) {
+      throw new Error(`Dropbox API error [${page.status}]: ${page.raw}`);
+    }
+
+    entries.push(...(page.data?.entries || []));
+    cursor = page.data?.has_more ? page.data?.cursor ?? null : null;
+  } while (cursor);
+
+  return entries;
+}
+
+function rankFolderCandidate(entry: any, targetName: string) {
+  const name = String(entry.name || '');
+  const normalized = normalizeName(name);
+  const normalizedWithoutSuffix = normalizeName(name.replace(/\s*\([^)]*\)\s*$/g, ''));
+
+  let score = 0;
+
+  if (normalized === targetName) score = 130;
+  else if (normalizedWithoutSuffix === targetName) score = 120;
+  else if (normalized.startsWith(targetName)) score = 90;
+  else if (normalizedWithoutSuffix.startsWith(targetName)) score = 85;
+  else if (normalized.includes(targetName)) score = 75;
+  else if (normalizedWithoutSuffix.includes(targetName)) score = 70;
+
+  if (normalized.includes('conflicto') || normalized.includes('solo lectura')) score -= 45;
+
+  return score;
+}
+
 async function resolvePathAndList(headers: Record<string, string>, requestedPath: string) {
-  const firstTry = await listFolderRequest(headers, requestedPath || '');
+  const firstTry = await listFolderRequest(headers, { path: requestedPath || '' });
   if (firstTry.ok) {
     return { data: firstTry.data, resolvedPath: requestedPath || '' };
   }
@@ -97,28 +149,12 @@ async function resolvePathAndList(headers: Record<string, string>, requestedPath
     throw new Error(`Dropbox API error [${firstTry.status}]: ${firstTry.raw}`);
   }
 
-  const rootTry = await listFolderRequest(headers, '');
-  if (!rootTry.ok) {
-    throw new Error(`Dropbox API error [${rootTry.status}]: ${rootTry.raw}`);
-  }
-
   const targetName = normalizeName(requestedPath.split('/').filter(Boolean).pop() || requestedPath);
-  const folders = (rootTry.data?.entries || []).filter((entry: any) => entry['.tag'] === 'folder');
+  const rootEntries = await listAllFolderEntries(headers, '');
+  const folders = rootEntries.filter((entry: any) => entry['.tag'] === 'folder');
 
   const ranked = folders
-    .map((entry: any) => {
-      const name = String(entry.name || '');
-      const normalized = normalizeName(name);
-      let score = 0;
-
-      if (normalized === targetName) score = 100;
-      else if (normalized.startsWith(targetName)) score = 85;
-      else if (normalized.includes(targetName)) score = 75;
-
-      if (normalized.includes('conflicto')) score -= 8;
-
-      return { entry, score };
-    })
+    .map((entry: any) => ({ entry, score: rankFolderCandidate(entry, targetName) }))
     .filter((item: any) => item.score > 0)
     .sort((a: any, b: any) => b.score - a.score);
 
@@ -130,7 +166,7 @@ async function resolvePathAndList(headers: Record<string, string>, requestedPath
   const candidatePath = candidate.path_display || `/${candidate.name}`;
   console.log(`Path not found for "${requestedPath}". Using best match: "${candidatePath}"`);
 
-  const candidateTry = await listFolderRequest(headers, candidatePath);
+  const candidateTry = await listFolderRequest(headers, { path: candidatePath });
   if (!candidateTry.ok) {
     throw new Error(`Dropbox API error [${candidateTry.status}]: ${candidateTry.raw}`);
   }
