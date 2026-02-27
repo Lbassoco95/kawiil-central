@@ -13,7 +13,7 @@ export function useProjects() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("*, clients(name)")
+        .select("*, clients(name, dropbox_folder_path)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -29,7 +29,7 @@ export function useProjectDetail(projectId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("*, clients(name)")
+        .select("*, clients(name, dropbox_folder_path)")
         .eq("id", projectId!)
         .single();
       if (error) throw error;

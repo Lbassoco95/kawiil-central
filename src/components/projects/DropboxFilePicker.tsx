@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,11 +29,20 @@ interface DropboxFilePickerProps {
   open: boolean;
   onClose: () => void;
   initialPath?: string;
+  lockToInitialPath?: boolean;
   onSelect: (file: { name: string; url: string }) => void;
 }
 
-export function DropboxFilePicker({ open, onClose, initialPath, onSelect }: DropboxFilePickerProps) {
-  const [currentPath, setCurrentPath] = useState(initialPath || "");
+export function DropboxFilePicker({
+  open,
+  onClose,
+  initialPath,
+  lockToInitialPath = false,
+  onSelect,
+}: DropboxFilePickerProps) {
+  const basePath = useMemo(() => (initialPath ?? "").trim(), [initialPath]);
+
+  const [currentPath, setCurrentPath] = useState(basePath);
   const [entries, setEntries] = useState<DropboxEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [linkLoading, setLinkLoading] = useState<string | null>(null);
@@ -41,15 +50,21 @@ export function DropboxFilePicker({ open, onClose, initialPath, onSelect }: Drop
   const [loaded, setLoaded] = useState(false);
 
   const browse = async (path: string) => {
+    const targetPath = lockToInitialPath && basePath
+      ? path && path.startsWith(basePath)
+        ? path
+        : basePath
+      : path || basePath;
+
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: { path, action: "list" },
+        body: { path: targetPath, action: "list" },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       setEntries(data.entries || []);
-      setCurrentPath(path);
+      setCurrentPath(data.resolved_path || targetPath);
       setLoaded(true);
     } catch (e: any) {
       toast.error("Error al navegar Dropbox: " + (e.message || "Error desconocido"));
@@ -59,20 +74,30 @@ export function DropboxFilePicker({ open, onClose, initialPath, onSelect }: Drop
   };
 
   const handleOpen = () => {
-    if (!loaded) {
-      browse(initialPath || "");
-    }
+    setPathHistory([]);
+    setEntries([]);
+    setLoaded(false);
+    setCurrentPath(basePath);
+    browse(basePath);
   };
 
   const openFolder = (path: string) => {
+    if (lockToInitialPath && basePath && !path.startsWith(basePath)) return;
     setPathHistory((prev) => [...prev, currentPath]);
     browse(path);
   };
 
   const goBack = () => {
+    if (lockToInitialPath && currentPath === basePath) return;
+
     const prev = pathHistory[pathHistory.length - 1] ?? "";
     setPathHistory((p) => p.slice(0, -1));
-    browse(prev);
+
+    const safePrev = lockToInitialPath && basePath && prev && !prev.startsWith(basePath)
+      ? basePath
+      : prev;
+
+    browse(safePrev);
   };
 
   const selectFile = async (entry: DropboxEntry) => {
@@ -103,24 +128,25 @@ export function DropboxFilePicker({ open, onClose, initialPath, onSelect }: Drop
         else handleOpen();
       }}
     >
-      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col" aria-describedby={undefined}>
+        <div className="flex flex-col space-y-1.5 text-center sm:text-left">
           <DialogTitle className="flex items-center gap-2">
             <Folder className="h-5 w-5" />
             Seleccionar archivo de Dropbox
           </DialogTitle>
-        </DialogHeader>
+          <DialogDescription>
+            Explorando: {basePath || "/ (Raíz)"}
+          </DialogDescription>
+        </div>
 
         {/* Path breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground border-b pb-2">
-          {currentPath && (
+          {currentPath && (!lockToInitialPath || currentPath !== basePath) && (
             <Button variant="ghost" size="sm" className="h-7 px-2" onClick={goBack}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
           )}
-          <span className="truncate">
-            {currentPath || "/ (Raíz)"}
-          </span>
+          <span className="truncate">{currentPath || basePath || "/ (Raíz)"}</span>
         </div>
 
         {/* File list */}
@@ -132,7 +158,7 @@ export function DropboxFilePicker({ open, onClose, initialPath, onSelect }: Drop
           ) : !loaded ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <p className="text-sm text-muted-foreground">Haz clic para cargar los archivos</p>
-              <Button onClick={() => browse(initialPath || "")}>Cargar archivos</Button>
+              <Button onClick={() => browse(basePath)}>Cargar archivos</Button>
             </div>
           ) : entries.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-12">Carpeta vacía</p>
@@ -144,7 +170,7 @@ export function DropboxFilePicker({ open, onClose, initialPath, onSelect }: Drop
                   className="w-full flex items-center gap-3 rounded-md px-3 py-2 hover:bg-muted/50 transition-colors text-left"
                   onClick={() => openFolder(entry.path)}
                 >
-                  <Folder className="h-4 w-4 text-blue-500 shrink-0" />
+                  <Folder className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm truncate">{entry.name}</span>
                 </button>
               ))}

@@ -85,6 +85,7 @@ const ProyectoDetalle = () => {
   }
 
   const clientName = (project as any).clients?.name;
+  const clientDropboxPath = (project as any).clients?.dropbox_folder_path as string | null | undefined;
 
   return (
     <AppLayout>
@@ -177,7 +178,7 @@ const ProyectoDetalle = () => {
 
           {isLawsuit && (
             <TabsContent value="juicio">
-              <LawsuitDashboard projectId={project.id} lawsuitDetails={lawsuitDetails} />
+              <LawsuitDashboard projectId={project.id} lawsuitDetails={lawsuitDetails} dropboxInitialPath={clientDropboxPath} />
             </TabsContent>
           )}
 
