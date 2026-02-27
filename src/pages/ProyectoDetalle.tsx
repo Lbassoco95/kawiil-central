@@ -86,6 +86,12 @@ const ProyectoDetalle = () => {
 
   const clientName = (project as any).clients?.name;
   const clientDropboxPath = (project as any).clients?.dropbox_folder_path as string | null | undefined;
+  const normalizedClientName = clientName?.trim();
+  const fallbackDropboxPath = normalizedClientName
+    ? `/Kawiil Mx/CLIENTES/${normalizedClientName}`
+    : "/Kawiil Mx/CLIENTES";
+  const effectiveDropboxPath = clientDropboxPath?.trim() || fallbackDropboxPath;
+  const lockDropboxToInitialPath = Boolean(clientDropboxPath?.trim());
 
   return (
     <AppLayout>
@@ -178,7 +184,12 @@ const ProyectoDetalle = () => {
 
           {isLawsuit && (
             <TabsContent value="juicio">
-              <LawsuitDashboard projectId={project.id} lawsuitDetails={lawsuitDetails} dropboxInitialPath={clientDropboxPath} />
+              <LawsuitDashboard
+                projectId={project.id}
+                lawsuitDetails={lawsuitDetails}
+                dropboxInitialPath={effectiveDropboxPath}
+                lockDropboxToInitialPath={lockDropboxToInitialPath}
+              />
             </TabsContent>
           )}
 
