@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -57,13 +57,15 @@ export function DropboxFolderPicker({
     }
   };
 
-  const handleOpen = () => {
-    setPathHistory([]);
-    setEntries([]);
-    setLoaded(false);
-    setCurrentPath("");
-    browse("");
-  };
+  // Trigger browse when dialog opens
+  useEffect(() => {
+    if (open && !loaded && !loading) {
+      setPathHistory([]);
+      setEntries([]);
+      setCurrentPath("");
+      browse("");
+    }
+  }, [open]);
 
   const openFolder = (path: string) => {
     setPathHistory((prev) => [...prev, currentPath]);
@@ -89,8 +91,10 @@ export function DropboxFolderPicker({
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        if (!o) onClose();
-        else handleOpen();
+        if (!o) {
+          onClose();
+          setLoaded(false);
+        }
       }}
     >
       <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
