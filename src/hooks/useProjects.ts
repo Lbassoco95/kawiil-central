@@ -22,6 +22,21 @@ export function useProjects() {
   });
 }
 
+export function useDeleteProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("projects").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Proyecto eliminado");
+    },
+    onError: (error: Error) => toast.error("Error al eliminar proyecto: " + error.message),
+  });
+}
+
 export function useProjectDetail(projectId: string | undefined) {
   const { user } = useAuth();
   return useQuery({

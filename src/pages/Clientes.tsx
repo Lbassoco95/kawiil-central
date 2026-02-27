@@ -5,9 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Users, Mail, Phone } from "lucide-react";
-import { useClients } from "@/hooks/useClients";
+import { Plus, Search, Users, Mail, Phone, Trash2 } from "lucide-react";
+import { useClients, useDeleteClient } from "@/hooks/useClients";
 import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
@@ -37,7 +38,9 @@ const Clientes = () => {
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const { data: clients, isLoading } = useClients();
+  const deleteClient = useDeleteClient();
 
   const filtered = useMemo(() => {
     if (!clients) return [];
@@ -143,12 +146,20 @@ const Clientes = () => {
                         )}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-1.5 justify-end">
+                    <div className="flex flex-wrap gap-1.5 justify-end items-start">
                       {client.services?.map((s) => (
                         <Badge key={s} variant="secondary" className="text-xs">
                           {SERVICE_LABELS[s as ServiceArea] || s}
                         </Badge>
                       ))}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: client.id, name: client.name }); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -159,6 +170,14 @@ const Clientes = () => {
       </div>
 
       <ClientFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`¿Eliminar cliente "${deleteTarget?.name}"?`}
+        description="Se eliminará el cliente y sus datos asociados. Esta acción no se puede deshacer."
+        onConfirm={async () => { if (deleteTarget) { await deleteClient.mutateAsync(deleteTarget.id); setDeleteTarget(null); } }}
+        isPending={deleteClient.isPending}
+      />
     </AppLayout>
   );
 };

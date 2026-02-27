@@ -176,6 +176,55 @@ export function useUpsertTaxObligation() {
   });
 }
 
+// ─── Delete hooks ───
+export function useDeleteArea() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("areas" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["areas"] }); toast.success("Área eliminada"); },
+    onError: (e) => toast.error(e.message),
+  });
+}
+
+export function useDeleteDocumentType() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("document_types" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["document-types"] }); toast.success("Tipo de documento eliminado"); },
+    onError: (e) => toast.error(e.message),
+  });
+}
+
+export function useDeleteCatalogTag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("catalog_tags" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["catalog-tags"] }); toast.success("Etiqueta eliminada"); },
+    onError: (e) => toast.error(e.message),
+  });
+}
+
+export function useDeleteTaxObligation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("tax_obligation_types" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tax-obligation-types"] }); toast.success("Obligación fiscal eliminada"); },
+    onError: (e) => toast.error(e.message),
+  });
+}
+
 // Helper
 async function getOrgId(userId: string): Promise<string> {
   const { data } = await supabase.rpc("get_user_org_id", { _user_id: userId });

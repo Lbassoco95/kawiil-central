@@ -4,10 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, FolderKanban, Scale } from "lucide-react";
-import { useProjects } from "@/hooks/useProjects";
+import { Search, FolderKanban, Scale, Trash2 } from "lucide-react";
+import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useState, useMemo } from "react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -39,8 +40,10 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
 const Proyectos = () => {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useProjects();
+  const deleteProject = useDeleteProject();
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const filtered = useMemo(() => {
     if (!projects) return [];
@@ -130,11 +133,21 @@ const Proyectos = () => {
                         {project.description && ` · ${project.description}`}
                       </p>
                     </div>
-                    {project.area && (
-                      <Badge variant="secondary" className="text-xs shrink-0">
-                        {SERVICE_LABELS[project.area]}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {project.area && (
+                        <Badge variant="secondary" className="text-xs shrink-0">
+                          {SERVICE_LABELS[project.area]}
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: project.id, name: project.name }); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -142,6 +155,14 @@ const Proyectos = () => {
           </div>
         )}
       </div>
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`¿Eliminar proyecto "${deleteTarget?.name}"?`}
+        description="Se eliminará el proyecto permanentemente. Si tiene tareas asociadas, la eliminación podría fallar."
+        onConfirm={async () => { if (deleteTarget) { await deleteProject.mutateAsync(deleteTarget.id); setDeleteTarget(null); } }}
+        isPending={deleteProject.isPending}
+      />
     </AppLayout>
   );
 };

@@ -229,6 +229,21 @@ export function useUpdateTask() {
   });
 }
 
+export function useDeleteTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("tasks").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("Tarea eliminada");
+    },
+    onError: (err: Error) => toast.error("Error al eliminar tarea: " + err.message),
+  });
+}
+
 export function useProfiles() {
   const { user } = useAuth();
 

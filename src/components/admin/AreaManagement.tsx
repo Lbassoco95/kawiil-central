@@ -3,24 +3,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Loader2, Pencil } from "lucide-react";
+import { Building2, Plus, Loader2, Pencil, Trash2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAreas, useUpsertArea, type Area } from "@/hooks/useCatalogs";
+import { useAreas, useUpsertArea, useDeleteArea, type Area } from "@/hooks/useCatalogs";
 import { useOrgProfiles } from "@/hooks/useClients";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 export function AreaManagement() {
   const { data: areas, isLoading } = useAreas();
   const { data: profiles } = useOrgProfiles();
   const upsert = useUpsertArea();
+  const deleteArea = useDeleteArea();
   const [editing, setEditing] = useState<Area | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Area | null>(null);
 
   const [form, setForm] = useState({ name: "", slug: "", description: "", color: "#6366f1", responsible_user_id: "" });
 
@@ -54,6 +57,12 @@ export function AreaManagement() {
       responsible_user_id: form.responsible_user_id || null,
     });
     setDialogOpen(false);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await deleteArea.mutateAsync(deleteTarget.id);
+    setDeleteTarget(null);
   };
 
   const responsibleName = (userId: string | null) => {
@@ -96,6 +105,9 @@ export function AreaManagement() {
                 </div>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(area)}>
                   <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteTarget(area)}>
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ))}
@@ -150,6 +162,15 @@ export function AreaManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`¿Eliminar el área "${deleteTarget?.name}"?`}
+        description="Se eliminará permanentemente. Si hay proyectos o tareas asociados, la eliminación podría fallar."
+        onConfirm={handleDelete}
+        isPending={deleteArea.isPending}
+      />
     </Card>
   );
 }
