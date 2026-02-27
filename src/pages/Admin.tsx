@@ -2,6 +2,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Tag, Building2 } from "lucide-react";
+import { UserManagement } from "@/components/admin/UserManagement";
 
 const Admin = () => {
   return (
@@ -20,19 +21,7 @@ const Admin = () => {
           </TabsList>
 
           <TabsContent value="usuarios" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  Usuarios y roles
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Gestión de usuarios del sistema y asignación de roles (admin, manager, staff, viewer).
-                </p>
-              </CardContent>
-            </Card>
+            <UserManagement />
           </TabsContent>
 
           <TabsContent value="areas" className="mt-4">
