@@ -1,8 +1,8 @@
 import { AppLayout } from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Tag, Building2 } from "lucide-react";
 import { UserManagement } from "@/components/admin/UserManagement";
+import { AreaManagement } from "@/components/admin/AreaManagement";
+import { CatalogManagement } from "@/components/admin/CatalogManagement";
 
 const Admin = () => {
   return (
@@ -25,35 +25,11 @@ const Admin = () => {
           </TabsContent>
 
           <TabsContent value="areas" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Áreas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Contabilidad, Legal, Softlanding, PLD/FT.
-                </p>
-              </CardContent>
-            </Card>
+            <AreaManagement />
           </TabsContent>
 
           <TabsContent value="catalogos" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  Catálogos
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Tipos de documento, etiquetas, tipos de servicio y estatus.
-                </p>
-              </CardContent>
-            </Card>
+            <CatalogManagement />
           </TabsContent>
         </Tabs>
       </div>

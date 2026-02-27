@@ -109,6 +109,88 @@ export type Database = {
           },
         ]
       }
+      areas: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          responsible_user_id: string | null
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          responsible_user_id?: string | null
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          responsible_user_id?: string | null
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "areas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalog_tags: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_tags_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           address: string | null
@@ -176,6 +258,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "clients_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_types_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -643,6 +760,44 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_obligation_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          frequency: string | null
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          frequency?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          frequency?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_obligation_types_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
