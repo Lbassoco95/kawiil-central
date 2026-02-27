@@ -41,6 +41,7 @@ export function useCreateClient() {
           ...client,
           organization_id: orgId!,
           created_by: user!.id,
+          dropbox_folder_path: client.dropbox_folder_path || null,
         })
         .select()
         .single();

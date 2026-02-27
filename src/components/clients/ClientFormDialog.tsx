@@ -106,6 +106,7 @@ const clientSchema = z.object({
   status: z.enum(["activo", "inactivo", "prospecto"] as const),
   contact_name: z.string().trim().max(200).optional().or(z.literal("")),
   contact_position: z.string().trim().max(200).optional().or(z.literal("")),
+  dropbox_folder_path: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
@@ -145,6 +146,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       status: "activo",
       contact_name: "",
       contact_position: "",
+      dropbox_folder_path: "",
     },
   });
 
@@ -181,6 +183,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       status: values.status,
       contact_name: values.contact_name || null,
       contact_position: values.contact_position || null,
+      dropbox_folder_path: values.dropbox_folder_path || null,
     });
     form.reset();
     onOpenChange(false);
@@ -527,6 +530,27 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                 />
               </div>
             </div>
+
+            {/* Dropbox folder path */}
+            <FormField
+              control={form.control}
+              name="dropbox_folder_path"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ruta de carpeta en Dropbox</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="/Kawiil Mx/CLIENTES/Nombre del cliente"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    Copia la ruta completa de la carpeta del cliente en Dropbox para enlazarla directamente.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {/* Notes */}
             <FormField
