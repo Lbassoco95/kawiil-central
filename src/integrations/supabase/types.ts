@@ -599,6 +599,50 @@ export type Database = {
           },
         ]
       }
+      savio_webhook_events: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          organization_id: string
+          payload: Json
+          processed_at: string | null
+          savio_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          organization_id: string
+          payload?: Json
+          processed_at?: string | null
+          savio_id?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          organization_id?: string
+          payload?: Json
+          processed_at?: string | null
+          savio_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "savio_webhook_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_assignees: {
         Row: {
           created_at: string
