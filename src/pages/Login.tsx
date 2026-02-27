@@ -36,9 +36,7 @@ const Login = () => {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl kawiil-gradient">
-            <span className="text-xl font-bold text-primary-foreground">K</span>
-          </div>
+          <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-12 w-12" />
           <h1 className="text-2xl font-bold text-foreground">Kawiil OS</h1>
           <p className="text-sm text-muted-foreground">Plataforma de gestión interna</p>
         </div>
