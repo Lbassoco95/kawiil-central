@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Folder } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateClient } from "@/hooks/useClients";
 import { useOrgProfiles } from "@/hooks/useClients";
+import { DropboxFolderPicker } from "@/components/clients/DropboxFolderPicker";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
@@ -127,6 +129,7 @@ function computeServices(values: ClientFormValues): ServiceArea[] {
 export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) {
   const createClient = useCreateClient();
   const { data: profiles } = useOrgProfiles();
+  const [dropboxPickerOpen, setDropboxPickerOpen] = useState(false);
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -537,17 +540,46 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
               name="dropbox_folder_path"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Ruta de carpeta en Dropbox</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="/Kawiil Mx/CLIENTES/Nombre del cliente"
-                      {...field}
-                    />
-                  </FormControl>
+                  <FormLabel>Carpeta en Dropbox</FormLabel>
+                  <div className="flex items-center gap-2">
+                    <FormControl>
+                      <Input
+                        readOnly
+                        placeholder="Sin carpeta enlazada"
+                        value={field.value || ""}
+                        className="flex-1 cursor-pointer bg-muted/30"
+                        onClick={() => setDropboxPickerOpen(true)}
+                      />
+                    </FormControl>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDropboxPickerOpen(true)}
+                    >
+                      <Folder className="h-4 w-4 mr-1" />
+                      Explorar
+                    </Button>
+                    {field.value && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => field.onChange("")}
+                      >
+                        Quitar
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Copia la ruta completa de la carpeta del cliente en Dropbox para enlazarla directamente.
+                    Selecciona la carpeta del cliente en Dropbox para vincular sus documentos.
                   </p>
                   <FormMessage />
+                  <DropboxFolderPicker
+                    open={dropboxPickerOpen}
+                    onClose={() => setDropboxPickerOpen(false)}
+                    onSelect={(path) => field.onChange(path)}
+                  />
                 </FormItem>
               )}
             />
