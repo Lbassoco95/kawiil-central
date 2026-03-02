@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -77,6 +77,7 @@ export function UserManagement() {
   const { areaLabelMap } = useAreaOptions();
   const toggleActive = useToggleUserActive();
   const [sendingReset, setSendingReset] = useState<string | null>(null);
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null);
 
   const handleSendRecovery = async (email: string, userId: string) => {
     setSendingReset(userId);
@@ -90,6 +91,22 @@ export function UserManagement() {
       toast.error(e.message || "Error al enviar correo de recuperación");
     } finally {
       setSendingReset(null);
+    }
+  };
+
+  const handleResendInvite = async (userId: string, email: string) => {
+    setResendingInvite(userId);
+    try {
+      const { data, error } = await supabase.functions.invoke("resend-invite", {
+        body: { user_id: userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(data?.message || `Invitación reenviada a ${email}`);
+    } catch (e: any) {
+      toast.error(e.message || "Error al reenviar invitación");
+    } finally {
+      setResendingInvite(null);
     }
   };
 
@@ -213,6 +230,25 @@ export function UserManagement() {
                           <Pencil className="h-3.5 w-3.5 mr-1" />
                           Editar
                         </Button>
+                        {!user.invitation_accepted && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-primary"
+                            disabled={resendingInvite === user.user_id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleResendInvite(user.user_id, user.email);
+                            }}
+                          >
+                            {resendingInvite === user.user_id ? (
+                              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                            )}
+                            Reenviar enlace inicial
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"

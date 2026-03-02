@@ -38,6 +38,12 @@ const CambiarContrasena = () => {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
+      // Mark invitation as accepted
+      await supabase
+        .from("profiles")
+        .update({ invitation_accepted: true })
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id);
+      
       toast({ title: "Contraseña actualizada", description: "Tu nueva contraseña ha sido guardada" });
       navigate("/");
     }
