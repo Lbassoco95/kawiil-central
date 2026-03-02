@@ -192,10 +192,11 @@ export function TaskFormDialog({ open, onOpenChange }: Props) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Cliente</Label>
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
+              <Label>Cliente <span className="text-xs text-muted-foreground">(dejar vacío para tarea interna)</span></Label>
+              <Select value={clientId} onValueChange={(v) => { setClientId(v === "__none__" ? "" : v); }}>
+                <SelectTrigger><SelectValue placeholder="Tarea interna" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__none__">Sin cliente (interna)</SelectItem>
                   {clients?.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
@@ -204,10 +205,14 @@ export function TaskFormDialog({ open, onOpenChange }: Props) {
             </div>
             <div>
               <Label>Proyecto</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
+              <Select value={projectId} onValueChange={(v) => { setProjectId(v === "__none__" ? "" : v); }}>
                 <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
                 <SelectContent>
-                  {projects?.map((p) => (
+                  <SelectItem value="__none__">Sin proyecto</SelectItem>
+                  {(clientId
+                    ? projects?.filter((p: any) => p.client_id === clientId)
+                    : projects
+                  )?.map((p) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
