@@ -52,9 +52,10 @@ Deno.serve(async (req) => {
     } else {
       // User already confirmed — send password recovery email
       // First update metadata to force password change on next login
-      await adminClient.auth.admin.updateUser(user_id, {
+      const { error: updateErr } = await adminClient.auth.admin.updateUserById(user_id, {
         user_metadata: { ...targetUser.user_metadata, must_change_password: true },
       });
+      if (updateErr) console.warn('Could not update metadata:', updateErr.message);
 
       // Generate and send recovery link (this actually sends the email)
       const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
