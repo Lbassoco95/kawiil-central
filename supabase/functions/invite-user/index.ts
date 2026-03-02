@@ -65,6 +65,7 @@ serve(async (req) => {
         area: area || null,
         phone: phone || null,
         organization_id: orgId,
+        invitation_accepted: false,
       })
       .eq('user_id', newUserId);
 

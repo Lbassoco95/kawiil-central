@@ -12,6 +12,7 @@ export interface OrgUser {
   phone: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  invitation_accepted: boolean;
   created_at: string;
   role?: string;
 }
