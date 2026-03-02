@@ -57,7 +57,7 @@ const inviteSchema = z.object({
 });
 
 const createSchema = inviteSchema.extend({
-  password: z.string().min(6, "Mínimo 6 caracteres"),
+  password: z.string().optional().or(z.literal("")),
 });
 
 type InviteFormValues = z.infer<typeof inviteSchema>;
@@ -108,17 +108,23 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
     onOpenChange(false);
   };
 
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; password: string } | null>(null);
+
   const onCreateSubmit = async (values: CreateFormValues) => {
-    await createUser.mutateAsync({
+    const result = await createUser.mutateAsync({
       email: values.email,
       full_name: values.full_name,
-      password: values.password,
+      password: values.password || "",
       role: values.role,
       area: values.area || undefined,
       phone: values.phone || undefined,
     });
-    createForm.reset();
-    onOpenChange(false);
+    if (result?.temp_password) {
+      setCreatedCredentials({ email: values.email, password: result.temp_password });
+    } else {
+      createForm.reset();
+      onOpenChange(false);
+    }
   };
 
   const isPending = inviteUser.isPending || createUser.isPending;
@@ -256,35 +262,55 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
           </TabsContent>
 
           <TabsContent value="create" className="mt-4">
-            <Form {...createForm}>
-              <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
-                {renderFields(createForm)}
-                <FormField
-                  control={createForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contraseña temporal *</FormLabel>
-                      <FormControl>
-                        <Input type="password" placeholder="Mínimo 6 caracteres" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <p className="text-xs text-muted-foreground">
-                  El usuario podrá iniciar sesión inmediatamente con estas credenciales.
-                </p>
-                <div className="flex justify-end gap-3 pt-2">
-                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" disabled={isPending}>
-                    {isPending ? "Creando..." : "Crear usuario"}
+            {createdCredentials ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+                  <p className="font-medium text-sm">✅ Usuario creado exitosamente</p>
+                  <p className="text-sm text-muted-foreground">
+                    Comparte estas credenciales con el usuario. Al iniciar sesión por primera vez, se le pedirá cambiar su contraseña.
+                  </p>
+                  <div className="space-y-2 font-mono text-sm bg-background rounded p-3 border">
+                    <p><span className="text-muted-foreground">Email:</span> {createdCredentials.email}</p>
+                    <p><span className="text-muted-foreground">Contraseña:</span> {createdCredentials.password}</p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={() => { setCreatedCredentials(null); createForm.reset(); onOpenChange(false); }}>
+                    Cerrar
                   </Button>
                 </div>
-              </form>
-            </Form>
+              </div>
+            ) : (
+              <Form {...createForm}>
+                <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4">
+                  {renderFields(createForm)}
+                  <FormField
+                    control={createForm.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contraseña temporal (opcional)</FormLabel>
+                        <FormControl>
+                          <Input type="text" placeholder="Se genera automáticamente si se deja vacío" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Se generará una contraseña provisional. El usuario deberá cambiarla en su primer inicio de sesión.
+                  </p>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={isPending}>
+                      {isPending ? "Creando..." : "Crear usuario"}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>
