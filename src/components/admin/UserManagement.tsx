@@ -264,7 +264,7 @@ export function UserManagement() {
                           <Pencil className="h-3.5 w-3.5 mr-1" />
                           Editar
                         </Button>
-                        {!user.invitation_accepted && (
+                        {(user.onboarding_status || (user.invitation_accepted ? 'active' : 'invited')) !== 'active' && (
                           <Button
                             variant="ghost"
                             size="sm"
