@@ -154,9 +154,13 @@ export function UserManagement() {
                           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${ROLE_STYLES[user.role || "staff"]}`}>
                             {ROLE_LABELS[user.role || "staff"] || user.role}
                           </Badge>
-                          {!user.invitation_accepted && (
+                          {!user.invitation_accepted ? (
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-300">
                               Pendiente de registro
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-300">
+                              Registrado
                             </Badge>
                           )}
                         </div>
