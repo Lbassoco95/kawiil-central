@@ -6,6 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+function generateTempPassword(length = 12): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$';
+  const array = new Uint8Array(length);
+  crypto.getRandomValues(array);
+  return Array.from(array, (byte) => chars[byte % chars.length]).join('');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -31,23 +38,25 @@ serve(async (req) => {
 
     const { email, full_name, password, role, area, phone } = await req.json();
 
-    if (!email || !full_name || !password || !role) {
-      throw new Error('Email, full_name, password, and role are required');
+    if (!email || !full_name || !role) {
+      throw new Error('Email, full_name, and role are required');
     }
 
-    if (password.length < 6) {
-      throw new Error('La contraseña debe tener al menos 6 caracteres');
-    }
+    // Use provided password or auto-generate one
+    const tempPassword = password && password.length >= 6 ? password : generateTempPassword();
 
     const { data: orgId } = await adminClient.rpc('get_user_org_id', { _user_id: callerUser.id });
     if (!orgId) throw new Error('Could not determine organization');
 
-    // Create user with admin API
+    // Create user with admin API - mark as needing password change
     const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
       email,
-      password,
+      password: tempPassword,
       email_confirm: true,
-      user_metadata: { full_name },
+      user_metadata: { 
+        full_name,
+        must_change_password: true,
+      },
     });
 
     if (createError) {
@@ -85,6 +94,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       user_id: newUserId,
+      temp_password: tempPassword,
       message: `Usuario ${full_name} creado exitosamente`,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
