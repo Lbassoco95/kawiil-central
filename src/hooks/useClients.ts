@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { sendSlackNotification } from "@/lib/slackNotifications";
 
 export type Client = Tables<"clients">;
 export type ClientInsert = TablesInsert<"clients">;
@@ -97,10 +98,18 @@ export function useCreateClient() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Cliente creado exitosamente");
+
+      if (data) {
+        sendSlackNotification("client_created", {
+          name: data.name,
+          client_type: data.client_type,
+          services: data.services,
+        });
+      }
     },
     onError: (error) => {
       toast.error("Error al crear cliente: " + error.message);
