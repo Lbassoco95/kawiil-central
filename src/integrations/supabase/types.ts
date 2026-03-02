@@ -462,6 +462,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          invitation_accepted: boolean
           is_active: boolean
           organization_id: string
           phone: string | null
@@ -475,6 +476,7 @@ export type Database = {
           email: string
           full_name: string
           id?: string
+          invitation_accepted?: boolean
           is_active?: boolean
           organization_id: string
           phone?: string | null
@@ -488,6 +490,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          invitation_accepted?: boolean
           is_active?: boolean
           organization_id?: string
           phone?: string | null
