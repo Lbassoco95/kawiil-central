@@ -85,7 +85,7 @@ export function UserManagement() {
           </div>
         ) : (
           <div className="space-y-2">
-            {users.map((user) => (
+            {users.filter((u) => u.is_active).map((user) => (
               <div
                 key={user.id}
                 className={`flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors ${!user.is_active ? "opacity-50" : ""}`}
@@ -136,6 +136,47 @@ export function UserManagement() {
                 </Button>
               </div>
             ))}
+
+            {/* Inactive users section */}
+            {users.filter((u) => !u.is_active).length > 0 && (
+              <details className="mt-4">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground py-2">
+                  Usuarios inactivos ({users.filter((u) => !u.is_active).length})
+                </summary>
+                <div className="space-y-2 mt-2">
+                  {users.filter((u) => !u.is_active).map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center gap-3 rounded-lg border border-dashed p-3 opacity-50"
+                    >
+                      <Avatar className="h-9 w-9">
+                        <AvatarFallback className="text-xs bg-muted text-muted-foreground">
+                          {getInitials(user.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm truncate">{user.full_name}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted text-muted-foreground">
+                            Inactivo
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{user.email}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title="Reactivar usuario"
+                        onClick={() => setDeactivateTarget({ userId: user.user_id, name: user.full_name, isActive: false })}
+                      >
+                        <UserCheck className="h-3.5 w-3.5 text-green-600" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
         )}
       </CardContent>
