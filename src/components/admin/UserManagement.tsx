@@ -124,6 +124,10 @@ export function UserManagement() {
         body: { user_id: userId },
       });
       if (error) throw error;
+      if (data?.rate_limited) {
+        toast.error(data.message || "Debes esperar antes de reenviar nuevamente");
+        return;
+      }
       if (data?.error) throw new Error(data.error);
       toast.success(data?.message || `Invitación reenviada a ${email}`);
     } catch (e: any) {
