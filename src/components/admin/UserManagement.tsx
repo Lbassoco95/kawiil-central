@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -73,6 +73,22 @@ export function UserManagement() {
   const { data: users, isLoading } = useOrgUsers();
   const { areaLabelMap } = useAreaOptions();
   const toggleActive = useToggleUserActive();
+  const [sendingReset, setSendingReset] = useState<string | null>(null);
+
+  const handleSendRecovery = async (email: string, userId: string) => {
+    setSendingReset(userId);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/cambiar-contrasena`,
+      });
+      if (error) throw error;
+      toast.success(`Correo de recuperación enviado a ${email}`);
+    } catch (e: any) {
+      toast.error(e.message || "Error al enviar correo de recuperación");
+    } finally {
+      setSendingReset(null);
+    }
+  };
 
   return (
     <Card>
@@ -138,28 +154,34 @@ export function UserManagement() {
                             {user.email}
                           </span>
                         </div>
-                        {user.phone && (
-                          <div>
-                            <span className="text-xs text-muted-foreground block">Teléfono</span>
-                            <span className="flex items-center gap-1.5 mt-0.5">
-                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                              {user.phone}
-                            </span>
-                          </div>
-                        )}
-                        {user.area && (
-                          <div>
-                            <span className="text-xs text-muted-foreground block">Área</span>
-                            <Badge variant="secondary" className="text-xs mt-0.5">
-                              {areaLabelMap[user.area] || user.area}
-                            </Badge>
-                          </div>
-                        )}
+                        <div>
+                          <span className="text-xs text-muted-foreground block">Teléfono</span>
+                          <span className="flex items-center gap-1.5 mt-0.5">
+                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                            {user.phone || <span className="text-muted-foreground italic">Sin registrar</span>}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground block">Área</span>
+                          <span className="flex items-center gap-1.5 mt-0.5">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                            {user.area ? (
+                              <Badge variant="secondary" className="text-xs">
+                                {areaLabelMap[user.area] || user.area}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground italic">Sin asignar</span>
+                            )}
+                          </span>
+                        </div>
                         <div>
                           <span className="text-xs text-muted-foreground block">Rol</span>
-                          <Badge variant="outline" className={`text-xs mt-0.5 ${ROLE_STYLES[user.role || "staff"]}`}>
-                            {ROLE_LABELS[user.role || "staff"] || user.role}
-                          </Badge>
+                          <span className="flex items-center gap-1.5 mt-0.5">
+                            <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Badge variant="outline" className={`text-xs ${ROLE_STYLES[user.role || "staff"]}`}>
+                              {ROLE_LABELS[user.role || "staff"] || user.role}
+                            </Badge>
+                          </span>
                         </div>
                         <div>
                           <span className="text-xs text-muted-foreground block">Fecha de alta</span>
@@ -168,8 +190,31 @@ export function UserManagement() {
                             {format(new Date(user.created_at), "d MMM yyyy", { locale: es })}
                           </span>
                         </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground block">Estado</span>
+                          <Badge variant="outline" className="text-xs mt-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            Activo
+                          </Badge>
+                        </div>
                       </div>
-                      <div className="flex justify-end pt-1">
+                      <div className="flex justify-end gap-2 pt-1 border-t">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          disabled={sendingReset === user.user_id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSendRecovery(user.email, user.user_id);
+                          }}
+                        >
+                          {sendingReset === user.user_id ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          ) : (
+                            <KeyRound className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Enviar recuperación
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
