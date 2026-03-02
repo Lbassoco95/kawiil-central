@@ -149,11 +149,16 @@ export function UserManagement() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm truncate">{user.full_name}</span>
                           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${ROLE_STYLES[user.role || "staff"]}`}>
                             {ROLE_LABELS[user.role || "staff"] || user.role}
                           </Badge>
+                          {!user.invitation_accepted && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-300">
+                              Pendiente de registro
+                            </Badge>
+                          )}
                         </div>
                         <span className="text-xs text-muted-foreground">{user.email}</span>
                       </div>
