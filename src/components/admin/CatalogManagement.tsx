@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Tag, FileText, Receipt, Plus, Pencil, Loader2, Trash2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tag, FileText, Receipt, Plus, Pencil, Loader2, Trash2, ChevronDown, ChevronUp, Palette, Clock } from "lucide-react";
 import {
   useDocumentTypes, useUpsertDocumentType, useDeleteDocumentType,
   useCatalogTags, useUpsertCatalogTag, useDeleteCatalogTag,
@@ -20,32 +21,6 @@ import {
   type DocumentType, type CatalogTag, type TaxObligationType,
 } from "@/hooks/useCatalogs";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
-
-// ─── Generic list item ───
-function CatalogItem({
-  name, subtitle, color, isActive, onEdit, onDelete,
-}: {
-  name: string; subtitle?: string | null; color?: string | null; isActive: boolean; onEdit: () => void; onDelete: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
-      {color && <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: color }} />}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-sm">{name}</span>
-          {!isActive && <Badge variant="outline" className="text-[10px]">Inactivo</Badge>}
-        </div>
-        {subtitle && <p className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</p>}
-      </div>
-      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}>
-        <Pencil className="h-3.5 w-3.5" />
-      </Button>
-      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={onDelete}>
-        <Trash2 className="h-3.5 w-3.5" />
-      </Button>
-    </div>
-  );
-}
 
 // ─── Document Types ───
 function DocumentTypesCatalog() {
@@ -56,6 +31,7 @@ function DocumentTypesCatalog() {
   const [editing, setEditing] = useState<DocumentType | null>(null);
   const [form, setForm] = useState({ name: "", description: "" });
   const [deleteTarget, setDeleteTarget] = useState<DocumentType | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const openNew = () => { setEditing(null); setForm({ name: "", description: "" }); setDialogOpen(true); };
   const openEdit = (dt: DocumentType) => { setEditing(dt); setForm({ name: dt.name, description: dt.description || "" }); setDialogOpen(true); };
@@ -75,7 +51,44 @@ function DocumentTypesCatalog() {
       {isLoading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : !data?.length ? (
         <p className="text-sm text-muted-foreground text-center py-4">Sin tipos de documento</p>
       ) : (
-        <div className="space-y-1.5">{data.map((dt) => <CatalogItem key={dt.id} name={dt.name} subtitle={dt.description} isActive={dt.is_active} onEdit={() => openEdit(dt)} onDelete={() => setDeleteTarget(dt)} />)}</div>
+        <div className="space-y-1.5">
+          {data.map((dt) => (
+            <Collapsible key={dt.id} open={expandedId === dt.id} onOpenChange={(open) => setExpandedId(open ? dt.id : null)}>
+              <div className="rounded-lg border hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-3 w-full p-3 text-left">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-sm">{dt.name}</span>
+                      {!dt.is_active && <Badge variant="outline" className="text-[10px] ml-2">Inactivo</Badge>}
+                    </div>
+                    {expandedId === dt.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-3 pb-3 border-t pt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground text-xs">Estado</span>
+                        <p><Badge variant={dt.is_active ? "default" : "outline"}>{dt.is_active ? "Activo" : "Inactivo"}</Badge></p>
+                      </div>
+                      {dt.description && (
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground text-xs">Descripción</span>
+                          <p className="text-sm">{dt.description}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(dt)}><Pencil className="h-3.5 w-3.5 mr-1" /> Editar</Button>
+                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(dt)}><Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar</Button>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
+          ))}
+        </div>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-sm">
@@ -111,6 +124,7 @@ function TagsCatalog() {
   const [editing, setEditing] = useState<CatalogTag | null>(null);
   const [form, setForm] = useState({ name: "", color: "#8b5cf6" });
   const [deleteTarget, setDeleteTarget] = useState<CatalogTag | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const openNew = () => { setEditing(null); setForm({ name: "", color: "#8b5cf6" }); setDialogOpen(true); };
   const openEdit = (tag: CatalogTag) => { setEditing(tag); setForm({ name: tag.name, color: tag.color || "#8b5cf6" }); setDialogOpen(true); };
@@ -130,16 +144,43 @@ function TagsCatalog() {
       {isLoading ? <Loader2 className="h-5 w-5 animate-spin mx-auto" /> : !data?.length ? (
         <p className="text-sm text-muted-foreground text-center py-4">Sin etiquetas</p>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div className="space-y-1.5">
           {data.map((tag) => (
-            <Badge key={tag.id} variant="outline" className="cursor-pointer hover:bg-muted/50 gap-1.5 pr-1" onClick={() => openEdit(tag)}>
-              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: tag.color || "#8b5cf6" }} />
-              {tag.name}
-              <Pencil className="h-2.5 w-2.5 ml-1 opacity-50" />
-              <button className="ml-1 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(tag); }}>
-                <Trash2 className="h-2.5 w-2.5" />
-              </button>
-            </Badge>
+            <Collapsible key={tag.id} open={expandedId === tag.id} onOpenChange={(open) => setExpandedId(open ? tag.id : null)}>
+              <div className="rounded-lg border hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-3 w-full p-3 text-left">
+                    <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: tag.color || "#8b5cf6" }} />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-sm">{tag.name}</span>
+                      {!tag.is_active && <Badge variant="outline" className="text-[10px] ml-2">Inactiva</Badge>}
+                    </div>
+                    {expandedId === tag.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-3 pb-3 border-t pt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground text-xs">Estado</span>
+                        <p><Badge variant={tag.is_active ? "default" : "outline"}>{tag.is_active ? "Activa" : "Inactiva"}</Badge></p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs flex items-center gap-1"><Palette className="h-3 w-3" /> Color</span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <div className="h-4 w-4 rounded border" style={{ backgroundColor: tag.color || "#8b5cf6" }} />
+                          <span className="font-mono text-xs">{tag.color || "#8b5cf6"}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(tag)}><Pencil className="h-3.5 w-3.5 mr-1" /> Editar</Button>
+                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(tag)}><Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar</Button>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           ))}
         </div>
       )}
@@ -183,6 +224,7 @@ function TaxObligationsCatalog() {
   const [editing, setEditing] = useState<TaxObligationType | null>(null);
   const [form, setForm] = useState({ name: "", description: "", frequency: "mensual" });
   const [deleteTarget, setDeleteTarget] = useState<TaxObligationType | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const openNew = () => { setEditing(null); setForm({ name: "", description: "", frequency: "mensual" }); setDialogOpen(true); };
   const openEdit = (ob: TaxObligationType) => { setEditing(ob); setForm({ name: ob.name, description: ob.description || "", frequency: ob.frequency || "mensual" }); setDialogOpen(true); };
@@ -206,7 +248,45 @@ function TaxObligationsCatalog() {
       ) : (
         <div className="space-y-1.5">
           {data.map((ob) => (
-            <CatalogItem key={ob.id} name={ob.name} subtitle={`${freqLabel[ob.frequency || "mensual"] || ob.frequency}${ob.description ? ` · ${ob.description}` : ""}`} isActive={ob.is_active} onEdit={() => openEdit(ob)} onDelete={() => setDeleteTarget(ob)} />
+            <Collapsible key={ob.id} open={expandedId === ob.id} onOpenChange={(open) => setExpandedId(open ? ob.id : null)}>
+              <div className="rounded-lg border hover:bg-muted/30 transition-colors">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-3 w-full p-3 text-left">
+                    <Receipt className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-sm">{ob.name}</span>
+                      {!ob.is_active && <Badge variant="outline" className="text-[10px] ml-2">Inactivo</Badge>}
+                    </div>
+                    <Badge variant="secondary" className="text-[10px] mr-1">{freqLabel[ob.frequency || "mensual"] || ob.frequency}</Badge>
+                    {expandedId === ob.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-3 pb-3 border-t pt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground text-xs">Estado</span>
+                        <p><Badge variant={ob.is_active ? "default" : "outline"}>{ob.is_active ? "Activo" : "Inactivo"}</Badge></p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs flex items-center gap-1"><Clock className="h-3 w-3" /> Frecuencia</span>
+                        <p className="font-medium">{freqLabel[ob.frequency || "mensual"] || ob.frequency}</p>
+                      </div>
+                      {ob.description && (
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground text-xs">Descripción</span>
+                          <p className="text-sm">{ob.description}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <Button variant="outline" size="sm" onClick={() => openEdit(ob)}><Pencil className="h-3.5 w-3.5 mr-1" /> Editar</Button>
+                      <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(ob)}><Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar</Button>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </div>
+            </Collapsible>
           ))}
         </div>
       )}
