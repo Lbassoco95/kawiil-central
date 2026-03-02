@@ -3,7 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
@@ -65,6 +68,7 @@ function useToggleUserActive() {
 
 export function UserManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<{ userId: string; name: string; isActive: boolean } | null>(null);
   const { data: users, isLoading } = useOrgUsers();
   const { areaLabelMap } = useAreaOptions();
@@ -95,55 +99,94 @@ export function UserManagement() {
         ) : (
           <div className="space-y-2">
             {users.filter((u) => u.is_active).map((user) => (
-              <div
+              <Collapsible
                 key={user.id}
-                className={`flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors ${!user.is_active ? "opacity-50" : ""}`}
+                open={expandedUser === user.id}
+                onOpenChange={(open) => setExpandedUser(open ? user.id : null)}
               >
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                    {getInitials(user.full_name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm truncate">{user.full_name}</span>
-                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${ROLE_STYLES[user.role || "staff"]}`}>
-                      {ROLE_LABELS[user.role || "staff"] || user.role}
-                    </Badge>
-                    {!user.is_active && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted text-muted-foreground">
-                        Inactivo
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                    <span className="flex items-center gap-1">
-                      <Mail className="h-3 w-3" />
-                      {user.email}
-                    </span>
-                    {user.phone && (
-                      <span className="flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        {user.phone}
-                      </span>
-                    )}
-                    {user.area && (
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                        {areaLabelMap[user.area] || user.area}
-                      </Badge>
-                    )}
-                  </div>
+                <div className="rounded-lg border hover:bg-muted/30 transition-colors">
+                  <CollapsibleTrigger asChild>
+                    <button className="flex items-center gap-3 w-full p-3 text-left">
+                      <Avatar className="h-9 w-9">
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                          {getInitials(user.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm truncate">{user.full_name}</span>
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${ROLE_STYLES[user.role || "staff"]}`}>
+                            {ROLE_LABELS[user.role || "staff"] || user.role}
+                          </Badge>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{user.email}</span>
+                      </div>
+                      {expandedUser === user.id ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-3 pb-3 pt-0 space-y-3 border-t mx-3">
+                      <div className="grid grid-cols-2 gap-3 pt-3 text-sm">
+                        <div>
+                          <span className="text-xs text-muted-foreground block">Correo</span>
+                          <span className="flex items-center gap-1.5 mt-0.5">
+                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                            {user.email}
+                          </span>
+                        </div>
+                        {user.phone && (
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Teléfono</span>
+                            <span className="flex items-center gap-1.5 mt-0.5">
+                              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                              {user.phone}
+                            </span>
+                          </div>
+                        )}
+                        {user.area && (
+                          <div>
+                            <span className="text-xs text-muted-foreground block">Área</span>
+                            <Badge variant="secondary" className="text-xs mt-0.5">
+                              {areaLabelMap[user.area] || user.area}
+                            </Badge>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-xs text-muted-foreground block">Rol</span>
+                          <Badge variant="outline" className={`text-xs mt-0.5 ${ROLE_STYLES[user.role || "staff"]}`}>
+                            {ROLE_LABELS[user.role || "staff"] || user.role}
+                          </Badge>
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground block">Fecha de alta</span>
+                          <span className="flex items-center gap-1.5 mt-0.5 text-sm">
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                            {format(new Date(user.created_at), "d MMM yyyy", { locale: es })}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeactivateTarget({ userId: user.user_id, name: user.full_name, isActive: true });
+                          }}
+                        >
+                          <UserX className="h-3.5 w-3.5 mr-1" />
+                          Desactivar
+                        </Button>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  title={user.is_active ? "Desactivar usuario" : "Reactivar usuario"}
-                  onClick={() => setDeactivateTarget({ userId: user.user_id, name: user.full_name, isActive: user.is_active })}
-                >
-                  {user.is_active ? <UserX className="h-3.5 w-3.5 text-destructive" /> : <UserCheck className="h-3.5 w-3.5 text-green-600" />}
-                </Button>
-              </div>
+              </Collapsible>
             ))}
 
             {/* Inactive users section */}
