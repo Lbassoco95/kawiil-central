@@ -57,22 +57,31 @@ Deno.serve(async (req) => {
       });
       if (updateErr) console.warn('Could not update metadata:', updateErr.message);
 
-      // Generate and send recovery link (this actually sends the email)
-      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-        type: 'recovery',
-        email: email,
-        options: {
-          redirectTo: `${siteUrl}/cambiar-contrasena`,
-        },
-      });
-      if (linkError) throw linkError;
-
-      // The generateLink for recovery doesn't send email automatically,
-      // so we need to use resetPasswordForEmail which DOES send the email
+      // Send recovery email (rate-limited by provider to ~60s per email)
       const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
         redirectTo: `${siteUrl}/cambiar-contrasena`,
       });
-      if (resetError) throw resetError;
+
+      if (resetError) {
+        const msg = resetError.message || '';
+        const isRateLimited = msg.toLowerCase().includes('for security purposes') && msg.toLowerCase().includes('after');
+
+        if (isRateLimited) {
+          const secondsMatch = msg.match(/after\s+(\d+)\s+seconds/i);
+          const retryAfterSeconds = secondsMatch ? Number(secondsMatch[1]) : 60;
+
+          return new Response(JSON.stringify({
+            success: false,
+            rate_limited: true,
+            retry_after_seconds: retryAfterSeconds,
+            message: `Espera ${retryAfterSeconds}s antes de reenviar a ${email}`,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        throw resetError;
+      }
 
       // Update onboarding status to reflect they need to set password
       await adminClient.from('profiles').update({
