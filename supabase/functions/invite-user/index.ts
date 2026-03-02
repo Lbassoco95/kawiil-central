@@ -43,8 +43,10 @@ serve(async (req) => {
     if (!orgId) throw new Error('Could not determine organization');
 
     // Create user with admin API (inviteUserByEmail)
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://kawiil-core-hub.lovable.app';
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
       data: { full_name },
+      redirectTo: `${siteUrl}/cambiar-contrasena`,
     });
 
     if (inviteError) {

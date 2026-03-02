@@ -35,9 +35,12 @@ Deno.serve(async (req) => {
     const { data: { user: targetUser }, error: userError } = await adminClient.auth.admin.getUserById(user_id);
     if (userError || !targetUser) throw new Error('Usuario no encontrado');
 
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://kawiil-core-hub.lovable.app';
+
     // Re-invite the user
     const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(targetUser.email!, {
       data: targetUser.user_metadata,
+      redirectTo: `${siteUrl}/cambiar-contrasena`,
     });
 
     if (inviteError) {
