@@ -36,31 +36,54 @@ Deno.serve(async (req) => {
     if (userError || !targetUser) throw new Error('Usuario no encontrado');
 
     const siteUrl = Deno.env.get('SITE_URL') || 'https://kawiil-core-hub.lovable.app';
+    const email = targetUser.email!;
+    const isConfirmed = !!targetUser.email_confirmed_at;
 
-    // Re-invite the user
-    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(targetUser.email!, {
-      data: targetUser.user_metadata,
-      redirectTo: `${siteUrl}/cambiar-contrasena`,
-    });
+    console.log(`Resending for ${email}, confirmed: ${isConfirmed}`);
 
-    if (inviteError) {
-      // If already confirmed, try generating a new invite link
-      if (inviteError.message?.includes('already been registered') || inviteError.message?.includes('already confirmed')) {
-        // Use generateLink as fallback
-        const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-          type: 'invite',
-          email: targetUser.email!,
-          options: { data: targetUser.user_metadata },
-        });
-        if (linkError) throw linkError;
-      } else {
-        throw inviteError;
-      }
+    if (!isConfirmed) {
+      // User never confirmed — re-invite
+      const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        data: targetUser.user_metadata,
+        redirectTo: `${siteUrl}/cambiar-contrasena`,
+      });
+      if (inviteError) throw inviteError;
+      console.log(`Invite sent to ${email}`);
+    } else {
+      // User already confirmed — send password recovery email
+      // First update metadata to force password change on next login
+      await adminClient.auth.admin.updateUser(user_id, {
+        user_metadata: { ...targetUser.user_metadata, must_change_password: true },
+      });
+
+      // Generate and send recovery link (this actually sends the email)
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: 'recovery',
+        email: email,
+        options: {
+          redirectTo: `${siteUrl}/cambiar-contrasena`,
+        },
+      });
+      if (linkError) throw linkError;
+
+      // The generateLink for recovery doesn't send email automatically,
+      // so we need to use resetPasswordForEmail which DOES send the email
+      const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
+        redirectTo: `${siteUrl}/cambiar-contrasena`,
+      });
+      if (resetError) throw resetError;
+
+      // Update onboarding status to reflect they need to set password
+      await adminClient.from('profiles').update({
+        onboarding_status: 'password_pending',
+      }).eq('user_id', user_id);
+
+      console.log(`Recovery email sent to ${email}`);
     }
 
     return new Response(JSON.stringify({
       success: true,
-      message: `Invitación reenviada a ${targetUser.email}`,
+      message: `Enlace de acceso reenviado a ${email}`,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
