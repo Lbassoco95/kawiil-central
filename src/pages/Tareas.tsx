@@ -10,6 +10,7 @@ import { useTasks, useDeleteTask } from "@/hooks/useTasks";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -35,6 +36,7 @@ const Tareas = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteTask = useDeleteTask();
+  const { areaOptions, areaLabelMap } = useAreaOptions();
 
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
@@ -56,13 +58,11 @@ const Tareas = () => {
         </div>
 
         <Tabs value={area} onValueChange={setArea}>
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="todas">Todas</TabsTrigger>
-            <TabsTrigger value="contabilidad">Contabilidad</TabsTrigger>
-            <TabsTrigger value="legal">Legal</TabsTrigger>
-            <TabsTrigger value="softlanding">Softlanding</TabsTrigger>
-            <TabsTrigger value="pld_ft">PLD/FT</TabsTrigger>
-            <TabsTrigger value="juicios">Juicios</TabsTrigger>
+            {areaOptions.map((a) => (
+              <TabsTrigger key={a.value} value={a.value}>{a.label}</TabsTrigger>
+            ))}
           </TabsList>
         </Tabs>
 
@@ -101,7 +101,7 @@ const Tareas = () => {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        {task.area && <span className="capitalize">{task.area.replace("_", "/")}</span>}
+                        {task.area && <span className="capitalize">{areaLabelMap[task.area] || task.area}</span>}
                         {(task as any).clients?.name && (
                           <span className="flex items-center gap-1">
                             <User className="h-3 w-3" />{(task as any).clients.name}

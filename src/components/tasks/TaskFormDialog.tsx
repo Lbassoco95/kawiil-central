@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCreateTask, useProfiles } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
+import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, Link } from "lucide-react";
 
@@ -33,6 +34,7 @@ export function TaskFormDialog({ open, onOpenChange }: Props) {
   const { data: profiles } = useProfiles();
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
+  const { areaOptions } = useAreaOptions();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,14 +90,6 @@ export function TaskFormDialog({ open, onOpenChange }: Props) {
       setNewLink("");
     }
   };
-
-  const areaOptions = [
-    { value: "contabilidad", label: "Contabilidad" },
-    { value: "legal", label: "Legal" },
-    { value: "softlanding", label: "Softlanding" },
-    { value: "pld_ft", label: "PLD/FT" },
-    { value: "juicios", label: "Juicios" },
-  ];
 
   const priorityOptions = [
     { value: "urgente", label: "🔴 Urgente" },
