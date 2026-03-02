@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+export type OnboardingStatus = 'invited' | 'link_opened' | 'password_set' | 'active';
+
 export interface OrgUser {
   id: string;
   user_id: string;
@@ -13,6 +15,7 @@ export interface OrgUser {
   avatar_url: string | null;
   is_active: boolean;
   invitation_accepted: boolean;
+  onboarding_status: OnboardingStatus;
   created_at: string;
   role?: string;
 }

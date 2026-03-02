@@ -68,6 +68,7 @@ serve(async (req) => {
         phone: phone || null,
         organization_id: orgId,
         invitation_accepted: false,
+        onboarding_status: 'invited',
       })
       .eq('user_id', newUserId);
 
