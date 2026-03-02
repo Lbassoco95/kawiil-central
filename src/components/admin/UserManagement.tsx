@@ -191,6 +191,25 @@ export function UserManagement() {
                         </div>
                         <span className="text-xs text-muted-foreground">{user.email}</span>
                       </div>
+                      {(user.onboarding_status || (user.invitation_accepted ? 'active' : 'invited')) !== 'active' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-[11px] px-2 py-1 h-7 shrink-0 text-primary border-primary/30 hover:bg-primary/10"
+                          disabled={resendingInvite === user.user_id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleResendInvite(user.user_id, user.email);
+                          }}
+                        >
+                          {resendingInvite === user.user_id ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Reenviar
+                        </Button>
+                      )}
                       {expandedUser === user.id ? (
                         <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
                       ) : (
