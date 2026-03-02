@@ -3,12 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
+import { UserEditDialog } from "@/components/admin/UserEditDialog";
+import type { OrgUser } from "@/hooks/useOrgUsers";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import {
   AlertDialog,
@@ -70,6 +72,7 @@ export function UserManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<{ userId: string; name: string; isActive: boolean } | null>(null);
+  const [editTarget, setEditTarget] = useState<OrgUser | null>(null);
   const { data: users, isLoading } = useOrgUsers();
   const { areaLabelMap } = useAreaOptions();
   const toggleActive = useToggleUserActive();
@@ -202,6 +205,18 @@ export function UserManagement() {
                           variant="ghost"
                           size="sm"
                           className="text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditTarget(user);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1" />
+                          Editar
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
                           disabled={sendingReset === user.user_id}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -279,6 +294,7 @@ export function UserManagement() {
       </CardContent>
 
       <UserFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <UserEditDialog user={editTarget} open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)} />
 
       {deactivateTarget && (
         <AlertDialog open={true} onOpenChange={(open) => !open && setDeactivateTarget(null)}>
