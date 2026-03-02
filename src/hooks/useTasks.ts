@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { sendSlackNotification } from "@/lib/slackNotifications";
 
 export type Task = Tables<"tasks"> & {
   clients?: { name: string } | null;
@@ -185,9 +186,17 @@ export function useCreateTask() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       toast.success("Tarea creada exitosamente");
+
+      if (data) {
+        sendSlackNotification("task_created", {
+          title: data.title,
+          priority: data.priority,
+          area: data.area,
+        });
+      }
     },
     onError: (err: Error) => {
       toast.error("Error al crear tarea: " + err.message);
@@ -212,6 +221,14 @@ export function useAddComment() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["task-comments", vars.taskId] });
       toast.success("Comentario guardado");
+
+      if (vars.mentions && vars.mentions.length > 0) {
+        sendSlackNotification("comment_mention", {
+          task_title: "Tarea",
+          comment_preview: vars.content.substring(0, 100),
+          mentioned_ids: vars.mentions,
+        });
+      }
     },
     onError: (err: Error) => {
       toast.error("Error al guardar comentario: " + err.message);
@@ -227,9 +244,16 @@ export function useUpdateTask() {
       const { error } = await supabase.from("tasks").update(updates).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
+
+      if (vars.status) {
+        sendSlackNotification("task_updated", {
+          title: vars.title || "Tarea",
+          status: vars.status,
+        });
+      }
     },
   });
 }
