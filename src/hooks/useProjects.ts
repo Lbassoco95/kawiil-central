@@ -26,6 +26,31 @@ export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      // Delete related records first to avoid FK constraints
+      const { error: apError } = await supabase
+        .from("accounting_periods")
+        .delete()
+        .eq("project_id", id);
+      if (apError) throw apError;
+
+      const { error: docError } = await supabase
+        .from("documents")
+        .delete()
+        .eq("project_id", id);
+      if (docError) throw docError;
+
+      const { error: taskError } = await supabase
+        .from("tasks")
+        .delete()
+        .eq("project_id", id);
+      if (taskError) throw taskError;
+
+      const { error: memberError } = await supabase
+        .from("project_members")
+        .delete()
+        .eq("project_id", id);
+      if (memberError) throw memberError;
+
       const { error } = await supabase.from("projects").delete().eq("id", id);
       if (error) throw error;
     },
