@@ -200,16 +200,21 @@ export function useAddComment() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ taskId, content }: { taskId: string; content: string }) => {
+    mutationFn: async ({ taskId, content, mentions }: { taskId: string; content: string; mentions?: string[] }) => {
       const { error } = await supabase.from("task_comments").insert({
         task_id: taskId,
         user_id: user!.id,
         content,
+        mentions: mentions ?? [],
       });
       if (error) throw error;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["task-comments", vars.taskId] });
+      toast.success("Comentario guardado");
+    },
+    onError: (err: Error) => {
+      toast.error("Error al guardar comentario: " + err.message);
     },
   });
 }

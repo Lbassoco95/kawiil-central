@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { MentionTextarea } from "./MentionTextarea";
+import { useProfiles } from "@/hooks/useTasks";
 
 interface Props {
   taskId: string | null;
@@ -47,10 +49,33 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
+  const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
+  const { data: orgProfiles } = useProfiles();
 
   if (!taskId) return null;
+
+  // Render @mentions as styled spans
+  const renderCommentContent = (content: string) => {
+    const parts = content.split(/(@\w[\w\s]*\w)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("@")) {
+        const name = part.slice(1);
+        const isKnown = orgProfiles?.some(
+          (p) => p.full_name.toLowerCase() === name.toLowerCase()
+        );
+        if (isKnown) {
+          return (
+            <span key={i} className="text-primary font-medium">
+              {part}
+            </span>
+          );
+        }
+      }
+      return part;
+    });
+  };
 
   const handleStatusChange = (status: string) => {
     updateTask.mutate({ id: taskId, status });
@@ -59,8 +84,13 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const handleSendComment = () => {
     if (!commentText.trim()) return;
     addComment.mutate(
-      { taskId, content: commentText },
-      { onSuccess: () => setCommentText("") }
+      { taskId, content: commentText, mentions: commentMentions },
+      {
+        onSuccess: () => {
+          setCommentText("");
+          setCommentMentions([]);
+        },
+      }
     );
   };
 
@@ -215,18 +245,21 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                             {format(new Date(c.created_at), "dd MMM HH:mm", { locale: es })}
                           </span>
                         </div>
-                        <p className="text-sm text-foreground whitespace-pre-wrap">{c.content}</p>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">
+                          {renderCommentContent(c.content)}
+                        </p>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <Textarea
+                  <MentionTextarea
                     value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Escribe un comentario..."
+                    onChange={setCommentText}
+                    profiles={orgProfiles ?? []}
+                    placeholder="Escribe un comentario... usa @ para mencionar"
                     rows={2}
-                    className="flex-1"
+                    onMentionsChange={setCommentMentions}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                         handleSendComment();
