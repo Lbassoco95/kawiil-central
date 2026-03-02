@@ -67,7 +67,7 @@ function DocumentTypesCatalog() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-3 pb-3 border-t pt-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-muted-foreground text-xs">Estado</span>
                         <p><Badge variant={dt.is_active ? "default" : "outline"}>{dt.is_active ? "Activo" : "Inactivo"}</Badge></p>
@@ -79,7 +79,7 @@ function DocumentTypesCatalog() {
                         </div>
                       )}
                     </div>
-                    <div className="flex justify-end gap-2 pt-1">
+                    <div className="flex flex-wrap justify-end gap-2 pt-1">
                       <Button variant="outline" size="sm" onClick={() => openEdit(dt)}><Pencil className="h-3.5 w-3.5 mr-1" /> Editar</Button>
                       <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(dt)}><Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar</Button>
                     </div>
@@ -160,7 +160,7 @@ function TagsCatalog() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-3 pb-3 border-t pt-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-muted-foreground text-xs">Estado</span>
                         <p><Badge variant={tag.is_active ? "default" : "outline"}>{tag.is_active ? "Activa" : "Inactiva"}</Badge></p>
@@ -173,7 +173,7 @@ function TagsCatalog() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2 pt-1">
+                    <div className="flex flex-wrap justify-end gap-2 pt-1">
                       <Button variant="outline" size="sm" onClick={() => openEdit(tag)}><Pencil className="h-3.5 w-3.5 mr-1" /> Editar</Button>
                       <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(tag)}><Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar</Button>
                     </div>
@@ -263,7 +263,7 @@ function TaxObligationsCatalog() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="px-3 pb-3 border-t pt-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="text-muted-foreground text-xs">Estado</span>
                         <p><Badge variant={ob.is_active ? "default" : "outline"}>{ob.is_active ? "Activo" : "Inactivo"}</Badge></p>
@@ -279,7 +279,7 @@ function TaxObligationsCatalog() {
                         </div>
                       )}
                     </div>
-                    <div className="flex justify-end gap-2 pt-1">
+                    <div className="flex flex-wrap justify-end gap-2 pt-1">
                       <Button variant="outline" size="sm" onClick={() => openEdit(ob)}><Pencil className="h-3.5 w-3.5 mr-1" /> Editar</Button>
                       <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(ob)}><Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar</Button>
                     </div>

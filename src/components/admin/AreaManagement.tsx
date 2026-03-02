@@ -117,7 +117,7 @@ export function AreaManagement() {
 
                   <CollapsibleContent>
                     <div className="px-3 pb-3 border-t pt-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-muted-foreground text-xs">Slug</span>
                           <p className="font-medium">{area.slug}</p>
@@ -152,7 +152,7 @@ export function AreaManagement() {
                           <p className="text-xs">{format(new Date(area.created_at), "dd MMM yyyy", { locale: es })}</p>
                         </div>
                       </div>
-                      <div className="flex justify-end gap-2 pt-1">
+                      <div className="flex flex-wrap justify-end gap-2 pt-1">
                         <Button variant="outline" size="sm" onClick={() => openEdit(area)}>
                           <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
                         </Button>
@@ -187,7 +187,7 @@ export function AreaManagement() {
               <Label>Descripción</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label>Color</Label>
                 <div className="flex items-center gap-2 mt-1">

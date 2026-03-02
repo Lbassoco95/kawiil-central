@@ -149,25 +149,25 @@ export function UserManagement() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="px-3 pb-3 pt-0 space-y-3 border-t mx-3">
-                      <div className="grid grid-cols-2 gap-3 pt-3 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 text-sm">
                         <div>
                           <span className="text-xs text-muted-foreground block">Correo</span>
-                          <span className="flex items-center gap-1.5 mt-0.5">
-                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="flex items-center gap-1.5 mt-0.5 break-all">
+                            <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             {user.email}
                           </span>
                         </div>
                         <div>
                           <span className="text-xs text-muted-foreground block">Teléfono</span>
                           <span className="flex items-center gap-1.5 mt-0.5">
-                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             {user.phone || <span className="text-muted-foreground italic">Sin registrar</span>}
                           </span>
                         </div>
                         <div>
                           <span className="text-xs text-muted-foreground block">Área</span>
                           <span className="flex items-center gap-1.5 mt-0.5">
-                            <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             {user.area ? (
                               <Badge variant="secondary" className="text-xs">
                                 {areaLabelMap[user.area] || user.area}
@@ -180,7 +180,7 @@ export function UserManagement() {
                         <div>
                           <span className="text-xs text-muted-foreground block">Rol</span>
                           <span className="flex items-center gap-1.5 mt-0.5">
-                            <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Shield className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             <Badge variant="outline" className={`text-xs ${ROLE_STYLES[user.role || "staff"]}`}>
                               {ROLE_LABELS[user.role || "staff"] || user.role}
                             </Badge>
@@ -189,7 +189,7 @@ export function UserManagement() {
                         <div>
                           <span className="text-xs text-muted-foreground block">Fecha de alta</span>
                           <span className="flex items-center gap-1.5 mt-0.5 text-sm">
-                            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                            <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             {format(new Date(user.created_at), "d MMM yyyy", { locale: es })}
                           </span>
                         </div>
@@ -200,7 +200,7 @@ export function UserManagement() {
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex justify-end gap-2 pt-1 border-t">
+                      <div className="flex flex-wrap justify-end gap-2 pt-1 border-t">
                         <Button
                           variant="ghost"
                           size="sm"
