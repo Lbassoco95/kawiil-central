@@ -3,13 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Loader2, Mail, Phone } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck } from "lucide-react";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
-import type { Database } from "@/integrations/supabase/types";
-
-type ServiceArea = Database["public"]["Enums"]["service_area"];
-type AppRole = Database["public"]["Enums"]["app_role"];
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { supabase } from "@/integrations/supabase/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -25,14 +26,6 @@ const ROLE_STYLES: Record<string, string> = {
   viewer: "bg-muted text-muted-foreground",
 };
 
-const AREA_LABELS: Record<ServiceArea, string> = {
-  contabilidad: "Contabilidad",
-  legal: "Legal",
-  softlanding: "Soft Landing",
-  pld_ft: "PLD/FT",
-  juicios: "Juicios",
-};
-
 function getInitials(name: string): string {
   return name
     .split(" ")
@@ -42,9 +35,31 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
+function useToggleUserActive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_active: !isActive })
+        .eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["org-users"] });
+      queryClient.invalidateQueries({ queryKey: ["org-profiles"] });
+      toast.success(vars.isActive ? "Usuario desactivado" : "Usuario reactivado");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+}
+
 export function UserManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<{ userId: string; name: string; isActive: boolean } | null>(null);
   const { data: users, isLoading } = useOrgUsers();
+  const { areaLabelMap } = useAreaOptions();
+  const toggleActive = useToggleUserActive();
 
   return (
     <Card>
@@ -73,7 +88,7 @@ export function UserManagement() {
             {users.map((user) => (
               <div
                 key={user.id}
-                className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors"
+                className={`flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors ${!user.is_active ? "opacity-50" : ""}`}
               >
                 <Avatar className="h-9 w-9">
                   <AvatarFallback className="text-xs bg-primary/10 text-primary">
@@ -105,11 +120,20 @@ export function UserManagement() {
                     )}
                     {user.area && (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                        {AREA_LABELS[user.area as ServiceArea] || user.area}
+                        {areaLabelMap[user.area] || user.area}
                       </Badge>
                     )}
                   </div>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title={user.is_active ? "Desactivar usuario" : "Reactivar usuario"}
+                  onClick={() => setDeactivateTarget({ userId: user.user_id, name: user.full_name, isActive: user.is_active })}
+                >
+                  {user.is_active ? <UserX className="h-3.5 w-3.5 text-destructive" /> : <UserCheck className="h-3.5 w-3.5 text-green-600" />}
+                </Button>
               </div>
             ))}
           </div>
@@ -117,6 +141,22 @@ export function UserManagement() {
       </CardContent>
 
       <UserFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+
+      <DeleteConfirmDialog
+        open={!!deactivateTarget}
+        onOpenChange={(open) => !open && setDeactivateTarget(null)}
+        title={deactivateTarget?.isActive ? `¿Desactivar a "${deactivateTarget?.name}"?` : `¿Reactivar a "${deactivateTarget?.name}"?`}
+        description={deactivateTarget?.isActive
+          ? "El usuario no podrá acceder al sistema hasta que sea reactivado."
+          : "El usuario podrá acceder nuevamente al sistema."}
+        onConfirm={() => {
+          if (deactivateTarget) {
+            toggleActive.mutate({ userId: deactivateTarget.userId, isActive: deactivateTarget.isActive });
+            setDeactivateTarget(null);
+          }
+        }}
+        isPending={toggleActive.isPending}
+      />
     </Card>
   );
 }

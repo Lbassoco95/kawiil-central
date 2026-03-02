@@ -12,17 +12,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useClients";
 import { toast } from "sonner";
+import { useAreaOptions } from "@/hooks/useAreaOptions";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
-
-const SERVICE_OPTIONS: { value: ServiceArea; label: string }[] = [
-  { value: "contabilidad", label: "Contabilidad" },
-  { value: "legal", label: "Legal" },
-  { value: "softlanding", label: "Soft Landing" },
-  { value: "pld_ft", label: "PLD/FT" },
-  { value: "juicios", label: "Juicios" },
-];
 
 export const TAX_OBLIGATION_OPTIONS = [
   { key: "isr_provisional", label: "ISR (mensual provisional)" },
@@ -41,6 +34,7 @@ export function ProjectFormDialog() {
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
   const { user } = useAuth();
   const { data: clients } = useClients();
+  const { areaOptions } = useAreaOptions();
   const queryClient = useQueryClient();
 
   const isAccounting = area === "contabilidad" || area === "softlanding";
@@ -139,7 +133,7 @@ export function ProjectFormDialog() {
                 <SelectValue placeholder="Seleccionar área" />
               </SelectTrigger>
               <SelectContent>
-                {SERVICE_OPTIONS.map((opt) => (
+                {areaOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>

@@ -28,9 +28,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInviteUser, useCreateUser } from "@/hooks/useOrgUsers";
 import { Mail, UserPlus } from "lucide-react";
+import { useAreaOptions } from "@/hooks/useAreaOptions";
 import type { Database } from "@/integrations/supabase/types";
 
-type ServiceArea = Database["public"]["Enums"]["service_area"];
 type AppRole = Database["public"]["Enums"]["app_role"];
 
 const ROLE_LABELS: Record<AppRole, string> = {
@@ -38,14 +38,6 @@ const ROLE_LABELS: Record<AppRole, string> = {
   manager: "Gerente",
   staff: "Staff",
   viewer: "Viewer (solo lectura)",
-};
-
-const AREA_LABELS: Record<ServiceArea, string> = {
-  contabilidad: "Contabilidad",
-  legal: "Legal",
-  softlanding: "Soft Landing",
-  pld_ft: "PLD/FT",
-  juicios: "Juicios",
 };
 
 const inviteSchema = z.object({
@@ -72,6 +64,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
   const [method, setMethod] = useState<"invite" | "create">("invite");
   const inviteUser = useInviteUser();
   const createUser = useCreateUser();
+  const { areaOptions } = useAreaOptions();
 
   const inviteForm = useForm<InviteFormValues>({
     resolver: zodResolver(inviteSchema),
@@ -210,8 +203,8 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {(Object.entries(AREA_LABELS) as [ServiceArea, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  {areaOptions.map((a) => (
+                    <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
