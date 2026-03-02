@@ -3,14 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw } from "lucide-react";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw, Send, Link2, KeySquare, CheckCircle2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
-import type { OrgUser } from "@/hooks/useOrgUsers";
+import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import {
   AlertDialog,
@@ -38,6 +38,29 @@ const ROLE_STYLES: Record<string, string> = {
   manager: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
   staff: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   viewer: "bg-muted text-muted-foreground",
+};
+
+const ONBOARDING_CONFIG: Record<OnboardingStatus, { label: string; className: string; icon: typeof Send }> = {
+  invited: {
+    label: "Invitación enviada",
+    className: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-300",
+    icon: Send,
+  },
+  link_opened: {
+    label: "Enlace abierto",
+    className: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-300",
+    icon: Link2,
+  },
+  password_set: {
+    label: "Contraseña establecida",
+    className: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400 border-purple-300",
+    icon: KeySquare,
+  },
+  active: {
+    label: "Registrado",
+    className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-300",
+    icon: CheckCircle2,
+  },
 };
 
 function getInitials(name: string): string {
@@ -154,15 +177,17 @@ export function UserManagement() {
                           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${ROLE_STYLES[user.role || "staff"]}`}>
                             {ROLE_LABELS[user.role || "staff"] || user.role}
                           </Badge>
-                          {!user.invitation_accepted ? (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border-amber-300">
-                              Pendiente de registro
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-300">
-                              Registrado
-                            </Badge>
-                          )}
+                          {(() => {
+                            const status = (user.onboarding_status || (user.invitation_accepted ? 'active' : 'invited')) as OnboardingStatus;
+                            const config = ONBOARDING_CONFIG[status];
+                            const StatusIcon = config.icon;
+                            return (
+                              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${config.className}`}>
+                                <StatusIcon className="h-3 w-3 mr-0.5" />
+                                {config.label}
+                              </Badge>
+                            );
+                          })()}
                         </div>
                         <span className="text-xs text-muted-foreground">{user.email}</span>
                       </div>

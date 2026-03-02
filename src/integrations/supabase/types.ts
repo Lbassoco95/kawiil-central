@@ -464,6 +464,7 @@ export type Database = {
           id: string
           invitation_accepted: boolean
           is_active: boolean
+          onboarding_status: string
           organization_id: string
           phone: string | null
           updated_at: string
@@ -478,6 +479,7 @@ export type Database = {
           id?: string
           invitation_accepted?: boolean
           is_active?: boolean
+          onboarding_status?: string
           organization_id: string
           phone?: string | null
           updated_at?: string
@@ -492,6 +494,7 @@ export type Database = {
           id?: string
           invitation_accepted?: boolean
           is_active?: boolean
+          onboarding_status?: string
           organization_id?: string
           phone?: string | null
           updated_at?: string

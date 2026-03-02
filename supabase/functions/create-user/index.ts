@@ -76,6 +76,7 @@ serve(async (req) => {
         area: area || null,
         phone: phone || null,
         organization_id: orgId,
+        onboarding_status: 'password_set',
       })
       .eq('user_id', newUserId);
 
