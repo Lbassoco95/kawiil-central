@@ -6,8 +6,17 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck } from "lucide-react";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
-import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -183,21 +192,35 @@ export function UserManagement() {
 
       <UserFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 
-      <DeleteConfirmDialog
-        open={!!deactivateTarget}
-        onOpenChange={(open) => !open && setDeactivateTarget(null)}
-        title={deactivateTarget?.isActive ? `¿Desactivar a "${deactivateTarget?.name}"?` : `¿Reactivar a "${deactivateTarget?.name}"?`}
-        description={deactivateTarget?.isActive
-          ? "El usuario no podrá acceder al sistema hasta que sea reactivado."
-          : "El usuario podrá acceder nuevamente al sistema."}
-        onConfirm={() => {
-          if (deactivateTarget) {
-            toggleActive.mutate({ userId: deactivateTarget.userId, isActive: deactivateTarget.isActive });
-            setDeactivateTarget(null);
-          }
-        }}
-        isPending={toggleActive.isPending}
-      />
+      {deactivateTarget && (
+        <AlertDialog open={true} onOpenChange={(open) => !open && setDeactivateTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {deactivateTarget.isActive ? `¿Desactivar a "${deactivateTarget.name}"?` : `¿Reactivar a "${deactivateTarget.name}"?`}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {deactivateTarget.isActive
+                  ? "El usuario no podrá acceder al sistema hasta que sea reactivado."
+                  : "El usuario podrá acceder nuevamente al sistema."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={toggleActive.isPending}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  toggleActive.mutate({ userId: deactivateTarget.userId, isActive: deactivateTarget.isActive });
+                  setDeactivateTarget(null);
+                }}
+                disabled={toggleActive.isPending}
+                className={deactivateTarget.isActive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}
+              >
+                {toggleActive.isPending ? "Procesando..." : deactivateTarget.isActive ? "Desactivar" : "Reactivar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Card>
   );
 }
