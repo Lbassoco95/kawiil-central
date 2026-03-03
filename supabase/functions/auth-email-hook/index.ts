@@ -216,12 +216,17 @@ async function handleWebhook(req: Request): Promise<Response> {
     )
   }
 
+  const siteUrl = `https://kawiil-core-hub.lovable.app`
+  const recoveryLink = emailType === 'recovery'
+    ? `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token=${encodeURIComponent(payload.data.token ?? '')}`
+    : payload.data.url
+
   // Build template props from payload.data (HookData structure)
   const templateProps = {
     siteName: SITE_NAME,
-    siteUrl: `https://kawiil-core-hub.lovable.app`,
+    siteUrl,
     recipient: payload.data.email,
-    confirmationUrl: payload.data.url,
+    confirmationUrl: recoveryLink,
     token: payload.data.token,
     email: payload.data.email,
     newEmail: payload.data.new_email,

@@ -12,7 +12,11 @@ const CambiarContrasena = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verifyingLink, setVerifyingLink] = useState(false);
   const [ready, setReady] = useState(false);
+  const [manualRecoveryFlow, setManualRecoveryFlow] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryToken, setRecoveryToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -20,14 +24,27 @@ const CambiarContrasena = () => {
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.replace("#", ""));
     const searchParams = new URLSearchParams(window.location.search);
+
     const linkError = hashParams.get("error_description") || searchParams.get("error_description");
-    const isRecoveryLink = hashParams.get("type") === "recovery" || searchParams.get("type") === "recovery";
+    const mode = searchParams.get("mode") || hashParams.get("mode");
+    const token = searchParams.get("token") || hashParams.get("token");
+    const email = searchParams.get("email") || hashParams.get("email");
 
     if (linkError) {
       setError(decodeURIComponent(linkError));
       return;
     }
 
+    // New secure recovery flow: verify token only when user explicitly clicks
+    if (mode === "recovery" && token && email) {
+      setManualRecoveryFlow(true);
+      setRecoveryToken(token);
+      setRecoveryEmail(email);
+      setError(null);
+      return;
+    }
+
+    // Backward compatibility: legacy links that create session directly
     let attempts = 0;
     const maxAttempts = 90; // ~45s
 
@@ -58,15 +75,10 @@ const CambiarContrasena = () => {
       attempts += 1;
       if (attempts >= maxAttempts) {
         clearInterval(interval);
-        if (!isRecoveryLink) {
-          setError("Este enlace no es de recuperación. Abre el correo más reciente y vuelve a intentar.");
-        } else {
-          setError("La verificación está tardando más de lo esperado. Espera unos segundos más o solicita un enlace nuevo.");
-        }
+        setError("La verificación está tardando más de lo esperado. Solicita un enlace nuevo desde administración.");
       }
     }, 500);
 
-    // intento inmediato
     checkSession();
 
     return () => {
@@ -74,6 +86,33 @@ const CambiarContrasena = () => {
       clearInterval(interval);
     };
   }, []);
+
+  const handleVerifyRecoveryLink = async () => {
+    if (!recoveryEmail || !recoveryToken) {
+      setError("Enlace de recuperación inválido. Solicita uno nuevo.");
+      return;
+    }
+
+    setVerifyingLink(true);
+    const { error } = await supabase.auth.verifyOtp({
+      email: recoveryEmail,
+      token: recoveryToken,
+      type: "recovery",
+    });
+
+    if (error) {
+      setError("El enlace ha expirado o ya fue utilizado. Solicita uno nuevo desde administración.");
+      setVerifyingLink(false);
+      return;
+    }
+
+    // Remove sensitive params from URL
+    window.history.replaceState({}, "", "/cambiar-contrasena");
+    setManualRecoveryFlow(false);
+    setReady(true);
+    setError(null);
+    setVerifyingLink(false);
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,6 +176,15 @@ const CambiarContrasena = () => {
                 <p className="text-sm text-destructive">{error}</p>
                 <Button variant="outline" onClick={() => navigate("/login")} className="w-full">
                   Ir al inicio de sesión
+                </Button>
+              </div>
+            ) : manualRecoveryFlow ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground text-center">
+                  Para continuar, confirma el enlace de recuperación.
+                </p>
+                <Button type="button" className="w-full" onClick={handleVerifyRecoveryLink} disabled={verifyingLink}>
+                  {verifyingLink ? "Validando enlace..." : "Validar enlace y continuar"}
                 </Button>
               </div>
             ) : !ready ? (
