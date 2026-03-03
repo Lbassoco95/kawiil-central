@@ -5,9 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, FileText, CheckSquare, Scale } from "lucide-react";
+import { ArrowLeft, Calculator, FileText, CheckSquare, Scale, Building2 } from "lucide-react";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
+import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -61,8 +62,10 @@ const ProyectoDetalle = () => {
 
   // Determine if project has accounting service
   const hasAccounting = project?.area === "contabilidad" || project?.area === "softlanding";
+  const isSoftlanding = project?.area === "softlanding";
   const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
   const lawsuitDetails = (project as any)?.lawsuit_details;
+  const constitutionDetails = (project as any)?.constitution_details ?? null;
 
   if (isLoading) {
     return (
@@ -123,9 +126,15 @@ const ProyectoDetalle = () => {
           </div>
         </div>
 
-        <Tabs defaultValue={isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
-          <TabsList>
+        <Tabs defaultValue={isSoftlanding ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
+          <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="general">General</TabsTrigger>
+            {isSoftlanding && (
+              <TabsTrigger value="constitucion">
+                <Building2 className="h-4 w-4 mr-1" />
+                Constitución
+              </TabsTrigger>
+            )}
             {hasAccounting && (
               <TabsTrigger value="contabilidad">
                 <Calculator className="h-4 w-4 mr-1" />
@@ -176,6 +185,15 @@ const ProyectoDetalle = () => {
               </Card>
             </div>
           </TabsContent>
+
+          {isSoftlanding && (
+            <TabsContent value="constitucion">
+              <ConstitutionDashboard
+                projectId={project.id}
+                constitutionDetails={constitutionDetails}
+              />
+            </TabsContent>
+          )}
 
           {hasAccounting && (
             <TabsContent value="contabilidad">
