@@ -78,3 +78,22 @@ export function useProjectDetail(projectId: string | undefined) {
     enabled: !!user && !!projectId,
   });
 }
+
+export function useUpdateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string } & Partial<Omit<Project, "id" | "created_at" | "organization_id">>) => {
+      const { error } = await supabase
+        .from("projects")
+        .update(updates)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["project", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Proyecto actualizado");
+    },
+    onError: (error: Error) => toast.error("Error al actualizar: " + error.message),
+  });
+}
