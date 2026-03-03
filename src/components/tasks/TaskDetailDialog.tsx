@@ -9,13 +9,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useTaskDetail, useAddComment, useUpdateTask } from "@/hooks/useTasks";
+import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssignees";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X
+  Upload, ExternalLink, Send, Plus, X, UserPlus
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { MentionTextarea } from "./MentionTextarea";
@@ -45,6 +46,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const { task, isLoading, comments, assignees, documents } = useTaskDetail(taskId ?? undefined);
   const addComment = useAddComment();
   const updateTask = useUpdateTask();
+  const addAssignee = useAddTaskAssignee();
+  const removeAssignee = useRemoveTaskAssignee();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
@@ -195,19 +198,38 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.description}</p>
             )}
 
-            {/* Assignees */}
-            {assignees.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2">Colaboradores</h4>
-                <div className="flex flex-wrap gap-2">
-                  {assignees.map((a: any) => (
-                    <Badge key={a.id} variant="secondary">
-                      {a.profile?.full_name || a.user_id}
-                    </Badge>
-                  ))}
-                </div>
+            {/* Assignees - editable */}
+            <div>
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                <UserPlus className="h-4 w-4" /> Colaboradores
+              </h4>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {assignees.map((a: any) => (
+                  <Badge key={a.id} variant="secondary" className="gap-1">
+                    {a.profile?.full_name || a.user_id}
+                    <X
+                      className="h-3 w-3 cursor-pointer hover:text-destructive"
+                      onClick={() => removeAssignee.mutate({ taskId: taskId!, userId: a.user_id })}
+                    />
+                  </Badge>
+                ))}
               </div>
-            )}
+              <Select
+                onValueChange={(uid) => addAssignee.mutate({ taskId: taskId!, userId: uid })}
+                value=""
+              >
+                <SelectTrigger className="w-full sm:w-[250px]">
+                  <SelectValue placeholder="Agregar colaborador..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgProfiles
+                    ?.filter((p) => !assignees.some((a: any) => a.user_id === p.user_id))
+                    .map((p) => (
+                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <Separator />
 
