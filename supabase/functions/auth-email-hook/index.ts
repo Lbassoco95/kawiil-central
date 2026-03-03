@@ -236,7 +236,7 @@ async function handleWebhook(req: Request): Promise<Response> {
   // The email action type is in payload.data.action_type (e.g., "signup", "recovery")
   // payload.type is the hook event type ("auth")
   const emailType = payload.data.action_type
-  console.log('Received auth event', { emailType, email: payload.data.email, run_id })
+  console.log('Received auth event', { emailType, email: payload.data.email, run_id, hasToken: !!payload.data.token, hasUrl: !!payload.data.url })
 
   const EmailTemplate = EMAIL_TEMPLATES[emailType]
   if (!EmailTemplate) {
@@ -262,11 +262,29 @@ async function handleWebhook(req: Request): Promise<Response> {
   }
 
   const isDirectRecoveryFlow = redirectTarget.includes('flow=direct')
-  const recoveryLink = emailType === 'recovery'
-    ? (isDirectRecoveryFlow
-        ? payload.data.url  // Use native Supabase verify URL – it creates a session and redirects
-        : await buildActivationRecoveryLink(siteUrl, payload.data.email ?? ''))
-    : payload.data.url
+
+  let recoveryLink = payload.data.url
+  if (emailType === 'recovery') {
+    if (isDirectRecoveryFlow) {
+      // Extract token from Supabase's native verify URL and build a frontend-only link
+      // so email scanners can't consume the one-time token
+      let extractedToken = payload.data.token || ''
+      if (!extractedToken && payload.data.url) {
+        try {
+          const nativeUrl = new URL(payload.data.url)
+          extractedToken = nativeUrl.searchParams.get('token') || ''
+        } catch { /* ignore */ }
+      }
+      if (extractedToken) {
+        recoveryLink = `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token=${encodeURIComponent(extractedToken)}`
+      } else {
+        console.warn('No token found for direct recovery flow, falling back to activation link')
+        recoveryLink = await buildActivationRecoveryLink(siteUrl, payload.data.email ?? '')
+      }
+    } else {
+      recoveryLink = await buildActivationRecoveryLink(siteUrl, payload.data.email ?? '')
+    }
+  }
 
   // Build template props from payload.data (HookData structure)
   const templateProps = {
