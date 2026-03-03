@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronDown, FileText } from "lucide-react";
+import { ChevronDown, FileText, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -44,11 +44,14 @@ export function AnnualStepDetailRow({
   projectId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [localStatus, setLocalStatus] = useState(step.step_status || "pendiente");
+  const [localDate, setLocalDate] = useState(step.date || "");
+  const [localNotes, setLocalNotes] = useState(step.notes || "");
+  const [hasChanges, setHasChanges] = useState(false);
   const toggleStep = useToggleAnnualStep();
   const updateDetails = useUpdateAnnualStepDetails();
 
-  const stepStatus = step.step_status || "pendiente";
-  const statusStyle = STEP_STATUS_STYLES[stepStatus] || STEP_STATUS_STYLES.pendiente;
+  const statusStyle = STEP_STATUS_STYLES[localStatus as StepStatus] || STEP_STATUS_STYLES.pendiente;
 
   const handleToggle = (checked: boolean) => {
     toggleStep.mutate({
@@ -59,33 +62,22 @@ export function AnnualStepDetailRow({
     });
   };
 
-  const handleStatusChange = (value: string) => {
-    updateDetails.mutate({
-      declarationId,
-      projectId,
-      stepKey: step.key,
-      updates: { step_status: value as StepStatus },
-    });
-  };
+  const markChanged = () => setHasChanges(true);
 
-  const handleNotesBlur = (value: string) => {
-    if (value !== (step.notes || "")) {
-      updateDetails.mutate({
+  const handleSave = () => {
+    updateDetails.mutate(
+      {
         declarationId,
         projectId,
         stepKey: step.key,
-        updates: { notes: value || null },
-      });
-    }
-  };
-
-  const handleDateChange = (value: string) => {
-    updateDetails.mutate({
-      declarationId,
-      projectId,
-      stepKey: step.key,
-      updates: { date: value || null },
-    });
+        updates: {
+          step_status: localStatus as StepStatus,
+          date: localDate || null,
+          notes: localNotes || null,
+        },
+      },
+      { onSuccess: () => setHasChanges(false) }
+    );
   };
 
   return (
@@ -114,7 +106,7 @@ export function AnnualStepDetailRow({
               {index + 1}. {step.label}
             </span>
             <Badge variant="outline" className={cn("text-xs", statusStyle)}>
-              {STEP_STATUS_OPTIONS.find((o) => o.value === stepStatus)?.label || "Pendiente"}
+              {STEP_STATUS_OPTIONS.find((o) => o.value === localStatus)?.label || "Pendiente"}
             </Badge>
             {step.notes && <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
             <ChevronDown
@@ -130,7 +122,10 @@ export function AnnualStepDetailRow({
             <div className="flex gap-3 flex-wrap">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Estado</label>
-                <Select value={stepStatus} onValueChange={handleStatusChange}>
+                <Select
+                  value={localStatus}
+                  onValueChange={(v) => { setLocalStatus(v as StepStatus); markChanged(); }}
+                >
                   <SelectTrigger className="h-8 text-xs w-44">
                     <SelectValue />
                   </SelectTrigger>
@@ -148,8 +143,8 @@ export function AnnualStepDetailRow({
                 <Input
                   type="date"
                   className="h-8 text-xs w-40"
-                  defaultValue={step.date || ""}
-                  onChange={(e) => handleDateChange(e.target.value)}
+                  value={localDate}
+                  onChange={(e) => { setLocalDate(e.target.value); markChanged(); }}
                 />
               </div>
             </div>
@@ -158,9 +153,19 @@ export function AnnualStepDetailRow({
               <Textarea
                 className="text-xs min-h-[60px]"
                 placeholder="Agregar notas..."
-                defaultValue={step.notes || ""}
-                onBlur={(e) => handleNotesBlur(e.target.value)}
+                value={localNotes}
+                onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }}
               />
+            </div>
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={!hasChanges || updateDetails.isPending}
+              >
+                <Save className="h-4 w-4 mr-1" />
+                Guardar
+              </Button>
             </div>
           </div>
         </CollapsibleContent>

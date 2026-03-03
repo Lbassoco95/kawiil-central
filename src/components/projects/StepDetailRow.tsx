@@ -25,6 +25,7 @@ import {
   Play,
   Pause,
   Timer,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -76,6 +77,10 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
   const [uploading, setUploading] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(step.time_spent_seconds || 0);
+  const [localStatus, setLocalStatus] = useState(step.step_status || "pendiente");
+  const [localDate, setLocalDate] = useState<Date | undefined>(step.date ? new Date(step.date) : undefined);
+  const [localNotes, setLocalNotes] = useState(step.notes || "");
+  const [hasChanges, setHasChanges] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const baseSecondsRef = useRef<number>(step.time_spent_seconds || 0);
@@ -85,8 +90,6 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const stepStatus = step.step_status || "pendiente";
-  const stepDate = step.date ? new Date(step.date) : undefined;
   const docIds = step.document_ids || [];
   const savedTime = step.time_spent_seconds || 0;
 
@@ -97,6 +100,16 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
       setDisplaySeconds(step.time_spent_seconds || 0);
     }
   }, [step.time_spent_seconds, timerRunning]);
+
+  // Sync local state when step data changes from server
+  useEffect(() => {
+    setLocalStatus(step.step_status || "pendiente");
+    setLocalDate(step.date ? new Date(step.date) : undefined);
+    setLocalNotes(step.notes || "");
+    setHasChanges(false);
+  }, [step.step_status, step.date, step.notes]);
+
+  const markChanged = () => setHasChanges(true);
 
   const startTimer = useCallback(() => {
     if (timerRunning) return;
@@ -118,16 +131,12 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
     const total = baseSecondsRef.current + elapsed;
     baseSecondsRef.current = total;
     setDisplaySeconds(total);
-    // Save to DB
     updateDetails.mutate({
-      periodId,
-      projectId,
-      stepKey: step.key,
+      periodId, projectId, stepKey: step.key,
       updates: { time_spent_seconds: total },
     });
   }, [timerRunning, periodId, projectId, step.key, updateDetails]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -148,28 +157,21 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
     enabled: docIds.length > 0 && expanded,
   });
 
-  const handleStatusChange = (newStatus: string) => {
-    if (newStatus === "completado" && !step.completed) {
+  const handleSave = () => {
+    if (localStatus === "completado" && !step.completed) {
       toggleStep.mutate({ periodId, projectId, stepKey: step.key, completed: true });
     }
-    updateDetails.mutate({
-      periodId, projectId, stepKey: step.key,
-      updates: { step_status: newStatus as StepStatus },
-    });
-  };
-
-  const handleDateChange = (date: Date | undefined) => {
-    updateDetails.mutate({
-      periodId, projectId, stepKey: step.key,
-      updates: { date: date ? date.toISOString() : null },
-    });
-  };
-
-  const handleNotesChange = (notes: string) => {
-    updateDetails.mutate({
-      periodId, projectId, stepKey: step.key,
-      updates: { notes: notes || null },
-    });
+    updateDetails.mutate(
+      {
+        periodId, projectId, stepKey: step.key,
+        updates: {
+          step_status: localStatus as StepStatus,
+          date: localDate ? localDate.toISOString() : null,
+          notes: localNotes || null,
+        },
+      },
+      { onSuccess: () => setHasChanges(false) }
+    );
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -233,13 +235,13 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
               {timerRunning ? formatTime(displaySeconds) : formatTimeCompact(savedTime)}
             </Badge>
           )}
-          {stepStatus !== "pendiente" && (
-            <Badge variant="outline" className={cn("text-xs", STEP_STATUS_STYLES[stepStatus])}>
-              {STEP_STATUS_OPTIONS.find((o) => o.value === stepStatus)?.label}
+          {localStatus !== "pendiente" && (
+            <Badge variant="outline" className={cn("text-xs", STEP_STATUS_STYLES[localStatus as StepStatus] || STEP_STATUS_STYLES.pendiente)}>
+              {STEP_STATUS_OPTIONS.find((o) => o.value === localStatus)?.label}
             </Badge>
           )}
-          {stepDate && (
-            <span className="text-xs text-muted-foreground">{format(stepDate, "dd/MM/yy")}</span>
+          {localDate && (
+            <span className="text-xs text-muted-foreground">{format(localDate, "dd/MM/yy")}</span>
           )}
           {docIds.length > 0 && (
             <Badge variant="secondary" className="text-xs gap-1">
@@ -284,7 +286,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
             {/* Status */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Estatus</label>
-              <Select value={stepStatus} onValueChange={handleStatusChange}>
+              <Select value={localStatus} onValueChange={(v) => { setLocalStatus(v as StepStatus); markChanged(); }}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {STEP_STATUS_OPTIONS.map((opt) => (
@@ -301,17 +303,17 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
-                    className={cn("h-8 w-full justify-start text-left text-xs font-normal", !stepDate && "text-muted-foreground")}
+                    className={cn("h-8 w-full justify-start text-left text-xs font-normal", !localDate && "text-muted-foreground")}
                   >
                     <CalendarIcon className="mr-2 h-3 w-3" />
-                    {stepDate ? format(stepDate, "PPP", { locale: es }) : "Seleccionar fecha"}
+                    {localDate ? format(localDate, "PPP", { locale: es }) : "Seleccionar fecha"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="single"
-                    selected={stepDate}
-                    onSelect={handleDateChange}
+                    selected={localDate}
+                    onSelect={(d) => { setLocalDate(d); markChanged(); }}
                     initialFocus
                     className="p-3 pointer-events-auto"
                   />
@@ -326,8 +328,8 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
             <Textarea
               className="text-xs min-h-[60px] resize-none"
               placeholder="Observaciones del paso..."
-              defaultValue={step.notes || ""}
-              onBlur={(e) => handleNotesChange(e.target.value)}
+              value={localNotes}
+              onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }}
             />
           </div>
 
@@ -365,6 +367,18 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
             {docIds.length === 0 && !uploading && (
               <p className="text-xs text-muted-foreground italic">Sin documentos adjuntos</p>
             )}
+          </div>
+
+          {/* Save button */}
+          <div className="flex justify-end pt-1">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={!hasChanges || updateDetails.isPending}
+            >
+              <Save className="h-4 w-4 mr-1" />
+              Guardar
+            </Button>
           </div>
         </div>
       )}
