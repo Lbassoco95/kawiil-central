@@ -17,7 +17,7 @@ const corsHeaders = {
 
 const EMAIL_SUBJECTS: Record<string, string> = {
   signup: 'Confirma tu correo electrónico',
-  invite: 'Te han invitado a Kawiil OS',
+  invite: 'Configura tu acceso a Kawiil OS',
   magiclink: 'Tu enlace de acceso',
   recovery: 'Restablecer contraseña',
   email_change: 'Confirma tu cambio de correo',

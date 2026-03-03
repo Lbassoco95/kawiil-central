@@ -42,13 +42,40 @@ Deno.serve(async (req) => {
     console.log(`Resending for ${email}, confirmed: ${isConfirmed}`);
 
     if (!isConfirmed) {
-      // User never confirmed — re-invite
-      const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-        data: targetUser.user_metadata,
+      // User never confirmed — confirm them first, then send recovery
+      // This ensures they always get a "set your password" email, not a "register" one
+      const { error: confirmError } = await adminClient.auth.admin.updateUserById(user_id, {
+        email_confirm: true,
+        user_metadata: { ...targetUser.user_metadata, must_change_password: true },
+      });
+      if (confirmError) {
+        console.warn('Could not confirm user:', confirmError.message);
+      }
+
+      // Now send recovery email
+      const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
         redirectTo: `${siteUrl}/cambiar-contrasena`,
       });
-      if (inviteError) throw inviteError;
-      console.log(`Invite sent to ${email}`);
+
+      if (resetError) {
+        const msg = resetError.message || '';
+        const isRateLimited = msg.toLowerCase().includes('for security purposes') && msg.toLowerCase().includes('after');
+        if (isRateLimited) {
+          const secondsMatch = msg.match(/after\s+(\d+)\s+seconds/i);
+          const retryAfterSeconds = secondsMatch ? Number(secondsMatch[1]) : 60;
+          return new Response(JSON.stringify({
+            success: false,
+            rate_limited: true,
+            retry_after_seconds: retryAfterSeconds,
+            message: `Espera ${retryAfterSeconds}s antes de reenviar a ${email}`,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        throw resetError;
+      }
+
+      console.log(`User confirmed + recovery sent to ${email}`);
     } else {
       // User already confirmed — send password recovery email
       // First update metadata to force password change on next login

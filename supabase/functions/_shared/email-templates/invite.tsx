@@ -28,25 +28,25 @@ export const InviteEmail = ({
 }: InviteEmailProps) => (
   <Html lang="es" dir="ltr">
     <Head />
-    <Preview>Te han invitado a {siteName}</Preview>
+    <Preview>Configura tu acceso a {siteName}</Preview>
     <Body style={main}>
       <Container style={container}>
         <div style={logoContainer}>
           <Img src="https://apfjafxiykkiydepmswk.supabase.co/storage/v1/object/public/email-assets/kawiil-logo.png" alt="Kawiil" width="56" height="56" style={logoImg} />
         </div>
-        <Heading style={h1}>Te han invitado a Kawiil OS</Heading>
+        <Heading style={h1}>Configura tu acceso a Kawiil OS</Heading>
         <Text style={text}>
-          Has sido invitado a unirte a{' '}
+          Se ha creado una cuenta para ti en{' '}
           <Link href={siteUrl} style={link}>
             <strong>{siteName}</strong>
           </Link>
-          . Haz clic en el botón para aceptar la invitación y configurar tu cuenta.
+          . Haz clic en el botón para establecer tu contraseña y acceder a la plataforma.
         </Text>
         <Button style={button} href={confirmationUrl}>
-          Aceptar invitación
+          Configurar mi contraseña
         </Button>
         <Text style={footer}>
-          Si no esperabas esta invitación, puedes ignorar este correo.
+          Si no esperabas este correo, puedes ignorarlo.
         </Text>
       </Container>
     </Body>
