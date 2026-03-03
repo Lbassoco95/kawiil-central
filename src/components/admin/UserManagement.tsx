@@ -105,7 +105,7 @@ export function UserManagement() {
     setSendingReset(userId);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/cambiar-contrasena`,
+        redirectTo: `${window.location.origin}/cambiar-contrasena?flow=direct`,
       });
       if (error) throw error;
       toast.success(`Correo de recuperación enviado a ${email}`);
