@@ -18,38 +18,60 @@ const CambiarContrasena = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Listen for PASSWORD_RECOVERY or SIGNED_IN events from the recovery link
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
-          if (session) {
-            setReady(true);
-            setError(null);
-          }
-        }
-      }
-    );
+    const hashParams = new URLSearchParams(window.location.hash.replace("#", ""));
+    const searchParams = new URLSearchParams(window.location.search);
+    const linkError = hashParams.get("error_description") || searchParams.get("error_description");
+    const isRecoveryLink = hashParams.get("type") === "recovery" || searchParams.get("type") === "recovery";
 
-    // Also check if user already has a session (e.g. navigated manually)
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    if (linkError) {
+      setError(decodeURIComponent(linkError));
+      return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 90; // ~45s
+
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setReady(true);
+        setError(null);
+        return true;
+      }
+      return false;
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
+        setReady(true);
+        setError(null);
       }
     });
 
-    // Timeout: if after 10s no session, show error
-    const timeout = setTimeout(() => {
-      setReady((prev) => {
-        if (!prev) {
-          setError("El enlace ha expirado o es inválido. Solicita uno nuevo desde el administrador.");
+    const interval = setInterval(async () => {
+      const hasSession = await checkSession();
+      if (hasSession) {
+        clearInterval(interval);
+        return;
+      }
+
+      attempts += 1;
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        if (!isRecoveryLink) {
+          setError("Este enlace no es de recuperación. Abre el correo más reciente y vuelve a intentar.");
+        } else {
+          setError("La verificación está tardando más de lo esperado. Espera unos segundos más o solicita un enlace nuevo.");
         }
-        return prev;
-      });
-    }, 10000);
+      }
+    }, 500);
+
+    // intento inmediato
+    checkSession();
 
     return () => {
       subscription.unsubscribe();
-      clearTimeout(timeout);
+      clearInterval(interval);
     };
   }, []);
 
