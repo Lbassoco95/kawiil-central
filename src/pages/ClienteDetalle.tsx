@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useClientDetail } from "@/hooks/useClientDetail";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,8 +16,10 @@ import {
   CheckSquare,
   ExternalLink,
   FolderOpen,
+  Pencil,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
+import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
 
@@ -79,6 +82,7 @@ const ClienteDetalle = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { client, isLoadingClient, projects, tasks, documents } = useClientDetail(id);
+  const [editOpen, setEditOpen] = useState(false);
 
   if (isLoadingClient) {
     return (
@@ -123,6 +127,10 @@ const ClienteDetalle = () => {
               {client.rfc && ` · RFC: ${client.rfc}`}
             </p>
           </div>
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Editar
+          </Button>
         </div>
 
         <Tabs defaultValue="general" className="space-y-4">
@@ -333,6 +341,8 @@ const ClienteDetalle = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      <ClientEditDialog open={editOpen} onOpenChange={setEditOpen} client={client} />
     </AppLayout>
   );
 };
