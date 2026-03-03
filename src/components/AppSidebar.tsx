@@ -10,9 +10,12 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Menu,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -25,8 +28,91 @@ const navItems = [
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { signOut, user } = useAuth();
+  const isMobile = useIsMobile();
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, []);
+
+  // On mobile, render a hamburger button + overlay drawer
+  if (isMobile) {
+    return (
+      <>
+        {/* Hamburger button */}
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="fixed top-3 left-3 z-50 flex items-center justify-center h-10 w-10 rounded-md bg-sidebar text-sidebar-foreground shadow-lg"
+          aria-label="Abrir menú"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
+        {/* Overlay */}
+        {mobileOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+
+        {/* Drawer */}
+        <aside
+          className={cn(
+            "fixed top-0 left-0 z-50 flex flex-col bg-sidebar text-sidebar-foreground h-screen w-64 transition-transform duration-200 shadow-xl",
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+        >
+          <div className="flex items-center justify-between px-4 h-14 border-b border-sidebar-border">
+            <div className="flex items-center gap-2">
+              <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-8 w-8" />
+              <span className="font-semibold text-sidebar-accent-foreground text-base tracking-tight">
+                Kawiil OS
+              </span>
+            </div>
+            <button onClick={() => setMobileOpen(false)} aria-label="Cerrar menú">
+              <X className="h-5 w-5 text-sidebar-foreground" />
+            </button>
+          </div>
+
+          <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.url}
+                to={item.url}
+                end={item.url === "/"}
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                onClick={() => setMobileOpen(false)}
+              >
+                <item.icon className="h-4 w-4 shrink-0" />
+                <span>{item.title}</span>
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="border-t border-sidebar-border p-2 space-y-1">
+            {user && (
+              <div className="px-3 py-2 text-xs text-sidebar-foreground truncate">
+                {user.email}
+              </div>
+            )}
+            <button
+              onClick={() => { signOut(); setMobileOpen(false); }}
+              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <LogOut className="h-4 w-4 shrink-0" />
+              <span>Cerrar sesión</span>
+            </button>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
+  // Desktop sidebar
   return (
     <aside
       className={cn(
