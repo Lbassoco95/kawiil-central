@@ -15,6 +15,10 @@ const CambiarContrasena = () => {
   const [verifyingLink, setVerifyingLink] = useState(false);
   const [ready, setReady] = useState(false);
   const [manualRecoveryFlow, setManualRecoveryFlow] = useState(false);
+  const [activationFlow, setActivationFlow] = useState(false);
+  const [activationTs, setActivationTs] = useState("");
+  const [activationSig, setActivationSig] = useState("");
+  const [activationMessage, setActivationMessage] = useState<string | null>(null);
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -27,6 +31,18 @@ const CambiarContrasena = () => {
     const mode = searchParams.get("mode") || hashParams.get("mode");
     const token = searchParams.get("token") || hashParams.get("token");
     const email = searchParams.get("email") || hashParams.get("email");
+    const ts = searchParams.get("ts") || hashParams.get("ts");
+    const sig = searchParams.get("sig") || hashParams.get("sig");
+
+    // Activation flow: el token real se genera al hacer clic en el enlace recibido
+    if (mode === "activate-recovery" && email && ts && sig) {
+      setActivationFlow(true);
+      setRecoveryEmail(email);
+      setActivationTs(ts);
+      setActivationSig(sig);
+      setError(null);
+      return;
+    }
 
     // Recovery flow: token/email are verified only after explicit user click
     if (mode === "recovery" && token && email) {
@@ -112,6 +128,32 @@ const CambiarContrasena = () => {
     setVerifyingLink(false);
   };
 
+  const handleActivateRecoveryLink = async () => {
+    if (!recoveryEmail || !activationTs || !activationSig) {
+      setError("Enlace inválido. Solicita uno nuevo desde administración.");
+      return;
+    }
+
+    setVerifyingLink(true);
+    const { data, error } = await supabase.functions.invoke("activate-recovery-link", {
+      body: {
+        email: recoveryEmail,
+        ts: activationTs,
+        sig: activationSig,
+        redirect_to: `${window.location.origin}/cambiar-contrasena?flow=direct`,
+      },
+    });
+
+    if (error || data?.error) {
+      setError(data?.error || error?.message || "No se pudo activar el enlace. Solicita uno nuevo.");
+      setVerifyingLink(false);
+      return;
+    }
+
+    setActivationMessage("Te enviamos un nuevo enlace de acceso a tu correo. Ábrelo para continuar con el cambio de contraseña.");
+    setVerifyingLink(false);
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -174,6 +216,18 @@ const CambiarContrasena = () => {
                 <p className="text-sm text-destructive">{error}</p>
                 <Button variant="outline" onClick={() => navigate("/login")} className="w-full">
                   Ir al inicio de sesión
+                </Button>
+              </div>
+            ) : activationFlow ? (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground text-center">
+                  Tu enlace está listo para activarse. Al confirmar, te enviaremos un enlace vigente para restablecer tu contraseña.
+                </p>
+                {activationMessage ? (
+                  <p className="text-sm text-center text-primary">{activationMessage}</p>
+                ) : null}
+                <Button type="button" className="w-full" onClick={handleActivateRecoveryLink} disabled={verifyingLink || !!activationMessage}>
+                  {verifyingLink ? "Activando enlace..." : activationMessage ? "Enlace activado" : "Activar enlace"}
                 </Button>
               </div>
             ) : manualRecoveryFlow ? (
