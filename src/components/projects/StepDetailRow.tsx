@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { formatDateMX } from "@/lib/dateUtils";
 import { es } from "date-fns/locale";
 import {
   useToggleAccountingStep,
@@ -354,7 +355,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
                     <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="truncate flex-1">{doc.name}</span>
                     <span className="text-muted-foreground shrink-0">
-                      {new Date(doc.created_at).toLocaleDateString("es-MX")}
+                      {formatDateMX(doc.created_at)}
                     </span>
                   </div>
                 ))}

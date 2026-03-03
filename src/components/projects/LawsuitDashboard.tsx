@@ -41,8 +41,8 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format, isPast, isToday, addDays, isBefore } from "date-fns";
-import { es } from "date-fns/locale";
+import { isPast, isToday, addDays, isBefore } from "date-fns";
+import { formatMX } from "@/lib/dateUtils";
 
 interface StageAttachment {
   id: string;
@@ -392,7 +392,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                   )}
                   {stage.date && (
                     <span className="text-xs text-muted-foreground">
-                      {format(new Date(stage.date), "dd MMM yyyy", { locale: es })}
+                      {formatMX(stage.date, "dd MMM yyyy")}
                     </span>
                   )}
                   <Badge variant="outline" className={`text-xs ${statusOpt?.color}`}>
@@ -499,7 +499,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                   <div className="flex items-center justify-between pt-1">
                     {stage.completed_at && (
                       <p className="text-xs text-muted-foreground">
-                        Completado: {format(new Date(stage.completed_at), "dd/MM/yyyy HH:mm", { locale: es })}
+                        Completado: {formatMX(stage.completed_at, "dd/MM/yyyy HH:mm")}
                       </p>
                     )}
                     <Button
@@ -573,7 +573,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                           {isOverdue && <AlertTriangle className="h-3 w-3 text-destructive" />}
                           {isUrgent && !isOverdue && <Clock className="h-3 w-3 text-yellow-600" />}
                           <span className={isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}>
-                            {format(dlDate, "dd MMM yyyy", { locale: es })}
+                            {formatMX(dlDate, "dd MMM yyyy")}
                           </span>
                         </div>
                         <Button

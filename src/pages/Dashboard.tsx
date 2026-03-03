@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
+import { formatDateMX, nowMX } from "@/lib/dateUtils";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ const Dashboard = () => {
 
   const dueSoon = useMemo(() => {
     if (!tasks) return 0;
-    const in7Days = new Date();
+    const in7Days = nowMX();
     in7Days.setDate(in7Days.getDate() + 7);
     return tasks.filter(
       (t) => t.due_date && new Date(t.due_date) <= in7Days
@@ -118,7 +119,7 @@ const Dashboard = () => {
                       <div className="flex items-center gap-2 shrink-0 ml-2">
                         {t.due_date && (
                           <span className="text-xs text-muted-foreground">
-                            {new Date(t.due_date).toLocaleDateString("es-MX")}
+                            {formatDateMX(t.due_date)}
                           </span>
                         )}
                         <Badge variant="outline" className="text-xs">
