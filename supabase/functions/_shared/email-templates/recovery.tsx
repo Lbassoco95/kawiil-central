@@ -56,23 +56,25 @@ const logoImg = { display: 'inline-block' }
 const h1 = {
   fontSize: '22px',
   fontWeight: 'bold' as const,
-  color: 'hsl(224, 30%, 14%)',
+  color: '#1a1f36',
   margin: '0 0 20px',
   textAlign: 'center' as const,
 }
 const text = {
   fontSize: '14px',
-  color: 'hsl(220, 10%, 46%)',
+  color: '#6b7280',
   lineHeight: '1.6',
   margin: '0 0 25px',
 }
 const button = {
-  backgroundColor: 'hsl(239, 84%, 67%)',
+  backgroundColor: '#4f46e5',
   color: '#ffffff',
-  fontSize: '14px',
+  fontSize: '16px',
   fontWeight: '600' as const,
   borderRadius: '8px',
-  padding: '12px 24px',
+  padding: '14px 32px',
   textDecoration: 'none',
+  display: 'block' as const,
+  textAlign: 'center' as const,
 }
 const footer = { fontSize: '12px', color: '#999999', margin: '30px 0 0', textAlign: 'center' as const }
