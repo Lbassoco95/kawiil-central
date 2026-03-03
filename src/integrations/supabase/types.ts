@@ -540,6 +540,7 @@ export type Database = {
         Row: {
           area: Database["public"]["Enums"]["service_area"] | null
           client_id: string | null
+          constitution_details: Json | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -557,6 +558,7 @@ export type Database = {
         Insert: {
           area?: Database["public"]["Enums"]["service_area"] | null
           client_id?: string | null
+          constitution_details?: Json | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -574,6 +576,7 @@ export type Database = {
         Update: {
           area?: Database["public"]["Enums"]["service_area"] | null
           client_id?: string | null
+          constitution_details?: Json | null
           created_at?: string
           created_by?: string | null
           description?: string | null
