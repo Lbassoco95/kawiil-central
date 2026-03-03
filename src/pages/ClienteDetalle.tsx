@@ -11,12 +11,12 @@ import {
   Phone,
   MapPin,
   User,
-  FolderKanban,
   FileText,
   CheckSquare,
   ExternalLink,
   FolderOpen,
 } from "lucide-react";
+import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
 
@@ -253,47 +253,8 @@ const ClienteDetalle = () => {
             </div>
           </TabsContent>
 
-          {/* Projects Tab */}
           <TabsContent value="proyectos">
-            {projects.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <FolderKanban className="mx-auto h-10 w-10 text-muted-foreground/50" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Sin proyectos asociados a este cliente.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3">
-                {projects.map((p) => (
-                  <Card key={p.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <h4 className="font-medium text-foreground truncate">{p.name}</h4>
-                          {p.description && (
-                            <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">
-                              {p.description}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {p.area && (
-                            <Badge variant="secondary" className="text-xs">
-                              {SERVICE_LABELS[p.area]}
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className={PROJECT_STATUS_STYLES[p.status]}>
-                            {PROJECT_STATUS_LABELS[p.status]}
-                          </Badge>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <ClientProjectsTab client={client} projects={projects} />
           </TabsContent>
 
           {/* Tasks Tab */}
