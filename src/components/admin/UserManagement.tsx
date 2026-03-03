@@ -182,7 +182,8 @@ export function UserManagement() {
                             {ROLE_LABELS[user.role || "staff"] || user.role}
                           </Badge>
                           {(() => {
-                            const status = (user.onboarding_status || (user.invitation_accepted ? 'active' : 'invited')) as OnboardingStatus;
+                            const raw = user.onboarding_status || (user.invitation_accepted ? 'active' : 'invited');
+                            const status = (raw in ONBOARDING_CONFIG ? raw : 'invited') as OnboardingStatus;
                             const config = ONBOARDING_CONFIG[status];
                             const StatusIcon = config.icon;
                             return (
