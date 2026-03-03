@@ -218,7 +218,7 @@ async function handleWebhook(req: Request): Promise<Response> {
 
   const siteUrl = `https://kawiil-core-hub.lovable.app`
   const recoveryLink = emailType === 'recovery'
-    ? `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token=${encodeURIComponent(payload.data.token ?? '')}`
+    ? `${siteUrl}/cambiar-contrasena?mode=recovery&verify_url=${encodeURIComponent(payload.data.url ?? '')}`
     : payload.data.url
 
   // Build template props from payload.data (HookData structure)

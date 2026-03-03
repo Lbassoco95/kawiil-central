@@ -15,8 +15,8 @@ const CambiarContrasena = () => {
   const [verifyingLink, setVerifyingLink] = useState(false);
   const [ready, setReady] = useState(false);
   const [manualRecoveryFlow, setManualRecoveryFlow] = useState(false);
+  const [recoveryVerifyUrl, setRecoveryVerifyUrl] = useState("");
   const [recoveryEmail, setRecoveryEmail] = useState("");
-  const [recoveryToken, setRecoveryToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -27,6 +27,7 @@ const CambiarContrasena = () => {
 
     const linkError = hashParams.get("error_description") || searchParams.get("error_description");
     const mode = searchParams.get("mode") || hashParams.get("mode");
+    const verifyUrl = searchParams.get("verify_url") || hashParams.get("verify_url");
     const token = searchParams.get("token") || hashParams.get("token");
     const email = searchParams.get("email") || hashParams.get("email");
 
@@ -35,16 +36,23 @@ const CambiarContrasena = () => {
       return;
     }
 
-    // New secure recovery flow: verify token only when user explicitly clicks
+    // Preferred flow: user lands here first, verification runs only after explicit click
+    if (mode === "recovery" && verifyUrl) {
+      setManualRecoveryFlow(true);
+      setRecoveryVerifyUrl(decodeURIComponent(verifyUrl));
+      setError(null);
+      return;
+    }
+
+    // Fallback flow: keep backward compatibility for token/email links
     if (mode === "recovery" && token && email) {
       setManualRecoveryFlow(true);
-      setRecoveryToken(token);
       setRecoveryEmail(email);
       setError(null);
       return;
     }
 
-    // Backward compatibility: legacy links that create session directly
+    // Legacy links that create session directly
     let attempts = 0;
     const maxAttempts = 90; // ~45s
 
@@ -88,7 +96,16 @@ const CambiarContrasena = () => {
   }, []);
 
   const handleVerifyRecoveryLink = async () => {
-    if (!recoveryEmail || !recoveryToken) {
+    // Preferred path: redirect to official verify URL only after explicit user click
+    if (recoveryVerifyUrl) {
+      setVerifyingLink(true);
+      window.location.assign(recoveryVerifyUrl);
+      return;
+    }
+
+    // Fallback path for token/email links
+    const token = new URLSearchParams(window.location.search).get("token") || new URLSearchParams(window.location.hash.replace("#", "")).get("token");
+    if (!recoveryEmail || !token) {
       setError("Enlace de recuperación inválido. Solicita uno nuevo.");
       return;
     }
@@ -96,7 +113,7 @@ const CambiarContrasena = () => {
     setVerifyingLink(true);
     const { error } = await supabase.auth.verifyOtp({
       email: recoveryEmail,
-      token: recoveryToken,
+      token,
       type: "recovery",
     });
 
@@ -106,7 +123,6 @@ const CambiarContrasena = () => {
       return;
     }
 
-    // Remove sensitive params from URL
     window.history.replaceState({}, "", "/cambiar-contrasena");
     setManualRecoveryFlow(false);
     setReady(true);
