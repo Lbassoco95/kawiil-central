@@ -5,11 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, FileText, CheckSquare, Scale, Building2, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet } from "lucide-react";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
 import { AnnualDeclarationDashboard } from "@/components/projects/AnnualDeclarationDashboard";
+import { ProjectGeneralTab } from "@/components/projects/ProjectGeneralTab";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -158,39 +159,7 @@ const ProyectoDetalle = () => {
           </TabsList>
 
           <TabsContent value="general">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Detalles del proyecto</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Estado</span>
-                    <Badge variant="outline" className={STATUS_STYLES[project.status]}>
-                      {STATUS_LABELS[project.status]}
-                    </Badge>
-                  </div>
-                  {project.area && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Área</span>
-                      <span>{SERVICE_LABELS[project.area]}</span>
-                    </div>
-                  )}
-                  {project.start_date && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Inicio</span>
-                      <span>{formatDateMX(project.start_date)}</span>
-                    </div>
-                  )}
-                  {project.end_date && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Fin</span>
-                      <span>{formatDateMX(project.end_date)}</span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            <ProjectGeneralTab project={project} />
           </TabsContent>
 
           {isSoftlanding && (
