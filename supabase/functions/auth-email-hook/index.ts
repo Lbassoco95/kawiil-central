@@ -263,8 +263,8 @@ async function handleWebhook(req: Request): Promise<Response> {
 
   const isDirectRecoveryFlow = redirectTarget.includes('flow=direct')
   const recoveryLink = emailType === 'recovery'
-    ? (isDirectRecoveryFlow && payload.data.token
-        ? `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token=${encodeURIComponent(payload.data.token ?? '')}`
+    ? (isDirectRecoveryFlow
+        ? payload.data.url  // Use native Supabase verify URL – it creates a session and redirects
         : await buildActivationRecoveryLink(siteUrl, payload.data.email ?? ''))
     : payload.data.url
 
