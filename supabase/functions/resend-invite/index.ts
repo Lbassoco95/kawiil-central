@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
       // Now send recovery email
       const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${siteUrl}/cambiar-contrasena`,
+        redirectTo: `${siteUrl}/cambiar-contrasena?flow=direct`,
       });
 
       if (resetError) {
@@ -75,6 +75,11 @@ Deno.serve(async (req) => {
         throw resetError;
       }
 
+      await adminClient.from('profiles').update({
+        invitation_accepted: false,
+        onboarding_status: 'password_pending',
+      }).eq('user_id', user_id);
+
       console.log(`User confirmed + recovery sent to ${email}`);
     } else {
       // User already confirmed — send password recovery email
@@ -86,7 +91,7 @@ Deno.serve(async (req) => {
 
       // Send recovery email (rate-limited by provider to ~60s per email)
       const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${siteUrl}/cambiar-contrasena`,
+        redirectTo: `${siteUrl}/cambiar-contrasena?flow=direct`,
       });
 
       if (resetError) {
