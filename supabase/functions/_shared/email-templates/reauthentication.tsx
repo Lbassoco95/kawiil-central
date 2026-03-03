@@ -46,13 +46,13 @@ const logoImg = { display: 'inline-block' }
 const h1 = {
   fontSize: '22px',
   fontWeight: 'bold' as const,
-  color: 'hsl(224, 30%, 14%)',
+  color: '#1a1f36',
   margin: '0 0 20px',
   textAlign: 'center' as const,
 }
 const text = {
   fontSize: '14px',
-  color: 'hsl(220, 10%, 46%)',
+  color: '#6b7280',
   lineHeight: '1.6',
   margin: '0 0 25px',
 }
@@ -60,7 +60,7 @@ const codeStyle = {
   fontFamily: 'Courier, monospace',
   fontSize: '28px',
   fontWeight: 'bold' as const,
-  color: 'hsl(239, 84%, 67%)',
+  color: '#4f46e5',
   margin: '0 0 30px',
   textAlign: 'center' as const,
   letterSpacing: '4px',
