@@ -40,6 +40,37 @@ const SENDER_DOMAIN = "notify.kawiil.mx"
 const ROOT_DOMAIN = "kawiil.mx"
 const FROM_DOMAIN = "notify.kawiil.mx" // Domain shown in From address (may be root or sender subdomain)
 
+const textEncoder = new TextEncoder()
+
+function toBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+async function signRecoveryActivation(email: string, timestamp: string): Promise<string> {
+  const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('LOVABLE_API_KEY') || 'fallback-secret'
+  const key = await crypto.subtle.importKey(
+    'raw',
+    textEncoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+
+  const payload = `${email}:${timestamp}`
+  const signature = await crypto.subtle.sign('HMAC', key, textEncoder.encode(payload))
+  return toBase64Url(new Uint8Array(signature))
+}
+
+async function buildActivationRecoveryLink(siteUrl: string, email: string): Promise<string> {
+  const ts = Math.floor(Date.now() / 1000).toString()
+  const sig = await signRecoveryActivation(email, ts)
+  return `${siteUrl}/cambiar-contrasena?mode=activate-recovery&email=${encodeURIComponent(email)}&ts=${encodeURIComponent(ts)}&sig=${encodeURIComponent(sig)}`
+}
+
 // Sample data for preview mode ONLY (not used in actual email sending).
 // URLs are baked in at scaffold time from the project's real data.
 // The sample email uses a fixed placeholder (RFC 6761 .test TLD) so the Go backend
@@ -217,8 +248,24 @@ async function handleWebhook(req: Request): Promise<Response> {
   }
 
   const siteUrl = `https://kawiil-core-hub.lovable.app`
+
+  let redirectTarget = ''
+  if (typeof payload.data.redirect_to === 'string') {
+    redirectTarget = payload.data.redirect_to
+  } else if (typeof payload.data.url === 'string') {
+    try {
+      const payloadUrl = new URL(payload.data.url)
+      redirectTarget = payloadUrl.searchParams.get('redirect_to') || ''
+    } catch {
+      redirectTarget = ''
+    }
+  }
+
+  const isDirectRecoveryFlow = redirectTarget.includes('flow=direct')
   const recoveryLink = emailType === 'recovery'
-    ? `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token=${encodeURIComponent(payload.data.token ?? '')}`
+    ? (isDirectRecoveryFlow && payload.data.token
+        ? `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token=${encodeURIComponent(payload.data.token ?? '')}`
+        : await buildActivationRecoveryLink(siteUrl, payload.data.email ?? ''))
     : payload.data.url
 
   // Build template props from payload.data (HookData structure)
