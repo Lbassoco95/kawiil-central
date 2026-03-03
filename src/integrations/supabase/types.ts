@@ -456,7 +456,7 @@ export type Database = {
       }
       profiles: {
         Row: {
-          area: Database["public"]["Enums"]["service_area"] | null
+          area: string | null
           avatar_url: string | null
           created_at: string
           email: string
@@ -471,7 +471,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          area?: Database["public"]["Enums"]["service_area"] | null
+          area?: string | null
           avatar_url?: string | null
           created_at?: string
           email: string
@@ -486,7 +486,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          area?: Database["public"]["Enums"]["service_area"] | null
+          area?: string | null
           avatar_url?: string | null
           created_at?: string
           email?: string

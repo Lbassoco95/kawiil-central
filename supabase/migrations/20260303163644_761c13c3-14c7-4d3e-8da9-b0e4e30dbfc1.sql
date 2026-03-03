@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ALTER COLUMN area TYPE text USING area::text;

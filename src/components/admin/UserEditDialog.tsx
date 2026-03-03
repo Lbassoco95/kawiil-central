@@ -74,7 +74,7 @@ function useUpdateUser() {
         .update({
           full_name: profileData.full_name,
           phone: profileData.phone || null,
-          area: (profileData.area as Database["public"]["Enums"]["service_area"]) || null,
+          area: (profileData.area || null) as any,
         })
         .eq("user_id", userId);
       if (profileError) throw profileError;
