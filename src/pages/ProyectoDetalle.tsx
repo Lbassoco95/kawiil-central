@@ -5,10 +5,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, FileText, CheckSquare, Scale, Building2 } from "lucide-react";
+import { ArrowLeft, Calculator, FileText, CheckSquare, Scale, Building2, FileSpreadsheet } from "lucide-react";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
+import { AnnualDeclarationDashboard } from "@/components/projects/AnnualDeclarationDashboard";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -141,6 +142,12 @@ const ProyectoDetalle = () => {
                 Contabilidad
               </TabsTrigger>
             )}
+            {hasAccounting && (
+              <TabsTrigger value="declaracion_anual">
+                <FileSpreadsheet className="h-4 w-4 mr-1" />
+                Declaración Anual
+              </TabsTrigger>
+            )}
             {isLawsuit && (
               <TabsTrigger value="juicio">
                 <Scale className="h-4 w-4 mr-1" />
@@ -198,6 +205,12 @@ const ProyectoDetalle = () => {
           {hasAccounting && (
             <TabsContent value="contabilidad">
               <AccountingDashboard projectId={project.id} />
+            </TabsContent>
+          )}
+
+          {hasAccounting && (
+            <TabsContent value="declaracion_anual">
+              <AnnualDeclarationDashboard projectId={project.id} />
             </TabsContent>
           )}
 

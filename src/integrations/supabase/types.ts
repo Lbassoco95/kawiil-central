@@ -109,6 +109,57 @@ export type Database = {
           },
         ]
       }
+      annual_declarations: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          organization_id: string
+          project_id: string
+          status: string
+          steps: Json
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id: string
+          project_id: string
+          status?: string
+          steps?: Json
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          project_id?: string
+          status?: string
+          steps?: Json
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_declarations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_declarations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       areas: {
         Row: {
           color: string | null
