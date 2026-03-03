@@ -15,7 +15,6 @@ const CambiarContrasena = () => {
   const [verifyingLink, setVerifyingLink] = useState(false);
   const [ready, setReady] = useState(false);
   const [manualRecoveryFlow, setManualRecoveryFlow] = useState(false);
-  const [recoveryVerifyUrl, setRecoveryVerifyUrl] = useState("");
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -25,30 +24,21 @@ const CambiarContrasena = () => {
     const hashParams = new URLSearchParams(window.location.hash.replace("#", ""));
     const searchParams = new URLSearchParams(window.location.search);
 
-    const linkError = hashParams.get("error_description") || searchParams.get("error_description");
     const mode = searchParams.get("mode") || hashParams.get("mode");
-    const verifyUrl = searchParams.get("verify_url") || hashParams.get("verify_url");
     const token = searchParams.get("token") || hashParams.get("token");
     const email = searchParams.get("email") || hashParams.get("email");
 
-    if (linkError) {
-      setError(decodeURIComponent(linkError));
-      return;
-    }
-
-    // Preferred flow: user lands here first, verification runs only after explicit click
-    if (mode === "recovery" && verifyUrl) {
-      setManualRecoveryFlow(true);
-      setRecoveryVerifyUrl(decodeURIComponent(verifyUrl));
-      setError(null);
-      return;
-    }
-
-    // Fallback flow: keep backward compatibility for token/email links
+    // Recovery flow: token/email are verified only after explicit user click
     if (mode === "recovery" && token && email) {
       setManualRecoveryFlow(true);
       setRecoveryEmail(email);
       setError(null);
+      return;
+    }
+
+    const linkError = hashParams.get("error_description") || searchParams.get("error_description");
+    if (linkError) {
+      setError(decodeURIComponent(linkError));
       return;
     }
 
@@ -96,14 +86,6 @@ const CambiarContrasena = () => {
   }, []);
 
   const handleVerifyRecoveryLink = async () => {
-    // Preferred path: redirect to official verify URL only after explicit user click
-    if (recoveryVerifyUrl) {
-      setVerifyingLink(true);
-      window.location.assign(recoveryVerifyUrl);
-      return;
-    }
-
-    // Fallback path for token/email links
     const token = new URLSearchParams(window.location.search).get("token") || new URLSearchParams(window.location.hash.replace("#", "")).get("token");
     if (!recoveryEmail || !token) {
       setError("Enlace de recuperación inválido. Solicita uno nuevo.");
