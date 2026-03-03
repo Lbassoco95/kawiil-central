@@ -5,8 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw, Send, Link2, KeySquare, CheckCircle2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatMX } from "@/lib/dateUtils";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
@@ -263,7 +262,7 @@ export function UserManagement() {
                           <span className="text-xs text-muted-foreground block">Fecha de alta</span>
                           <span className="flex items-center gap-1.5 mt-0.5 text-sm">
                             <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            {format(new Date(user.created_at), "d MMM yyyy", { locale: es })}
+                            {formatMX(user.created_at, "d MMM yyyy")}
                           </span>
                         </div>
                         <div>

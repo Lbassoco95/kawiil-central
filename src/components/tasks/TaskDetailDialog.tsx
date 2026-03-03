@@ -17,8 +17,7 @@ import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
   Upload, ExternalLink, Send, Plus, X
 } from "lucide-react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatMX } from "@/lib/dateUtils";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 
@@ -182,7 +181,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               {task.due_date && (
                 <span className="flex items-center gap-1 text-muted-foreground">
                   <Calendar className="h-3.5 w-3.5" />
-                  {format(new Date(task.due_date), "dd MMM yyyy", { locale: es })}
+                  {formatMX(task.due_date, "dd MMM yyyy")}
                 </span>
               )}
               {(task as any).clients?.name && (
@@ -242,7 +241,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{c.profile?.full_name || "Usuario"}</span>
                           <span className="text-xs text-muted-foreground">
-                            {format(new Date(c.created_at), "dd MMM HH:mm", { locale: es })}
+                            {formatMX(c.created_at, "dd MMM HH:mm")}
                           </span>
                         </div>
                         <p className="text-sm text-foreground whitespace-pre-wrap">
@@ -285,7 +284,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                         {link.url}
                       </a>
                       <span className="text-xs text-muted-foreground shrink-0">
-                        {link.added_at ? format(new Date(link.added_at), "dd MMM", { locale: es }) : ""}
+                        {link.added_at ? formatMX(link.added_at, "dd MMM") : ""}
                       </span>
                       <X className="h-4 w-4 cursor-pointer text-muted-foreground hover:text-destructive shrink-0" onClick={() => handleRemoveLink(i)} />
                     </div>
@@ -319,7 +318,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                         {doc.file_size ? `${(doc.file_size / 1024).toFixed(0)} KB` : ""}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {format(new Date(doc.created_at), "dd MMM", { locale: es })}
+                        {formatMX(doc.created_at, "dd MMM")}
                       </span>
                     </div>
                   ))}

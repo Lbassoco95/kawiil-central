@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, CalendarDays, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { nowMX } from "@/lib/dateUtils";
 import {
   useAccountingPeriods,
   useCreateAccountingPeriod,
@@ -99,7 +100,7 @@ function PeriodCard({
 export function AccountingDashboard({ projectId }: { projectId: string }) {
   const { data: periods, isLoading } = useAccountingPeriods(projectId);
   const createPeriod = useCreateAccountingPeriod();
-  const now = new Date();
+  const now = nowMX();
   const [newYear, setNewYear] = useState(now.getFullYear().toString());
   const [newMonth, setNewMonth] = useState((now.getMonth() + 1).toString());
   const [showCreate, setShowCreate] = useState(false);

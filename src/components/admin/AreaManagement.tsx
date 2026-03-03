@@ -16,8 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatMX } from "@/lib/dateUtils";
 
 export function AreaManagement() {
   const { data: areas, isLoading } = useAreas();
@@ -149,7 +148,7 @@ export function AreaManagement() {
                         )}
                         <div>
                           <span className="text-muted-foreground text-xs">Creada</span>
-                          <p className="text-xs">{format(new Date(area.created_at), "dd MMM yyyy", { locale: es })}</p>
+                          <p className="text-xs">{formatMX(area.created_at, "dd MMM yyyy")}</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2 pt-1">

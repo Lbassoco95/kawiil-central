@@ -11,8 +11,7 @@ import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatMX } from "@/lib/dateUtils";
 
 const priorityColors: Record<string, string> = {
   urgente: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
@@ -113,7 +112,7 @@ const Tareas = () => {
                         {task.due_date && (
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            {format(new Date(task.due_date), "dd MMM yyyy", { locale: es })}
+                            {formatMX(task.due_date, "dd MMM yyyy")}
                           </span>
                         )}
                       </div>

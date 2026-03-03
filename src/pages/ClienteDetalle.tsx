@@ -18,6 +18,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
+import { formatDateMX } from "@/lib/dateUtils";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientStatus = Database["public"]["Enums"]["client_status"];
@@ -316,7 +317,7 @@ const ClienteDetalle = () => {
                           <h4 className="font-medium text-foreground truncate">{t.title}</h4>
                           {t.due_date && (
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              Vence: {new Date(t.due_date).toLocaleDateString("es-MX")}
+                              Vence: {formatDateMX(t.due_date)}
                             </p>
                           )}
                         </div>

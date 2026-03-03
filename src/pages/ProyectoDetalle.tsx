@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Database } from "@/integrations/supabase/types";
+import { formatDateMX } from "@/lib/dateUtils";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 type ServiceArea = Database["public"]["Enums"]["service_area"];
@@ -162,13 +163,13 @@ const ProyectoDetalle = () => {
                   {project.start_date && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Inicio</span>
-                      <span>{new Date(project.start_date).toLocaleDateString("es-MX")}</span>
+                      <span>{formatDateMX(project.start_date)}</span>
                     </div>
                   )}
                   {project.end_date && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Fin</span>
-                      <span>{new Date(project.end_date).toLocaleDateString("es-MX")}</span>
+                      <span>{formatDateMX(project.end_date)}</span>
                     </div>
                   )}
                 </CardContent>
