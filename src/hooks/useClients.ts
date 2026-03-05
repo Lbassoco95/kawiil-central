@@ -117,6 +117,12 @@ export function useCreateClient() {
   });
 }
 
+export const PAYROLL_OBLIGATION_STEPS = [
+  { key: "decl_isr_retenciones_nomina", label: "Declaración: ISR Retenciones (nómina)" },
+  { key: "decl_imss", label: "Declaración: IMSS" },
+  { key: "decl_isn", label: "Declaración: ISN" },
+];
+
 export function useUpdateClient() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -128,9 +134,17 @@ export function useUpdateClient() {
       previousServices,
     }: {
       id: string;
-      updates: Partial<ClientInsert>;
+      updates: Partial<ClientInsert> & { has_payroll?: boolean };
       previousServices: string[];
     }) => {
+      // Get previous has_payroll value
+      const { data: prevClient } = await supabase
+        .from("clients")
+        .select("has_payroll")
+        .eq("id", id)
+        .single();
+      const previousPayroll = (prevClient as any)?.has_payroll || false;
+
       const { data, error } = await supabase
         .from("clients")
         .update(updates)
@@ -146,7 +160,6 @@ export function useUpdateClient() {
       if (addedServices.length > 0 && data) {
         const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
 
-        // Check existing projects for this client to avoid duplicates
         const { data: existingProjects } = await supabase
           .from("projects")
           .select("area")
@@ -157,7 +170,6 @@ export function useUpdateClient() {
 
         const projectsToCreate: Array<{ name: string; area: string }> = [];
 
-        // Contabilidad project for contabilidad/softlanding
         if (
           (addedServices.includes("contabilidad") || addedServices.includes("softlanding")) &&
           !existingAreas.includes("contabilidad") &&
@@ -192,6 +204,63 @@ export function useUpdateClient() {
         if (projectsToCreate.length > 0) {
           queryClient.invalidateQueries({ queryKey: ["projects"] });
           queryClient.invalidateQueries({ queryKey: ["client-projects", id] });
+        }
+      }
+
+      // Handle payroll change: add/remove payroll steps from accounting periods
+      const newPayroll = (updates as any).has_payroll ?? previousPayroll;
+      if (newPayroll !== previousPayroll && data) {
+        // Find accounting projects for this client
+        const { data: accountingProjects } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("client_id", id)
+          .in("area", ["contabilidad", "softlanding"])
+          .neq("status", "cancelado");
+
+        if (accountingProjects && accountingProjects.length > 0) {
+          for (const proj of accountingProjects) {
+            const { data: periods } = await supabase
+              .from("accounting_periods")
+              .select("id, steps")
+              .eq("project_id", proj.id);
+
+            if (periods) {
+              for (const period of periods) {
+                let steps = period.steps as any[];
+                if (newPayroll) {
+                  // Add payroll steps if not present
+                  const existingKeys = steps.map((s: any) => s.key);
+                  const toAdd = PAYROLL_OBLIGATION_STEPS.filter((ps) => !existingKeys.includes(ps.key));
+                  if (toAdd.length > 0) {
+                    steps = [
+                      ...steps,
+                      ...toAdd.map((ps) => ({
+                        key: ps.key,
+                        label: ps.label,
+                        completed: false,
+                        completed_at: null,
+                        completed_by: null,
+                        step_status: "pendiente",
+                        date: null,
+                        notes: null,
+                        document_ids: [],
+                      })),
+                    ];
+                  }
+                } else {
+                  // Remove payroll steps
+                  const payrollKeys = PAYROLL_OBLIGATION_STEPS.map((ps) => ps.key);
+                  steps = steps.filter((s: any) => !payrollKeys.includes(s.key));
+                }
+                await supabase
+                  .from("accounting_periods")
+                  .update({ steps: steps as any })
+                  .eq("id", period.id);
+              }
+            }
+          }
+          queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
         }
       }
 
