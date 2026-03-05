@@ -103,6 +103,7 @@ const clientSchema = z.object({
   service_package: z.enum(["softlanding", "backoffice", "individual"] as const),
   extra_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
   individual_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
+  has_payroll: z.boolean().default(false),
   primary_area: z.enum(ALL_SERVICE_AREAS).optional().nullable(),
   responsible_user_id: z.string().uuid().optional().nullable().or(z.literal("")),
   status: z.enum(["activo", "inactivo", "prospecto"] as const),
@@ -144,6 +145,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       service_package: "backoffice",
       extra_services: [],
       individual_services: [],
+      has_payroll: false,
       primary_area: null,
       responsible_user_id: "",
       status: "activo",
@@ -187,6 +189,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       contact_name: values.contact_name || null,
       contact_position: values.contact_position || null,
       dropbox_folder_path: values.dropbox_folder_path || null,
+      has_payroll: values.has_payroll,
     });
     form.reset();
     onOpenChange(false);
@@ -465,6 +468,30 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                       ))}
                     </div>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Payroll toggle */}
+            {(servicePackage === "backoffice" || servicePackage === "softlanding" || allServices.includes("contabilidad")) && (
+              <FormField
+                control={form.control}
+                name="has_payroll"
+                render={({ field }) => (
+                  <FormItem className="flex items-center space-x-3 space-y-0 rounded-md border p-4">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="cursor-pointer">Lleva nómina</FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Agrega obligaciones de ISR Retenciones, IMSS e ISN al proyecto contable
+                      </p>
+                    </div>
                   </FormItem>
                 )}
               />

@@ -1,0 +1,1 @@
+ALTER TABLE public.clients ADD COLUMN has_payroll boolean NOT NULL DEFAULT false;

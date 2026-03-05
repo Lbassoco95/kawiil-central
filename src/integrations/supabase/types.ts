@@ -252,6 +252,7 @@ export type Database = {
           created_by: string | null
           dropbox_folder_path: string | null
           email: string | null
+          has_payroll: boolean
           id: string
           name: string
           notes: string | null
@@ -273,6 +274,7 @@ export type Database = {
           created_by?: string | null
           dropbox_folder_path?: string | null
           email?: string | null
+          has_payroll?: boolean
           id?: string
           name: string
           notes?: string | null
@@ -294,6 +296,7 @@ export type Database = {
           created_by?: string | null
           dropbox_folder_path?: string | null
           email?: string | null
+          has_payroll?: boolean
           id?: string
           name?: string
           notes?: string | null
