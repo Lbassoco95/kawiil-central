@@ -79,13 +79,15 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         .createSignedUrl(document.file_path, 3600);
       if (error) throw error;
 
+      const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
+
       if (fileType === "xml") {
-        const resp = await fetch(data.signedUrl);
+        const resp = await fetch(signedUrl);
         const text = await resp.text();
         setXmlContent(text);
       }
 
-      setPreviewUrl(data.signedUrl);
+      setPreviewUrl(signedUrl);
     } catch (err: any) {
       setPreviewUrl(null);
       setXmlContent(null);
