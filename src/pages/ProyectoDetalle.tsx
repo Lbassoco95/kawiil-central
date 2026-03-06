@@ -60,6 +60,9 @@ const ProyectoDetalle = () => {
   // Determine if project has accounting service
   const hasAccounting = project?.area === "contabilidad" || project?.area === "softlanding";
   const isSoftlanding = project?.area === "softlanding";
+  const isConstitutionNacional = project?.area === "constitucion_nacional";
+  const hasConstitution = isSoftlanding || isConstitutionNacional;
+  const isGestoria = project?.area === "gestoria";
   const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
