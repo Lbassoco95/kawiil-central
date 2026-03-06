@@ -32,6 +32,11 @@ export function AppSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { signOut, user } = useAuth();
   const isMobile = useIsMobile();
+  const { isAdminOrManager } = useUserRole();
+
+  const visibleNavItems = navItems.filter(
+    (item) => item.url !== "/admin" || isAdminOrManager
+  );
 
   // Close mobile menu on route change
   useEffect(() => {
