@@ -78,16 +78,9 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         const resp = await fetch(data.signedUrl);
         const text = await resp.text();
         setXmlContent(text);
-        setPreviewUrl(data.signedUrl);
-      } else if (fileType === "pdf") {
-        // Fetch PDF as blob to avoid Chrome cross-origin iframe blocking
-        const resp = await fetch(data.signedUrl);
-        const blob = await resp.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        setPreviewUrl(blobUrl);
-      } else {
-        setPreviewUrl(data.signedUrl);
       }
+
+      setPreviewUrl(data.signedUrl);
     } catch (err: any) {
       setPreviewUrl(null);
       setXmlContent(null);
