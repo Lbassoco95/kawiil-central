@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight } from "lucide-react";
 import { useTasks, useDeleteTask } from "@/hooks/useTasks";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
@@ -45,6 +46,7 @@ const Tareas = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteTask = useDeleteTask();
+  const { isAdminOrManager } = useUserRole();
   const { areaOptions, areaLabelMap } = useAreaOptions();
   const { data: assignedSteps = [] } = useAssignedSteps();
 
@@ -152,10 +154,12 @@ const Tareas = () => {
                         )}
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {isAdminOrManager && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

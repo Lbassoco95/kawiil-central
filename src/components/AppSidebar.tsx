@@ -16,6 +16,7 @@ import {
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -31,6 +32,11 @@ export function AppSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { signOut, user } = useAuth();
   const isMobile = useIsMobile();
+  const { isAdminOrManager } = useUserRole();
+
+  const visibleNavItems = navItems.filter(
+    (item) => item.url !== "/admin" || isAdminOrManager
+  );
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -78,7 +84,7 @@ export function AppSidebar() {
           </div>
 
           <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.url}
                 to={item.url}
@@ -132,7 +138,7 @@ export function AppSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink
             key={item.url}
             to={item.url}
