@@ -211,7 +211,7 @@ export function useUpdateStepDetails() {
       periodId: string;
       projectId: string;
       stepKey: string;
-      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds">>;
+      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds" | "assigned_to">>;
     }) => {
       const { data: period, error: fetchErr } = await supabase
         .from("accounting_periods")

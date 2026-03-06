@@ -429,6 +429,19 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                       />
                     </div>
                   </div>
+                  <StepAssigneeSelect
+                    value={stage.assigned_to || null}
+                    onChange={(userId) => {
+                      const updated = {
+                        ...lawsuitDetails,
+                        stages: lawsuitDetails.stages.map((s) =>
+                          s.key === stage.key ? { ...s, assigned_to: userId } : s
+                        ),
+                      };
+                      updateLawsuit.mutate(updated);
+                    }}
+                  />
+
                   <div className="space-y-1">
                     <Label className="text-xs">Notas</Label>
                     <Textarea

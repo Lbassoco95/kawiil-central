@@ -128,7 +128,7 @@ export function useUpdateAnnualStepDetails() {
       declarationId: string;
       projectId: string;
       stepKey: string;
-      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds">>;
+      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds" | "assigned_to">>;
     }) => {
       const { data: decl, error: fetchErr } = await supabase
         .from("annual_declarations" as any)
