@@ -10,9 +10,11 @@ import {
   ArrowRight,
   Clock,
   TrendingUp,
+  UserCheck,
 } from "lucide-react";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,8 +28,8 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
+  const { data: orgUsers } = useOrgUsers();
 
-  // All non-completed/cancelled tasks
   const { data: allTasks } = useQuery({
     queryKey: ["dashboard-all-tasks"],
     queryFn: async () => {
@@ -46,84 +48,124 @@ const Dashboard = () => {
     [allTasks]
   );
 
-  const activeClients = useMemo(
-    () => clients?.filter((c) => c.status === "activo").length ?? 0,
-    [clients]
-  );
-  const activeProjects = useMemo(
-    () => projects?.filter((p) => p.status === "activo").length ?? 0,
-    [projects]
+  const completedTasks = useMemo(
+    () => allTasks?.filter((t) => t.status === "completada") ?? [],
+    [allTasks]
   );
 
+  const activeClients = useMemo(() => clients?.filter((c) => c.status === "activo").length ?? 0, [clients]);
+  const activeProjects = useMemo(() => projects?.filter((p) => p.status === "activo").length ?? 0, [projects]);
+
+  const today = useMemo(() => nowMX(), []);
   const dueSoon = useMemo(() => {
-    const in7Days = nowMX();
+    const in7Days = new Date(today);
     in7Days.setDate(in7Days.getDate() + 7);
-    return pendingTasks.filter(
-      (t) => t.due_date && new Date(t.due_date) <= in7Days
-    ).length;
-  }, [pendingTasks]);
+    return pendingTasks.filter((t) => t.due_date && new Date(t.due_date) <= in7Days).length;
+  }, [pendingTasks, today]);
 
-  // My tasks (assigned to me), sorted by due_date
   const myTasks = useMemo(
-    () => pendingTasks.filter((t) => t.assigned_to === user?.id).slice(0, 8),
+    () => pendingTasks.filter((t) => t.assigned_to === user?.id).slice(0, 6),
     [pendingTasks, user]
   );
 
-  // ── Progress by project ──
+  // ── Team workload ──
+  const teamWorkload = useMemo(() => {
+    if (!orgUsers || !allTasks) return [];
+    const activeUsers = orgUsers.filter((u) => u.is_active && u.invitation_accepted);
+    return activeUsers.map((u) => {
+      const userTasks = allTasks.filter((t) => t.assigned_to === u.user_id);
+      const pending = userTasks.filter((t) => ["pendiente", "en_progreso", "en_revision"].includes(t.status)).length;
+      const completed = userTasks.filter((t) => t.status === "completada").length;
+      const total = pending + completed;
+      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      const overdue = userTasks.filter(
+        (t) => ["pendiente", "en_progreso", "en_revision"].includes(t.status) && t.due_date && new Date(t.due_date) < today
+      ).length;
+      return {
+        userId: u.user_id,
+        name: u.full_name,
+        area: u.area,
+        pending,
+        completed,
+        total,
+        pct,
+        overdue,
+        isMe: u.user_id === user?.id,
+      };
+    }).filter((u) => u.total > 0).sort((a, b) => b.pending - a.pending);
+  }, [orgUsers, allTasks, user, today]);
+
+  // ── Project progress ──
   const projectProgress = useMemo(() => {
     if (!projects || !allTasks) return [];
-    const activeProjs = projects.filter((p) => p.status === "activo");
-    return activeProjs.map((p) => {
-      const projectTasks = allTasks.filter((t) => t.project_id === p.id);
-      const total = projectTasks.length;
-      const completed = projectTasks.filter((t) => t.status === "completada").length;
-      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-      return {
-        id: p.id,
-        name: p.name,
-        clientName: (p as any).clients?.name ?? "—",
-        area: p.area,
-        total,
-        completed,
-        pct,
-      };
-    }).sort((a, b) => b.total - a.total).slice(0, 10);
+    return projects
+      .filter((p) => p.status === "activo")
+      .map((p) => {
+        const pt = allTasks.filter((t) => t.project_id === p.id);
+        const total = pt.length;
+        const completed = pt.filter((t) => t.status === "completada").length;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        return {
+          id: p.id,
+          name: p.name,
+          clientName: (p as any).clients?.name ?? "—",
+          area: p.area,
+          total,
+          completed,
+          pct,
+        };
+      })
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
   }, [projects, allTasks]);
 
-  // ── Progress by client ──
+  // ── Client progress ──
   const clientProgress = useMemo(() => {
     if (!clients || !allTasks) return [];
-    const activeC = clients.filter((c) => c.status === "activo");
-    return activeC.map((c) => {
-      const clientTasks = allTasks.filter((t) => t.client_id === c.id);
-      const total = clientTasks.length;
-      const completed = clientTasks.filter((t) => t.status === "completada").length;
-      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-      return { id: c.id, name: c.name, total, completed, pct };
-    }).filter((c) => c.total > 0).sort((a, b) => b.total - a.total).slice(0, 8);
+    return clients
+      .filter((c) => c.status === "activo")
+      .map((c) => {
+        const ct = allTasks.filter((t) => t.client_id === c.id);
+        const total = ct.length;
+        const completed = ct.filter((t) => t.status === "completada").length;
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        return { id: c.id, name: c.name, total, completed, pct };
+      })
+      .filter((c) => c.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
   }, [clients, allTasks]);
 
   // ── Area indicators ──
   const areaStats = useMemo(() => {
-    if (!pendingTasks) return [];
-    const areas: Record<string, { total: number; overdue: number }> = {};
-    const today = nowMX();
-    pendingTasks.forEach((t) => {
+    if (!allTasks) return [];
+    const areas: Record<string, { pending: number; completed: number; overdue: number }> = {};
+    allTasks.forEach((t) => {
       const a = t.area || "sin_area";
-      if (!areas[a]) areas[a] = { total: 0, overdue: 0 };
-      areas[a].total++;
-      if (t.due_date && new Date(t.due_date) < today) areas[a].overdue++;
+      if (a === "sin_area") return;
+      if (!areas[a]) areas[a] = { pending: 0, completed: 0, overdue: 0 };
+      if (t.status === "completada") {
+        areas[a].completed++;
+      } else if (["pendiente", "en_progreso", "en_revision"].includes(t.status)) {
+        areas[a].pending++;
+        if (t.due_date && new Date(t.due_date) < today) areas[a].overdue++;
+      }
     });
     return Object.entries(areas)
-      .filter(([key]) => key !== "sin_area")
-      .map(([key, val]) => ({
-        area: key,
-        label: SERVICE_LABELS[key as keyof typeof SERVICE_LABELS] || key,
-        ...val,
-        status: val.overdue > 0 ? "danger" : val.total > 5 ? "warning" : "ok",
-      }))
+      .map(([key, val]) => {
+        const total = val.pending + val.completed;
+        const pct = total > 0 ? Math.round((val.completed / total) * 100) : 0;
+        return {
+          area: key,
+          label: SERVICE_LABELS[key as keyof typeof SERVICE_LABELS] || key,
+          ...val,
+          total,
+          pct,
+          status: val.overdue > 0 ? "danger" : val.pending > 5 ? "warning" : "ok",
+        };
+      })
       .sort((a, b) => b.total - a.total);
-  }, [pendingTasks]);
+  }, [allTasks, today]);
 
   const stats = [
     { label: "Clientes activos", value: activeClients, icon: Users, href: "/clientes" },
@@ -155,16 +197,23 @@ const Dashboard = () => {
     return "text-muted-foreground";
   };
 
+  const workloadLevel = (pending: number, overdue: number) => {
+    if (overdue > 0) return "border-destructive/30 bg-destructive/5";
+    if (pending > 8) return "border-warning/30 bg-warning/5";
+    if (pending <= 2) return "border-success/30 bg-success/5";
+    return "";
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Resumen operativo de Kawiil OS</p>
+          <p className="text-sm text-muted-foreground">Vista colaborativa del equipo</p>
         </div>
 
-        {/* Stats Row */}
+        {/* Stats */}
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
             <Card
@@ -183,31 +232,70 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* Area Indicators */}
+        {/* Area Indicators with progress */}
         {areaStats.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-primary" />
-                Estado por área
+                Avance por área
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {areaStats.map((a) => (
-                  <div
-                    key={a.area}
-                    className="flex items-center gap-3 rounded-lg border p-3"
-                  >
-                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${statusDot(a.status)}`} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate">{a.label}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {a.total} pendientes
-                        {a.overdue > 0 && (
-                          <span className="text-destructive ml-1">· {a.overdue} vencidas</span>
-                        )}
+                  <div key={a.area} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${statusDot(a.status)}`} />
+                        <span className="text-sm font-medium">{a.label}</span>
                       </div>
+                      <span className={`text-sm font-bold ${progressColor(a.pct)}`}>{a.pct}%</span>
+                    </div>
+                    <Progress value={a.pct} className="h-1.5 mb-2" />
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>{a.completed} completadas</span>
+                      <span>{a.pending} pendientes</span>
+                      {a.overdue > 0 && <span className="text-destructive font-medium">{a.overdue} vencidas</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Team Workload */}
+        {teamWorkload.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <UserCheck className="h-4 w-4 text-primary" />
+                Carga del equipo
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {teamWorkload.map((m) => (
+                  <div
+                    key={m.userId}
+                    className={`rounded-lg border p-3 transition-colors ${workloadLevel(m.pending, m.overdue)} ${m.isMe ? "ring-1 ring-primary/30" : ""}`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="min-w-0 flex-1 mr-2">
+                        <span className="text-sm font-medium block truncate">
+                          {m.name}
+                          {m.isMe && <span className="text-[10px] text-primary ml-1">(tú)</span>}
+                        </span>
+                        {m.area && <span className="text-[10px] text-muted-foreground">{m.area}</span>}
+                      </div>
+                      <span className={`text-sm font-bold ${progressColor(m.pct)}`}>{m.pct}%</span>
+                    </div>
+                    <Progress value={m.pct} className="h-1.5 mb-1.5" />
+                    <div className="flex gap-3 text-[11px] text-muted-foreground">
+                      <span>{m.pending} pendientes</span>
+                      <span>{m.completed} hechas</span>
+                      {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
                     </div>
                   </div>
                 ))}
@@ -247,7 +335,7 @@ const Dashboard = () => {
                       <span className="truncate flex-1 mr-2">{t.title}</span>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {t.due_date && (
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className={`text-[11px] ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                             {formatDateMX(t.due_date)}
                           </span>
                         )}
@@ -294,9 +382,7 @@ const Dashboard = () => {
                         </div>
                         <div className="text-right shrink-0">
                           <span className={`text-sm font-semibold ${progressColor(p.pct)}`}>{p.pct}%</span>
-                          <span className="text-[10px] text-muted-foreground block">
-                            {p.completed}/{p.total}
-                          </span>
+                          <span className="text-[10px] text-muted-foreground block">{p.completed}/{p.total}</span>
                         </div>
                       </div>
                       <Progress value={p.pct} className="h-1.5" />
@@ -336,9 +422,7 @@ const Dashboard = () => {
                       <span className={`text-sm font-bold ${progressColor(c.pct)}`}>{c.pct}%</span>
                     </div>
                     <Progress value={c.pct} className="h-1.5 mb-1" />
-                    <span className="text-[10px] text-muted-foreground">
-                      {c.completed} de {c.total} tareas
-                    </span>
+                    <span className="text-[10px] text-muted-foreground">{c.completed} de {c.total} tareas</span>
                   </div>
                 ))}
               </div>
