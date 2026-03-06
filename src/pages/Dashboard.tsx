@@ -22,10 +22,12 @@ import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdminOrManager } = useUserRole();
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
   const { data: orgUsers } = useOrgUsers();
@@ -266,7 +268,7 @@ const Dashboard = () => {
         )}
 
         {/* Team Workload */}
-        {teamWorkload.length > 0 && (
+        {isAdminOrManager && teamWorkload.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
