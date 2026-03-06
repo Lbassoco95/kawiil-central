@@ -79,9 +79,10 @@ const STATUS_CONFIG = {
 interface Props {
   projectId: string;
   gestoriaDetails: { steps: GestoriaStep[] } | null;
+  responsibleUserId?: string | null;
 }
 
-export function GestoriaDashboard({ projectId, gestoriaDetails }: Props) {
+export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId }: Props) {
   const queryClient = useQueryClient();
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
   const { data: profiles = [] } = useProfiles();
