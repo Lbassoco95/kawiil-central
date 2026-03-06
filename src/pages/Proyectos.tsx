@@ -47,6 +47,7 @@ const Proyectos = () => {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useProjects();
   const deleteProject = useDeleteProject();
+  const { isAdminOrManager } = useUserRole();
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
