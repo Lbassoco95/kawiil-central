@@ -23,6 +23,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
   const [showDropboxInput, setShowDropboxInput] = useState(false);
   const [dropboxUrl, setDropboxUrl] = useState("");
   const [savingLink, setSavingLink] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<any>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: documents = [] } = useQuery({
