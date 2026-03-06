@@ -14,6 +14,7 @@ import { Plus, Search, Users, Mail, Phone, Trash2, ChevronDown, ChevronRight } f
 import { useClients, useDeleteClient } from "@/hooks/useClients";
 import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { useUserRole } from "@/hooks/useUserRole";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
