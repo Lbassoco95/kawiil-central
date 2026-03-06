@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
@@ -27,6 +28,8 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Phone,
+  CalendarClock,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +45,7 @@ interface ConstitutionStep {
   completed_at: string | null;
   notes: string;
   conditional?: boolean;
+  appointment_date?: string | null;
 }
 
 const DEFAULT_STEPS: ConstitutionStep[] = [
@@ -82,27 +86,56 @@ const DEFAULT_STEPS: ConstitutionStep[] = [
     notes: "",
   },
   {
-    key: "comprobante_domicilio",
-    label: "Comprobante de domicilio corporativo",
-    description: "Generar comprobante a nombre de la empresa (contrato de internet, línea móvil, etc.).",
+    key: "contratacion_linea",
+    label: "Contratación de línea telefónica",
+    description: "Contratar línea telefónica fija o móvil a nombre de la empresa para generar comprobante de domicilio requerido para la e.firma.",
+    icon: "Phone",
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+  },
+  {
+    key: "recibo_comprobante",
+    label: "Comprobante de domicilio generado",
+    description: "Verificar que ya se generó el recibo de la línea contratada. Para el RFC se puede usar estado de cuenta bancario o comprobante de teléfono de un socio nacional. Para la e.firma se requiere recibo de línea telefónica.",
     icon: "Home",
     status: "pendiente",
     completed_at: null,
     notes: "",
   },
   {
+    key: "cita_rfc",
+    label: "Agendar cita ante el SAT (RFC)",
+    description: "El gestor solicita cita en el SAT para la inscripción al RFC.",
+    icon: "CalendarClock",
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+    appointment_date: null,
+  },
+  {
     key: "obtencion_rfc",
     label: "Obtención del RFC",
-    description: "Tramitar el Registro Federal de Contribuyentes ante el SAT.",
+    description: "Acudir a la cita y completar la inscripción al Registro Federal de Contribuyentes ante el SAT.",
     icon: "Receipt",
     status: "pendiente",
     completed_at: null,
     notes: "",
   },
   {
+    key: "cita_efirma",
+    label: "Agendar cita ante el SAT (e.firma)",
+    description: "El gestor solicita cita en el SAT para obtener la firma electrónica. Requiere tener el recibo de línea telefónica.",
+    icon: "CalendarClock",
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+    appointment_date: null,
+  },
+  {
     key: "firma_electronica",
     label: "Obtención de e.firma (FIEL)",
-    description: "Obtener la firma electrónica avanzada del SAT.",
+    description: "Acudir a la cita y completar el trámite de firma electrónica avanzada del SAT.",
     icon: "KeyRound",
     status: "pendiente",
     completed_at: null,
@@ -149,6 +182,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Landmark,
   BookOpen,
   Globe,
+  Phone,
+  CalendarClock,
 };
 
 const STATUS_CONFIG = {
@@ -214,21 +249,16 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
       });
   };
 
-  const updateStepStatus = (key: string, newStatus: ConstitutionStep["status"]) => {
+  const updateStep = (key: string, updates: Partial<ConstitutionStep>) => {
     const updated = steps.map((s) =>
       s.key === key
         ? {
             ...s,
-            status: newStatus,
-            completed_at: newStatus === "completado" ? new Date().toISOString() : null,
+            ...updates,
+            completed_at: updates.status === "completado" ? new Date().toISOString() : updates.status !== undefined ? null : s.completed_at,
           }
         : s
     );
-    saveMutation.mutate(updated);
-  };
-
-  const updateStepNotes = (key: string, notes: string) => {
-    const updated = steps.map((s) => (s.key === key ? { ...s, notes } : s));
     saveMutation.mutate(updated);
   };
 
@@ -287,6 +317,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
           const statusCfg = STATUS_CONFIG[step.status];
           const StatusIcon = statusCfg.icon;
           const isOpen = expandedStep === step.key;
+          const hasAppointment = step.appointment_date !== undefined;
 
           return (
             <Collapsible
@@ -310,6 +341,12 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           {step.description}
                         </p>
                       </div>
+                      {hasAppointment && step.appointment_date && (
+                        <Badge variant="outline" className="text-xs shrink-0 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                          <CalendarClock className="h-3 w-3 mr-1" />
+                          {formatDateMX(step.appointment_date)}
+                        </Badge>
+                      )}
                       <Badge variant="outline" className={`text-xs shrink-0 ${statusCfg.class}`}>
                         <StatusIcon className="h-3 w-3 mr-1" />
                         {statusCfg.label}
@@ -332,6 +369,35 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                       </p>
                     )}
 
+                    {/* Appointment date field */}
+                    {hasAppointment && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <CalendarClock className="h-3 w-3" />
+                          Fecha y hora de cita
+                        </label>
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            type="datetime-local"
+                            className="text-sm w-auto"
+                            defaultValue={step.appointment_date || ""}
+                            id={`const-appointment-${step.key}`}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={saveMutation.isPending}
+                            onClick={() => {
+                              const el = document.getElementById(`const-appointment-${step.key}`) as HTMLInputElement;
+                              if (el) updateStep(step.key, { appointment_date: el.value || null });
+                            }}
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Status buttons */}
                     <div className="flex flex-wrap gap-2">
                       {(["pendiente", "en_progreso", "completado"] as const).map((st) => (
@@ -340,7 +406,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           size="sm"
                           variant={step.status === st ? "default" : "outline"}
                           className="text-xs"
-                          onClick={() => updateStepStatus(step.key, st)}
+                          onClick={() => updateStep(step.key, { status: st })}
                           disabled={saveMutation.isPending}
                         >
                           {STATUS_CONFIG[st].label}
@@ -356,7 +422,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           className="text-sm min-h-[60px]"
                           placeholder="Agregar notas sobre este paso..."
                           defaultValue={step.notes}
-                          id={`notes-${step.key}`}
+                          id={`const-notes-${step.key}`}
                         />
                         <Button
                           size="sm"
@@ -364,8 +430,8 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           className="shrink-0 self-end"
                           disabled={saveMutation.isPending}
                           onClick={() => {
-                            const el = document.getElementById(`notes-${step.key}`) as HTMLTextAreaElement;
-                            if (el) updateStepNotes(step.key, el.value);
+                            const el = document.getElementById(`const-notes-${step.key}`) as HTMLTextAreaElement;
+                            if (el) updateStep(step.key, { notes: el.value });
                           }}
                         >
                           <Save className="h-3 w-3" />
