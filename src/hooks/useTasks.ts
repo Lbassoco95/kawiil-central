@@ -192,6 +192,7 @@ export function useCreateTask() {
       toast.success("Tarea creada exitosamente");
 
       if (data) {
+        logActivity({ entityType: "task", entityId: data.id, action: "created", details: { title: data.title, area: data.area, priority: data.priority } });
         sendSlackNotification("task_created", {
           title: data.title,
           priority: data.priority,
