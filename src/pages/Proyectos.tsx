@@ -10,6 +10,7 @@ import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useState, useMemo } from "react";
+import { useUserRole } from "@/hooks/useUserRole";
 import type { Database } from "@/integrations/supabase/types";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
