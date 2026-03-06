@@ -52,6 +52,7 @@ const Clientes = () => {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const { data: clients, isLoading } = useClients();
   const deleteClient = useDeleteClient();
+  const { isAdminOrManager } = useUserRole();
 
   const filtered = useMemo(() => {
     if (!clients) return [];
