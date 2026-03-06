@@ -287,9 +287,10 @@ export function useDeleteClient() {
       const { error } = await supabase.from("clients").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      logActivity({ entityType: "client", entityId: id, action: "deleted" });
       toast.success("Cliente eliminado");
     },
     onError: (error) => toast.error("Error al eliminar cliente: " + error.message),

@@ -268,8 +268,9 @@ export function useDeleteTask() {
       const { error } = await supabase.from("tasks").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      logActivity({ entityType: "task", entityId: id, action: "deleted" });
       toast.success("Tarea eliminada");
     },
     onError: (err: Error) => toast.error("Error al eliminar tarea: " + err.message),
