@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -65,42 +65,52 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
   const loadPreview = async () => {
     if (!document?.file_path || document.source !== "supabase") return;
     setLoading(true);
+    setPreviewUrl(null);
+    setXmlContent(null);
+
     try {
       const { data, error } = await supabase.storage
         .from("documents")
         .createSignedUrl(document.file_path, 3600);
       if (error) throw error;
-      
+
       if (fileType === "xml") {
         const resp = await fetch(data.signedUrl);
         const text = await resp.text();
         setXmlContent(text);
       }
-      
+
       setPreviewUrl(data.signedUrl);
     } catch (err: any) {
+      setPreviewUrl(null);
+      setXmlContent(null);
       toast.error("Error al cargar preview: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (open && document?.source === "supabase" && document?.file_path) {
+      void loadPreview();
+    }
+  }, [open, document?.id]);
   const handleDownload = async () => {
     if (!document) return;
-    
+
     if (document.source === "dropbox" && document.external_path) {
       window.open(document.external_path, "_blank");
       return;
     }
-    
+
     if (!document.file_path) return;
-    
+
     try {
       const { data, error } = await supabase.storage
         .from("documents")
         .createSignedUrl(document.file_path, 60, { download: true });
       if (error) throw error;
-      
+
       const a = window.document.createElement("a");
       a.href = data.signedUrl;
       a.download = document.name;
@@ -120,18 +130,10 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     onOpenChange(o);
   };
 
-  // Load preview when opened
-  const onOpenAutoPreview = (o: boolean) => {
-    handleOpenChange(o);
-    if (o && document?.source === "supabase" && document?.file_path) {
-      setTimeout(loadPreview, 100);
-    }
-  };
-
   const isDropbox = document?.source === "dropbox";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenAutoPreview}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center gap-3">
