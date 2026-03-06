@@ -5,7 +5,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Users, Mail, Phone, Trash2 } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Plus, Search, Users, Mail, Phone, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { useClients, useDeleteClient } from "@/hooks/useClients";
 import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -28,11 +33,22 @@ const STATUS_LABELS: Record<ClientStatus, string> = {
   prospecto: "Prospecto",
 };
 
+const AREA_ORDER: ServiceArea[] = [
+  "contabilidad",
+  "legal",
+  "softlanding",
+  "pld_ft",
+  "juicios",
+  "gestoria",
+  "constitucion_nacional",
+];
+
 const Clientes = () => {
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const { data: clients, isLoading } = useClients();
   const deleteClient = useDeleteClient();
 
@@ -47,6 +63,46 @@ const Clientes = () => {
         c.email?.toLowerCase().includes(q)
     );
   }, [clients, search]);
+
+  const grouped = useMemo(() => {
+    const groups: Record<string, typeof filtered> = {};
+    const noService: typeof filtered = [];
+
+    for (const client of filtered) {
+      if (!client.services || client.services.length === 0) {
+        noService.push(client);
+        continue;
+      }
+      // Use primary_area if set, otherwise first service
+      const primaryArea = client.primary_area || client.services[0];
+      if (!groups[primaryArea]) groups[primaryArea] = [];
+      groups[primaryArea].push(client);
+    }
+
+    // Sort alphabetically within each group
+    for (const key of Object.keys(groups)) {
+      groups[key].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    }
+    noService.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+    const result: { key: string; label: string; clients: typeof filtered }[] = AREA_ORDER
+      .filter((key) => groups[key] && groups[key].length > 0)
+      .map((key) => ({ key, label: SERVICE_LABELS[key], clients: groups[key] }));
+
+    if (noService.length > 0) {
+      result.push({ key: "sin_servicio", label: "Sin servicio asignado", clients: noService });
+    }
+
+    return result;
+  }, [filtered]);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   return (
     <AppLayout>
@@ -74,6 +130,9 @@ const Clientes = () => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <Badge variant="secondary" className="text-xs">
+            {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}
+          </Badge>
         </div>
 
         {isLoading ? (
@@ -105,60 +164,86 @@ const Clientes = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
-            {filtered.map((client) => (
-              <Card key={client.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/clientes/${client.id}`)}>
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-foreground truncate">
-                          {client.name}
-                        </h3>
-                        <Badge variant="outline" className={STATUS_STYLES[client.status]}>
-                          {STATUS_LABELS[client.status]}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {client.client_type === "persona_moral"
-                          ? "Persona Moral"
-                          : "Persona Física"}
-                        {client.rfc && ` · RFC: ${client.rfc}`}
-                      </p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground pt-1">
-                        {client.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="h-3.5 w-3.5" />
-                            {client.email}
-                          </span>
-                        )}
-                        {client.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="h-3.5 w-3.5" />
-                            {client.phone}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 justify-end items-start">
-                      {client.services?.map((s) => (
-                        <Badge key={s} variant="secondary" className="text-xs">
-                          {SERVICE_LABELS[s as ServiceArea] || s}
-                        </Badge>
+          <div className="space-y-4">
+            {grouped.map((group) => {
+              const isCollapsed = collapsedGroups.has(group.key);
+              return (
+                <Collapsible key={group.key} open={!isCollapsed} onOpenChange={() => toggleGroup(group.key)}>
+                  <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-2 px-1 hover:bg-accent/50 rounded-md transition-colors">
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <h2 className="text-sm font-semibold text-foreground">{group.label}</h2>
+                    <Badge variant="secondary" className="text-xs ml-1">
+                      {group.clients.length}
+                    </Badge>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="grid gap-2 mt-2 ml-6">
+                      {group.clients.map((client) => (
+                        <Card
+                          key={client.id}
+                          className="hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => navigate(`/clientes/${client.id}`)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-semibold text-foreground truncate text-sm">
+                                      {client.name}
+                                    </h3>
+                                    <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[client.status]}`}>
+                                      {STATUS_LABELS[client.status]}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                                    <span>
+                                      {client.client_type === "persona_moral" ? "PM" : "PF"}
+                                      {client.rfc && ` · ${client.rfc}`}
+                                    </span>
+                                    {client.email && (
+                                      <span className="flex items-center gap-1">
+                                        <Mail className="h-3 w-3" />
+                                        {client.email}
+                                      </span>
+                                    )}
+                                    {client.phone && (
+                                      <span className="flex items-center gap-1">
+                                        <Phone className="h-3 w-3" />
+                                        {client.phone}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {client.services?.filter((s) => s !== group.key).map((s) => (
+                                  <Badge key={s} variant="secondary" className="text-[10px]">
+                                    {SERVICE_LABELS[s as ServiceArea] || s}
+                                  </Badge>
+                                ))}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+                                  onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: client.id, name: client.name }); }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
                       ))}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: client.id, name: client.name }); }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CollapsibleContent>
+                </Collapsible>
+              );
+            })}
           </div>
         )}
       </div>
