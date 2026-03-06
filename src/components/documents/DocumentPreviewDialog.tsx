@@ -78,16 +78,9 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         const resp = await fetch(data.signedUrl);
         const text = await resp.text();
         setXmlContent(text);
-        setPreviewUrl(data.signedUrl);
-      } else if (fileType === "pdf") {
-        // Fetch PDF as blob to avoid Chrome cross-origin iframe blocking
-        const resp = await fetch(data.signedUrl);
-        const blob = await resp.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        setPreviewUrl(blobUrl);
-      } else {
-        setPreviewUrl(data.signedUrl);
       }
+
+      setPreviewUrl(data.signedUrl);
     } catch (err: any) {
       setPreviewUrl(null);
       setXmlContent(null);
@@ -208,11 +201,19 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
           )}
 
           {!isDropbox && !loading && previewUrl && fileType === "pdf" && (
-            <iframe
-              src={previewUrl}
+            <object
+              data={previewUrl}
+              type="application/pdf"
               className="w-full h-[60vh] rounded"
-              title={document?.name}
-            />
+              aria-label={document?.name ?? "Vista previa de PDF"}
+            >
+              <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-center p-6">
+                <p className="text-sm text-muted-foreground">Chrome bloqueó la vista embebida del PDF.</p>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewUrl} target="_blank" rel="noopener noreferrer">Abrir PDF en pestaña nueva</a>
+                </Button>
+              </div>
+            </object>
           )}
 
           {!isDropbox && !loading && previewUrl && fileType === "image" && (
