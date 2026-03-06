@@ -85,7 +85,7 @@ const Clientes = () => {
     }
     noService.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-    const result = AREA_ORDER
+    const result: { key: string; label: string; clients: typeof filtered }[] = AREA_ORDER
       .filter((key) => groups[key] && groups[key].length > 0)
       .map((key) => ({ key, label: SERVICE_LABELS[key], clients: groups[key] }));
 
