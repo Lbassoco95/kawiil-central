@@ -46,6 +46,7 @@ const Tareas = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteTask = useDeleteTask();
+  const { isAdminOrManager } = useUserRole();
   const { areaOptions, areaLabelMap } = useAreaOptions();
   const { data: assignedSteps = [] } = useAssignedSteps();
 
