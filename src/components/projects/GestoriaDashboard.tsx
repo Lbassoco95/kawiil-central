@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -21,6 +22,8 @@ import {
   Clock,
   AlertCircle,
   ClipboardList,
+  Phone,
+  CalendarClock,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,35 +35,99 @@ interface GestoriaStep {
   label: string;
   description: string;
   icon: string;
+  phase: number;
   status: "pendiente" | "en_progreso" | "completado";
   completed_at: string | null;
   notes: string;
+  appointment_date?: string | null;
 }
+
+const PHASES = [
+  { number: 1, label: "Documentación y requisitos previos" },
+  { number: 2, label: "Trámite de RFC" },
+  { number: 3, label: "Trámite de e.firma" },
+  { number: 4, label: "Entrega" },
+];
 
 const DEFAULT_STEPS: GestoriaStep[] = [
   {
     key: "documentacion",
     label: "Recopilación de documentación",
-    description: "Integrar documentos de identidad, comprobante de domicilio y demás requisitos del contribuyente.",
+    description: "Integrar documentos de identidad del contribuyente, acta constitutiva (persona moral), poder notarial y demás requisitos.",
     icon: "FileText",
+    phase: 1,
     status: "pendiente",
     completed_at: null,
     notes: "",
+  },
+  {
+    key: "comprobante_domicilio_rfc",
+    label: "Comprobante de domicilio para RFC",
+    description: "Estado de cuenta bancario a nombre del contribuyente o comprobante de teléfono. Requerido para la inscripción al RFC cuando hay un socio nacional.",
+    icon: "FileText",
+    phase: 1,
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+  },
+  {
+    key: "contratacion_linea",
+    label: "Contratación de línea telefónica",
+    description: "Contratar línea telefónica fija o móvil a nombre del contribuyente para generar el comprobante de domicilio requerido para la e.firma.",
+    icon: "Phone",
+    phase: 1,
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+  },
+  {
+    key: "recibo_linea",
+    label: "Recibo de línea telefónica generado",
+    description: "Verificar que ya se generó el recibo/comprobante de la línea contratada. Sin este documento no se puede agendar la cita para e.firma.",
+    icon: "FileText",
+    phase: 1,
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+  },
+  {
+    key: "cita_rfc",
+    label: "Agendar cita ante el SAT (RFC)",
+    description: "Solicitar cita en el SAT a través del gestor para realizar la inscripción al RFC.",
+    icon: "CalendarClock",
+    phase: 2,
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+    appointment_date: null,
   },
   {
     key: "obtencion_rfc",
     label: "Obtención del RFC",
-    description: "Tramitar el Registro Federal de Contribuyentes ante el SAT.",
+    description: "Acudir a la cita y completar la inscripción al Registro Federal de Contribuyentes.",
     icon: "Receipt",
+    phase: 2,
     status: "pendiente",
     completed_at: null,
     notes: "",
   },
   {
-    key: "firma_electronica",
+    key: "cita_efirma",
+    label: "Agendar cita ante el SAT (e.firma)",
+    description: "Solicitar cita en el SAT a través del gestor para obtener la firma electrónica. Requiere tener el recibo de línea telefónica.",
+    icon: "CalendarClock",
+    phase: 3,
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+    appointment_date: null,
+  },
+  {
+    key: "obtencion_efirma",
     label: "Obtención de e.firma (FIEL)",
-    description: "Obtener la firma electrónica avanzada del SAT.",
+    description: "Acudir a la cita y completar el trámite de firma electrónica avanzada.",
     icon: "KeyRound",
+    phase: 3,
     status: "pendiente",
     completed_at: null,
     notes: "",
@@ -68,8 +135,9 @@ const DEFAULT_STEPS: GestoriaStep[] = [
   {
     key: "entrega_final",
     label: "Entrega de documentos y acuses",
-    description: "Entregar al cliente los documentos, acuses y constancias obtenidos.",
+    description: "Entregar al cliente los documentos, acuses, constancia de RFC y archivos de e.firma obtenidos.",
     icon: "Send",
+    phase: 4,
     status: "pendiente",
     completed_at: null,
     notes: "",
@@ -81,6 +149,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Receipt,
   KeyRound,
   Send,
+  Phone,
+  CalendarClock,
 };
 
 const STATUS_CONFIG = {
@@ -120,17 +190,16 @@ export function GestoriaDashboard({ projectId, gestoriaDetails }: Props) {
     onError: (e: Error) => toast.error("Error: " + e.message),
   });
 
-  const updateStepStatus = (key: string, newStatus: GestoriaStep["status"]) => {
+  const updateStep = (key: string, updates: Partial<GestoriaStep>) => {
     const updated = steps.map((s) =>
       s.key === key
-        ? { ...s, status: newStatus, completed_at: newStatus === "completado" ? new Date().toISOString() : null }
+        ? {
+            ...s,
+            ...updates,
+            completed_at: updates.status === "completado" ? new Date().toISOString() : updates.status !== undefined ? null : s.completed_at,
+          }
         : s
     );
-    saveMutation.mutate(updated);
-  };
-
-  const updateStepNotes = (key: string, notes: string) => {
-    const updated = steps.map((s) => (s.key === key ? { ...s, notes } : s));
     saveMutation.mutate(updated);
   };
 
@@ -160,6 +229,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Progress overview */}
       <Card>
         <CardContent className="pt-6 space-y-3">
           <div className="flex items-center justify-between">
@@ -172,89 +242,150 @@ export function GestoriaDashboard({ projectId, gestoriaDetails }: Props) {
         </CardContent>
       </Card>
 
-      <div className="space-y-2">
-        {steps.map((step, idx) => {
-          const IconComp = ICON_MAP[step.icon] || FileText;
-          const statusCfg = STATUS_CONFIG[step.status];
-          const StatusIcon = statusCfg.icon;
-          const isOpen = expandedStep === step.key;
+      {/* Phases */}
+      {PHASES.map((phase) => {
+        const phaseSteps = steps.filter((s) => s.phase === phase.number);
+        if (phaseSteps.length === 0) return null;
+        const phaseCompleted = phaseSteps.every((s) => s.status === "completado");
 
-          return (
-            <Collapsible
-              key={step.key}
-              open={isOpen}
-              onOpenChange={() => setExpandedStep(isOpen ? null : step.key)}
-            >
-              <Card className={step.status === "completado" ? "opacity-75" : ""}>
-                <CollapsibleTrigger asChild>
-                  <CardContent className="p-4 cursor-pointer hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted shrink-0">
-                        <span className="text-xs font-bold text-muted-foreground">{idx + 1}</span>
+        return (
+          <div key={phase.number} className="space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <Badge
+                variant={phaseCompleted ? "default" : "outline"}
+                className={`text-xs ${phaseCompleted ? "bg-green-600 text-white" : ""}`}
+              >
+                Fase {phase.number}
+              </Badge>
+              <h4 className="text-sm font-semibold text-foreground">{phase.label}</h4>
+            </div>
+
+            {phaseSteps.map((step, idx) => {
+              const IconComp = ICON_MAP[step.icon] || FileText;
+              const statusCfg = STATUS_CONFIG[step.status];
+              const StatusIcon = statusCfg.icon;
+              const isOpen = expandedStep === step.key;
+              const globalIdx = steps.findIndex((s) => s.key === step.key);
+              const hasAppointment = step.appointment_date !== undefined;
+
+              return (
+                <Collapsible
+                  key={step.key}
+                  open={isOpen}
+                  onOpenChange={() => setExpandedStep(isOpen ? null : step.key)}
+                >
+                  <Card className={step.status === "completado" ? "opacity-75" : ""}>
+                    <CollapsibleTrigger asChild>
+                      <CardContent className="p-4 cursor-pointer hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-muted shrink-0">
+                            <span className="text-xs font-bold text-muted-foreground">{globalIdx + 1}</span>
+                          </div>
+                          <IconComp className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-medium text-foreground truncate">{step.label}</h4>
+                            <p className="text-xs text-muted-foreground truncate hidden sm:block">{step.description}</p>
+                          </div>
+                          {hasAppointment && step.appointment_date && (
+                            <Badge variant="outline" className="text-xs shrink-0 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                              <CalendarClock className="h-3 w-3 mr-1" />
+                              {formatDateMX(step.appointment_date)}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className={`text-xs shrink-0 ${statusCfg.class}`}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {statusCfg.label}
+                          </Badge>
+                          {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                        </div>
+                      </CardContent>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="px-4 pb-4 space-y-3 border-t pt-3">
+                        <p className="text-sm text-muted-foreground">{step.description}</p>
+
+                        {step.completed_at && (
+                          <p className="text-xs text-muted-foreground">Completado: {formatDateMX(step.completed_at)}</p>
+                        )}
+
+                        {/* Appointment date field */}
+                        {hasAppointment && (
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                              <CalendarClock className="h-3 w-3" />
+                              Fecha y hora de cita
+                            </label>
+                            <div className="flex gap-2 items-center">
+                              <Input
+                                type="datetime-local"
+                                className="text-sm w-auto"
+                                defaultValue={step.appointment_date || ""}
+                                id={`appointment-${step.key}`}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={saveMutation.isPending}
+                                onClick={() => {
+                                  const el = document.getElementById(`appointment-${step.key}`) as HTMLInputElement;
+                                  if (el) updateStep(step.key, { appointment_date: el.value || null });
+                                }}
+                              >
+                                <Save className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Status buttons */}
+                        <div className="flex flex-wrap gap-2">
+                          {(["pendiente", "en_progreso", "completado"] as const).map((st) => (
+                            <Button
+                              key={st}
+                              size="sm"
+                              variant={step.status === st ? "default" : "outline"}
+                              className="text-xs"
+                              onClick={() => updateStep(step.key, { status: st })}
+                              disabled={saveMutation.isPending}
+                            >
+                              {STATUS_CONFIG[st].label}
+                            </Button>
+                          ))}
+                        </div>
+
+                        {/* Notes */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Notas</label>
+                          <div className="flex gap-2">
+                            <Textarea
+                              className="text-sm min-h-[60px]"
+                              placeholder="Agregar notas..."
+                              defaultValue={step.notes}
+                              id={`gestoria-notes-${step.key}`}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="shrink-0 self-end"
+                              disabled={saveMutation.isPending}
+                              onClick={() => {
+                                const el = document.getElementById(`gestoria-notes-${step.key}`) as HTMLTextAreaElement;
+                                if (el) updateStep(step.key, { notes: el.value });
+                              }}
+                            >
+                              <Save className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                      <IconComp className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium text-foreground truncate">{step.label}</h4>
-                        <p className="text-xs text-muted-foreground truncate hidden sm:block">{step.description}</p>
-                      </div>
-                      <Badge variant="outline" className={`text-xs shrink-0 ${statusCfg.class}`}>
-                        <StatusIcon className="h-3 w-3 mr-1" />
-                        {statusCfg.label}
-                      </Badge>
-                      {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-                    </div>
-                  </CardContent>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="px-4 pb-4 space-y-3 border-t pt-3">
-                    <p className="text-sm text-muted-foreground">{step.description}</p>
-                    {step.completed_at && (
-                      <p className="text-xs text-muted-foreground">Completado: {formatDateMX(step.completed_at)}</p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {(["pendiente", "en_progreso", "completado"] as const).map((st) => (
-                        <Button
-                          key={st}
-                          size="sm"
-                          variant={step.status === st ? "default" : "outline"}
-                          className="text-xs"
-                          onClick={() => updateStepStatus(step.key, st)}
-                          disabled={saveMutation.isPending}
-                        >
-                          {STATUS_CONFIG[st].label}
-                        </Button>
-                      ))}
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Notas</label>
-                      <div className="flex gap-2">
-                        <Textarea
-                          className="text-sm min-h-[60px]"
-                          placeholder="Agregar notas..."
-                          defaultValue={step.notes}
-                          id={`gestoria-notes-${step.key}`}
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0 self-end"
-                          disabled={saveMutation.isPending}
-                          onClick={() => {
-                            const el = document.getElementById(`gestoria-notes-${step.key}`) as HTMLTextAreaElement;
-                            if (el) updateStepNotes(step.key, el.value);
-                          }}
-                        >
-                          <Save className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          );
-        })}
-      </div>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
