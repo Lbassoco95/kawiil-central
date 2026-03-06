@@ -20,6 +20,7 @@ const Documentos = () => {
   const [sourceFilter, setSourceFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; source: string; file_path: string | null } | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<any>(null);
 
   const { data: documents, isLoading } = useDocuments({ search, source: sourceFilter });
   const deleteDocument = useDeleteDocument();
