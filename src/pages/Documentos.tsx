@@ -11,8 +11,9 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { formatMX } from "@/lib/dateUtils";
 import {
   Plus, Search, FileText, Link, ExternalLink, Trash2, Upload,
-  Calendar, User, FolderOpen
+  Calendar, User, FolderOpen, Eye
 } from "lucide-react";
+import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 
 const Documentos = () => {
   const [search, setSearch] = useState("");
