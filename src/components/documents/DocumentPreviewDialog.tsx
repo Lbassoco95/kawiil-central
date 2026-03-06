@@ -55,6 +55,11 @@ function getFileLabel(type: string) {
   }
 }
 
+function buildAbsoluteSignedUrl(signedUrl: string) {
+  if (signedUrl.startsWith("http://") || signedUrl.startsWith("https://")) return signedUrl;
+  return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1${signedUrl}`;
+}
+
 export function DocumentPreviewDialog({ open, onOpenChange, document }: DocumentPreviewDialogProps) {
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -74,13 +79,15 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         .createSignedUrl(document.file_path, 3600);
       if (error) throw error;
 
+      const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
+
       if (fileType === "xml") {
-        const resp = await fetch(data.signedUrl);
+        const resp = await fetch(signedUrl);
         const text = await resp.text();
         setXmlContent(text);
       }
 
-      setPreviewUrl(data.signedUrl);
+      setPreviewUrl(signedUrl);
     } catch (err: any) {
       setPreviewUrl(null);
       setXmlContent(null);
@@ -117,8 +124,9 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         .createSignedUrl(document.file_path, 60, { download: true });
       if (error) throw error;
 
+      const fileUrl = buildAbsoluteSignedUrl(data.signedUrl);
       const a = window.document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = fileUrl;
       a.download = document.name;
       window.document.body.appendChild(a);
       a.click();
