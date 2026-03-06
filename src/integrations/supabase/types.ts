@@ -958,6 +958,8 @@ export type Database = {
         | "softlanding"
         | "pld_ft"
         | "juicios"
+        | "gestoria"
+        | "constitucion_nacional"
       task_priority: "urgente" | "alta" | "media" | "baja"
       task_status:
         | "pendiente"
@@ -1103,6 +1105,8 @@ export const Constants = {
         "softlanding",
         "pld_ft",
         "juicios",
+        "gestoria",
+        "constitucion_nacional",
       ],
       task_priority: ["urgente", "alta", "media", "baja"],
       task_status: [

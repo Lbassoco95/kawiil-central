@@ -37,13 +37,7 @@ type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientType = Database["public"]["Enums"]["client_type"];
 type Client = Tables<"clients">;
 
-const SERVICE_LABELS: Record<ServiceArea, string> = {
-  contabilidad: "Contabilidad",
-  legal: "Legal",
-  softlanding: "Soft Landing",
-  pld_ft: "PLD/FT",
-  juicios: "Juicios",
-};
+import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
 const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   persona_moral: "Persona Moral",
@@ -73,6 +67,8 @@ const PACKAGE_INCLUDED_SERVICES: Record<ServicePackage, ServiceArea[]> = {
 const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
+  { value: "gestoria", label: "Gestoría" },
+  { value: "constitucion_nacional", label: "Constitución Nacional" },
 ];
 
 const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
@@ -80,9 +76,11 @@ const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "legal", label: "Legal" },
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
+  { value: "gestoria", label: "Gestoría" },
+  { value: "constitucion_nacional", label: "Constitución Nacional" },
 ];
 
-const ALL_SERVICE_AREAS = ["contabilidad", "legal", "softlanding", "pld_ft", "juicios"] as const;
+const ALL_SERVICE_AREAS = ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional"] as const;
 
 const clientSchema = z.object({
   name: z.string().trim().min(1, "El nombre es requerido").max(200),

@@ -5,11 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList } from "lucide-react";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
 import { AnnualDeclarationDashboard } from "@/components/projects/AnnualDeclarationDashboard";
+import { GestoriaDashboard } from "@/components/projects/GestoriaDashboard";
 import { ProjectGeneralTab } from "@/components/projects/ProjectGeneralTab";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,13 +21,7 @@ import { formatDateMX } from "@/lib/dateUtils";
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 
-const SERVICE_LABELS: Record<ServiceArea, string> = {
-  contabilidad: "Contabilidad",
-  legal: "Legal",
-  softlanding: "Soft Landing",
-  pld_ft: "PLD/FT",
-  juicios: "Juicios",
-};
+import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = {
   activo: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -65,6 +60,9 @@ const ProyectoDetalle = () => {
   // Determine if project has accounting service
   const hasAccounting = project?.area === "contabilidad" || project?.area === "softlanding";
   const isSoftlanding = project?.area === "softlanding";
+  const isConstitutionNacional = project?.area === "constitucion_nacional";
+  const hasConstitution = isSoftlanding || isConstitutionNacional;
+  const isGestoria = project?.area === "gestoria";
   const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
@@ -128,13 +126,19 @@ const ProyectoDetalle = () => {
           </div>
         </div>
 
-        <Tabs defaultValue={isSoftlanding ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
+        <Tabs defaultValue={isGestoria ? "gestoria" : hasConstitution ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="general">General</TabsTrigger>
-            {isSoftlanding && (
+            {hasConstitution && (
               <TabsTrigger value="constitucion">
                 <Building2 className="h-4 w-4 mr-1" />
                 Constitución
+              </TabsTrigger>
+            )}
+            {isGestoria && (
+              <TabsTrigger value="gestoria">
+                <ClipboardList className="h-4 w-4 mr-1" />
+                Gestoría
               </TabsTrigger>
             )}
             {hasAccounting && (
@@ -162,11 +166,20 @@ const ProyectoDetalle = () => {
             <ProjectGeneralTab project={project} />
           </TabsContent>
 
-          {isSoftlanding && (
+          {hasConstitution && (
             <TabsContent value="constitucion">
               <ConstitutionDashboard
                 projectId={project.id}
                 constitutionDetails={constitutionDetails}
+              />
+            </TabsContent>
+          )}
+
+          {isGestoria && (
+            <TabsContent value="gestoria">
+              <GestoriaDashboard
+                projectId={project.id}
+                gestoriaDetails={constitutionDetails}
               />
             </TabsContent>
           )}

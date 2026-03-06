@@ -25,13 +25,7 @@ type ProjectStatus = Database["public"]["Enums"]["project_status"];
 type Client = Tables<"clients">;
 type Project = Tables<"projects">;
 
-const SERVICE_LABELS: Record<ServiceArea, string> = {
-  contabilidad: "Contabilidad",
-  legal: "Legal",
-  softlanding: "Soft Landing",
-  pld_ft: "PLD/FT",
-  juicios: "Juicios",
-};
+import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
 const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
   activo: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
@@ -72,8 +66,17 @@ function getExpectedProjects(services: ServiceArea[]): Array<{ area: ServiceArea
     expected.push({ area: "pld_ft", namePrefix: "Cumplimiento PLD/FT" });
   }
 
+  // Gestoría project (RFC + e.firma)
+  if (services.includes("gestoria")) {
+    expected.push({ area: "gestoria", namePrefix: "Gestoría" });
+  }
+
+  // Constitución Nacional project
+  if (services.includes("constitucion_nacional")) {
+    expected.push({ area: "constitucion_nacional", namePrefix: "Constitución Nacional" });
+  }
+
   // Juicios – individual lawsuits are added manually
-  // (not auto-created since each lawsuit is unique)
 
   return expected;
 }
