@@ -215,19 +215,11 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
           )}
 
           {!isDropbox && !loading && previewUrl && fileType === "pdf" && (
-            <object
-              data={previewUrl}
-              type="application/pdf"
+            <iframe
+              src={previewUrl + "#toolbar=1&navpanes=0"}
               className="w-full h-[60vh] rounded"
-              aria-label={document?.name ?? "Vista previa de PDF"}
-            >
-              <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-center p-6">
-                <p className="text-sm text-muted-foreground">Chrome bloqueó la vista embebida del PDF.</p>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={previewUrl} target="_blank" rel="noopener noreferrer">Abrir PDF en pestaña nueva</a>
-                </Button>
-              </div>
-            </object>
+              title={document?.name}
+            />
           )}
 
           {!isDropbox && !loading && previewUrl && fileType === "image" && (
