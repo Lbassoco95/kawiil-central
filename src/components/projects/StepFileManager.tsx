@@ -32,7 +32,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
       if (documentIds.length === 0) return [];
       const { data, error } = await supabase
         .from("documents")
-        .select("id, name, mime_type, created_at, source, external_path")
+        .select("id, name, mime_type, file_path, file_size, created_at, source, external_path")
         .in("id", documentIds);
       if (error) throw error;
       return data;
