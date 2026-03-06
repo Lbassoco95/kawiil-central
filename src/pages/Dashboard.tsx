@@ -27,6 +27,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdminOrManager } = useUserRole();
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
   const { data: orgUsers } = useOrgUsers();
