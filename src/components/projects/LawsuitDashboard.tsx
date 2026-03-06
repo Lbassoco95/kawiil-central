@@ -43,6 +43,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isPast, isToday, addDays, isBefore } from "date-fns";
 import { formatMX } from "@/lib/dateUtils";
+import { StepAssigneeSelect } from "./StepAssigneeSelect";
 
 interface StageAttachment {
   id: string;
@@ -59,6 +60,7 @@ interface LawsuitStage {
   notes: string;
   completed_at: string | null;
   attachments?: StageAttachment[];
+  assigned_to?: string | null;
 }
 
 interface LawsuitDeadline {
@@ -427,6 +429,19 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                       />
                     </div>
                   </div>
+                  <StepAssigneeSelect
+                    value={stage.assigned_to || null}
+                    onChange={(userId) => {
+                      const updated = {
+                        ...lawsuitDetails,
+                        stages: lawsuitDetails.stages.map((s) =>
+                          s.key === stage.key ? { ...s, assigned_to: userId } : s
+                        ),
+                      };
+                      updateLawsuit.mutate(updated);
+                    }}
+                  />
+
                   <div className="space-y-1">
                     <Label className="text-xs">Notas</Label>
                     <Textarea
