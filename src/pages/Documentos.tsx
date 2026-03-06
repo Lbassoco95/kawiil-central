@@ -173,6 +173,12 @@ const Documentos = () => {
         title="Eliminar documento"
         description="¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer."
       />
+
+      <DocumentPreviewDialog
+        open={!!previewDoc}
+        onOpenChange={(o) => { if (!o) setPreviewDoc(null); }}
+        document={previewDoc}
+      />
     </AppLayout>
   );
 };
