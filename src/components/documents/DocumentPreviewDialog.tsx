@@ -124,8 +124,9 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         .createSignedUrl(document.file_path, 60, { download: true });
       if (error) throw error;
 
+      const fileUrl = buildAbsoluteSignedUrl(data.signedUrl);
       const a = window.document.createElement("a");
-      a.href = data.signedUrl;
+      a.href = fileUrl;
       a.download = document.name;
       window.document.body.appendChild(a);
       a.click();
