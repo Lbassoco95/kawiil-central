@@ -37,6 +37,8 @@ import {
   Link2,
   ExternalLink,
   FolderOpen,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
