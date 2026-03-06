@@ -23,6 +23,7 @@ export interface AccountingStep {
   notes?: string | null;
   document_ids?: string[];
   time_spent_seconds?: number;
+  assigned_to?: string | null;
 }
 
 export interface AccountingPeriod {
