@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
+import { logActivity } from "@/lib/activityLog";
 
 export type Task = Tables<"tasks"> & {
   clients?: { name: string } | null;
