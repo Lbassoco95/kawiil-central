@@ -95,10 +95,45 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
       void loadPreview();
     }
   }, [open, document?.id]);
+  const handleDownload = async () => {
+    if (!document) return;
 
+    if (document.source === "dropbox" && document.external_path) {
+      window.open(document.external_path, "_blank");
+      return;
+    }
+
+    if (!document.file_path) return;
+
+    try {
+      const { data, error } = await supabase.storage
+        .from("documents")
+        .createSignedUrl(document.file_path, 60, { download: true });
+      if (error) throw error;
+
+      const a = window.document.createElement("a");
+      a.href = data.signedUrl;
+      a.download = document.name;
+      window.document.body.appendChild(a);
+      a.click();
+      window.document.body.removeChild(a);
+    } catch (err: any) {
+      toast.error("Error al descargar: " + err.message);
+    }
+  };
+
+  const handleOpenChange = (o: boolean) => {
+    if (!o) {
+      setPreviewUrl(null);
+      setXmlContent(null);
+    }
+    onOpenChange(o);
+  };
+
+  const isDropbox = document?.source === "dropbox";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenAutoPreview}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center gap-3">
