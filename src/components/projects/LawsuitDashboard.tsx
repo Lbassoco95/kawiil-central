@@ -37,6 +37,8 @@ import {
   Link2,
   ExternalLink,
   FolderOpen,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +46,8 @@ import { toast } from "sonner";
 import { isPast, isToday, addDays, isBefore } from "date-fns";
 import { formatMX } from "@/lib/dateUtils";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
+import { StepFileManager } from "./StepFileManager";
+import { useProfiles } from "@/hooks/useTasks";
 
 interface StageAttachment {
   id: string;
@@ -61,6 +65,11 @@ interface LawsuitStage {
   completed_at: string | null;
   attachments?: StageAttachment[];
   assigned_to?: string | null;
+  collaborators?: string[];
+  document_ids?: string[];
+  due_date?: string | null;
+  started_at?: string | null;
+  time_spent_seconds?: number;
 }
 
 interface LawsuitDeadline {
@@ -143,6 +152,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
   const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
   const queryClient = useQueryClient();
+  const { data: profiles = [] } = useProfiles();
 
   const updateLawsuit = useMutation({
     mutationFn: async (updated: LawsuitDetails) => {
@@ -402,127 +412,99 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                   </Badge>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="pl-10 pr-3 pb-3 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <StepAssigneeSelect
+                      value={stage.assigned_to || null}
+                      onChange={(userId) => {
+                        const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, assigned_to: userId } : s) };
+                        updateLawsuit.mutate(updated);
+                      }}
+                    />
                     <div className="space-y-1">
                       <Label className="text-xs">Estado</Label>
-                      <Select
-                        value={stage.status}
-                        onValueChange={(v) => updateStageStatus(stage.key, v)}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Select value={stage.status} onValueChange={(v) => updateStageStatus(stage.key, v)}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {STAGE_STATUS_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                          ))}
+                          {STAGE_STATUS_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Fecha</Label>
-                      <Input
-                        type="date"
-                        className="h-8 text-xs"
-                        value={stage.date || ""}
-                        onChange={(e) => updateStageField(stage.key, "date", e.target.value)}
-                      />
+                      <Label className="text-xs">Fecha límite</Label>
+                      <Input type="date" className="h-8 text-xs" value={stage.date || ""} onChange={(e) => updateStageField(stage.key, "date", e.target.value)} />
                     </div>
                   </div>
-                  <StepAssigneeSelect
-                    value={stage.assigned_to || null}
-                    onChange={(userId) => {
-                      const updated = {
-                        ...lawsuitDetails,
-                        stages: lawsuitDetails.stages.map((s) =>
-                          s.key === stage.key ? { ...s, assigned_to: userId } : s
-                        ),
-                      };
+
+                  {/* Collaborators */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                      <UserPlus className="h-3 w-3" /> Colaboradores
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-1">
+                      {(stage.collaborators || []).map((uid) => {
+                        const p = profiles.find((pr) => pr.user_id === uid);
+                        return (
+                          <Badge key={uid} variant="secondary" className="text-xs gap-1">
+                            {p?.full_name || uid}
+                            <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() => {
+                              const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, collaborators: (s.collaborators || []).filter((c) => c !== uid) } : s) };
+                              updateLawsuit.mutate(updated);
+                            }} />
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                    <Select onValueChange={(uid) => {
+                      const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, collaborators: [...(s.collaborators || []), uid] } : s) };
                       updateLawsuit.mutate(updated);
-                    }}
-                  />
+                    }} value="">
+                      <SelectTrigger className="h-8 text-xs w-full sm:w-[250px]"><SelectValue placeholder="Agregar colaborador..." /></SelectTrigger>
+                      <SelectContent>
+                        {profiles.filter((p) => p.user_id !== stage.assigned_to && !(stage.collaborators || []).includes(p.user_id)).map((p) => (
+                          <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   <div className="space-y-1">
                     <Label className="text-xs">Notas</Label>
-                    <Textarea
-                      className="text-xs min-h-[60px]"
-                      placeholder="Notas de esta etapa..."
-                      value={stage.notes || ""}
-                      onChange={(e) => updateStageField(stage.key, "notes", e.target.value)}
-                    />
+                    <Textarea className="text-xs min-h-[60px]" placeholder="Notas de esta etapa..." value={stage.notes || ""} onChange={(e) => updateStageField(stage.key, "notes", e.target.value)} />
                   </div>
 
-                  {/* Attachments section */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs flex items-center gap-1">
-                        <FolderOpen className="h-3 w-3" /> Archivos vinculados
-                      </Label>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 text-xs px-2"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setAttachmentDialogOpen(stage.key);
-                        }}
-                      >
-                        <Plus className="h-3 w-3 mr-1" /> Agregar link
-                      </Button>
-                    </div>
-                    {attachments.length > 0 ? (
+                  {/* File management (Dropbox + upload) */}
+                  <StepFileManager
+                    documentIds={stage.document_ids || []}
+                    onDocumentAdded={(newIds) => {
+                      const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, document_ids: newIds } : s) };
+                      updateLawsuit.mutate(updated);
+                    }}
+                    projectId={projectId}
+                  />
+
+                  {/* Legacy attachments */}
+                  {attachments.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-xs flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Links vinculados</Label>
                       <div className="space-y-1">
                         {attachments.map((att) => (
-                          <div
-                            key={att.id}
-                            className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs bg-muted/30"
-                          >
-                            {att.type === "dropbox" ? (
-                              <FolderOpen className="h-3 w-3 text-blue-500 shrink-0" />
-                            ) : (
-                              <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
-                            )}
+                          <div key={att.id} className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs bg-muted/30">
+                            {att.type === "dropbox" ? <FolderOpen className="h-3 w-3 text-blue-500 shrink-0" /> : <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
                             <span className="flex-1 truncate">{att.name}</span>
-                            <a
-                              href={att.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline shrink-0"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5 shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeAttachment(stage.key, att.id);
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline shrink-0" onClick={(e) => e.stopPropagation()}><ExternalLink className="h-3 w-3" /></a>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={(e) => { e.stopPropagation(); removeAttachment(stage.key, att.id); }}><Trash2 className="h-3 w-3" /></Button>
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic">Sin archivos vinculados</p>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={(e) => { e.stopPropagation(); setAttachmentDialogOpen(stage.key); }}>
+                    <Plus className="h-3 w-3 mr-1" /> Agregar link externo
+                  </Button>
 
                   <div className="flex items-center justify-between pt-1">
-                    {stage.completed_at && (
-                      <p className="text-xs text-muted-foreground">
-                        Completado: {formatMX(stage.completed_at, "dd/MM/yyyy HH:mm")}
-                      </p>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-destructive hover:text-destructive ml-auto"
-                      onClick={() => removeStage(stage.key)}
-                    >
+                    {stage.completed_at && <p className="text-xs text-muted-foreground">Completado: {formatMX(stage.completed_at, "dd/MM/yyyy HH:mm")}</p>}
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive ml-auto" onClick={() => removeStage(stage.key)}>
                       <Trash2 className="h-3 w-3 mr-1" /> Eliminar etapa
                     </Button>
                   </div>
