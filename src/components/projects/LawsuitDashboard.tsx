@@ -44,6 +44,8 @@ import { toast } from "sonner";
 import { isPast, isToday, addDays, isBefore } from "date-fns";
 import { formatMX } from "@/lib/dateUtils";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
+import { StepFileManager } from "./StepFileManager";
+import { useProfiles } from "@/hooks/useTasks";
 
 interface StageAttachment {
   id: string;
