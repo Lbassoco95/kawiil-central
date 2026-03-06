@@ -107,13 +107,12 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     if (open && document?.source === "supabase" && document?.file_path) {
       void loadPreview();
     }
-    // Cleanup blob URLs when closing
-    return () => {
-      if (previewUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
+    if (!open && previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
   }, [open, document?.id]);
+
   const handleDownload = async () => {
     if (!document) return;
 
