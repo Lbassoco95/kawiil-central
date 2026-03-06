@@ -271,6 +271,7 @@ export function useUpdateClient() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["client", data.id] });
+      logActivity({ entityType: "client", entityId: data.id, action: "updated", details: { name: data.name } });
       toast.success("Cliente actualizado exitosamente");
     },
     onError: (error) => {
