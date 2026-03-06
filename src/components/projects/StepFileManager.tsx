@@ -163,7 +163,8 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
           {documents.map((doc) => (
             <div
               key={doc.id}
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-xs bg-background border border-border/50"
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-xs bg-background border border-border/50 cursor-pointer hover:bg-accent/50 transition-colors"
+              onClick={() => setPreviewDoc(doc)}
             >
               {doc.source === "dropbox" ? (
                 <Link2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
@@ -171,17 +172,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
                 <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               )}
               <span className="truncate flex-1">{doc.name}</span>
-              {doc.external_path && (
-                <a
-                  href={doc.external_path}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:text-primary/80"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
+              <Eye className="h-3 w-3 text-muted-foreground shrink-0" />
               <span className="text-muted-foreground shrink-0">{formatDateMX(doc.created_at)}</span>
             </div>
           ))}
@@ -189,6 +180,12 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
       ) : (
         <p className="text-xs text-muted-foreground italic">Sin archivos adjuntos</p>
       )}
+
+      <DocumentPreviewDialog
+        open={!!previewDoc}
+        onOpenChange={(o) => { if (!o) setPreviewDoc(null); }}
+        document={previewDoc}
+      />
     </div>
   );
 }

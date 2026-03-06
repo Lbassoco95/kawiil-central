@@ -82,7 +82,7 @@ const Documentos = () => {
         ) : (
           <div className="space-y-2">
             {documents.map((doc) => (
-              <Card key={doc.id} className="hover:shadow-sm transition-shadow">
+              <Card key={doc.id} className="hover:shadow-sm transition-shadow cursor-pointer" onClick={() => setPreviewDoc(doc)}>
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 shrink-0">
@@ -131,28 +131,26 @@ const Documentos = () => {
                           <span>{(doc.file_size / 1024).toFixed(0)} KB</span>
                         )}
                       </div>
-
-                      {doc.source === "dropbox" && doc.external_path && (
-                        <a
-                          href={doc.external_path}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-primary hover:underline flex items-center gap-1 truncate"
-                        >
-                          <ExternalLink className="h-3 w-3 shrink-0" />
-                          {doc.external_path}
-                        </a>
-                      )}
                     </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-primary"
+                        onClick={(e) => { e.stopPropagation(); setPreviewDoc(doc); }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path }); }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
