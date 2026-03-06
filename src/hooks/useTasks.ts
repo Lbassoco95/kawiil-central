@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
+import { logActivity } from "@/lib/activityLog";
 
 export type Task = Tables<"tasks"> & {
   clients?: { name: string } | null;
@@ -191,6 +192,7 @@ export function useCreateTask() {
       toast.success("Tarea creada exitosamente");
 
       if (data) {
+        logActivity({ entityType: "task", entityId: data.id, action: "created", details: { title: data.title, area: data.area, priority: data.priority } });
         sendSlackNotification("task_created", {
           title: data.title,
           priority: data.priority,
@@ -247,6 +249,7 @@ export function useUpdateTask() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
+      logActivity({ entityType: "task", entityId: vars.id, action: "updated", details: { changes: Object.keys(vars).filter(k => k !== "id") } });
 
       if (vars.status) {
         sendSlackNotification("task_updated", {
@@ -265,8 +268,9 @@ export function useDeleteTask() {
       const { error } = await supabase.from("tasks").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      logActivity({ entityType: "task", entityId: id, action: "deleted" });
       toast.success("Tarea eliminada");
     },
     onError: (err: Error) => toast.error("Error al eliminar tarea: " + err.message),

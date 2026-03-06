@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
+import { logActivity } from "@/lib/activityLog";
 
 export type Client = Tables<"clients">;
 export type ClientInsert = TablesInsert<"clients">;
@@ -104,6 +105,7 @@ export function useCreateClient() {
       toast.success("Cliente creado exitosamente");
 
       if (data) {
+        logActivity({ entityType: "client", entityId: data.id, action: "created", details: { name: data.name, client_type: data.client_type } });
         sendSlackNotification("client_created", {
           name: data.name,
           client_type: data.client_type,
@@ -269,6 +271,7 @@ export function useUpdateClient() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["client", data.id] });
+      logActivity({ entityType: "client", entityId: data.id, action: "updated", details: { name: data.name } });
       toast.success("Cliente actualizado exitosamente");
     },
     onError: (error) => {
@@ -284,9 +287,10 @@ export function useDeleteClient() {
       const { error } = await supabase.from("clients").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      logActivity({ entityType: "client", entityId: id, action: "deleted" });
       toast.success("Cliente eliminado");
     },
     onError: (error) => toast.error("Error al eliminar cliente: " + error.message),
