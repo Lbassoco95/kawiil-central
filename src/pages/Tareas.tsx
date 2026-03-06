@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight } from "lucide-react";
 import { useTasks, useDeleteTask } from "@/hooks/useTasks";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
