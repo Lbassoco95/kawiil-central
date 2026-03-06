@@ -249,6 +249,7 @@ export function useUpdateTask() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
+      logActivity({ entityType: "task", entityId: vars.id, action: "updated", details: { changes: Object.keys(vars).filter(k => k !== "id") } });
 
       if (vars.status) {
         sendSlackNotification("task_updated", {
