@@ -126,13 +126,19 @@ const ProyectoDetalle = () => {
           </div>
         </div>
 
-        <Tabs defaultValue={isSoftlanding ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
+        <Tabs defaultValue={isGestoria ? "gestoria" : hasConstitution ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="general">General</TabsTrigger>
-            {isSoftlanding && (
+            {hasConstitution && (
               <TabsTrigger value="constitucion">
                 <Building2 className="h-4 w-4 mr-1" />
                 Constitución
+              </TabsTrigger>
+            )}
+            {isGestoria && (
+              <TabsTrigger value="gestoria">
+                <ClipboardList className="h-4 w-4 mr-1" />
+                Gestoría
               </TabsTrigger>
             )}
             {hasAccounting && (
@@ -160,11 +166,20 @@ const ProyectoDetalle = () => {
             <ProjectGeneralTab project={project} />
           </TabsContent>
 
-          {isSoftlanding && (
+          {hasConstitution && (
             <TabsContent value="constitucion">
               <ConstitutionDashboard
                 projectId={project.id}
                 constitutionDetails={constitutionDetails}
+              />
+            </TabsContent>
+          )}
+
+          {isGestoria && (
+            <TabsContent value="gestoria">
+              <GestoriaDashboard
+                projectId={project.id}
+                gestoriaDetails={constitutionDetails}
               />
             </TabsContent>
           )}

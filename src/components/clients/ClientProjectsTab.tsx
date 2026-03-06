@@ -66,8 +66,17 @@ function getExpectedProjects(services: ServiceArea[]): Array<{ area: ServiceArea
     expected.push({ area: "pld_ft", namePrefix: "Cumplimiento PLD/FT" });
   }
 
+  // Gestoría project (RFC + e.firma)
+  if (services.includes("gestoria")) {
+    expected.push({ area: "gestoria", namePrefix: "Gestoría" });
+  }
+
+  // Constitución Nacional project
+  if (services.includes("constitucion_nacional")) {
+    expected.push({ area: "constitucion_nacional", namePrefix: "Constitución Nacional" });
+  }
+
   // Juicios – individual lawsuits are added manually
-  // (not auto-created since each lawsuit is unique)
 
   return expected;
 }
