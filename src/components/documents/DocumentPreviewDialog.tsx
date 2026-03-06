@@ -55,6 +55,11 @@ function getFileLabel(type: string) {
   }
 }
 
+function buildAbsoluteSignedUrl(signedUrl: string) {
+  if (signedUrl.startsWith("http://") || signedUrl.startsWith("https://")) return signedUrl;
+  return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1${signedUrl}`;
+}
+
 export function DocumentPreviewDialog({ open, onOpenChange, document }: DocumentPreviewDialogProps) {
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
