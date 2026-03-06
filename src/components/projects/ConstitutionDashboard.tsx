@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
@@ -27,6 +28,8 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Phone,
+  CalendarClock,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +45,7 @@ interface ConstitutionStep {
   completed_at: string | null;
   notes: string;
   conditional?: boolean;
+  appointment_date?: string | null;
 }
 
 const DEFAULT_STEPS: ConstitutionStep[] = [
@@ -82,27 +86,56 @@ const DEFAULT_STEPS: ConstitutionStep[] = [
     notes: "",
   },
   {
-    key: "comprobante_domicilio",
-    label: "Comprobante de domicilio corporativo",
-    description: "Generar comprobante a nombre de la empresa (contrato de internet, línea móvil, etc.).",
+    key: "contratacion_linea",
+    label: "Contratación de línea telefónica",
+    description: "Contratar línea telefónica fija o móvil a nombre de la empresa para generar comprobante de domicilio requerido para la e.firma.",
+    icon: "Phone",
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+  },
+  {
+    key: "recibo_comprobante",
+    label: "Comprobante de domicilio generado",
+    description: "Verificar que ya se generó el recibo de la línea contratada. Para el RFC se puede usar estado de cuenta bancario o comprobante de teléfono de un socio nacional. Para la e.firma se requiere recibo de línea telefónica.",
     icon: "Home",
     status: "pendiente",
     completed_at: null,
     notes: "",
   },
   {
+    key: "cita_rfc",
+    label: "Agendar cita ante el SAT (RFC)",
+    description: "El gestor solicita cita en el SAT para la inscripción al RFC.",
+    icon: "CalendarClock",
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+    appointment_date: null,
+  },
+  {
     key: "obtencion_rfc",
     label: "Obtención del RFC",
-    description: "Tramitar el Registro Federal de Contribuyentes ante el SAT.",
+    description: "Acudir a la cita y completar la inscripción al Registro Federal de Contribuyentes ante el SAT.",
     icon: "Receipt",
     status: "pendiente",
     completed_at: null,
     notes: "",
   },
   {
+    key: "cita_efirma",
+    label: "Agendar cita ante el SAT (e.firma)",
+    description: "El gestor solicita cita en el SAT para obtener la firma electrónica. Requiere tener el recibo de línea telefónica.",
+    icon: "CalendarClock",
+    status: "pendiente",
+    completed_at: null,
+    notes: "",
+    appointment_date: null,
+  },
+  {
     key: "firma_electronica",
     label: "Obtención de e.firma (FIEL)",
-    description: "Obtener la firma electrónica avanzada del SAT.",
+    description: "Acudir a la cita y completar el trámite de firma electrónica avanzada del SAT.",
     icon: "KeyRound",
     status: "pendiente",
     completed_at: null,
