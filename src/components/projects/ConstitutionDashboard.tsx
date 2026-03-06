@@ -182,6 +182,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Landmark,
   BookOpen,
   Globe,
+  Phone,
+  CalendarClock,
 };
 
 const STATUS_CONFIG = {
@@ -247,21 +249,16 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
       });
   };
 
-  const updateStepStatus = (key: string, newStatus: ConstitutionStep["status"]) => {
+  const updateStep = (key: string, updates: Partial<ConstitutionStep>) => {
     const updated = steps.map((s) =>
       s.key === key
         ? {
             ...s,
-            status: newStatus,
-            completed_at: newStatus === "completado" ? new Date().toISOString() : null,
+            ...updates,
+            completed_at: updates.status === "completado" ? new Date().toISOString() : updates.status !== undefined ? null : s.completed_at,
           }
         : s
     );
-    saveMutation.mutate(updated);
-  };
-
-  const updateStepNotes = (key: string, notes: string) => {
-    const updated = steps.map((s) => (s.key === key ? { ...s, notes } : s));
     saveMutation.mutate(updated);
   };
 
@@ -320,6 +317,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
           const statusCfg = STATUS_CONFIG[step.status];
           const StatusIcon = statusCfg.icon;
           const isOpen = expandedStep === step.key;
+          const hasAppointment = step.appointment_date !== undefined;
 
           return (
             <Collapsible
@@ -343,6 +341,12 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           {step.description}
                         </p>
                       </div>
+                      {hasAppointment && step.appointment_date && (
+                        <Badge variant="outline" className="text-xs shrink-0 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                          <CalendarClock className="h-3 w-3 mr-1" />
+                          {formatDateMX(step.appointment_date)}
+                        </Badge>
+                      )}
                       <Badge variant="outline" className={`text-xs shrink-0 ${statusCfg.class}`}>
                         <StatusIcon className="h-3 w-3 mr-1" />
                         {statusCfg.label}
@@ -365,6 +369,35 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                       </p>
                     )}
 
+                    {/* Appointment date field */}
+                    {hasAppointment && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                          <CalendarClock className="h-3 w-3" />
+                          Fecha y hora de cita
+                        </label>
+                        <div className="flex gap-2 items-center">
+                          <Input
+                            type="datetime-local"
+                            className="text-sm w-auto"
+                            defaultValue={step.appointment_date || ""}
+                            id={`const-appointment-${step.key}`}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={saveMutation.isPending}
+                            onClick={() => {
+                              const el = document.getElementById(`const-appointment-${step.key}`) as HTMLInputElement;
+                              if (el) updateStep(step.key, { appointment_date: el.value || null });
+                            }}
+                          >
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Status buttons */}
                     <div className="flex flex-wrap gap-2">
                       {(["pendiente", "en_progreso", "completado"] as const).map((st) => (
@@ -373,7 +406,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           size="sm"
                           variant={step.status === st ? "default" : "outline"}
                           className="text-xs"
-                          onClick={() => updateStepStatus(step.key, st)}
+                          onClick={() => updateStep(step.key, { status: st })}
                           disabled={saveMutation.isPending}
                         >
                           {STATUS_CONFIG[st].label}
@@ -389,7 +422,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           className="text-sm min-h-[60px]"
                           placeholder="Agregar notas sobre este paso..."
                           defaultValue={step.notes}
-                          id={`notes-${step.key}`}
+                          id={`const-notes-${step.key}`}
                         />
                         <Button
                           size="sm"
@@ -397,8 +430,8 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
                           className="shrink-0 self-end"
                           disabled={saveMutation.isPending}
                           onClick={() => {
-                            const el = document.getElementById(`notes-${step.key}`) as HTMLTextAreaElement;
-                            if (el) updateStepNotes(step.key, el.value);
+                            const el = document.getElementById(`const-notes-${step.key}`) as HTMLTextAreaElement;
+                            if (el) updateStep(step.key, { notes: el.value });
                           }}
                         >
                           <Save className="h-3 w-3" />
