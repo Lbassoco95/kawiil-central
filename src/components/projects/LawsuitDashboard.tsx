@@ -63,6 +63,11 @@ interface LawsuitStage {
   completed_at: string | null;
   attachments?: StageAttachment[];
   assigned_to?: string | null;
+  collaborators?: string[];
+  document_ids?: string[];
+  due_date?: string | null;
+  started_at?: string | null;
+  time_spent_seconds?: number;
 }
 
 interface LawsuitDeadline {
