@@ -74,20 +74,26 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     setXmlContent(null);
 
     try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .createSignedUrl(document.file_path, 3600);
-      if (error) throw error;
-
-      const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
-
       if (fileType === "xml") {
+        // For XML, use signed URL to fetch text content
+        const { data, error } = await supabase.storage
+          .from("documents")
+          .createSignedUrl(document.file_path, 3600);
+        if (error) throw error;
+        const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
         const resp = await fetch(signedUrl);
         const text = await resp.text();
         setXmlContent(text);
+        setPreviewUrl(signedUrl);
+      } else {
+        // For PDF, images, etc. download as blob to avoid cross-origin blocking
+        const { data, error } = await supabase.storage
+          .from("documents")
+          .download(document.file_path);
+        if (error) throw error;
+        const blobUrl = URL.createObjectURL(data);
+        setPreviewUrl(blobUrl);
       }
-
-      setPreviewUrl(signedUrl);
     } catch (err: any) {
       setPreviewUrl(null);
       setXmlContent(null);
