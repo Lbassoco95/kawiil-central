@@ -76,16 +76,20 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
   });
 
   const updateStep = (key: string, updates: Partial<GestoriaStep>) => {
-    const updated = steps.map((s) =>
-      s.key === key
-        ? {
-            ...s,
-            ...updates,
-            status: (updates.step_status === "completado" ? "completado" : updates.step_status === "en_progreso" || updates.step_status === "en_espera_cliente" ? "en_progreso" : updates.step_status !== undefined ? "pendiente" : s.status) as GestoriaStep["status"],
-            completed_at: updates.step_status === "completado" ? new Date().toISOString() : updates.step_status !== undefined && updates.step_status !== "completado" ? null : s.completed_at,
-          }
-        : s
-    );
+    const updated = steps.map((s) => {
+      if (s.key !== key) return s;
+      const merged = { ...s, ...updates };
+      const newStepStatus = updates.step_status || s.step_status;
+      let newStatus: GestoriaStep["status"] = s.status;
+      if (newStepStatus === "completado") newStatus = "completado";
+      else if (newStepStatus === "en_progreso" || newStepStatus === "en_espera_cliente") newStatus = "en_progreso";
+      else if (newStepStatus === "pendiente") newStatus = "pendiente";
+      return {
+        ...merged,
+        status: newStatus,
+        completed_at: newStatus === "completado" ? new Date().toISOString() : newStatus !== s.status ? null : s.completed_at,
+      };
+    });
     saveMutation.mutate(updated);
   };
 
