@@ -58,7 +58,7 @@
     --priority-urgent: 0 72% 51%;
     --priority-high: 25 95% 53%;
     --priority-medium: 38 92% 50%;
-    --priority-low: 157 100% 50%;
+    --priority-low: 157 72% 36%;
 
     /* Area colors */
     --area-contabilidad: 210 100% 47%;
