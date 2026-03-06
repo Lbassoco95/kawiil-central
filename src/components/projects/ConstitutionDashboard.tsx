@@ -66,9 +66,10 @@ const STATUS_CONFIG = {
 interface Props {
   projectId: string;
   constitutionDetails: { steps: ConstitutionStep[]; has_foreign_partners: boolean } | null;
+  responsibleUserId?: string | null;
 }
 
-export function ConstitutionDashboard({ projectId, constitutionDetails }: Props) {
+export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId }: Props) {
   const queryClient = useQueryClient();
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
   const { data: profiles = [] } = useProfiles();
