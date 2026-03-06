@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, FolderKanban, Scale, Trash2 } from "lucide-react";
+import { Search, FolderKanban, Scale, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
@@ -31,6 +31,17 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   cancelado: "Cancelado",
 };
 
+const AREA_ORDER: (ServiceArea | "sin_area")[] = [
+  "contabilidad",
+  "legal",
+  "softlanding",
+  "pld_ft",
+  "juicios",
+  "gestoria",
+  "constitucion_nacional",
+  "sin_area",
+];
+
 const Proyectos = () => {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useProjects();
@@ -38,6 +49,15 @@ const Proyectos = () => {
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     if (!projects) return [];
@@ -49,6 +69,31 @@ const Proyectos = () => {
         (p as any).clients?.name?.toLowerCase().includes(q)
     );
   }, [projects, search]);
+
+  const grouped = useMemo(() => {
+    const groups: Record<string, typeof filtered> = {};
+    for (const p of filtered) {
+      const key = p.area || "sin_area";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    }
+    // Sort each group alphabetically by client name, then project name
+    for (const key of Object.keys(groups)) {
+      groups[key].sort((a, b) => {
+        const clientA = ((a as any).clients?.name || "ZZZ").toLowerCase();
+        const clientB = ((b as any).clients?.name || "ZZZ").toLowerCase();
+        if (clientA !== clientB) return clientA.localeCompare(clientB);
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+    }
+    return AREA_ORDER
+      .filter((key) => groups[key]?.length)
+      .map((key) => ({
+        key,
+        label: key === "sin_area" ? "Sin categoría" : SERVICE_LABELS[key as ServiceArea] || key,
+        projects: groups[key],
+      }));
+  }, [filtered]);
 
   return (
     <AppLayout>
@@ -104,48 +149,65 @@ const Proyectos = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4">
-            {filtered.map((project) => (
-              <Card
-                key={project.id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => navigate(`/proyectos/${project.id}`)}
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-foreground truncate">
-                          {project.name}
-                        </h3>
-                        <Badge variant="outline" className={STATUS_STYLES[project.status]}>
-                          {STATUS_LABELS[project.status]}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {(project as any).clients?.name ?? "Proyecto interno"}
-                        {project.description && ` · ${project.description}`}
-                      </p>
+          <div className="space-y-4">
+            {grouped.map(({ key, label, projects: groupProjects }) => {
+              const isCollapsed = collapsedGroups.has(key);
+              return (
+                <div key={key}>
+                  <button
+                    onClick={() => toggleGroup(key)}
+                    className="flex items-center gap-2 w-full text-left mb-2 group"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+                      {label}
+                    </h2>
+                    <Badge variant="secondary" className="text-xs">
+                      {groupProjects.length}
+                    </Badge>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="grid gap-2 pl-6">
+                      {groupProjects.map((project) => (
+                        <Card
+                          key={project.id}
+                          className="hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => navigate(`/proyectos/${project.id}`)}
+                        >
+                          <CardContent className="px-4 py-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0 flex-1 flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground shrink-0 w-32 truncate">
+                                  {(project as any).clients?.name ?? "Interno"}
+                                </span>
+                                <h3 className="font-medium text-foreground text-sm truncate">
+                                  {project.name}
+                                </h3>
+                                <Badge variant="outline" className={`text-xs shrink-0 ${STATUS_STYLES[project.status]}`}>
+                                  {STATUS_LABELS[project.status]}
+                                </Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+                                onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: project.id, name: project.name }); }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {project.area && (
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          {SERVICE_LABELS[project.area]}
-                        </Badge>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: project.id, name: project.name }); }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
