@@ -47,8 +47,8 @@
     --sidebar-ring: 210 100% 47%;
 
     /* Custom tokens */
-    --success: 157 100% 50%;
-    --success-foreground: 220 30% 12%;
+    --success: 157 72% 36%;
+    --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
     --info: 210 100% 47%;
