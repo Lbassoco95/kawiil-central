@@ -22,6 +22,7 @@ import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const Dashboard = () => {
   const navigate = useNavigate();
