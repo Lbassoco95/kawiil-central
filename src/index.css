@@ -111,7 +111,7 @@
 
 @layer utilities {
   .kawiil-gradient {
-    background: linear-gradient(135deg, hsl(239 84% 67%) 0%, hsl(271 81% 56%) 100%);
+    background: linear-gradient(135deg, hsl(210 100% 47%) 0%, hsl(157 100% 50%) 100%);
   }
 
   .sidebar-item-active {
