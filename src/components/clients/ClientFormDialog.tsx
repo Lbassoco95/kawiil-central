@@ -68,14 +68,17 @@ const PACKAGE_INCLUDED_SERVICES: Record<ServicePackage, ServiceArea[]> = {
 const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
+  { value: "gestoria", label: "Gestoría" },
+  { value: "constitucion_nacional", label: "Constitución Nacional" },
 ];
 
-// For individual mode, these are the selectable services
 const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "contabilidad", label: "Contabilidad" },
   { value: "legal", label: "Legal" },
   { value: "pld_ft", label: "PLD/FT" },
   { value: "juicios", label: "Juicios" },
+  { value: "gestoria", label: "Gestoría" },
+  { value: "constitucion_nacional", label: "Constitución Nacional" },
 ];
 
 const ALL_SERVICE_AREAS = [
@@ -84,6 +87,8 @@ const ALL_SERVICE_AREAS = [
   "softlanding",
   "pld_ft",
   "juicios",
+  "gestoria",
+  "constitucion_nacional",
 ] as const;
 
 const clientSchema = z.object({

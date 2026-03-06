@@ -14,13 +14,7 @@ import type { Database } from "@/integrations/supabase/types";
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientStatus = Database["public"]["Enums"]["client_status"];
 
-const SERVICE_LABELS: Record<ServiceArea, string> = {
-  contabilidad: "Contabilidad",
-  legal: "Legal",
-  softlanding: "Soft Landing",
-  pld_ft: "PLD/FT",
-  juicios: "Juicios",
-};
+import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
 const STATUS_STYLES: Record<ClientStatus, string> = {
   activo: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
