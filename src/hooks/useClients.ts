@@ -105,6 +105,7 @@ export function useCreateClient() {
       toast.success("Cliente creado exitosamente");
 
       if (data) {
+        logActivity({ entityType: "client", entityId: data.id, action: "created", details: { name: data.name, client_type: data.client_type } });
         sendSlackNotification("client_created", {
           name: data.name,
           client_type: data.client_type,
