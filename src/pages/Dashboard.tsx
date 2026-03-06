@@ -268,7 +268,7 @@ const Dashboard = () => {
         )}
 
         {/* Team Workload */}
-        {teamWorkload.length > 0 && (
+        {isAdminOrManager && teamWorkload.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
