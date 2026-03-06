@@ -122,14 +122,19 @@ export function useCreateAccountingPeriod() {
       if (error) throw error;
 
       // Enrich default steps with new fields + append tax obligation steps + payroll steps
+      // Set assigned_to from project's responsible_user_id
+      const responsibleUserId = (project as any).responsible_user_id || null;
       const currentSteps = (data.steps as any as AccountingStep[]).map((s) => ({
         ...s,
         step_status: s.step_status || ("pendiente" as StepStatus),
         date: s.date || null,
         notes: s.notes || null,
         document_ids: s.document_ids || [],
+        assigned_to: s.assigned_to || responsibleUserId,
       }));
-      const allSteps = [...currentSteps, ...extraSteps, ...payrollSteps];
+      const enrichedExtraSteps = extraSteps.map((s) => ({ ...s, assigned_to: responsibleUserId }));
+      const enrichedPayrollSteps = payrollSteps.map((s) => ({ ...s, assigned_to: responsibleUserId }));
+      const allSteps = [...currentSteps, ...enrichedExtraSteps, ...enrichedPayrollSteps];
       const { error: updateErr } = await supabase
         .from("accounting_periods")
         .update({ steps: allSteps as any })

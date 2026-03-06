@@ -181,6 +181,7 @@ const ProyectoDetalle = () => {
               <GestoriaDashboard
                 projectId={project.id}
                 gestoriaDetails={constitutionDetails}
+                responsibleUserId={project.responsible_user_id}
               />
             </TabsContent>
           )}

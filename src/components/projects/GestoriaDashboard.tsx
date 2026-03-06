@@ -120,7 +120,13 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
     saveMutation.mutate(updated);
   };
 
-  const initializeSteps = () => saveMutation.mutate(DEFAULT_STEPS);
+  const initializeSteps = () => {
+    const stepsWithResponsible = DEFAULT_STEPS.map((s) => ({
+      ...s,
+      assigned_to: responsibleUserId || null,
+    }));
+    saveMutation.mutate(stepsWithResponsible);
+  };
 
   if (!gestoriaDetails) {
     return (
