@@ -1,13 +1,14 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, ExternalLink, Plus } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, ExternalLink, Plus, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDateMX } from "@/lib/dateUtils";
 import { logActivity } from "@/lib/activityLog";
+import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 
 interface Props {
   documentIds: string[];
