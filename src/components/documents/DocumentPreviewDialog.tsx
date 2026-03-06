@@ -74,20 +74,26 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     setXmlContent(null);
 
     try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .createSignedUrl(document.file_path, 3600);
-      if (error) throw error;
-
-      const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
-
       if (fileType === "xml") {
+        // For XML, use signed URL to fetch text content
+        const { data, error } = await supabase.storage
+          .from("documents")
+          .createSignedUrl(document.file_path, 3600);
+        if (error) throw error;
+        const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
         const resp = await fetch(signedUrl);
         const text = await resp.text();
         setXmlContent(text);
+        setPreviewUrl(signedUrl);
+      } else {
+        // For PDF, images, etc. download as blob to avoid cross-origin blocking
+        const { data, error } = await supabase.storage
+          .from("documents")
+          .download(document.file_path);
+        if (error) throw error;
+        const blobUrl = URL.createObjectURL(data);
+        setPreviewUrl(blobUrl);
       }
-
-      setPreviewUrl(signedUrl);
     } catch (err: any) {
       setPreviewUrl(null);
       setXmlContent(null);
@@ -101,13 +107,12 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     if (open && document?.source === "supabase" && document?.file_path) {
       void loadPreview();
     }
-    // Cleanup blob URLs when closing
-    return () => {
-      if (previewUrl?.startsWith("blob:")) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
+    if (!open && previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
   }, [open, document?.id]);
+
   const handleDownload = async () => {
     if (!document) return;
 
@@ -209,19 +214,11 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
           )}
 
           {!isDropbox && !loading && previewUrl && fileType === "pdf" && (
-            <object
-              data={previewUrl}
-              type="application/pdf"
+            <iframe
+              src={previewUrl + "#toolbar=1&navpanes=0"}
               className="w-full h-[60vh] rounded"
-              aria-label={document?.name ?? "Vista previa de PDF"}
-            >
-              <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-center p-6">
-                <p className="text-sm text-muted-foreground">Chrome bloqueó la vista embebida del PDF.</p>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={previewUrl} target="_blank" rel="noopener noreferrer">Abrir PDF en pestaña nueva</a>
-                </Button>
-              </div>
-            </object>
+              title={document?.name}
+            />
           )}
 
           {!isDropbox && !loading && previewUrl && fileType === "image" && (
