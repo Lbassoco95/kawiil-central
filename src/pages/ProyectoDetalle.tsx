@@ -171,6 +171,7 @@ const ProyectoDetalle = () => {
               <ConstitutionDashboard
                 projectId={project.id}
                 constitutionDetails={constitutionDetails}
+                responsibleUserId={project.responsible_user_id}
               />
             </TabsContent>
           )}
