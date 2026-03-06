@@ -37,13 +37,7 @@ type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientType = Database["public"]["Enums"]["client_type"];
 type Client = Tables<"clients">;
 
-const SERVICE_LABELS: Record<ServiceArea, string> = {
-  contabilidad: "Contabilidad",
-  legal: "Legal",
-  softlanding: "Soft Landing",
-  pld_ft: "PLD/FT",
-  juicios: "Juicios",
-};
+import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
 const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   persona_moral: "Persona Moral",
