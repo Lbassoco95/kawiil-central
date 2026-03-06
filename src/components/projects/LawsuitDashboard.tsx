@@ -60,6 +60,7 @@ interface LawsuitStage {
   notes: string;
   completed_at: string | null;
   attachments?: StageAttachment[];
+  assigned_to?: string | null;
 }
 
 interface LawsuitDeadline {
