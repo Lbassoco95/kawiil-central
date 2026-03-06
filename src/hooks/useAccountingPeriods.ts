@@ -20,10 +20,13 @@ export interface AccountingStep {
   completed_by: string | null;
   step_status?: StepStatus;
   date?: string | null;
+  due_date?: string | null;
+  started_at?: string | null;
   notes?: string | null;
   document_ids?: string[];
   time_spent_seconds?: number;
   assigned_to?: string | null;
+  collaborators?: string[];
 }
 
 export interface AccountingPeriod {
