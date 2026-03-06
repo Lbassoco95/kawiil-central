@@ -16,6 +16,7 @@ import {
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
