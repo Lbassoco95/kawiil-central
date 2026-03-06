@@ -139,8 +139,6 @@ const LAWSUIT_TYPE_LABELS: Record<string, string> = {
   familiar: "Familiar",
 };
 
-  const { data: profiles = [] } = useProfiles();
-
 export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false }: LawsuitDashboardProps) {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
@@ -152,6 +150,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
   const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
   const queryClient = useQueryClient();
+  const { data: profiles = [] } = useProfiles();
 
   const updateLawsuit = useMutation({
     mutationFn: async (updated: LawsuitDetails) => {
