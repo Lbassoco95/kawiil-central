@@ -43,6 +43,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isPast, isToday, addDays, isBefore } from "date-fns";
 import { formatMX } from "@/lib/dateUtils";
+import { StepAssigneeSelect } from "./StepAssigneeSelect";
 
 interface StageAttachment {
   id: string;
