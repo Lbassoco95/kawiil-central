@@ -66,9 +66,10 @@ const STATUS_CONFIG = {
 interface Props {
   projectId: string;
   constitutionDetails: { steps: ConstitutionStep[]; has_foreign_partners: boolean } | null;
+  responsibleUserId?: string | null;
 }
 
-export function ConstitutionDashboard({ projectId, constitutionDetails }: Props) {
+export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId }: Props) {
   const queryClient = useQueryClient();
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
   const { data: profiles = [] } = useProfiles();
@@ -112,7 +113,13 @@ export function ConstitutionDashboard({ projectId, constitutionDetails }: Props)
     saveMutation.mutate(updated);
   };
 
-  const initializeSteps = () => saveMutation.mutate(DEFAULT_STEPS);
+  const initializeSteps = () => {
+    const stepsWithResponsible = DEFAULT_STEPS.map((s) => ({
+      ...s,
+      assigned_to: responsibleUserId || null,
+    }));
+    saveMutation.mutate(stepsWithResponsible);
+  };
 
   if (!constitutionDetails) {
     return (
