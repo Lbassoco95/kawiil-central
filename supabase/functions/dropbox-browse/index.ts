@@ -245,7 +245,8 @@ serve(async (req) => {
       throw new Error('DROPBOX_ACCESS_TOKEN is not configured');
     }
 
-    const { path = '', action = 'list' } = await req.json();
+    const body = await req.json();
+    const { path = '', action = 'list', file_content, file_name } = body;
 
     const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN);
     const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId);
@@ -266,10 +267,46 @@ serve(async (req) => {
       });
     }
 
-    if (action === "upload") {
-      const { file_content, file_name } = await req.json().catch(() => ({ file_content: null, file_name: null }));
-      // file_content comes from the initial parse, re-read from body won't work.
-      // We get it from the original parsed body.
+    if (action === 'upload') {
+      if (!file_content || !path) {
+        throw new Error('file_content and path are required for upload');
+      }
+
+      const fileBytes = Uint8Array.from(atob(file_content), (c) => c.charCodeAt(0));
+
+      const uploadHeaders: Record<string, string> = {
+        'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
+        'Content-Type': 'application/octet-stream',
+        'Dropbox-API-Arg': JSON.stringify({
+          path,
+          mode: 'add',
+          autorename: true,
+          mute: false,
+        }),
+      };
+
+      if (rootNamespaceId) {
+        uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
+          '.tag': 'root',
+          root: rootNamespaceId,
+        });
+      }
+
+      const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+        method: 'POST',
+        headers: uploadHeaders,
+        body: fileBytes,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Dropbox upload error [${response.status}]: ${errText}`);
+      }
+
+      const result = await response.json();
+      return new Response(JSON.stringify({ success: true, name: result.name, path: result.path_display }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     if (action === "get_link") {
