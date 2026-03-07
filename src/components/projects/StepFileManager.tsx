@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, Plus, Eye } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -10,6 +10,7 @@ import { formatDateMX } from "@/lib/dateUtils";
 import { logActivity } from "@/lib/activityLog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
+import { SendToSignDialog } from "@/components/documents/SendToSignDialog";
 
 interface Props {
   documentIds: string[];
