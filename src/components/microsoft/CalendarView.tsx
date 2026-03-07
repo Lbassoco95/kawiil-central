@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -7,17 +7,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCalendarEvents, useCreateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useMicrosoft";
+import { CDMX_TZ } from "@/lib/dateUtils";
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   parseISO, isSameDay, addMonths, subMonths, addWeeks, subWeeks,
-  eachDayOfInterval, getDay, startOfDay, isToday, addDays, isSameMonth,
+  eachDayOfInterval, isToday, addDays, subDays, isSameMonth,
 } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
-import { Plus, ChevronLeft, ChevronRight, Clock, Loader2, Trash2 } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
 
-type ViewMode = "week" | "month";
+type ViewMode = "day" | "3days" | "week" | "month";
 
-const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7:00 - 21:00
+const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6:00 - 21:00
+
+/** Parse an event datetime string into CDMX-adjusted Date */
+function parseEventTime(dt: string): Date {
+  // Microsoft returns datetimes already in CDMX when Prefer header is set
+  // but without timezone offset, so parse as-is
+  if (dt.includes("T") && !dt.includes("Z") && !dt.includes("+") && !dt.includes("-", 10)) {
+    // No timezone info - treat as CDMX local time
+    return new Date(dt);
+  }
+  // Has timezone info (UTC Z or offset) - convert to CDMX
+  return toZonedTime(parseISO(dt), CDMX_TZ);
+}
 
 export function CalendarView() {
   const [viewMode, setViewMode] = useState<ViewMode>("week");
@@ -26,13 +40,48 @@ export function CalendarView() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEvent, setNewEvent] = useState({ subject: "", startTime: "09:00", endTime: "10:00" });
 
-  // Range for fetching events
-  const rangeStart = viewMode === "week"
-    ? startOfWeek(currentDate, { weekStartsOn: 1 }).toISOString()
-    : startOfMonth(subMonths(currentDate, 0)).toISOString();
-  const rangeEnd = viewMode === "week"
-    ? endOfWeek(currentDate, { weekStartsOn: 1 }).toISOString()
-    : endOfMonth(currentDate).toISOString();
+  // Days to show based on view
+  const viewDays = useMemo(() => {
+    switch (viewMode) {
+      case "day":
+        return [currentDate];
+      case "3days":
+        return eachDayOfInterval({ start: currentDate, end: addDays(currentDate, 2) });
+      case "week":
+        return eachDayOfInterval({
+          start: startOfWeek(currentDate, { weekStartsOn: 1 }),
+          end: endOfWeek(currentDate, { weekStartsOn: 1 }),
+        });
+      case "month":
+        return [];
+      default:
+        return [];
+    }
+  }, [viewMode, currentDate]);
+
+  // Month days grid
+  const monthDays = useMemo(() => {
+    if (viewMode !== "month") return [];
+    const start = startOfMonth(currentDate);
+    const end = endOfMonth(currentDate);
+    const monthStart = startOfWeek(start, { weekStartsOn: 1 });
+    const monthEnd = endOfWeek(end, { weekStartsOn: 1 });
+    return eachDayOfInterval({ start: monthStart, end: monthEnd });
+  }, [viewMode, currentDate]);
+
+  // Fetch range
+  const rangeStart = useMemo(() => {
+    if (viewMode === "month") return startOfMonth(currentDate).toISOString();
+    if (viewMode === "day") return startOfWeek(currentDate, { weekStartsOn: 1 }).toISOString();
+    return (viewDays[0] || currentDate).toISOString();
+  }, [viewMode, currentDate, viewDays]);
+
+  const rangeEnd = useMemo(() => {
+    if (viewMode === "month") return endOfMonth(currentDate).toISOString();
+    if (viewMode === "day") return endOfWeek(currentDate, { weekStartsOn: 1 }).toISOString();
+    const last = viewDays[viewDays.length - 1] || currentDate;
+    return addDays(last, 1).toISOString();
+  }, [viewMode, currentDate, viewDays]);
 
   const { data: events = [], isLoading } = useCalendarEvents(rangeStart, rangeEnd);
   const createEvent = useCreateCalendarEvent();
@@ -40,40 +89,43 @@ export function CalendarView() {
 
   // Navigate
   const goNext = () => {
-    if (viewMode === "week") setCurrentDate(addWeeks(currentDate, 1));
-    else setCurrentDate(addMonths(currentDate, 1));
+    switch (viewMode) {
+      case "day": setCurrentDate(addDays(currentDate, 1)); break;
+      case "3days": setCurrentDate(addDays(currentDate, 3)); break;
+      case "week": setCurrentDate(addWeeks(currentDate, 1)); break;
+      case "month": setCurrentDate(addMonths(currentDate, 1)); break;
+    }
   };
   const goPrev = () => {
-    if (viewMode === "week") setCurrentDate(subWeeks(currentDate, 1));
-    else setCurrentDate(subMonths(currentDate, 1));
+    switch (viewMode) {
+      case "day": setCurrentDate(subDays(currentDate, 1)); break;
+      case "3days": setCurrentDate(subDays(currentDate, 3)); break;
+      case "week": setCurrentDate(subWeeks(currentDate, 1)); break;
+      case "month": setCurrentDate(subMonths(currentDate, 1)); break;
+    }
   };
   const goToday = () => setCurrentDate(new Date());
 
-  // Events grouped by date
+  // Events grouped by date string
   const eventsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
     events.forEach((e: any) => {
-      const dateKey = format(parseISO(e.start?.dateTime || e.start?.date), "yyyy-MM-dd");
+      const dt = e.start?.dateTime || e.start?.date;
+      if (!dt) return;
+      const parsed = parseEventTime(dt);
+      const dateKey = format(parsed, "yyyy-MM-dd");
       if (!map.has(dateKey)) map.set(dateKey, []);
-      map.get(dateKey)!.push(e);
+      map.get(dateKey)!.push({ ...e, _parsedStart: parsed });
     });
+    // Sort events within each day by time
+    map.forEach((evts) => evts.sort((a: any, b: any) => a._parsedStart.getTime() - b._parsedStart.getTime()));
     return map;
   }, [events]);
 
-  // Week days
-  const weekDays = useMemo(() => {
-    const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-    return eachDayOfInterval({ start, end: addDays(start, 6) });
-  }, [currentDate]);
-
-  // Month days
-  const monthDays = useMemo(() => {
-    const start = startOfMonth(currentDate);
-    const end = endOfMonth(currentDate);
-    const monthStart = startOfWeek(start, { weekStartsOn: 1 });
-    const monthEnd = endOfWeek(end, { weekStartsOn: 1 });
-    return eachDayOfInterval({ start: monthStart, end: monthEnd });
-  }, [currentDate]);
+  const getEventsForDay = (date: Date) => {
+    const key = format(date, "yyyy-MM-dd");
+    return eventsByDate.get(key) || [];
+  };
 
   const handleCreateEvent = () => {
     if (!newEvent.subject) return;
@@ -81,8 +133,8 @@ export function CalendarView() {
     createEvent.mutate(
       {
         subject: newEvent.subject,
-        start: { dateTime: `${dateStr}T${newEvent.startTime}:00`, timeZone: "America/Mexico_City" },
-        end: { dateTime: `${dateStr}T${newEvent.endTime}:00`, timeZone: "America/Mexico_City" },
+        start: { dateTime: `${dateStr}T${newEvent.startTime}:00`, timeZone: CDMX_TZ },
+        end: { dateTime: `${dateStr}T${newEvent.endTime}:00`, timeZone: CDMX_TZ },
       },
       {
         onSuccess: () => {
@@ -93,25 +145,37 @@ export function CalendarView() {
     );
   };
 
-  const getEventsForDay = (date: Date) => {
-    const key = format(date, "yyyy-MM-dd");
-    return eventsByDate.get(key) || [];
-  };
+  // Header label
+  const headerLabel = useMemo(() => {
+    switch (viewMode) {
+      case "day":
+        return format(currentDate, "EEEE d 'de' MMMM, yyyy", { locale: es });
+      case "3days": {
+        const end = addDays(currentDate, 2);
+        return `${format(currentDate, "d MMM", { locale: es })} – ${format(end, "d MMM yyyy", { locale: es })}`;
+      }
+      case "week": {
+        const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
+        const we = endOfWeek(currentDate, { weekStartsOn: 1 });
+        return `${format(ws, "d MMM", { locale: es })} – ${format(we, "d MMM yyyy", { locale: es })}`;
+      }
+      case "month":
+        return format(currentDate, "MMMM yyyy", { locale: es });
+    }
+  }, [viewMode, currentDate]);
 
-  const headerLabel = viewMode === "week"
-    ? `${format(weekDays[0], "d MMM", { locale: es })} – ${format(weekDays[6], "d MMM yyyy", { locale: es })}`
-    : format(currentDate, "MMMM yyyy", { locale: es });
+  const colCount = viewMode === "month" ? 7 : viewDays.length;
 
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={goPrev}>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goPrev}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={goToday}>Hoy</Button>
-          <Button variant="outline" size="sm" onClick={goNext}>
+          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goNext}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           <h2 className="text-lg font-semibold capitalize ml-2">{headerLabel}</h2>
@@ -120,6 +184,8 @@ export function CalendarView() {
         <div className="flex items-center gap-2">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
             <TabsList className="h-8">
+              <TabsTrigger value="day" className="text-xs px-3 h-7">Día</TabsTrigger>
+              <TabsTrigger value="3days" className="text-xs px-3 h-7">3 Días</TabsTrigger>
               <TabsTrigger value="week" className="text-xs px-3 h-7">Semana</TabsTrigger>
               <TabsTrigger value="month" className="text-xs px-3 h-7">Mes</TabsTrigger>
             </TabsList>
@@ -130,15 +196,20 @@ export function CalendarView() {
         </div>
       </div>
 
-      {/* Weekly view */}
-      {viewMode === "week" && (
+      {/* Day / 3-day / Week grid view */}
+      {viewMode !== "month" && (
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <div className="min-w-[700px]">
+            <div className={viewMode === "day" ? "min-w-[400px]" : "min-w-[700px]"}>
               {/* Day headers */}
-              <div className="grid grid-cols-8 border-b border-border">
-                <div className="p-2 text-xs text-muted-foreground text-center border-r border-border">Hora</div>
-                {weekDays.map((day) => (
+              <div
+                className="grid border-b border-border"
+                style={{ gridTemplateColumns: `60px repeat(${colCount}, 1fr)` }}
+              >
+                <div className="p-2 text-xs text-muted-foreground text-center border-r border-border">
+                  <span className="text-[10px]">CDMX</span>
+                </div>
+                {viewDays.map((day) => (
                   <div
                     key={day.toISOString()}
                     className={`p-2 text-center border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/50 transition-colors ${
@@ -150,7 +221,7 @@ export function CalendarView() {
                       {format(day, "EEE", { locale: es })}
                     </div>
                     <div className={`text-sm font-medium ${isToday(day) ? "text-primary" : ""}`}>
-                      {format(day, "d")}
+                      {format(day, "d MMM", { locale: es })}
                     </div>
                   </div>
                 ))}
@@ -158,15 +229,17 @@ export function CalendarView() {
 
               {/* Time grid */}
               {HOURS.map((hour) => (
-                <div key={hour} className="grid grid-cols-8 border-b border-border last:border-b-0 min-h-[48px]">
+                <div
+                  key={hour}
+                  className="grid border-b border-border last:border-b-0"
+                  style={{ gridTemplateColumns: `60px repeat(${colCount}, 1fr)`, minHeight: "48px" }}
+                >
                   <div className="p-1 text-xs text-muted-foreground text-right pr-2 border-r border-border pt-1">
-                    {`${hour}:00`}
+                    {`${hour.toString().padStart(2, "0")}:00`}
                   </div>
-                  {weekDays.map((day) => {
+                  {viewDays.map((day) => {
                     const dayEvents = getEventsForDay(day).filter((e: any) => {
-                      if (!e.start?.dateTime) return false;
-                      const eventHour = parseISO(e.start.dateTime).getHours();
-                      return eventHour === hour;
+                      return e._parsedStart.getHours() === hour;
                     });
                     return (
                       <div
@@ -174,25 +247,35 @@ export function CalendarView() {
                         className="border-r border-border last:border-r-0 p-0.5 cursor-pointer hover:bg-muted/30 transition-colors"
                         onClick={() => {
                           setSelectedDate(day);
-                          setNewEvent({ ...newEvent, startTime: `${hour.toString().padStart(2, "0")}:00`, endTime: `${(hour + 1).toString().padStart(2, "0")}:00` });
+                          setNewEvent({
+                            ...newEvent,
+                            startTime: `${hour.toString().padStart(2, "0")}:00`,
+                            endTime: `${(hour + 1).toString().padStart(2, "0")}:00`,
+                          });
                           setShowCreate(true);
                         }}
                       >
-                        {dayEvents.map((event: any) => (
-                          <div
-                            key={event.id}
-                            className="bg-primary/20 text-primary rounded px-1 py-0.5 text-xs truncate mb-0.5 group relative"
-                            title={event.subject}
-                          >
-                            <span className="font-medium">{event.subject}</span>
-                            <button
-                              className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}
+                        {dayEvents.map((event: any) => {
+                          const startStr = format(event._parsedStart, "HH:mm");
+                          const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
+                          const endStr = endDt ? format(endDt, "HH:mm") : "";
+                          return (
+                            <div
+                              key={event.id}
+                              className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative"
+                              title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                             >
-                              <Trash2 className="h-3 w-3 text-destructive" />
-                            </button>
-                          </div>
-                        ))}
+                              <span className="text-[10px] text-primary/70 mr-1">{startStr}</span>
+                              <span className="font-medium">{event.subject}</span>
+                              <button
+                                className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
@@ -207,7 +290,6 @@ export function CalendarView() {
       {viewMode === "month" && (
         <Card>
           <CardContent className="p-0">
-            {/* Day names header */}
             <div className="grid grid-cols-7 border-b border-border">
               {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
                 <div key={d} className="p-2 text-xs text-muted-foreground text-center font-medium">
@@ -215,7 +297,6 @@ export function CalendarView() {
                 </div>
               ))}
             </div>
-            {/* Days grid */}
             <div className="grid grid-cols-7">
               {monthDays.map((day) => {
                 const dayEvents = getEventsForDay(day);
@@ -233,9 +314,7 @@ export function CalendarView() {
                     </div>
                     <div className="space-y-0.5">
                       {dayEvents.slice(0, 3).map((event: any) => {
-                        const time = event.start?.dateTime
-                          ? format(parseISO(event.start.dateTime), "HH:mm")
-                          : "";
+                        const time = event._parsedStart ? format(event._parsedStart, "HH:mm") : "";
                         return (
                           <div
                             key={event.id}
@@ -278,7 +357,7 @@ export function CalendarView() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Hora inicio</Label>
+                <Label>Hora inicio (CDMX)</Label>
                 <Input
                   type="time"
                   value={newEvent.startTime}
@@ -286,7 +365,7 @@ export function CalendarView() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Hora fin</Label>
+                <Label>Hora fin (CDMX)</Label>
                 <Input
                   type="time"
                   value={newEvent.endTime}
@@ -294,6 +373,7 @@ export function CalendarView() {
                 />
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">Zona horaria: América/Ciudad de México</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
