@@ -79,6 +79,14 @@ export function useCreateClient() {
           });
         }
 
+        // Compliance (cumplimiento) project
+        if (services.includes("cumplimiento")) {
+          projectsToCreate.push({
+            name: `Cumplimiento — ${data.name}`,
+            area: "cumplimiento",
+          });
+        }
+
         for (const proj of projectsToCreate) {
           const { error: projectError } = await supabase
             .from("projects")
