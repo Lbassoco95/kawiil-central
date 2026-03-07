@@ -224,6 +224,67 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label>Abogado Patrono</Label>
+              <Input
+                placeholder="Nombre del abogado patrono"
+                value={leadAttorney}
+                onChange={(e) => setLeadAttorney(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Abogado Sustituto</Label>
+              <Input
+                placeholder="Nombre del abogado sustituto"
+                value={substituteAttorney}
+                onChange={(e) => setSubstituteAttorney(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Autorizados */}
+          <div className="space-y-2">
+            <Label>Autorizados</Label>
+            <div className="flex flex-wrap gap-1.5 mb-1">
+              {authorizedPersons.map((name, idx) => (
+                <Badge key={idx} variant="secondary" className="text-xs gap-1">
+                  {name}
+                  <X
+                    className="h-3 w-3 cursor-pointer hover:text-destructive"
+                    onClick={() => setAuthorizedPersons(authorizedPersons.filter((_, i) => i !== idx))}
+                  />
+                </Badge>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Nombre del autorizado"
+                value={newAuthorized}
+                onChange={(e) => setNewAuthorized(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newAuthorized.trim()) {
+                    e.preventDefault();
+                    setAuthorizedPersons([...authorizedPersons, newAuthorized.trim()]);
+                    setNewAuthorized("");
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!newAuthorized.trim()}
+                onClick={() => {
+                  setAuthorizedPersons([...authorizedPersons, newAuthorized.trim()]);
+                  setNewAuthorized("");
+                }}
+              >
+                Agregar
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Presiona Enter o el botón para agregar. Pueden o no ser usuarios del sistema.</p>
           </div>
 
           <div className="space-y-2">
