@@ -434,6 +434,35 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'create_folder') {
+      const folderPath = body.folder_path || path;
+      if (!folderPath) {
+        throw new Error('folder_path or path is required for create_folder');
+      }
+
+      const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
+        method: 'POST',
+        headers: dbxHeaders,
+        body: JSON.stringify({ path: folderPath, autorename: false }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Dropbox create_folder error [${response.status}]: ${errText}`);
+      }
+
+      const result = await response.json();
+      const metadata = result.metadata || {};
+
+      return new Response(JSON.stringify({
+        success: true,
+        name: metadata.name,
+        path: metadata.path_display || folderPath,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
