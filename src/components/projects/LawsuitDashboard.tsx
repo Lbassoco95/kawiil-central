@@ -270,11 +270,24 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       id: crypto.randomUUID(),
       ...newDeadline,
       completed: false,
+      document_ids: [],
     };
     const updated = { ...lawsuitDetails, deadlines: [...(lawsuitDetails.deadlines || []), dl] };
     updateLawsuit.mutate(updated);
+
+    // Send Slack alert if there are attendees
+    if (dl.attendees.length > 0 || dl.assigned_to) {
+      sendSlackNotification("deadline_created" as any, {
+        title: dl.title,
+        date: dl.date,
+        time: dl.time || "Sin hora",
+        type: DEADLINE_TYPE_LABELS[dl.type] || dl.type,
+        attendees: dl.attendees.join(", ") || "Sin asistentes",
+        assigned_to: dl.assigned_to ? profiles.find(p => p.user_id === dl.assigned_to)?.full_name || "N/A" : "Sin asignar",
+      });
+    }
+
     setNewDeadline({ title: "", date: "", time: "", type: "termino", notes: "", attendees: [] });
-    
     setDeadlineDialogOpen(false);
     toast.success("Término agregado");
   };
@@ -293,6 +306,16 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     const updated = {
       ...lawsuitDetails,
       deadlines: (lawsuitDetails.deadlines || []).filter((d) => d.id !== id),
+    };
+    updateLawsuit.mutate(updated);
+  };
+
+  const updateDeadlineField = (id: string, field: string, value: any) => {
+    const updated = {
+      ...lawsuitDetails,
+      deadlines: (lawsuitDetails.deadlines || []).map((d) =>
+        d.id === id ? { ...d, [field]: value } : d
+      ),
     };
     updateLawsuit.mutate(updated);
   };
