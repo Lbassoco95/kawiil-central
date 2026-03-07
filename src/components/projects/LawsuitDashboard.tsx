@@ -578,73 +578,111 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               Sin términos registrados. Agrega fechas importantes del proceso.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {[...lawsuitDetails.deadlines]
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                 .map((dl) => {
                   const dlDate = new Date(dl.date);
                   const isOverdue = !dl.completed && isPast(dlDate) && !isToday(dlDate);
                   const isUrgent = !dl.completed && isBefore(dlDate, addDays(new Date(), 3));
+                  const isExpanded = expandedDeadline === dl.id;
 
                   return (
-                    <div
+                    <Collapsible
                       key={dl.id}
-                      className={`flex items-center gap-3 rounded-md border p-3 ${
-                        dl.completed ? "opacity-50" : isOverdue ? "border-destructive bg-destructive/5" : isUrgent ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10" : ""
-                      }`}
+                      open={isExpanded}
+                      onOpenChange={() => setExpandedDeadline(isExpanded ? null : dl.id)}
                     >
-                      <button
-                        className={`shrink-0 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          dl.completed ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground"
-                        }`}
-                        onClick={() => toggleDeadline(dl.id)}
-                      >
-                        {dl.completed && <CheckCircle2 className="h-3 w-3" />}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-sm font-medium ${dl.completed ? "line-through" : ""}`}>
-                            {dl.title}
-                          </span>
-                          <Badge variant="outline" className="text-xs">
-                            {DEADLINE_TYPE_LABELS[dl.type] || dl.type}
-                          </Badge>
-                          {dl.time && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3" /> {dl.time}
-                            </span>
-                          )}
-                        </div>
-                        {(dl.attendees || []).length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            <span className="text-xs text-muted-foreground">Asistirán:</span>
-                            {(dl.attendees || []).map((a, i) => (
-                              <Badge key={i} variant="secondary" className="text-xs">{a}</Badge>
-                            ))}
+                      <div className={`rounded-md border ${
+                        dl.completed ? "opacity-50" : isOverdue ? "border-destructive bg-destructive/5" : isUrgent ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10" : ""
+                      }`}>
+                        <CollapsibleTrigger className="flex items-center w-full gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left">
+                          {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                          <button
+                            className={`shrink-0 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                              dl.completed ? "bg-accent border-accent text-accent-foreground" : "border-muted-foreground"
+                            }`}
+                            onClick={(e) => { e.stopPropagation(); toggleDeadline(dl.id); }}
+                          >
+                            {dl.completed && <CheckCircle2 className="h-3 w-3" />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm font-medium ${dl.completed ? "line-through" : ""}`}>
+                                {dl.title}
+                              </span>
+                              <Badge variant="outline" className="text-xs">
+                                {DEADLINE_TYPE_LABELS[dl.type] || dl.type}
+                              </Badge>
+                              {dl.time && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Clock className="h-3 w-3" /> {dl.time}
+                                </span>
+                              )}
+                              {(dl.document_ids || []).length > 0 && (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Link2 className="h-3 w-3" />
+                                  {(dl.document_ids || []).length}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        )}
-                        {dl.notes && (
-                          <p className="text-xs text-muted-foreground mt-0.5">{dl.notes}</p>
-                        )}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isOverdue && <AlertTriangle className="h-3 w-3 text-destructive" />}
+                            {isUrgent && !isOverdue && <Clock className="h-3 w-3 text-yellow-600" />}
+                            <span className={`text-xs ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                              {formatMX(dlDate, "dd MMM yyyy")}
+                            </span>
+                          </div>
+                        </CollapsibleTrigger>
+
+                        <CollapsibleContent className="px-3 pb-3 pt-1 space-y-3 ml-9">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <StepAssigneeSelect
+                              value={dl.assigned_to || null}
+                              onChange={(userId) => updateDeadlineField(dl.id, "assigned_to", userId)}
+                            />
+                            <div className="space-y-1">
+                              <Label className="text-xs">Fecha</Label>
+                              <Input type="date" className="h-8 text-xs" value={dl.date} onChange={(e) => updateDeadlineField(dl.id, "date", e.target.value)} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Hora</Label>
+                              <Input type="time" className="h-8 text-xs" value={dl.time || ""} onChange={(e) => updateDeadlineField(dl.id, "time", e.target.value)} />
+                            </div>
+                          </div>
+
+                          {/* Attendees */}
+                          <div className="space-y-2">
+                            <Label className="text-xs">¿Quiénes asistirán?</Label>
+                            <UserOrTextMulti
+                              values={dl.attendees || []}
+                              onChange={(vals) => updateDeadlineField(dl.id, "attendees", vals)}
+                              profiles={profiles.map((p) => ({ user_id: p.user_id, full_name: p.full_name }))}
+                              placeholder="Nombre o seleccionar usuario..."
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <Label className="text-xs">Notas</Label>
+                            <Textarea className="text-xs min-h-[60px]" placeholder="Notas del término..." value={dl.notes || ""} onChange={(e) => updateDeadlineField(dl.id, "notes", e.target.value)} />
+                          </div>
+
+                          {/* File management */}
+                          <StepFileManager
+                            documentIds={dl.document_ids || []}
+                            onDocumentAdded={(newIds) => updateDeadlineField(dl.id, "document_ids", newIds)}
+                            projectId={projectId}
+                          />
+
+                          <div className="flex items-center justify-end pt-1">
+                            <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => removeDeadline(dl.id)}>
+                              <Trash2 className="h-3 w-3 mr-1" /> Eliminar
+                            </Button>
+                          </div>
+                        </CollapsibleContent>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex items-center gap-1 text-xs">
-                          {isOverdue && <AlertTriangle className="h-3 w-3 text-destructive" />}
-                          {isUrgent && !isOverdue && <Clock className="h-3 w-3 text-yellow-600" />}
-                          <span className={isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}>
-                            {formatMX(dlDate, "dd MMM yyyy")}
-                          </span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => removeDeadline(dl.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
+                    </Collapsible>
                   );
                 })}
             </div>
