@@ -71,8 +71,8 @@ export interface ComplianceTaskRowProps {
     assigned_to: string | null;
     compliance_periodicity: string | null;
     compliance_period: string | null;
-    checklist: any;
-    dropbox_links: any;
+    checklist?: any;
+    dropbox_links?: any;
   };
   projectId: string;
   urgencyBadge: React.ReactNode;
