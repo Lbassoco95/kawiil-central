@@ -375,6 +375,20 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             <span className="text-muted-foreground">Demandado</span>
             <span>{lawsuitDetails.defendant || "—"}</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Abogado Patrono</span>
+            <span>{lawsuitDetails.lead_attorney || "—"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Abogado Sustituto</span>
+            <span>{lawsuitDetails.substitute_attorney || "—"}</span>
+          </div>
+          {(lawsuitDetails.authorized_persons || []).length > 0 && (
+            <div className="col-span-full">
+              <span className="text-muted-foreground">Autorizados: </span>
+              <span>{(lawsuitDetails.authorized_persons || []).join(", ")}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
