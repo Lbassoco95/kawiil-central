@@ -13,7 +13,8 @@ interface NotificationPayload {
     | "task_created"
     | "task_updated"
     | "comment_mention"
-    | "project_status_changed";
+    | "project_status_changed"
+    | "deadline_created";
   data: Record<string, any>;
 }
 
@@ -138,6 +139,45 @@ serve(async (req) => {
               { type: "mrkdwn", text: `*Cliente:*\n${data.client_name || "N/A"}` },
             ],
           },
+        ];
+        break;
+
+      case "deadline_created":
+        message = `⚖️ Nuevo término/fecha clave: ${data.title}`;
+        blocks = [
+          {
+            type: "header",
+            text: { type: "plain_text", text: "⚖️ Término / Fecha Clave Registrada" },
+          },
+          {
+            type: "section",
+            fields: [
+              { type: "mrkdwn", text: `*Título:*\n${data.title}` },
+              { type: "mrkdwn", text: `*Tipo:*\n${data.type || "Término"}` },
+              { type: "mrkdwn", text: `*Fecha:*\n${data.date}` },
+              { type: "mrkdwn", text: `*Hora:*\n${data.time || "Sin hora"}` },
+            ],
+          },
+          ...(data.attendees
+            ? [
+                {
+                  type: "context",
+                  elements: [
+                    { type: "mrkdwn", text: `👥 Asistirán: ${data.attendees}` },
+                  ],
+                },
+              ]
+            : []),
+          ...(data.assigned_to && data.assigned_to !== "Sin asignar"
+            ? [
+                {
+                  type: "context",
+                  elements: [
+                    { type: "mrkdwn", text: `📌 Responsable: ${data.assigned_to}` },
+                  ],
+                },
+              ]
+            : []),
         ];
         break;
 
