@@ -209,7 +209,7 @@ export function AccountingDashboard({ projectId, clientDropboxPath }: { projectI
         </Card>
       ) : (
         periods.map((period) => (
-          <PeriodCard key={period.id} period={period} projectId={projectId} />
+          <PeriodCard key={period.id} period={period} projectId={projectId} clientDropboxPath={clientDropboxPath} />
         ))
       )}
     </div>

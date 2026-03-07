@@ -189,7 +189,7 @@ export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { p
         </Card>
       ) : (
         declarations.map((decl) => (
-          <DeclarationCard key={decl.id} declaration={decl} projectId={projectId} />
+          <DeclarationCard key={decl.id} declaration={decl} projectId={projectId} clientDropboxPath={clientDropboxPath} />
         ))
       )}
     </div>
