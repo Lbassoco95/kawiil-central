@@ -76,9 +76,11 @@ interface LawsuitDeadline {
   id: string;
   title: string;
   date: string;
+  time: string;
   type: string;
   completed: boolean;
   notes: string;
+  attendees: string[];
 }
 
 interface LawsuitDetails {
@@ -87,6 +89,9 @@ interface LawsuitDetails {
   court: string | null;
   plaintiff: string | null;
   defendant: string | null;
+  lead_attorney?: string | null;
+  substitute_attorney?: string | null;
+  authorized_persons?: string[];
   stages: LawsuitStage[];
   deadlines: LawsuitDeadline[];
 }
@@ -147,7 +152,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState<string | null>(null);
   const [dropboxPickerStage, setDropboxPickerStage] = useState<string | null>(null);
-  const [newDeadline, setNewDeadline] = useState({ title: "", date: "", type: "termino", notes: "" });
+  const [newDeadline, setNewDeadline] = useState({ title: "", date: "", time: "", type: "termino", notes: "", attendees: [] as string[] });
+  const [newDeadlineAttendee, setNewDeadlineAttendee] = useState("");
   const [newStageTemplate, setNewStageTemplate] = useState("contestacion");
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
   const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
@@ -263,7 +269,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     };
     const updated = { ...lawsuitDetails, deadlines: [...(lawsuitDetails.deadlines || []), dl] };
     updateLawsuit.mutate(updated);
-    setNewDeadline({ title: "", date: "", type: "termino", notes: "" });
+    setNewDeadline({ title: "", date: "", time: "", type: "termino", notes: "", attendees: [] });
+    setNewDeadlineAttendee("");
     setDeadlineDialogOpen(false);
     toast.success("Término agregado");
   };
@@ -368,6 +375,20 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             <span className="text-muted-foreground">Demandado</span>
             <span>{lawsuitDetails.defendant || "—"}</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Abogado Patrono</span>
+            <span>{lawsuitDetails.lead_attorney || "—"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Abogado Sustituto</span>
+            <span>{lawsuitDetails.substitute_attorney || "—"}</span>
+          </div>
+          {(lawsuitDetails.authorized_persons || []).length > 0 && (
+            <div className="col-span-full">
+              <span className="text-muted-foreground">Autorizados: </span>
+              <span>{(lawsuitDetails.authorized_persons || []).join(", ")}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -553,14 +574,27 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                         {dl.completed && <CheckCircle2 className="h-3 w-3" />}
                       </button>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className={`text-sm font-medium ${dl.completed ? "line-through" : ""}`}>
                             {dl.title}
                           </span>
                           <Badge variant="outline" className="text-xs">
                             {DEADLINE_TYPE_LABELS[dl.type] || dl.type}
                           </Badge>
+                          {dl.time && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> {dl.time}
+                            </span>
+                          )}
                         </div>
+                        {(dl.attendees || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            <span className="text-xs text-muted-foreground">Asistirán:</span>
+                            {(dl.attendees || []).map((a, i) => (
+                              <Badge key={i} variant="secondary" className="text-xs">{a}</Badge>
+                            ))}
+                          </div>
+                        )}
                         {dl.notes && (
                           <p className="text-xs text-muted-foreground mt-0.5">{dl.notes}</p>
                         )}
@@ -738,13 +772,21 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                 onChange={(e) => setNewDeadline((p) => ({ ...p, title: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Fecha *</Label>
                 <Input
                   type="date"
                   value={newDeadline.date}
                   onChange={(e) => setNewDeadline((p) => ({ ...p, date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Hora</Label>
+                <Input
+                  type="time"
+                  value={newDeadline.time}
+                  onChange={(e) => setNewDeadline((p) => ({ ...p, time: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -764,6 +806,48 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                 </Select>
               </div>
             </div>
+
+            {/* Attendees */}
+            <div className="space-y-2">
+              <Label>¿Quiénes asistirán?</Label>
+              <div className="flex flex-wrap gap-1.5 mb-1">
+                {(newDeadline.attendees || []).map((name, idx) => (
+                  <Badge key={idx} variant="secondary" className="text-xs gap-1">
+                    {name}
+                    <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() =>
+                      setNewDeadline((p) => ({ ...p, attendees: p.attendees.filter((_, i) => i !== idx) }))
+                    } />
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Nombre de quien asistirá"
+                  value={newDeadlineAttendee}
+                  onChange={(e) => setNewDeadlineAttendee(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newDeadlineAttendee.trim()) {
+                      e.preventDefault();
+                      setNewDeadline((p) => ({ ...p, attendees: [...p.attendees, newDeadlineAttendee.trim()] }));
+                      setNewDeadlineAttendee("");
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!newDeadlineAttendee.trim()}
+                  onClick={() => {
+                    setNewDeadline((p) => ({ ...p, attendees: [...p.attendees, newDeadlineAttendee.trim()] }));
+                    setNewDeadlineAttendee("");
+                  }}
+                >
+                  Agregar
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Notas</Label>
               <Textarea
