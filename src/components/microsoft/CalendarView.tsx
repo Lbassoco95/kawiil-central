@@ -30,8 +30,14 @@ import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
 
 type ViewMode = "day" | "3days" | "week" | "month";
 
-const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6:00 - 21:00
-const HOUR_HEIGHT = 44; // Altura algo más compacta por fila, estilo Outlook
+const START_HOUR = 6;
+const END_HOUR = 21;
+const SLOT_MINUTES = 30; // Intervalos de 30 minutos, similar a Outlook
+const TIME_SLOTS = Array.from(
+  { length: ((END_HOUR - START_HOUR) * 60) / SLOT_MINUTES + 1 },
+  (_, i) => START_HOUR * 60 + i * SLOT_MINUTES
+);
+const SLOT_HEIGHT = 32;
 
 /** Parse an event datetime string into CDMX-adjusted Date */
 function parseEventTime(dt: string): Date {
@@ -39,6 +45,12 @@ function parseEventTime(dt: string): Date {
     return new Date(dt);
   }
   return toZonedTime(parseISO(dt), CDMX_TZ);
+}
+
+function minutesToLabel(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
 export function CalendarView() {
@@ -154,8 +166,15 @@ export function CalendarView() {
     return getEventsForDay(date).filter((e: any) => e._isAllDay);
   };
 
-  const getTimedEventsForHour = (date: Date, hour: number) => {
-    return getEventsForDay(date).filter((e: any) => !e._isAllDay && e._parsedStart.getHours() === hour);
+  const getTimedEventsForSlot = (date: Date, slotMinutes: number) => {
+    const slotEnd = slotMinutes + SLOT_MINUTES;
+    return getEventsForDay(date).filter((e: any) => {
+      if (e._isAllDay) return false;
+      const h = e._parsedStart.getHours();
+      const m = e._parsedStart.getMinutes();
+      const total = h * 60 + m;
+      return total >= slotMinutes && total < slotEnd;
+    });
   };
 
   const handleCreateEvent = () => {
@@ -310,31 +329,40 @@ export function CalendarView() {
                 })}
               </div>
 
-              {/* Time grid - uniform height per row */}
-              {HOURS.map((hour) => (
+              {/* Time grid - intervalos de 30 minutos para ubicar mejor las horas */}
+              {TIME_SLOTS.map((slotMinutes) => (
                 <div
-                  key={hour}
+                  key={slotMinutes}
                   className="grid border-b border-border last:border-b-0"
                   style={{
                     gridTemplateColumns: `56px repeat(${colCount}, 1fr)`,
-                    height: `${HOUR_HEIGHT}px`,
+                    height: `${SLOT_HEIGHT}px`,
                   }}
                 >
                   <div className="text-[11px] text-muted-foreground text-right pr-2 border-r border-border pt-1 leading-none">
-                    {`${hour.toString().padStart(2, "0")}:00`}
+                    {minutesToLabel(slotMinutes)}
                   </div>
                   {viewDays.map((day) => {
-                    const dayEvents = getTimedEventsForHour(day, hour);
+                    const dayEvents = getTimedEventsForSlot(day, slotMinutes);
+                    const startHour = Math.floor(slotMinutes / 60);
+                    const startMinutes = slotMinutes % 60;
+                    const nextSlot = slotMinutes + SLOT_MINUTES;
+                    const endHour = Math.floor(nextSlot / 60);
+                    const endMinutes = nextSlot % 60;
                     return (
                       <div
-                        key={day.toISOString() + hour}
+                        key={day.toISOString() + slotMinutes}
                         className="border-r border-border last:border-r-0 p-0.5 cursor-pointer hover:bg-muted/30 transition-colors overflow-hidden"
                         onClick={() => {
                           setSelectedDate(day);
                           setNewEvent({
                             ...newEvent,
-                            startTime: `${hour.toString().padStart(2, "0")}:00`,
-                            endTime: `${(hour + 1).toString().padStart(2, "0")}:00`,
+                            startTime: `${startHour.toString().padStart(2, "0")}:${startMinutes
+                              .toString()
+                              .padStart(2, "0")}`,
+                            endTime: `${endHour.toString().padStart(2, "0")}:${endMinutes
+                              .toString()
+                              .padStart(2, "0")}`,
                           });
                           setShowCreate(true);
                         }}
