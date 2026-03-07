@@ -5,12 +5,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield } from "lucide-react";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
 import { AnnualDeclarationDashboard } from "@/components/projects/AnnualDeclarationDashboard";
 import { GestoriaDashboard } from "@/components/projects/GestoriaDashboard";
+import { ComplianceDashboard } from "@/components/projects/ComplianceDashboard";
 import { ProjectGeneralTab } from "@/components/projects/ProjectGeneralTab";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -64,6 +65,7 @@ const ProyectoDetalle = () => {
   const hasConstitution = isSoftlanding || isConstitutionNacional;
   const isGestoria = project?.area === "gestoria";
   const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
+  const isCumplimiento = project?.area === "cumplimiento";
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
 
@@ -126,7 +128,7 @@ const ProyectoDetalle = () => {
           </div>
         </div>
 
-        <Tabs defaultValue={isGestoria ? "gestoria" : hasConstitution ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
+        <Tabs defaultValue={isCumplimiento ? "cumplimiento" : isGestoria ? "gestoria" : hasConstitution ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="general">General</TabsTrigger>
             {hasConstitution && (
@@ -157,6 +159,12 @@ const ProyectoDetalle = () => {
               <TabsTrigger value="juicio">
                 <Scale className="h-4 w-4 mr-1" />
                 Juicio
+              </TabsTrigger>
+            )}
+            {isCumplimiento && (
+              <TabsTrigger value="cumplimiento">
+                <Shield className="h-4 w-4 mr-1" />
+                Cumplimiento
               </TabsTrigger>
             )}
             <TabsTrigger value="tareas">Tareas ({tasks.length})</TabsTrigger>
@@ -206,6 +214,12 @@ const ProyectoDetalle = () => {
                 dropboxInitialPath={effectiveDropboxPath}
                 lockDropboxToInitialPath={lockDropboxToInitialPath}
               />
+            </TabsContent>
+          )}
+
+          {isCumplimiento && (
+            <TabsContent value="cumplimiento">
+              <ComplianceDashboard projectId={project.id} clientId={project.client_id} />
             </TabsContent>
           )}
 

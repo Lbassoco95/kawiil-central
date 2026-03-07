@@ -6,11 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, AlertTriangle } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useClients";
+import { useClientComplianceConfig } from "@/hooks/useCompliance";
+import { ComplianceTaskGeneratorModal } from "@/components/compliance/ComplianceTaskGeneratorModal";
 import { toast } from "sonner";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import type { Database } from "@/integrations/supabase/types";
@@ -32,12 +35,28 @@ export function ProjectFormDialog() {
   const [clientId, setClientId] = useState<string>("");
   const [area, setArea] = useState<string>("");
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
+  const [complianceGenOpen, setComplianceGenOpen] = useState(false);
+  const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const { user } = useAuth();
   const { data: clients } = useClients();
   const { areaOptions } = useAreaOptions();
   const queryClient = useQueryClient();
 
+  const isCumplimiento = area === "cumplimiento";
   const isAccounting = area === "contabilidad" || area === "softlanding";
+
+  // Get compliance config for selected client
+  const { data: complianceConfigs } = useClientComplianceConfig(
+    isCumplimiento && clientId ? clientId : undefined
+  );
+  const hasComplianceConfig = (complianceConfigs || []).length > 0;
+  const complianceEntityTypeIds = (complianceConfigs || []).map((c) => c.entity_type_id);
+
+  // Auto-set name for compliance projects
+  const selectedClient = clients?.find((c) => c.id === clientId);
+  const autoName = isCumplimiento && selectedClient
+    ? `Cumplimiento — ${selectedClient.name}`
+    : name;
 
   const toggleObligation = (key: string) => {
     setSelectedObligations((prev) =>
@@ -54,7 +73,7 @@ export function ProjectFormDialog() {
       const { data, error } = await supabase
         .from("projects")
         .insert({
-          name,
+          name: isCumplimiento ? autoName : name,
           description: description || null,
           client_id: clientId || null,
           area: (area as ServiceArea) || null,
@@ -68,10 +87,16 @@ export function ProjectFormDialog() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Proyecto creado exitosamente");
-      resetForm();
+
+      if (isCumplimiento && hasComplianceConfig && data) {
+        setCreatedProjectId(data.id);
+        setComplianceGenOpen(true);
+      } else {
+        resetForm();
+      }
     },
     onError: (error) => {
       toast.error("Error al crear proyecto: " + error.message);
@@ -85,108 +110,167 @@ export function ProjectFormDialog() {
     setClientId("");
     setArea("");
     setSelectedObligations([]);
+    setCreatedProjectId(null);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Nuevo proyecto
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Crear proyecto</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 pt-2">
-          <div className="space-y-2">
-            <Label htmlFor="project-name">Nombre *</Label>
-            <Input
-              id="project-name"
-              placeholder="Nombre del proyecto"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Cliente</Label>
-            <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar cliente (opcional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients?.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Área de servicio</Label>
-            <Select value={area} onValueChange={(v) => { setArea(v); setSelectedObligations([]); }}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar área" />
-              </SelectTrigger>
-              <SelectContent>
-                {areaOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {isAccounting && (
-            <div className="space-y-3 rounded-md border p-4">
-              <Label className="text-sm font-semibold">Obligaciones fiscales a presentar</Label>
-              <p className="text-xs text-muted-foreground">
-                Selecciona las declaraciones que aplican a este proyecto.
-              </p>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Nuevo proyecto
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Crear proyecto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {!isCumplimiento && (
               <div className="space-y-2">
-                {TAX_OBLIGATION_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.key}
-                    className="flex items-center gap-3 rounded-md px-2 py-2 text-sm cursor-pointer hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedObligations.includes(opt.key)}
-                      onCheckedChange={() => toggleObligation(opt.key)}
-                    />
-                    <span>{opt.label}</span>
-                  </label>
-                ))}
+                <Label htmlFor="project-name">Nombre *</Label>
+                <Input
+                  id="project-name"
+                  placeholder="Nombre del proyecto"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
               </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Cliente</Label>
+              <Select value={clientId} onValueChange={setClientId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar cliente (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
 
-          <div className="space-y-2">
-            <Label>Descripción</Label>
-            <Textarea
-              placeholder="Descripción del proyecto (opcional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
+            <div className="space-y-2">
+              <Label>Área de servicio</Label>
+              <Select value={area} onValueChange={(v) => { setArea(v); setSelectedObligations([]); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar área" />
+                </SelectTrigger>
+                <SelectContent>
+                  {areaOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => createProject.mutate()}
-              disabled={!name.trim() || createProject.isPending || (isAccounting && selectedObligations.length === 0)}
-            >
-              {createProject.isPending ? "Creando..." : "Crear proyecto"}
-            </Button>
+            {/* Compliance info */}
+            {isCumplimiento && clientId && !hasComplianceConfig && (
+              <div className="flex items-center gap-2 text-sm text-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md p-3">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>
+                  Este cliente no tiene tipo de entidad regulada configurado.{" "}
+                  <a href={`/clientes/${clientId}`} className="underline font-medium">
+                    Configurar ahora
+                  </a>
+                </span>
+              </div>
+            )}
+
+            {isCumplimiento && clientId && hasComplianceConfig && (
+              <div className="rounded-md border p-3 space-y-2">
+                <Label className="text-sm font-semibold">Proyecto de Cumplimiento</Label>
+                <p className="text-sm text-muted-foreground">
+                  Se creará: <strong>{autoName}</strong>
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {(complianceConfigs || []).map((c) => (
+                    <Badge key={c.id} variant="outline" className="text-xs">
+                      {c.entity_type?.name || "—"}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Al crear, se abrirá el generador de tareas obligatorias.
+                </p>
+              </div>
+            )}
+
+            {isAccounting && (
+              <div className="space-y-3 rounded-md border p-4">
+                <Label className="text-sm font-semibold">Obligaciones fiscales a presentar</Label>
+                <p className="text-xs text-muted-foreground">
+                  Selecciona las declaraciones que aplican a este proyecto.
+                </p>
+                <div className="space-y-2">
+                  {TAX_OBLIGATION_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.key}
+                      className="flex items-center gap-3 rounded-md px-2 py-2 text-sm cursor-pointer hover:bg-muted/50 transition-colors"
+                    >
+                      <Checkbox
+                        checked={selectedObligations.includes(opt.key)}
+                        onCheckedChange={() => toggleObligation(opt.key)}
+                      />
+                      <span>{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Descripción</Label>
+              <Textarea
+                placeholder="Descripción del proyecto (opcional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => createProject.mutate()}
+                disabled={
+                  (!isCumplimiento && !name.trim()) ||
+                  (isCumplimiento && (!clientId || !hasComplianceConfig)) ||
+                  createProject.isPending ||
+                  (isAccounting && selectedObligations.length === 0)
+                }
+              >
+                {createProject.isPending ? "Creando..." : "Crear proyecto"}
+              </Button>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      {createdProjectId && (
+        <ComplianceTaskGeneratorModal
+          open={complianceGenOpen}
+          onOpenChange={(o) => {
+            setComplianceGenOpen(o);
+            if (!o) resetForm();
+          }}
+          projectId={createdProjectId}
+          entityTypeIds={complianceEntityTypeIds}
+          responsibleUserId={user!.id}
+          onGenerated={() => {
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", createdProjectId] });
+            resetForm();
+          }}
+        />
+      )}
+    </>
   );
 }

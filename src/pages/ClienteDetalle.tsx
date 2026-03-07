@@ -17,9 +17,11 @@ import {
   ExternalLink,
   FolderOpen,
   Pencil,
+  Shield,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
+import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
 
@@ -130,6 +132,10 @@ const ClienteDetalle = () => {
         <Tabs defaultValue="general" className="space-y-4">
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="cumplimiento">
+              <Shield className="h-4 w-4 mr-1" />
+              Cumplimiento
+            </TabsTrigger>
             <TabsTrigger value="proyectos">
               Proyectos ({projects.length})
             </TabsTrigger>
@@ -253,6 +259,10 @@ const ClienteDetalle = () => {
                 </Card>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="cumplimiento">
+            <ComplianceClientSection clientId={client.id} />
           </TabsContent>
 
           <TabsContent value="proyectos">
