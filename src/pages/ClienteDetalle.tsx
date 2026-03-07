@@ -14,7 +14,6 @@ import {
   User,
   FileText,
   CheckSquare,
-  ExternalLink,
   FolderOpen,
   Pencil,
   Shield,
@@ -22,6 +21,7 @@ import {
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
+import { DropboxFolderBrowser } from "@/components/clients/DropboxFolderBrowser";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
 
@@ -217,7 +217,7 @@ const ClienteDetalle = () => {
               </Card>
 
               {/* Dropbox */}
-              <Card>
+              <Card className="md:col-span-2">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <FolderOpen className="h-4 w-4" />
@@ -226,19 +226,7 @@ const ClienteDetalle = () => {
                 </CardHeader>
                 <CardContent>
                   {client.dropbox_folder_path ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm truncate flex-1">{client.dropbox_folder_path}</span>
-                      <a
-                        href={`https://www.dropbox.com/home${client.dropbox_folder_path}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Button variant="outline" size="sm">
-                          <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                          Abrir
-                        </Button>
-                      </a>
-                    </div>
+                    <DropboxFolderBrowser folderPath={client.dropbox_folder_path} />
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       Sin carpeta de Dropbox vinculada. Edita el cliente para agregar la ruta.
