@@ -48,6 +48,7 @@ import { formatMX } from "@/lib/dateUtils";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { useProfiles } from "@/hooks/useTasks";
+import { UserOrTextMulti } from "./UserOrTextInput";
 
 interface StageAttachment {
   id: string;
