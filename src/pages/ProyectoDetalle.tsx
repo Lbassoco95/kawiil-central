@@ -232,32 +232,125 @@ const ProyectoDetalle = () => {
           )}
 
           <TabsContent value="tareas">
-            {tasks.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/50" />
-                  <p className="mt-3 text-sm text-muted-foreground">
-                    Sin tareas en este proyecto.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-3">
-                {tasks.map((t) => (
-                  <Card key={t.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <h4 className="font-medium text-foreground truncate">{t.title}</h4>
-                        <div className="flex gap-2 shrink-0">
-                          <Badge variant="outline" className="text-xs">{t.priority}</Badge>
-                          <Badge variant="secondary" className="text-xs">{t.status}</Badge>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-semibold text-foreground">Tareas del proyecto</h3>
+                <Button size="sm" onClick={() => setShowTaskForm(true)}>
+                  <Plus className="h-4 w-4 mr-1" />Crear tarea
+                </Button>
               </div>
-            )}
+
+              {tasks.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/50" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Sin tareas en este proyecto.
+                    </p>
+                    <Button variant="outline" className="mt-3" onClick={() => setShowTaskForm(true)}>
+                      <Plus className="h-4 w-4 mr-1" />Crear primera tarea
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {tasks.map((t) => (
+                    <Card key={t.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="font-medium text-foreground truncate">{t.title}</h4>
+                          <div className="flex gap-2 shrink-0">
+                            <Badge variant="outline" className="text-xs">{t.priority}</Badge>
+                            <Badge variant="secondary" className="text-xs">{t.status}</Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <TaskFormDialog
+              open={showTaskForm}
+              onOpenChange={(o) => {
+                setShowTaskForm(o);
+                if (!o) queryClient.invalidateQueries({ queryKey: ["project-tasks", id] });
+              }}
+              defaultProjectId={project.id}
+              defaultClientId={project.client_id || undefined}
+              defaultArea={project.area || undefined}
+            />
+          </TabsContent>
+
+          {/* Dropbox Sign tab */}
+          <TabsContent value="firmas">
+            <Card>
+              <CardContent className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <PenTool className="h-5 w-5 text-primary" />
+                    <h3 className="font-semibold text-foreground">Solicitudes de firma</h3>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={loadingSign}
+                    onClick={async () => {
+                      setLoadingSign(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("dropbox-sign", {
+                          body: { action: "list", page: 1, page_size: 50 },
+                        });
+                        if (error) throw error;
+                        setSignRequests(data.requests || []);
+                      } catch {
+                        setSignRequests([]);
+                      } finally {
+                        setLoadingSign(false);
+                      }
+                    }}
+                  >
+                    {loadingSign ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cargar firmas"}
+                  </Button>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Las solicitudes de firma se envían desde los archivos de cada paso. Haz clic en el ícono ✒️ junto a un archivo de Dropbox para enviarlo a firma.
+                </p>
+
+                {signRequests.length > 0 ? (
+                  <div className="space-y-2">
+                    {signRequests.map((sr: any) => (
+                      <div key={sr.signature_request_id} className="flex items-center gap-3 p-3 rounded-md border text-sm">
+                        <PenTool className={`h-4 w-4 shrink-0 ${sr.is_complete ? "text-green-600" : sr.is_declined ? "text-destructive" : "text-primary"}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{sr.title}</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {sr.signatures?.map((sig: any, i: number) => (
+                              <Badge
+                                key={i}
+                                variant={sig.status === "signed" ? "default" : "secondary"}
+                                className="text-[10px]"
+                              >
+                                {sig.signer_name}: {sig.status === "signed" ? "Firmado" : sig.status === "declined" ? "Rechazado" : "Pendiente"}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        <Badge variant={sr.is_complete ? "default" : "outline"} className="text-xs shrink-0">
+                          {sr.is_complete ? "Completada" : sr.is_declined ? "Rechazada" : "Pendiente"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : !loadingSign ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    Haz clic en "Cargar firmas" para ver las solicitudes de Dropbox Sign.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
