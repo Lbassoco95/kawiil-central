@@ -267,6 +267,13 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
         initialPath={clientDropboxPath || "/Kawiil Mx"}
         onUploaded={handleDropboxUploaded}
       />
+
+      <SendToSignDialog
+        open={!!signDoc}
+        onClose={() => setSignDoc(null)}
+        fileUrl={signDoc?.url}
+        fileName={signDoc?.name}
+      />
     </div>
   );
 }
