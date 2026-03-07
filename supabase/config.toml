@@ -5,3 +5,5 @@ project_id = "apfjafxiykkiydepmswk"
     verify_jwt = false
   [functions.savio-webhook]
     verify_jwt = false
+  [functions.slack-events]
+    verify_jwt = false
