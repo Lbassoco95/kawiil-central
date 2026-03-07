@@ -198,7 +198,7 @@ const ProyectoDetalle = () => {
 
           {hasAccounting && (
             <TabsContent value="contabilidad">
-              <AccountingDashboard projectId={project.id} />
+              <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
             </TabsContent>
           )}
 
