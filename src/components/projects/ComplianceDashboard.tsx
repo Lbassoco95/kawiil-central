@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,15 +15,16 @@ import {
   ChevronDown,
   ChevronRight,
   CheckCircle2,
-  Clock,
   AlertTriangle,
   Calendar,
-  RefreshCw,
+  Settings2,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useClientComplianceConfig } from "@/hooks/useCompliance";
+import { useClientComplianceConfig, useSaveClientCompliance } from "@/hooks/useCompliance";
+import { ComplianceEntitySelector } from "@/components/compliance/ComplianceEntitySelector";
+import { ComplianceTaskGeneratorModal } from "@/components/compliance/ComplianceTaskGeneratorModal";
 import { formatMX, nowMX } from "@/lib/dateUtils";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -70,7 +72,21 @@ export function ComplianceDashboard({ projectId, clientId }: ComplianceDashboard
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  const { data: complianceConfigs } = useClientComplianceConfig(clientId || undefined);
+  const { data: complianceConfigs, isLoading: configLoading } = useClientComplianceConfig(clientId || undefined);
+  const saveCompliance = useSaveClientCompliance();
+
+  // Setup state (when no entity types configured yet)
+  const [setupMode, setSetupMode] = useState(false);
+  const [selectedEntityTypeIds, setSelectedEntityTypeIds] = useState<string[]>([]);
+  const [registrationNumber, setRegistrationNumber] = useState("");
+  const [authorizationDate, setAuthorizationDate] = useState("");
+  const [complianceOfficerName, setComplianceOfficerName] = useState("");
+
+  // Task generator modal
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+
+  const hasComplianceConfig = (complianceConfigs || []).length > 0;
+  const complianceEntityTypeIds = (complianceConfigs || []).map((c) => c.entity_type_id);
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["compliance-tasks", projectId],
@@ -160,8 +176,162 @@ export function ComplianceDashboard({ projectId, clientId }: ComplianceDashboard
     });
   };
 
-  if (isLoading) {
+  const handleSaveConfig = async () => {
+    if (!clientId) return;
+    await saveCompliance.mutateAsync({
+      clientId,
+      entityTypeIds: selectedEntityTypeIds,
+      registrationNumber,
+      authorizationDate,
+      complianceOfficerName,
+    });
+    setSetupMode(false);
+    // After saving, open the task generator
+    setGeneratorOpen(true);
+  };
+
+  if (isLoading || configLoading) {
     return <Card><CardContent className="p-6 text-center text-muted-foreground">Cargando obligaciones...</CardContent></Card>;
+  }
+
+  // === SETUP MODE: No entity types configured ===
+  if (!hasComplianceConfig && !setupMode && tasks.length === 0) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-6 text-center space-y-4">
+            <Shield className="mx-auto h-12 w-12 text-muted-foreground/50" />
+            <div>
+              <h3 className="font-semibold text-foreground text-lg">Configurar Cumplimiento</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Para generar las obligaciones regulatorias, primero debes seleccionar el tipo de entidad regulada de este cliente.
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                ¿Es un Transmisor de Dinero (CNBV)? ¿Una Actividad Vulnerable (LFPIORPI)? ¿Una IFPE? Selecciona los que apliquen.
+              </p>
+            </div>
+            <Button onClick={() => setSetupMode(true)}>
+              <Settings2 className="mr-2 h-4 w-4" />
+              Configurar tipo de entidad
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // === SETUP FORM: Selecting entity types ===
+  if (setupMode) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-6 space-y-5">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold text-foreground">Seleccionar tipo de entidad regulada</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Selecciona los tipos de entidad que aplican a este cliente. Se generarán automáticamente las obligaciones regulatorias correspondientes.
+            </p>
+
+            <div className="max-h-64 overflow-y-auto rounded-md border p-3">
+              <ComplianceEntitySelector
+                selectedIds={selectedEntityTypeIds}
+                onChange={setSelectedEntityTypeIds}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm">Número de registro / Folio regulatorio</Label>
+                <Input
+                  value={registrationNumber}
+                  onChange={(e) => setRegistrationNumber(e.target.value)}
+                  placeholder="Folio o número de registro (opcional)"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Fecha de autorización</Label>
+                <Input
+                  type="date"
+                  value={authorizationDate}
+                  onChange={(e) => setAuthorizationDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-sm">Responsable de cumplimiento en el cliente</Label>
+              <Input
+                value={complianceOfficerName}
+                onChange={(e) => setComplianceOfficerName(e.target.value)}
+                placeholder="Nombre del oficial de cumplimiento del cliente (opcional)"
+              />
+            </div>
+
+            {selectedEntityTypeIds.length > 0 && (
+              <div className="rounded-md bg-muted/50 p-3 text-sm">
+                <p className="font-medium text-foreground mb-1">Entidades seleccionadas:</p>
+                <p className="text-muted-foreground">
+                  Al continuar, se generarán todas las tareas obligatorias del año {new Date().getFullYear()} para las entidades seleccionadas.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setSetupMode(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSaveConfig}
+                disabled={selectedEntityTypeIds.length === 0 || saveCompliance.isPending}
+              >
+                {saveCompliance.isPending ? "Guardando..." : "Continuar y generar tareas"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // === HAS CONFIG BUT NO TASKS: Offer to generate ===
+  if (hasComplianceConfig && tasks.length === 0) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-6 text-center space-y-4">
+            <Shield className="mx-auto h-12 w-12 text-primary/50" />
+            <div>
+              <h3 className="font-semibold text-foreground text-lg">Entidad configurada</h3>
+              <div className="flex flex-wrap justify-center gap-1 mt-2">
+                {entityTypeNames.map((name) => (
+                  <Badge key={name} variant="outline" className="text-xs">{name}</Badge>
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground mt-3">
+                Las obligaciones regulatorias aún no han sido generadas. Haz clic para crear todas las tareas del año {new Date().getFullYear()}.
+              </p>
+            </div>
+            <Button onClick={() => setGeneratorOpen(true)}>
+              <Shield className="mr-2 h-4 w-4" />
+              Generar tareas de cumplimiento
+            </Button>
+          </CardContent>
+        </Card>
+
+        <ComplianceTaskGeneratorModal
+          open={generatorOpen}
+          onOpenChange={setGeneratorOpen}
+          projectId={projectId}
+          entityTypeIds={complianceEntityTypeIds}
+          responsibleUserId={user!.id}
+          onGenerated={() => {
+            queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
+          }}
+        />
+      </div>
+    );
   }
 
   return (
@@ -204,95 +374,96 @@ export function ComplianceDashboard({ projectId, clientId }: ComplianceDashboard
       </Card>
 
       {/* Tasks grouped by category */}
-      {tasks.length === 0 ? (
-        <Card>
-          <CardContent className="p-6 text-center">
-            <Shield className="mx-auto h-10 w-10 text-muted-foreground/50" />
-            <p className="mt-3 text-sm text-muted-foreground">
-              No hay tareas de cumplimiento generadas. Crea el proyecto desde el formulario para auto-generar las obligaciones.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {groupedTasks.map((group) => {
-            const isCollapsed = collapsedCategories.has(group.key);
-            const groupPct = group.total > 0 ? Math.round((group.completed / group.total) * 100) : 0;
+      <div className="space-y-3">
+        {groupedTasks.map((group) => {
+          const isCollapsed = collapsedCategories.has(group.key);
+          const groupPct = group.total > 0 ? Math.round((group.completed / group.total) * 100) : 0;
 
-            return (
-              <Collapsible key={group.key} open={!isCollapsed} onOpenChange={() => toggleCategory(group.key)}>
-                <Card>
-                  <CollapsibleTrigger className="flex items-center justify-between w-full p-4 hover:bg-muted/30 transition-colors rounded-t-lg">
-                    <div className="flex items-center gap-2">
-                      {isCollapsed ? (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <span className="text-sm font-semibold text-foreground">{group.label}</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {group.completed}/{group.total}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Progress value={groupPct} className="h-1.5 w-20" />
-                      <span className="text-xs text-muted-foreground w-8 text-right">{groupPct}%</span>
-                    </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <CardContent className="pt-0 pb-3 px-4">
-                      <div className="space-y-1">
-                        {group.tasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className={`flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                              task.status === "completada" ? "opacity-60" : "hover:bg-muted/50"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <input
-                                type="checkbox"
-                                checked={task.status === "completada"}
-                                onChange={() =>
-                                  updateTask.mutate({
-                                    id: task.id,
-                                    status: task.status === "completada" ? "pendiente" : "completada",
-                                  })
-                                }
-                                className="h-4 w-4 rounded border-muted-foreground/30 cursor-pointer"
-                              />
-                              <span className={`truncate ${task.status === "completada" ? "line-through" : ""}`}>
-                                {task.title}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {task.compliance_periodicity && (
-                                <Badge variant="outline" className="text-[10px]">
-                                  {PERIODICITY_LABELS[task.compliance_periodicity] || task.compliance_periodicity}
-                                </Badge>
-                              )}
-                              {task.compliance_period && (
-                                <span className="text-[10px] text-muted-foreground">{task.compliance_period}</span>
-                              )}
-                              {task.due_date && (
-                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatMX(task.due_date, "dd MMM")}
-                                </span>
-                              )}
-                              {getUrgencyBadge(task)}
-                            </div>
+          return (
+            <Collapsible key={group.key} open={!isCollapsed} onOpenChange={() => toggleCategory(group.key)}>
+              <Card>
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-4 hover:bg-muted/30 transition-colors rounded-t-lg">
+                  <div className="flex items-center gap-2">
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="text-sm font-semibold text-foreground">{group.label}</span>
+                    <Badge variant="secondary" className="text-xs">
+                      {group.completed}/{group.total}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Progress value={groupPct} className="h-1.5 w-20" />
+                    <span className="text-xs text-muted-foreground w-8 text-right">{groupPct}%</span>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0 pb-3 px-4">
+                    <div className="space-y-1">
+                      {group.tasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                            task.status === "completada" ? "opacity-60" : "hover:bg-muted/50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={task.status === "completada"}
+                              onChange={() =>
+                                updateTask.mutate({
+                                  id: task.id,
+                                  status: task.status === "completada" ? "pendiente" : "completada",
+                                })
+                              }
+                              className="h-4 w-4 rounded border-muted-foreground/30 cursor-pointer"
+                            />
+                            <span className={`truncate ${task.status === "completada" ? "line-through" : ""}`}>
+                              {task.title}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            );
-          })}
-        </div>
-      )}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {task.compliance_periodicity && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {PERIODICITY_LABELS[task.compliance_periodicity] || task.compliance_periodicity}
+                              </Badge>
+                            )}
+                            {task.compliance_period && (
+                              <span className="text-[10px] text-muted-foreground">{task.compliance_period}</span>
+                            )}
+                            {task.due_date && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                <Calendar className="h-3 w-3" />
+                                {formatMX(task.due_date, "dd MMM")}
+                              </span>
+                            )}
+                            {getUrgencyBadge(task)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          );
+        })}
+      </div>
+
+      {/* Generator modal for re-generation if needed */}
+      <ComplianceTaskGeneratorModal
+        open={generatorOpen}
+        onOpenChange={setGeneratorOpen}
+        projectId={projectId}
+        entityTypeIds={complianceEntityTypeIds}
+        responsibleUserId={user!.id}
+        onGenerated={() => {
+          queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
+        }}
+      />
     </div>
   );
 }
