@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,6 +55,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [showBlockTime, setShowBlockTime] = useState(false);
   const { data: orgProfiles } = useProfiles();
 
   if (!taskId) return null;
@@ -192,6 +194,14 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <User className="h-3.5 w-3.5" />{(task as any).clients.name}
                 </span>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowBlockTime(true)}
+                className="gap-1"
+              >
+                <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
+              </Button>
             </div>
 
             {task.description && (
@@ -361,6 +371,14 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
           <div className="py-12 text-center text-muted-foreground">Tarea no encontrada</div>
         )}
       </DialogContent>
+      {task && (
+        <BlockTimeDialog
+          open={showBlockTime}
+          onOpenChange={setShowBlockTime}
+          taskTitle={task.title}
+          taskDueDate={task.due_date || undefined}
+        />
+      )}
     </Dialog>
   );
 }

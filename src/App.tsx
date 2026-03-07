@@ -15,6 +15,7 @@ import Admin from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
 import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
+import Microsoft365 from "./pages/Microsoft365";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/proyectos" element={<ProtectedRoute><Proyectos /></ProtectedRoute>} />
             <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
             <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
+            <Route path="/microsoft365" element={<ProtectedRoute><Microsoft365 /></ProtectedRoute>} />
             <Route path="/documentos" element={<ProtectedRoute><Documentos /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
