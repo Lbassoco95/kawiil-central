@@ -15,6 +15,7 @@ import Admin from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
 import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
+import Microsoft365 from "./pages/Microsoft365";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
