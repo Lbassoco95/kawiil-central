@@ -105,8 +105,13 @@ Deno.serve(async (req) => {
         const start = params?.start || new Date().toISOString();
         const end = params?.end || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const res = await fetch(
-          `${GRAPH_BASE}/me/calendarview?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=50`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+          `${GRAPH_BASE}/me/calendarview?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Prefer: 'outlook.timezone="America/Mexico_City"',
+            },
+          }
         );
         result = await res.json();
         break;
