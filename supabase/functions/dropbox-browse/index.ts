@@ -332,6 +332,10 @@ serve(async (req) => {
         }),
       };
 
+      if (adminMemberId) {
+        uploadHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
+      }
+
       if (rootNamespaceId) {
         uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
           '.tag': 'root',
