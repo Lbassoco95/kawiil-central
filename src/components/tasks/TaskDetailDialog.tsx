@@ -55,6 +55,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [showBlockTime, setShowBlockTime] = useState(false);
   const { data: orgProfiles } = useProfiles();
 
   if (!taskId) return null;
