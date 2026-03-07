@@ -5,7 +5,8 @@ type SlackEventType =
   | "task_created"
   | "task_updated"
   | "comment_mention"
-  | "project_status_changed";
+  | "project_status_changed"
+  | "deadline_created";
 
 export async function sendSlackNotification(
   eventType: SlackEventType,
