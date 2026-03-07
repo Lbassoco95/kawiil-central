@@ -75,11 +75,12 @@ export interface ComplianceTaskRowProps {
     dropbox_links?: any;
   };
   projectId: string;
+  clientDropboxPath?: string;
   urgencyBadge: React.ReactNode;
   onUpdate: () => void;
 }
 
-export function ComplianceTaskRow({ task, projectId, urgencyBadge, onUpdate }: ComplianceTaskRowProps) {
+export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate }: ComplianceTaskRowProps) {
   const [open, setOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState(task.status);
   const [localDueDate, setLocalDueDate] = useState<Date | undefined>(task.due_date ? new Date(task.due_date) : undefined);
@@ -374,6 +375,7 @@ export function ComplianceTaskRow({ task, projectId, urgencyBadge, onUpdate }: C
               documentIds={[]}
               onDocumentAdded={() => {}}
               projectId={projectId}
+              clientDropboxPath={clientDropboxPath}
               disabled={saving}
             />
 

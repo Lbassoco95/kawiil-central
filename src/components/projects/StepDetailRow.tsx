@@ -10,9 +10,10 @@ interface StepDetailRowProps {
   index: number;
   periodId: string;
   projectId: string;
+  clientDropboxPath?: string;
 }
 
-export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRowProps) {
+export function StepDetailRow({ step, index, periodId, projectId, clientDropboxPath }: StepDetailRowProps) {
   const toggleStep = useToggleAccountingStep();
   const updateDetails = useUpdateStepDetails();
   const queryClient = useQueryClient();
@@ -22,6 +23,7 @@ export function StepDetailRow({ step, index, periodId, projectId }: StepDetailRo
       step={step}
       index={index}
       projectId={projectId}
+      clientDropboxPath={clientDropboxPath}
       showTimer={true}
       onToggle={(checked) => toggleStep.mutate({ periodId, projectId, stepKey: step.key, completed: checked })}
       onSave={(updates) => {

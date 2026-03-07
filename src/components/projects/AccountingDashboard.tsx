@@ -36,9 +36,11 @@ const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; classNa
 function PeriodCard({
   period,
   projectId,
+  clientDropboxPath,
 }: {
   period: AccountingPeriod;
   projectId: string;
+  clientDropboxPath?: string;
 }) {
   const [open, setOpen] = useState(period.status !== "completado");
   const completed = period.steps.filter((s) => s.completed).length;
@@ -88,6 +90,7 @@ function PeriodCard({
                   index={idx}
                   periodId={period.id}
                   projectId={projectId}
+                  clientDropboxPath={clientDropboxPath}
                 />
               ))}
             </div>
@@ -97,7 +100,7 @@ function PeriodCard({
     </Card>
   );
 }
-export function AccountingDashboard({ projectId }: { projectId: string }) {
+export function AccountingDashboard({ projectId, clientDropboxPath }: { projectId: string; clientDropboxPath?: string }) {
   const { data: periods, isLoading } = useAccountingPeriods(projectId);
   const createPeriod = useCreateAccountingPeriod();
   const now = nowMX();
@@ -206,7 +209,7 @@ export function AccountingDashboard({ projectId }: { projectId: string }) {
         </Card>
       ) : (
         periods.map((period) => (
-          <PeriodCard key={period.id} period={period} projectId={projectId} />
+          <PeriodCard key={period.id} period={period} projectId={projectId} clientDropboxPath={clientDropboxPath} />
         ))
       )}
     </div>

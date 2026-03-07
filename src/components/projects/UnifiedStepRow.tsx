@@ -54,13 +54,14 @@ export interface UnifiedStepRowProps {
   saving?: boolean;
   showTimer?: boolean;
   showCheckbox?: boolean;
+  clientDropboxPath?: string;
   /** Extra content like appointment date fields */
   extraFields?: React.ReactNode;
 }
 
 export function UnifiedStepRow({
   step, index, projectId, onSave, onToggle, saving,
-  showTimer = true, showCheckbox = true, extraFields,
+  showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -313,6 +314,7 @@ export function UnifiedStepRow({
               documentIds={step.document_ids || []}
               onDocumentAdded={handleDocumentAdded}
               projectId={projectId}
+              clientDropboxPath={clientDropboxPath}
               disabled={saving}
             />
 

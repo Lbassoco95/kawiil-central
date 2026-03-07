@@ -35,9 +35,11 @@ const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; classNa
 function DeclarationCard({
   declaration,
   projectId,
+  clientDropboxPath,
 }: {
   declaration: AnnualDeclaration;
   projectId: string;
+  clientDropboxPath?: string;
 }) {
   const [open, setOpen] = useState(declaration.status !== "completado");
   const completed = declaration.steps.filter((s) => s.completed).length;
@@ -87,6 +89,7 @@ function DeclarationCard({
                   index={idx}
                   declarationId={declaration.id}
                   projectId={projectId}
+                  clientDropboxPath={clientDropboxPath}
                 />
               ))}
             </div>
@@ -97,7 +100,7 @@ function DeclarationCard({
   );
 }
 
-export function AnnualDeclarationDashboard({ projectId }: { projectId: string }) {
+export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { projectId: string; clientDropboxPath?: string }) {
   const { data: declarations, isLoading } = useAnnualDeclarations(projectId);
   const createDeclaration = useCreateAnnualDeclaration();
   const now = nowMX();
@@ -186,7 +189,7 @@ export function AnnualDeclarationDashboard({ projectId }: { projectId: string })
         </Card>
       ) : (
         declarations.map((decl) => (
-          <DeclarationCard key={decl.id} declaration={decl} projectId={projectId} />
+          <DeclarationCard key={decl.id} declaration={decl} projectId={projectId} clientDropboxPath={clientDropboxPath} />
         ))
       )}
     </div>

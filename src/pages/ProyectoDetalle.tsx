@@ -180,6 +180,7 @@ const ProyectoDetalle = () => {
                 projectId={project.id}
                 constitutionDetails={constitutionDetails}
                 responsibleUserId={project.responsible_user_id}
+                clientDropboxPath={effectiveDropboxPath}
               />
             </TabsContent>
           )}
@@ -190,19 +191,20 @@ const ProyectoDetalle = () => {
                 projectId={project.id}
                 gestoriaDetails={constitutionDetails}
                 responsibleUserId={project.responsible_user_id}
+                clientDropboxPath={effectiveDropboxPath}
               />
             </TabsContent>
           )}
 
           {hasAccounting && (
             <TabsContent value="contabilidad">
-              <AccountingDashboard projectId={project.id} />
+              <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
             </TabsContent>
           )}
 
           {hasAccounting && (
             <TabsContent value="declaracion_anual">
-              <AnnualDeclarationDashboard projectId={project.id} />
+              <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
             </TabsContent>
           )}
 
@@ -219,7 +221,7 @@ const ProyectoDetalle = () => {
 
           {isCumplimiento && (
             <TabsContent value="cumplimiento">
-              <ComplianceDashboard projectId={project.id} clientId={project.client_id} />
+              <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} />
             </TabsContent>
           )}
 
