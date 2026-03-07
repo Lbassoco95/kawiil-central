@@ -194,6 +194,14 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <User className="h-3.5 w-3.5" />{(task as any).clients.name}
                 </span>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowBlockTime(true)}
+                className="gap-1"
+              >
+                <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
+              </Button>
             </div>
 
             {task.description && (
