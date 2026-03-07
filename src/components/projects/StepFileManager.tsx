@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, ExternalLink, Plus, Eye } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, Plus, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -9,22 +9,27 @@ import { toast } from "sonner";
 import { formatDateMX } from "@/lib/dateUtils";
 import { logActivity } from "@/lib/activityLog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
+import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 
 interface Props {
   documentIds: string[];
   onDocumentAdded: (updatedIds: string[]) => void;
   projectId: string;
+  clientDropboxPath?: string;
   disabled?: boolean;
 }
 
-export function StepFileManager({ documentIds, onDocumentAdded, projectId, disabled }: Props) {
+export function StepFileManager({ documentIds, onDocumentAdded, projectId, clientDropboxPath, disabled }: Props) {
   const { user } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [showDropboxInput, setShowDropboxInput] = useState(false);
   const [dropboxUrl, setDropboxUrl] = useState("");
   const [savingLink, setSavingLink] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<any>(null);
+  const [dropboxUploadFile, setDropboxUploadFile] = useState<File | null>(null);
+  const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dropboxFileRef = useRef<HTMLInputElement>(null);
 
   const { data: documents = [] } = useQuery({
     queryKey: ["step-docs", ...documentIds],
@@ -108,21 +113,68 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
     }
   };
 
+  const handleDropboxFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setDropboxUploadFile(file);
+      setShowDropboxUpload(true);
+    }
+    if (dropboxFileRef.current) dropboxFileRef.current.value = "";
+  };
+
+  const handleDropboxUploaded = async (result: { name: string; path: string; url: string }) => {
+    if (!user) return;
+    try {
+      const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+      const { data: doc, error } = await supabase
+        .from("documents")
+        .insert({
+          name: result.name,
+          external_path: result.url || result.path,
+          organization_id: orgId!,
+          project_id: projectId,
+          uploaded_by: user.id,
+          source: "dropbox" as const,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      onDocumentAdded([...documentIds, doc.id]);
+      logActivity({ entityType: "document", entityId: doc.id, action: "file_uploaded", details: { name: result.name, source: "dropbox", dropbox_path: result.path } });
+    } catch (err: any) {
+      toast.error("Error al registrar documento: " + err.message);
+    }
+    setDropboxUploadFile(null);
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="text-xs font-medium text-muted-foreground">Archivos</label>
         <div className="flex items-center gap-1">
+          {/* Upload to Dropbox - primary action */}
+          <input ref={dropboxFileRef} type="file" className="hidden" onChange={handleDropboxFileSelect} />
           <Button
             variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            disabled={disabled}
+            onClick={() => dropboxFileRef.current?.click()}
+          >
+            <Upload className="h-3 w-3" />
+            Subir a Dropbox
+          </Button>
+          {/* Link Dropbox URL */}
+          <Button
+            variant="ghost"
             size="sm"
             className="h-7 text-xs gap-1"
             disabled={disabled}
             onClick={() => setShowDropboxInput(!showDropboxInput)}
           >
             <Link2 className="h-3 w-3" />
-            Dropbox
           </Button>
+          {/* Upload to local storage */}
           <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
           <Button
             variant="ghost"
@@ -131,8 +183,8 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
             disabled={uploading || disabled}
             onClick={() => fileRef.current?.click()}
           >
-            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-            Subir
+            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
+            Local
           </Button>
         </div>
       </div>
@@ -185,6 +237,14 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, disab
         open={!!previewDoc}
         onOpenChange={(o) => { if (!o) setPreviewDoc(null); }}
         document={previewDoc}
+      />
+
+      <DropboxUploadDialog
+        open={showDropboxUpload}
+        onClose={() => { setShowDropboxUpload(false); setDropboxUploadFile(null); }}
+        file={dropboxUploadFile}
+        initialPath={clientDropboxPath || "/Kawiil Mx"}
+        onUploaded={handleDropboxUploaded}
       />
     </div>
   );
