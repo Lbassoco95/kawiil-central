@@ -674,6 +674,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                             documentIds={dl.document_ids || []}
                             onDocumentAdded={(newIds) => updateDeadlineField(dl.id, "document_ids", newIds)}
                             projectId={projectId}
+                            clientDropboxPath={dropboxInitialPath || undefined}
                           />
 
                           <div className="flex items-center justify-end pt-1">
