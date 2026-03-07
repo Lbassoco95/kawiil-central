@@ -69,6 +69,7 @@ const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "juicios", label: "Juicios" },
   { value: "gestoria", label: "Gestoría" },
   { value: "constitucion_nacional", label: "Constitución Nacional" },
+  { value: "cumplimiento", label: "Cumplimiento" },
 ];
 
 const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
