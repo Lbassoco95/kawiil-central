@@ -358,7 +358,38 @@ serve(async (req) => {
       }
 
       const result = await response.json();
-      return new Response(JSON.stringify({ success: true, name: result.name, path: result.path_display }), {
+      const uploadedPath = result.path_display || path;
+
+      // Get a shared link for the uploaded file
+      let shareUrl = '';
+      try {
+        const linkRes = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+          method: 'POST',
+          headers: dbxHeaders,
+          body: JSON.stringify({ path: uploadedPath }),
+        });
+        if (linkRes.ok) {
+          const linkData = await linkRes.json();
+          shareUrl = linkData.url;
+        } else {
+          const linkErr = await linkRes.json();
+          if (linkErr?.error?.['.tag'] === 'shared_link_already_exists') {
+            const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+              method: 'POST',
+              headers: dbxHeaders,
+              body: JSON.stringify({ path: uploadedPath, direct_only: true }),
+            });
+            if (listRes.ok) {
+              const listData = await listRes.json();
+              if (listData.links?.length > 0) shareUrl = listData.links[0].url;
+            }
+          }
+        }
+      } catch (linkError) {
+        console.error('Error getting share link after upload:', linkError);
+      }
+
+      return new Response(JSON.stringify({ success: true, name: result.name, path: uploadedPath, url: shareUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
