@@ -79,6 +79,14 @@ export function useCreateClient() {
           });
         }
 
+        // Compliance (cumplimiento) project
+        if (services.includes("cumplimiento")) {
+          projectsToCreate.push({
+            name: `Cumplimiento — ${data.name}`,
+            area: "cumplimiento",
+          });
+        }
+
         for (const proj of projectsToCreate) {
           const { error: projectError } = await supabase
             .from("projects")
@@ -189,6 +197,10 @@ export function useUpdateClient() {
 
         if (addedServices.includes("pld_ft") && !existingAreas.includes("pld_ft")) {
           projectsToCreate.push({ name: `Cumplimiento PLD/FT - ${data.name}`, area: "pld_ft" });
+        }
+
+        if (addedServices.includes("cumplimiento") && !existingAreas.includes("cumplimiento")) {
+          projectsToCreate.push({ name: `Cumplimiento — ${data.name}`, area: "cumplimiento" });
         }
 
         for (const proj of projectsToCreate) {
