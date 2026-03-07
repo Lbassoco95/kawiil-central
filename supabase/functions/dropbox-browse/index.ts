@@ -5,25 +5,68 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Cache the team root namespace ID
+// Cache the team root namespace ID and admin member ID
 let cachedRootNamespaceId: string | null = null;
+let cachedAdminMemberId: string | null = null;
 
-async function getTeamRootNamespaceId(token: string): Promise<string | null> {
-  if (cachedRootNamespaceId) return cachedRootNamespaceId;
+async function getTeamAdminMemberId(token: string): Promise<string | null> {
+  if (cachedAdminMemberId) return cachedAdminMemberId;
 
   try {
-    const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+    const response = await fetch('https://api.dropboxapi.com/2/team/members/list_v2', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ limit: 50 }),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error('Failed to list team members:', await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    const members = data?.members || [];
+    // Find a team admin
+    const admin = members.find((m: any) => m?.role?.['.tag'] === 'team_admin');
+    const memberId = admin?.profile?.team_member_id || members[0]?.profile?.team_member_id;
+    if (memberId) {
+      cachedAdminMemberId = memberId;
+      console.log('Using team admin member ID:', memberId);
+    }
+    return memberId || null;
+  } catch (e) {
+    console.error('Error getting team admin:', e);
+    return null;
+  }
+}
+
+async function getTeamRootNamespaceId(token: string, adminMemberId: string | null): Promise<string | null> {
+  if (cachedRootNamespaceId) return cachedRootNamespaceId;
+
+  try {
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${token}`,
+    };
+    if (adminMemberId) {
+      headers['Dropbox-API-Select-Admin'] = adminMemberId;
+    }
+
+    const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+      method: 'POST',
+      headers,
+    });
+
+    if (!response.ok) {
+      console.error('Failed to get account info:', await response.text());
+      return null;
+    }
 
     const account = await response.json();
     const rootNsId = account?.root_info?.root_namespace_id;
-    if (rootNsId && account?.root_info?.['.tag'] === 'team') {
+    if (rootNsId) {
       cachedRootNamespaceId = rootNsId;
       console.log('Using team root namespace:', rootNsId);
       return rootNsId;
@@ -35,11 +78,14 @@ async function getTeamRootNamespaceId(token: string): Promise<string | null> {
   }
 }
 
-function getDropboxHeaders(token: string, rootNamespaceId: string | null): Record<string, string> {
+function getDropboxHeaders(token: string, rootNamespaceId: string | null, adminMemberId: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
+  if (adminMemberId) {
+    headers['Dropbox-API-Select-Admin'] = adminMemberId;
+  }
   if (rootNamespaceId) {
     headers['Dropbox-API-Path-Root'] = JSON.stringify({
       '.tag': 'root',
@@ -248,8 +294,9 @@ serve(async (req) => {
     const body = await req.json();
     const { path = '', action = 'list', file_content, file_name } = body;
 
-    const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN);
-    const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId);
+    const adminMemberId = await getTeamAdminMemberId(DROPBOX_ACCESS_TOKEN);
+    const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN, adminMemberId);
+    const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
     if (action === 'list') {
       const { data, resolvedPath } = await resolvePathAndList(dbxHeaders, path || '');
@@ -284,6 +331,10 @@ serve(async (req) => {
           mute: false,
         }),
       };
+
+      if (adminMemberId) {
+        uploadHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
+      }
 
       if (rootNamespaceId) {
         uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
