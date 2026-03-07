@@ -174,6 +174,10 @@ const ProyectoDetalle = () => {
               </TabsTrigger>
             )}
             <TabsTrigger value="tareas">Tareas ({tasks.length})</TabsTrigger>
+            <TabsTrigger value="firmas">
+              <PenTool className="h-4 w-4 mr-1" />
+              Firmas
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="general">
