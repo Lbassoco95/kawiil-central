@@ -371,6 +371,14 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
           <div className="py-12 text-center text-muted-foreground">Tarea no encontrada</div>
         )}
       </DialogContent>
+      {task && (
+        <BlockTimeDialog
+          open={showBlockTime}
+          onOpenChange={setShowBlockTime}
+          taskTitle={task.title}
+          taskDueDate={task.due_date || undefined}
+        />
+      )}
     </Dialog>
   );
 }
