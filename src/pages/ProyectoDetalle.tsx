@@ -180,6 +180,7 @@ const ProyectoDetalle = () => {
                 projectId={project.id}
                 constitutionDetails={constitutionDetails}
                 responsibleUserId={project.responsible_user_id}
+                clientDropboxPath={effectiveDropboxPath}
               />
             </TabsContent>
           )}
