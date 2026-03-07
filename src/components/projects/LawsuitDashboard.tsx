@@ -552,7 +552,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                     <Plus className="h-3 w-3 mr-1" /> Agregar link externo
                   </Button>
 
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-border">
                     {stage.completed_at && <p className="text-xs text-muted-foreground">Completado: {formatMX(stage.completed_at, "dd/MM/yyyy HH:mm")}</p>}
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive ml-auto" onClick={() => removeStage(stage.key)}>
                       <Trash2 className="h-3 w-3 mr-1" /> Eliminar etapa
