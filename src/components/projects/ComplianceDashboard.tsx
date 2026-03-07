@@ -19,12 +19,13 @@ import {
   Calendar,
   Settings2,
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClientComplianceConfig, useSaveClientCompliance } from "@/hooks/useCompliance";
 import { ComplianceEntitySelector } from "@/components/compliance/ComplianceEntitySelector";
 import { ComplianceTaskGeneratorModal } from "@/components/compliance/ComplianceTaskGeneratorModal";
+import { ComplianceTaskRow } from "@/components/projects/ComplianceTaskRow";
 import { formatMX, nowMX } from "@/lib/dateUtils";
 
 const CATEGORY_LABELS: Record<string, string> = {
