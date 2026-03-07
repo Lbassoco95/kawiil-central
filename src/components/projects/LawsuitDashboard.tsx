@@ -152,7 +152,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState<string | null>(null);
   const [dropboxPickerStage, setDropboxPickerStage] = useState<string | null>(null);
-  const [newDeadline, setNewDeadline] = useState({ title: "", date: "", type: "termino", notes: "" });
+  const [newDeadline, setNewDeadline] = useState({ title: "", date: "", time: "", type: "termino", notes: "", attendees: [] as string[] });
+  const [newDeadlineAttendee, setNewDeadlineAttendee] = useState("");
   const [newStageTemplate, setNewStageTemplate] = useState("contestacion");
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
   const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
