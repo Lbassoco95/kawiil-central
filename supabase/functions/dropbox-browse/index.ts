@@ -299,7 +299,10 @@ serve(async (req) => {
     const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
     if (action === 'list') {
-      const { data, resolvedPath } = await resolvePathAndList(dbxHeaders, path || '');
+      // When browsing root, default to the shared team folder "Kawiil Mx"
+      // to prevent users from seeing other members' personal folders
+      const browsePath = (!path || path === '' || path === '/') ? '/Kawiil Mx' : path;
+      const { data, resolvedPath } = await resolvePathAndList(dbxHeaders, browsePath);
       const entries = (data.entries || []).map((entry: any) => ({
         id: entry.id,
         name: entry.name,
