@@ -271,7 +271,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     const updated = { ...lawsuitDetails, deadlines: [...(lawsuitDetails.deadlines || []), dl] };
     updateLawsuit.mutate(updated);
     setNewDeadline({ title: "", date: "", time: "", type: "termino", notes: "", attendees: [] });
-    setNewDeadlineAttendee("");
+    
     setDeadlineDialogOpen(false);
     toast.success("Término agregado");
   };
