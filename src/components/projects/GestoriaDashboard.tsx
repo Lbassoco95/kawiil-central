@@ -44,9 +44,10 @@ interface Props {
   projectId: string;
   gestoriaDetails: { steps: GestoriaStep[] } | null;
   responsibleUserId?: string | null;
+  clientDropboxPath?: string;
 }
 
-export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId }: Props) {
+export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath }: Props) {
   const queryClient = useQueryClient();
 
   const steps: GestoriaStep[] = (gestoriaDetails?.steps ?? DEFAULT_STEPS).map((s) => ({

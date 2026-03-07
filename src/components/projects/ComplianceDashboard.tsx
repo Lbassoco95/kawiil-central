@@ -50,6 +50,7 @@ const PERIODICITY_LABELS: Record<string, string> = {
 interface ComplianceDashboardProps {
   projectId: string;
   clientId?: string | null;
+  clientDropboxPath?: string;
 }
 
 interface ComplianceTask {

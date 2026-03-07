@@ -61,7 +61,7 @@ export interface UnifiedStepRowProps {
 
 export function UnifiedStepRow({
   step, index, projectId, onSave, onToggle, saving,
-  showTimer = true, showCheckbox = true, extraFields,
+  showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);

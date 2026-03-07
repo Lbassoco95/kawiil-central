@@ -97,7 +97,7 @@ function DeclarationCard({
   );
 }
 
-export function AnnualDeclarationDashboard({ projectId }: { projectId: string }) {
+export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { projectId: string; clientDropboxPath?: string }) {
   const { data: declarations, isLoading } = useAnnualDeclarations(projectId);
   const createDeclaration = useCreateAnnualDeclaration();
   const now = nowMX();
