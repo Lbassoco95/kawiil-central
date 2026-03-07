@@ -217,6 +217,12 @@ const ProyectoDetalle = () => {
             </TabsContent>
           )}
 
+          {isCumplimiento && (
+            <TabsContent value="cumplimiento">
+              <ComplianceDashboard projectId={project.id} clientId={project.client_id} />
+            </TabsContent>
+          )}
+
           <TabsContent value="tareas">
             {tasks.length === 0 ? (
               <Card>
