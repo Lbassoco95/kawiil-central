@@ -151,6 +151,7 @@ const LAWSUIT_TYPE_LABELS: Record<string, string> = {
 
 export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false }: LawsuitDashboardProps) {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  const [expandedDeadline, setExpandedDeadline] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState<string | null>(null);
