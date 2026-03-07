@@ -45,6 +45,10 @@ const ProyectoDetalle = () => {
   const navigate = useNavigate();
   const { data: project, isLoading } = useProjectDetail(id);
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [signRequests, setSignRequests] = useState<any[]>([]);
+  const [loadingSign, setLoadingSign] = useState(false);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
