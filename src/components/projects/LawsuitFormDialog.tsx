@@ -127,6 +127,10 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
     setClientId("");
     setResponsibleUserId("");
     setDescription("");
+    setLeadAttorney("");
+    setSubstituteAttorney("");
+    setAuthorizedPersons([]);
+    setNewAuthorized("");
   };
 
   return (
