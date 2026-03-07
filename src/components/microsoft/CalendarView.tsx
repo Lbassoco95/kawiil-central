@@ -26,7 +26,7 @@ import {
 } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
-import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video } from "lucide-react";
 
 type ViewMode = "day" | "3days" | "week" | "month";
 
@@ -51,6 +51,25 @@ function minutesToLabel(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+}
+
+const CATEGORY_COLOR_CLASSES = [
+  "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200",
+  "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200",
+  "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+  "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200",
+  "bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-200",
+  "bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200",
+];
+
+function getCategoryClasses(name?: string | null) {
+  if (!name) return "";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash + name.charCodeAt(i)) % 2147483647;
+  }
+  const index = hash % CATEGORY_COLOR_CLASSES.length;
+  return CATEGORY_COLOR_CLASSES[index];
 }
 
 export function CalendarView() {
@@ -371,14 +390,42 @@ export function CalendarView() {
                           const startStr = format(event._parsedStart, "HH:mm");
                           const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
                           const endStr = endDt ? format(endDt, "HH:mm") : "";
+                          const primaryCategory: string | undefined = event.categories?.[0];
+                          const categoryClasses = getCategoryClasses(primaryCategory);
+                          const meetingUrl: string | undefined =
+                            event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
                           return (
                             <div
                               key={event.id}
                               className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative"
                               title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                             >
-                              <span className="text-[10px] text-primary/70 mr-1">{startStr}</span>
-                              <span className="font-medium">{event.subject}</span>
+                              <div className="flex items-center gap-1 pr-4">
+                                {primaryCategory && (
+                                  <span
+                                    className={`rounded px-1 py-px text-[9px] font-medium ${categoryClasses}`}
+                                  >
+                                    {primaryCategory}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-primary/70 mr-1">
+                                  {endStr ? `${startStr}–${endStr}` : startStr}
+                                </span>
+                                <span className="font-medium truncate">{event.subject}</span>
+                                {meetingUrl && (
+                                  <button
+                                    type="button"
+                                    className="ml-auto p-0.5"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(meetingUrl, "_blank");
+                                    }}
+                                    title="Abrir enlace de reunión"
+                                  >
+                                    <Video className="h-3 w-3 text-primary" />
+                                  </button>
+                                )}
+                              </div>
                               <button
                                 className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
                                 onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}
