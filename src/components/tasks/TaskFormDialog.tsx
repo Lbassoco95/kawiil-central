@@ -15,18 +15,21 @@ import { X, Plus, Link } from "lucide-react";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultProjectId?: string;
+  defaultClientId?: string;
+  defaultArea?: string;
 }
 
-export function TaskFormDialog({ open, onOpenChange }: Props) {
+export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [area, setArea] = useState<string>("");
+  const [area, setArea] = useState<string>(defaultArea || "");
   const [priority, setPriority] = useState("media");
   const [dueDate, setDueDate] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [additionalAssignees, setAdditionalAssignees] = useState<string[]>([]);
-  const [clientId, setClientId] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [clientId, setClientId] = useState(defaultClientId || "");
+  const [projectId, setProjectId] = useState(defaultProjectId || "");
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
 
