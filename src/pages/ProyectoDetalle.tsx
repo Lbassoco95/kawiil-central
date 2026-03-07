@@ -14,7 +14,8 @@ import { AnnualDeclarationDashboard } from "@/components/projects/AnnualDeclarat
 import { GestoriaDashboard } from "@/components/projects/GestoriaDashboard";
 import { ComplianceDashboard } from "@/components/projects/ComplianceDashboard";
 import { ProjectGeneralTab } from "@/components/projects/ProjectGeneralTab";
-import { useQuery } from "@tanstack/react-query";
+import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Database } from "@/integrations/supabase/types";
