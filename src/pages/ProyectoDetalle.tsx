@@ -128,7 +128,7 @@ const ProyectoDetalle = () => {
           </div>
         </div>
 
-        <Tabs defaultValue={isGestoria ? "gestoria" : hasConstitution ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
+        <Tabs defaultValue={isCumplimiento ? "cumplimiento" : isGestoria ? "gestoria" : hasConstitution ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
           <TabsList className="flex-wrap h-auto gap-1">
             <TabsTrigger value="general">General</TabsTrigger>
             {hasConstitution && (
