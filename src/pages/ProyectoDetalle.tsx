@@ -65,6 +65,7 @@ const ProyectoDetalle = () => {
   const hasConstitution = isSoftlanding || isConstitutionNacional;
   const isGestoria = project?.area === "gestoria";
   const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
+  const isCumplimiento = project?.area === "cumplimiento";
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
 
