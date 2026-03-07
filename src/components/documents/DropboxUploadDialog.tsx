@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,13 @@ export function DropboxUploadDialog({
   const [uploading, setUploading] = useState(false);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  // Trigger browse when dialog opens externally
+  useEffect(() => {
+    if (open && !loaded && !loading) {
+      handleOpen();
+    }
+  }, [open]);
 
   const browse = async (path: string) => {
     setLoading(true);
