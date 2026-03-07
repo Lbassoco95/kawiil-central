@@ -221,7 +221,7 @@ const ProyectoDetalle = () => {
 
           {isCumplimiento && (
             <TabsContent value="cumplimiento">
-              <ComplianceDashboard projectId={project.id} clientId={project.client_id} />
+              <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} />
             </TabsContent>
           )}
 
