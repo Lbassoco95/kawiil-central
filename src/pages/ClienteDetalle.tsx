@@ -14,7 +14,6 @@ import {
   User,
   FileText,
   CheckSquare,
-  ExternalLink,
   FolderOpen,
   Pencil,
   Shield,
@@ -22,6 +21,7 @@ import {
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
+import { DropboxFolderBrowser } from "@/components/clients/DropboxFolderBrowser";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
 
