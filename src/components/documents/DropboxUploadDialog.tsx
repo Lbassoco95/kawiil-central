@@ -6,6 +6,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -14,6 +15,7 @@ import {
   Loader2,
   Upload,
   FileText,
+  FolderPlus,
 } from "lucide-react";
 
 interface DropboxEntry {
@@ -48,8 +50,10 @@ export function DropboxUploadDialog({
   const [uploading, setUploading] = useState(false);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
-  // Trigger browse when dialog opens externally
   useEffect(() => {
     if (open && !loaded && !loading) {
       handleOpen();
@@ -79,6 +83,8 @@ export function DropboxUploadDialog({
     setEntries([]);
     setLoaded(false);
     setCurrentPath(basePath);
+    setShowNewFolder(false);
+    setNewFolderName("");
     browse(basePath);
   };
 
@@ -93,11 +99,33 @@ export function DropboxUploadDialog({
     browse(prev);
   };
 
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+    setCreatingFolder(true);
+    try {
+      const folderPath = `${currentPath}/${newFolderName.trim()}`;
+      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
+        body: { action: "create_folder", folder_path: folderPath },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      toast.success(`Carpeta "${newFolderName.trim()}" creada`);
+      setNewFolderName("");
+      setShowNewFolder(false);
+      // Navigate into the new folder
+      setPathHistory((prev) => [...prev, currentPath]);
+      browse(data.path || folderPath);
+    } catch (e: any) {
+      toast.error("Error al crear carpeta: " + (e.message || "Error desconocido"));
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
   const handleUpload = async () => {
     if (!file) return;
     setUploading(true);
     try {
-      // Read file as base64
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
       let binary = "";
@@ -105,17 +133,11 @@ export function DropboxUploadDialog({
         binary += String.fromCharCode(bytes[i]);
       }
       const base64 = btoa(binary);
-
       const uploadPath = `${currentPath}/${file.name}`;
 
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: {
-          action: "upload",
-          path: uploadPath,
-          file_content: base64,
-        },
+        body: { action: "upload", path: uploadPath, file_content: base64 },
       });
-
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
@@ -167,7 +189,7 @@ export function DropboxUploadDialog({
           </div>
         )}
 
-        {/* Path breadcrumb */}
+        {/* Path breadcrumb + new folder */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground border-b pb-2">
           {pathHistory.length > 0 && (
             <Button variant="ghost" size="sm" className="h-7 px-2" onClick={goBack}>
@@ -175,8 +197,39 @@ export function DropboxUploadDialog({
             </Button>
           )}
           <Folder className="h-4 w-4 shrink-0" />
-          <span className="truncate">{currentPath || "/"}</span>
+          <span className="truncate flex-1">{currentPath || "/"}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 shrink-0"
+            onClick={() => setShowNewFolder(!showNewFolder)}
+            disabled={loading || !loaded}
+          >
+            <FolderPlus className="h-4 w-4" />
+          </Button>
         </div>
+
+        {/* New folder input */}
+        {showNewFolder && (
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Nombre de la nueva carpeta..."
+              className="h-8 text-xs"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
+              autoFocus
+            />
+            <Button
+              size="sm"
+              className="h-8 text-xs shrink-0"
+              disabled={!newFolderName.trim() || creatingFolder}
+              onClick={handleCreateFolder}
+            >
+              {creatingFolder ? <Loader2 className="h-3 w-3 animate-spin" /> : "Crear"}
+            </Button>
+          </div>
+        )}
 
         {/* Folder list */}
         <div className="flex-1 overflow-y-auto min-h-[150px] max-h-[300px] space-y-0.5">
