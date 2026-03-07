@@ -153,6 +153,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
               step={step}
               index={idx}
               projectId={projectId}
+              clientDropboxPath={clientDropboxPath}
               showTimer={false}
               showCheckbox={false}
               onSave={(updates) => updateStep(step.key, updates as Partial<ConstitutionStep>)}

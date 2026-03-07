@@ -88,6 +88,7 @@ function PeriodCard({
                   index={idx}
                   periodId={period.id}
                   projectId={projectId}
+                  clientDropboxPath={clientDropboxPath}
                 />
               ))}
             </div>
