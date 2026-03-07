@@ -772,13 +772,21 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                 onChange={(e) => setNewDeadline((p) => ({ ...p, title: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Fecha *</Label>
                 <Input
                   type="date"
                   value={newDeadline.date}
                   onChange={(e) => setNewDeadline((p) => ({ ...p, date: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Hora</Label>
+                <Input
+                  type="time"
+                  value={newDeadline.time}
+                  onChange={(e) => setNewDeadline((p) => ({ ...p, time: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -798,6 +806,48 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                 </Select>
               </div>
             </div>
+
+            {/* Attendees */}
+            <div className="space-y-2">
+              <Label>¿Quiénes asistirán?</Label>
+              <div className="flex flex-wrap gap-1.5 mb-1">
+                {(newDeadline.attendees || []).map((name, idx) => (
+                  <Badge key={idx} variant="secondary" className="text-xs gap-1">
+                    {name}
+                    <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() =>
+                      setNewDeadline((p) => ({ ...p, attendees: p.attendees.filter((_, i) => i !== idx) }))
+                    } />
+                  </Badge>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Nombre de quien asistirá"
+                  value={newDeadlineAttendee}
+                  onChange={(e) => setNewDeadlineAttendee(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newDeadlineAttendee.trim()) {
+                      e.preventDefault();
+                      setNewDeadline((p) => ({ ...p, attendees: [...p.attendees, newDeadlineAttendee.trim()] }));
+                      setNewDeadlineAttendee("");
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!newDeadlineAttendee.trim()}
+                  onClick={() => {
+                    setNewDeadline((p) => ({ ...p, attendees: [...p.attendees, newDeadlineAttendee.trim()] }));
+                    setNewDeadlineAttendee("");
+                  }}
+                >
+                  Agregar
+                </Button>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Notas</Label>
               <Textarea
