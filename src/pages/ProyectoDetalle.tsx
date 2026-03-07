@@ -191,6 +191,7 @@ const ProyectoDetalle = () => {
                 projectId={project.id}
                 gestoriaDetails={constitutionDetails}
                 responsibleUserId={project.responsible_user_id}
+                clientDropboxPath={effectiveDropboxPath}
               />
             </TabsContent>
           )}
