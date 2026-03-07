@@ -10,7 +10,7 @@ import { useCalendarEvents, useCreateCalendarEvent, useDeleteCalendarEvent } fro
 import { CDMX_TZ } from "@/lib/dateUtils";
 import {
   format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  parseISO, isSameDay, addMonths, subMonths, addWeeks, subWeeks,
+  parseISO, addMonths, subMonths, addWeeks, subWeeks,
   eachDayOfInterval, isToday, addDays, subDays, isSameMonth,
 } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
@@ -20,16 +20,13 @@ import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
 type ViewMode = "day" | "3days" | "week" | "month";
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6:00 - 21:00
+const HOUR_HEIGHT = 48; // Fixed pixel height per hour slot
 
 /** Parse an event datetime string into CDMX-adjusted Date */
 function parseEventTime(dt: string): Date {
-  // Microsoft returns datetimes already in CDMX when Prefer header is set
-  // but without timezone offset, so parse as-is
   if (dt.includes("T") && !dt.includes("Z") && !dt.includes("+") && !dt.includes("-", 10)) {
-    // No timezone info - treat as CDMX local time
     return new Date(dt);
   }
-  // Has timezone info (UTC Z or offset) - convert to CDMX
   return toZonedTime(parseISO(dt), CDMX_TZ);
 }
 
@@ -40,7 +37,6 @@ export function CalendarView() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEvent, setNewEvent] = useState({ subject: "", startTime: "09:00", endTime: "10:00" });
 
-  // Days to show based on view
   const viewDays = useMemo(() => {
     switch (viewMode) {
       case "day":
@@ -59,7 +55,6 @@ export function CalendarView() {
     }
   }, [viewMode, currentDate]);
 
-  // Month days grid
   const monthDays = useMemo(() => {
     if (viewMode !== "month") return [];
     const start = startOfMonth(currentDate);
@@ -69,16 +64,15 @@ export function CalendarView() {
     return eachDayOfInterval({ start: monthStart, end: monthEnd });
   }, [viewMode, currentDate]);
 
-  // Fetch range
   const rangeStart = useMemo(() => {
     if (viewMode === "month") return startOfMonth(currentDate).toISOString();
-    if (viewMode === "day") return startOfWeek(currentDate, { weekStartsOn: 1 }).toISOString();
+    if (viewMode === "day") return currentDate.toISOString();
     return (viewDays[0] || currentDate).toISOString();
   }, [viewMode, currentDate, viewDays]);
 
   const rangeEnd = useMemo(() => {
     if (viewMode === "month") return endOfMonth(currentDate).toISOString();
-    if (viewMode === "day") return endOfWeek(currentDate, { weekStartsOn: 1 }).toISOString();
+    if (viewMode === "day") return addDays(currentDate, 1).toISOString();
     const last = viewDays[viewDays.length - 1] || currentDate;
     return addDays(last, 1).toISOString();
   }, [viewMode, currentDate, viewDays]);
@@ -87,7 +81,6 @@ export function CalendarView() {
   const createEvent = useCreateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
 
-  // Navigate
   const goNext = () => {
     switch (viewMode) {
       case "day": setCurrentDate(addDays(currentDate, 1)); break;
@@ -106,7 +99,6 @@ export function CalendarView() {
   };
   const goToday = () => setCurrentDate(new Date());
 
-  // Events grouped by date string
   const eventsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
     events.forEach((e: any) => {
@@ -117,7 +109,6 @@ export function CalendarView() {
       if (!map.has(dateKey)) map.set(dateKey, []);
       map.get(dateKey)!.push({ ...e, _parsedStart: parsed });
     });
-    // Sort events within each day by time
     map.forEach((evts) => evts.sort((a: any, b: any) => a._parsedStart.getTime() - b._parsedStart.getTime()));
     return map;
   }, [events]);
@@ -145,7 +136,6 @@ export function CalendarView() {
     );
   };
 
-  // Header label
   const headerLabel = useMemo(() => {
     switch (viewMode) {
       case "day":
@@ -165,6 +155,16 @@ export function CalendarView() {
   }, [viewMode, currentDate]);
 
   const colCount = viewMode === "month" ? 7 : viewDays.length;
+
+  // Minimum width per column based on view mode
+  const getMinWidth = () => {
+    switch (viewMode) {
+      case "day": return "min-w-[400px]";
+      case "3days": return "min-w-[600px]";
+      case "week": return "min-w-[750px]";
+      default: return "";
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -200,14 +200,14 @@ export function CalendarView() {
       {viewMode !== "month" && (
         <Card>
           <CardContent className="p-0 overflow-x-auto">
-            <div className={viewMode === "day" ? "min-w-[400px]" : "min-w-[700px]"}>
-              {/* Day headers */}
+            <div className={getMinWidth()}>
+              {/* Day headers - sticky */}
               <div
-                className="grid border-b border-border"
-                style={{ gridTemplateColumns: `60px repeat(${colCount}, 1fr)` }}
+                className="grid border-b border-border sticky top-0 z-10 bg-card"
+                style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}
               >
-                <div className="p-2 text-xs text-muted-foreground text-center border-r border-border">
-                  <span className="text-[10px]">CDMX</span>
+                <div className="p-2 text-[10px] text-muted-foreground text-center border-r border-border flex items-center justify-center">
+                  CDMX
                 </div>
                 {viewDays.map((day) => (
                   <div
@@ -221,20 +221,23 @@ export function CalendarView() {
                       {format(day, "EEE", { locale: es })}
                     </div>
                     <div className={`text-sm font-medium ${isToday(day) ? "text-primary" : ""}`}>
-                      {format(day, "d MMM", { locale: es })}
+                      {format(day, "d", { locale: es })}
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Time grid */}
+              {/* Time grid - uniform height per row */}
               {HOURS.map((hour) => (
                 <div
                   key={hour}
                   className="grid border-b border-border last:border-b-0"
-                  style={{ gridTemplateColumns: `60px repeat(${colCount}, 1fr)`, minHeight: "48px" }}
+                  style={{
+                    gridTemplateColumns: `56px repeat(${colCount}, 1fr)`,
+                    height: `${HOUR_HEIGHT}px`,
+                  }}
                 >
-                  <div className="p-1 text-xs text-muted-foreground text-right pr-2 border-r border-border pt-1">
+                  <div className="text-[11px] text-muted-foreground text-right pr-2 border-r border-border pt-1 leading-none">
                     {`${hour.toString().padStart(2, "0")}:00`}
                   </div>
                   {viewDays.map((day) => {
@@ -244,7 +247,7 @@ export function CalendarView() {
                     return (
                       <div
                         key={day.toISOString() + hour}
-                        className="border-r border-border last:border-r-0 p-0.5 cursor-pointer hover:bg-muted/30 transition-colors"
+                        className="border-r border-border last:border-r-0 p-0.5 cursor-pointer hover:bg-muted/30 transition-colors overflow-hidden"
                         onClick={() => {
                           setSelectedDate(day);
                           setNewEvent({
@@ -268,7 +271,7 @@ export function CalendarView() {
                               <span className="text-[10px] text-primary/70 mr-1">{startStr}</span>
                               <span className="font-medium">{event.subject}</span>
                               <button
-                                className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
                                 onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}
                               >
                                 <Trash2 className="h-3 w-3 text-destructive" />
@@ -304,7 +307,7 @@ export function CalendarView() {
                 return (
                   <div
                     key={day.toISOString()}
-                    className={`min-h-[90px] border-b border-r border-border p-1 cursor-pointer hover:bg-muted/30 transition-colors ${
+                    className={`h-[100px] border-b border-r border-border p-1 cursor-pointer hover:bg-muted/30 transition-colors overflow-hidden ${
                       !inMonth ? "bg-muted/20" : ""
                     } ${isToday(day) ? "bg-primary/5" : ""}`}
                     onClick={() => { setSelectedDate(day); setShowCreate(true); }}

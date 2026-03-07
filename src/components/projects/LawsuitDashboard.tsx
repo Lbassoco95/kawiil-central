@@ -677,7 +677,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                             clientDropboxPath={dropboxInitialPath || undefined}
                           />
 
-                          <div className="flex items-center justify-end pt-1">
+                          <div className="flex items-center justify-end pt-3 mt-2 border-t border-border">
                             <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => removeDeadline(dl.id)}>
                               <Trash2 className="h-3 w-3 mr-1" /> Eliminar
                             </Button>

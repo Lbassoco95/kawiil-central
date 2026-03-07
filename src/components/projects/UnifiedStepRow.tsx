@@ -337,7 +337,7 @@ export function UnifiedStepRow({
               disabled={saving}
             />
 
-            <div className="flex justify-end pt-1">
+            <div className="flex justify-end pt-3 mt-2 border-t border-border">
               <Button size="sm" onClick={handleSave} disabled={!hasChanges || saving}>
                 <Save className="h-4 w-4 mr-1" />Guardar
               </Button>

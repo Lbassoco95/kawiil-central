@@ -1,14 +1,13 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { CalendarView } from "@/components/microsoft/CalendarView";
 import { EmailView } from "@/components/microsoft/EmailView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { Calendar, Mail, Loader2 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 const Microsoft365 = () => {
-  const [tab, setTab] = useState("calendario");
   const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
 
   if (isLoading) {
@@ -31,7 +30,7 @@ const Microsoft365 = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Microsoft 365</h1>
           <p className="text-sm text-muted-foreground">
@@ -39,23 +38,25 @@ const Microsoft365 = () => {
           </p>
         </div>
 
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
-            <TabsTrigger value="calendario" className="gap-2">
-              <Calendar className="h-4 w-4" /> Calendario
-            </TabsTrigger>
-            <TabsTrigger value="correo" className="gap-2">
-              <Mail className="h-4 w-4" /> Correo
-            </TabsTrigger>
-          </TabsList>
+        {/* Calendar Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Calendario</h2>
+          </div>
+          <CalendarView />
+        </section>
 
-          <TabsContent value="calendario" className="mt-4">
-            <CalendarView />
-          </TabsContent>
-          <TabsContent value="correo" className="mt-4">
-            <EmailView />
-          </TabsContent>
-        </Tabs>
+        <Separator />
+
+        {/* Email Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Mail className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Correo</h2>
+          </div>
+          <EmailView />
+        </section>
       </div>
     </AppLayout>
   );
