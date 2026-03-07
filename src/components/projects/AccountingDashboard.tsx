@@ -36,6 +36,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; classNa
 function PeriodCard({
   period,
   projectId,
+  clientDropboxPath,
 }: {
   period: AccountingPeriod;
   projectId: string;

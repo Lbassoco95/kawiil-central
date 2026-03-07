@@ -35,9 +35,11 @@ const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; classNa
 function DeclarationCard({
   declaration,
   projectId,
+  clientDropboxPath,
 }: {
   declaration: AnnualDeclaration;
   projectId: string;
+  clientDropboxPath?: string;
 }) {
   const [open, setOpen] = useState(declaration.status !== "completado");
   const completed = declaration.steps.filter((s) => s.completed).length;
