@@ -217,16 +217,35 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
           {documents.map((doc) => (
             <div
               key={doc.id}
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-xs bg-background border border-border/50 cursor-pointer hover:bg-accent/50 transition-colors"
-              onClick={() => setPreviewDoc(doc)}
+              className="flex items-center gap-2 rounded px-2 py-1.5 text-xs bg-background border border-border/50 hover:bg-accent/50 transition-colors"
             >
-              {doc.source === "dropbox" ? (
-                <Link2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-              ) : (
-                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <div
+                className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer"
+                onClick={() => setPreviewDoc(doc)}
+              >
+                {doc.source === "dropbox" ? (
+                  <Link2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                ) : (
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                )}
+                <span className="truncate flex-1">{doc.name}</span>
+              </div>
+              {doc.external_path && (
+                <button
+                  className="shrink-0 p-0.5 rounded hover:bg-primary/10 transition-colors"
+                  title="Enviar a firma"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSignDoc({ name: doc.name, url: doc.external_path! });
+                  }}
+                >
+                  <PenTool className="h-3 w-3 text-primary" />
+                </button>
               )}
-              <span className="truncate flex-1">{doc.name}</span>
-              <Eye className="h-3 w-3 text-muted-foreground shrink-0" />
+              <Eye
+                className="h-3 w-3 text-muted-foreground shrink-0 cursor-pointer"
+                onClick={() => setPreviewDoc(doc)}
+              />
               <span className="text-muted-foreground shrink-0">{formatDateMX(doc.created_at)}</span>
             </div>
           ))}
