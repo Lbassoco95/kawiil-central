@@ -199,6 +199,10 @@ export function useUpdateClient() {
           projectsToCreate.push({ name: `Cumplimiento PLD/FT - ${data.name}`, area: "pld_ft" });
         }
 
+        if (addedServices.includes("cumplimiento") && !existingAreas.includes("cumplimiento")) {
+          projectsToCreate.push({ name: `Cumplimiento — ${data.name}`, area: "cumplimiento" });
+        }
+
         for (const proj of projectsToCreate) {
           await supabase.from("projects").insert({
             name: proj.name,
