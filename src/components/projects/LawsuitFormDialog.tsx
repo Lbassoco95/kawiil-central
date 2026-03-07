@@ -60,6 +60,10 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
   const [clientId, setClientId] = useState("");
   const [responsibleUserId, setResponsibleUserId] = useState("");
   const [description, setDescription] = useState("");
+  const [leadAttorney, setLeadAttorney] = useState("");
+  const [substituteAttorney, setSubstituteAttorney] = useState("");
+  const [authorizedPersons, setAuthorizedPersons] = useState<string[]>([]);
+  const [newAuthorized, setNewAuthorized] = useState("");
   const { user } = useAuth();
   const { data: clients } = useClients();
   const { data: profiles } = useOrgProfiles();
