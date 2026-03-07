@@ -89,6 +89,9 @@ interface LawsuitDetails {
   court: string | null;
   plaintiff: string | null;
   defendant: string | null;
+  lead_attorney?: string | null;
+  substitute_attorney?: string | null;
+  authorized_persons?: string[];
   stages: LawsuitStage[];
   deadlines: LawsuitDeadline[];
 }
