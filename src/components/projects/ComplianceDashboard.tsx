@@ -89,7 +89,7 @@ export function ComplianceDashboard({ projectId, clientId }: ComplianceDashboard
 
   const updateTask = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("tasks").update({ status }).eq("id", id);
+      const { error } = await supabase.from("tasks").update({ status } as any).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
