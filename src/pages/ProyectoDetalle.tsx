@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield } from "lucide-react";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
