@@ -82,6 +82,8 @@ interface LawsuitDeadline {
   completed: boolean;
   notes: string;
   attendees: string[];
+  assigned_to?: string | null;
+  document_ids?: string[];
 }
 
 interface LawsuitDetails {
