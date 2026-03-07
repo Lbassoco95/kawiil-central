@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,9 +8,21 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCalendarEvents, useCreateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useMicrosoft";
 import { CDMX_TZ } from "@/lib/dateUtils";
 import {
-  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  parseISO, addMonths, subMonths, addWeeks, subWeeks,
-  eachDayOfInterval, isToday, addDays, subDays, isSameMonth,
+  format,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  parseISO,
+  addMonths,
+  subMonths,
+  addWeeks,
+  subWeeks,
+  eachDayOfInterval,
+  isToday,
+  addDays,
+  subDays,
+  isSameMonth,
 } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
@@ -20,7 +31,7 @@ import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
 type ViewMode = "day" | "3days" | "week" | "month";
 
 const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6:00 - 21:00
-const HOUR_HEIGHT = 48; // Fixed pixel height per hour slot
+const HOUR_HEIGHT = 44; // Altura algo más compacta por fila, estilo Outlook
 
 /** Parse an event datetime string into CDMX-adjusted Date */
 function parseEventTime(dt: string): Date {
@@ -101,21 +112,50 @@ export function CalendarView() {
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
+
     events.forEach((e: any) => {
-      const dt = e.start?.dateTime || e.start?.date;
-      if (!dt) return;
-      const parsed = parseEventTime(dt);
-      const dateKey = format(parsed, "yyyy-MM-dd");
+      const rawStart = e.start?.dateTime || e.start?.date;
+      if (!rawStart) return;
+
+      const parsedStart = parseEventTime(rawStart);
+      const dateKey = format(parsedStart, "yyyy-MM-dd");
+
+      // En Microsoft Graph, los eventos de día completo vienen con isAllDay=true
+      // y normalmente usan solo fecha (sin hora). Detectamos eso para
+      // poder mostrarlos en una banda de "Todo el día", similar a Outlook.
+      const isAllDay =
+        e.isAllDay === true ||
+        (!!e.start?.date && !e.start?.dateTime) ||
+        (!!e.end?.date && !e.end?.dateTime);
+
+      const enhancedEvent = {
+        ...e,
+        _parsedStart: parsedStart,
+        _isAllDay: isAllDay,
+      };
+
       if (!map.has(dateKey)) map.set(dateKey, []);
-      map.get(dateKey)!.push({ ...e, _parsedStart: parsed });
+      map.get(dateKey)!.push(enhancedEvent);
     });
-    map.forEach((evts) => evts.sort((a: any, b: any) => a._parsedStart.getTime() - b._parsedStart.getTime()));
+
+    map.forEach((evts) =>
+      evts.sort((a: any, b: any) => a._parsedStart.getTime() - b._parsedStart.getTime())
+    );
+
     return map;
   }, [events]);
 
   const getEventsForDay = (date: Date) => {
     const key = format(date, "yyyy-MM-dd");
     return eventsByDate.get(key) || [];
+  };
+
+  const getAllDayEventsForDay = (date: Date) => {
+    return getEventsForDay(date).filter((e: any) => e._isAllDay);
+  };
+
+  const getTimedEventsForHour = (date: Date, hour: number) => {
+    return getEventsForDay(date).filter((e: any) => !e._isAllDay && e._parsedStart.getHours() === hour);
   };
 
   const handleCreateEvent = () => {
@@ -156,12 +196,13 @@ export function CalendarView() {
 
   const colCount = viewMode === "month" ? 7 : viewDays.length;
 
-  // Minimum width per column based on view mode
+  // Anchura mínima por columna según la vista,
+  // para evitar que el calendario se "rompa" en pantallas pequeñas.
   const getMinWidth = () => {
     switch (viewMode) {
       case "day": return "min-w-[400px]";
       case "3days": return "min-w-[600px]";
-      case "week": return "min-w-[750px]";
+      case "week": return "min-w-[820px]";
       default: return "";
     }
   };
@@ -196,7 +237,7 @@ export function CalendarView() {
         </div>
       </div>
 
-      {/* Day / 3-day / Week grid view */}
+      {/* Vista Día / 3 días / Semana - estilo rejilla de Outlook */}
       {viewMode !== "month" && (
         <Card>
           <CardContent className="p-0 overflow-x-auto">
@@ -227,6 +268,48 @@ export function CalendarView() {
                 ))}
               </div>
 
+              {/* Banda de eventos de día completo (Todo el día), similar a Outlook */}
+              <div
+                className="grid border-b border-border bg-muted/40"
+                style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}
+              >
+                <div className="text-[11px] text-muted-foreground text-right pr-2 border-r border-border py-1.5 leading-none">
+                  Todo el día
+                </div>
+                {viewDays.map((day) => {
+                  const allDayEvents = getAllDayEventsForDay(day);
+                  return (
+                    <div
+                      key={day.toISOString() + "-allday"}
+                      className="border-r border-border last:border-r-0 px-1 py-1 space-y-1 overflow-hidden cursor-pointer hover:bg-muted/40 transition-colors"
+                      onClick={() => {
+                        setSelectedDate(day);
+                        setShowCreate(true);
+                      }}
+                    >
+                      {allDayEvents.map((event: any) => (
+                        <div
+                          key={event.id}
+                          className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[11px] truncate group relative"
+                          title={event.subject}
+                        >
+                          <span className="font-medium">{event.subject}</span>
+                          <button
+                            className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteEvent.mutate(event.id);
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+
               {/* Time grid - uniform height per row */}
               {HOURS.map((hour) => (
                 <div
@@ -241,9 +324,7 @@ export function CalendarView() {
                     {`${hour.toString().padStart(2, "0")}:00`}
                   </div>
                   {viewDays.map((day) => {
-                    const dayEvents = getEventsForDay(day).filter((e: any) => {
-                      return e._parsedStart.getHours() === hour;
-                    });
+                    const dayEvents = getTimedEventsForHour(day, hour);
                     return (
                       <div
                         key={day.toISOString() + hour}
