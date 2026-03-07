@@ -195,31 +195,6 @@ export function CalendarView() {
     return getEventsForDay(date).filter((e: any) => e._isAllDay);
   };
 
-  const getTimedEventsForSlot = (date: Date, slotMinutes: number) => {
-    const slotEnd = slotMinutes + SLOT_MINUTES;
-    return getEventsForDay(date)
-      .filter((e: any) => !e._isAllDay)
-      .map((e: any) => {
-        const startTotal = e._parsedStart.getHours() * 60 + e._parsedStart.getMinutes();
-        const endDt = e.end?.dateTime ? parseEventTime(e.end.dateTime) : null;
-        const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
-
-        // Consideramos que el evento cubre el slot si hay traslape entre
-        // [startTotal, endTotal) y [slotMinutes, slotEnd)
-        const coversSlot = startTotal < slotEnd && endTotal > slotMinutes;
-        const isStartSlot = startTotal >= slotMinutes && startTotal < slotEnd;
-
-        return {
-          ...e,
-          _coversSlot: coversSlot,
-          _isStartSlot: isStartSlot,
-          _startTotal: startTotal,
-          _endTotal: endTotal,
-        };
-      })
-      .filter((e: any) => e._coversSlot);
-  };
-
   const handleCreateEvent = () => {
     if (!newEvent.subject) return;
     const dateStr = format(selectedDate, "yyyy-MM-dd");
@@ -413,72 +388,94 @@ export function CalendarView() {
                 })}
               </div>
 
-              {/* Time grid - intervalos de 30 minutos para ubicar mejor las horas */}
-              {TIME_SLOTS.map((slotMinutes) => (
-                <div
-                  key={slotMinutes}
-                  className="grid border-b border-border last:border-b-0"
-                  style={{
-                    gridTemplateColumns: `56px repeat(${colCount}, 1fr)`,
-                    height: `${SLOT_HEIGHT}px`,
-                  }}
-                >
-                  <div className="text-[11px] text-muted-foreground text-right pr-2 border-r border-border pt-1 leading-none">
-                    {minutesToLabel(slotMinutes)}
-                  </div>
-                  {viewDays.map((day) => {
-                    const dayEvents = getTimedEventsForSlot(day, slotMinutes);
-                    const startHour = Math.floor(slotMinutes / 60);
-                    const startMinutes = slotMinutes % 60;
-                    const nextSlot = slotMinutes + SLOT_MINUTES;
-                    const endHour = Math.floor(nextSlot / 60);
-                    const endMinutes = nextSlot % 60;
-                    return (
-                      <div
-                        key={day.toISOString() + slotMinutes}
-                        className="border-r border-border last:border-r-0 p-0.5 cursor-pointer hover:bg-muted/30 transition-colors overflow-hidden"
-                        onClick={() => {
-                          setSelectedDate(day);
-                          setNewEvent({
-                            ...newEvent,
-                            startTime: `${startHour.toString().padStart(2, "0")}:${startMinutes
-                              .toString()
-                              .padStart(2, "0")}`,
-                            endTime: `${endHour.toString().padStart(2, "0")}:${endMinutes
-                              .toString()
-                              .padStart(2, "0")}`,
-                          });
-                          setShowCreate(true);
-                        }}
-                      >
-                        {dayEvents.map((event: any) => {
-                          const startStr = format(event._parsedStart, "HH:mm");
-                          const endDt = event.end?.dateTime ? parseEventTime(event.end.dateTime) : null;
-                          const endStr = endDt ? format(endDt, "HH:mm") : "";
-                          const primaryCategory: string | undefined = event.categories?.[0];
-                          const categoryClasses = getCategoryClasses(primaryCategory);
-                          const meetingUrl: string | undefined =
-                            event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
+              {/* Time grid - una sola columna de horas y columnas de día con bloques continuos */}
+              <div
+                className="grid border-t border-border"
+                style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}
+              >
+                {/* Columna de horas */}
+                <div className="border-r border-border">
+                  {TIME_SLOTS.map((slotMinutes) => (
+                    <div
+                      key={slotMinutes}
+                      className="text-[11px] text-muted-foreground text-right pr-2 border-b border-border pt-1 leading-none"
+                      style={{ height: `${SLOT_HEIGHT}px` }}
+                    >
+                      {minutesToLabel(slotMinutes)}
+                    </div>
+                  ))}
+                </div>
 
-                          // Para que el bloque cubra todo el rango (por ejemplo 06:00–07:00),
-                          // mostramos el contenido completo solo en el slot inicial y en los
-                          // siguientes slots mostramos un "relleno" visual.
-                          if (!event._isStartSlot) {
-                            return (
-                              <div
-                                key={event.id + "-" + slotMinutes}
-                                className="bg-primary/10 rounded h-full"
-                              />
-                            );
-                          }
+                {/* Columnas por día, con fondo por slot y eventos posicionados como en Outlook */}
+                {viewDays.map((day) => {
+                  const dayEvents = getEventsForDay(day).filter((e: any) => !e._isAllDay);
+                  return (
+                    <div
+                      key={day.toISOString() + "-column"}
+                      className="relative border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/10"
+                      onClick={() => {
+                        setSelectedDate(day);
+                        setShowCreate(true);
+                      }}
+                    >
+                      {/* Fondo por slot */}
+                      {TIME_SLOTS.map((slotMinutes) => (
+                        <div
+                          key={slotMinutes}
+                          className="border-b border-border/60 last:border-b-0"
+                          style={{ height: `${SLOT_HEIGHT}px` }}
+                        />
+                      ))}
 
-                          return (
+                      {/* Capa de eventos */}
+                      {dayEvents.map((event: any) => {
+                        const startTotal =
+                          event._parsedStart.getHours() * 60 + event._parsedStart.getMinutes();
+                        const endDt = event.end?.dateTime
+                          ? parseEventTime(event.end.dateTime)
+                          : null;
+                        const endTotal = endDt
+                          ? endDt.getHours() * 60 + endDt.getMinutes()
+                          : startTotal + SLOT_MINUTES;
+
+                        const dayStart = START_HOUR * 60;
+                        const dayEnd = END_HOUR * 60;
+
+                        const clampedStart = Math.max(startTotal, dayStart);
+                        const clampedEnd = Math.min(endTotal, dayEnd);
+
+                        if (clampedEnd <= clampedStart) return null;
+
+                        const offsetMinutes = clampedStart - dayStart;
+                        const top =
+                          (offsetMinutes / SLOT_MINUTES) * SLOT_HEIGHT + 2; // pequeño offset
+                        const height = Math.max(
+                          SLOT_HEIGHT,
+                          ((clampedEnd - clampedStart) / SLOT_MINUTES) * SLOT_HEIGHT - 4
+                        );
+
+                        const startStr = format(event._parsedStart, "HH:mm");
+                        const endStr = endDt ? format(endDt, "HH:mm") : "";
+                        const primaryCategory: string | undefined = event.categories?.[0];
+                        const categoryClasses = getCategoryClasses(primaryCategory);
+                        const meetingUrl: string | undefined =
+                          event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
+
+                        return (
+                          <div
+                            key={event.id}
+                            className="absolute inset-x-0 px-0.5"
+                            style={{ top, height }}
+                          >
                             <div
-                              key={event.id + "-" + slotMinutes}
-                              className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative"
+                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm"
                               title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedDate(day);
+                              }}
                             >
-                              <div className="flex items-center gap-1 pr-4">
+                              <div className="flex items-start gap-1 pr-4">
                                 {primaryCategory && (
                                   <span
                                     className={`rounded px-1 py-px text-[9px] font-medium ${categoryClasses}`}
@@ -486,10 +483,19 @@ export function CalendarView() {
                                     {primaryCategory}
                                   </span>
                                 )}
-                                <span className="text-[10px] text-primary/70 mr-1">
-                                  {endStr ? `${startStr}–${endStr}` : startStr}
-                                </span>
-                                <span className="font-medium truncate">{event.subject}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[10px] text-primary/70">
+                                    {endStr ? `${startStr}–${endStr}` : startStr}
+                                  </div>
+                                  <div className="font-medium truncate leading-tight">
+                                    {event.subject}
+                                  </div>
+                                  {event.location?.displayName && (
+                                    <div className="text-[9px] text-primary/80 truncate">
+                                      {event.location.displayName}
+                                    </div>
+                                  )}
+                                </div>
                                 {meetingUrl && (
                                   <button
                                     type="button"
@@ -506,18 +512,21 @@ export function CalendarView() {
                               </div>
                               <button
                                 className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
-                                onClick={(e) => { e.stopPropagation(); deleteEvent.mutate(event.id); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteEvent.mutate(event.id);
+                                }}
                               >
                                 <Trash2 className="h-3 w-3 text-destructive" />
                               </button>
                             </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -609,6 +618,45 @@ export function CalendarView() {
                   onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Invitados (correos separados por coma)</Label>
+              <Input
+                placeholder="persona1@ejemplo.com, persona2@ejemplo.com"
+                value={newEvent.attendees}
+                onChange={(e) => setNewEvent({ ...newEvent, attendees: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Ubicación / dirección</Label>
+              <Input
+                placeholder="Oficina, sala, dirección física, etc."
+                value={newEvent.location}
+                onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <Label className="text-sm">Crear reunión de Microsoft Teams</Label>
+                <p className="text-xs text-muted-foreground">
+                  Si está activo, Outlook generará el enlace de Teams automáticamente.
+                </p>
+              </div>
+              <Switch
+                checked={newEvent.isOnlineMeeting}
+                onCheckedChange={(checked) =>
+                  setNewEvent({ ...newEvent, isOnlineMeeting: checked })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción / notas</Label>
+              <Textarea
+                placeholder="Agenda, notas, instrucciones de conexión, etc."
+                value={newEvent.description}
+                onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                rows={4}
+              />
             </div>
             <p className="text-xs text-muted-foreground">Zona horaria: América/Ciudad de México</p>
           </div>
