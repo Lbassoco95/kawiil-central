@@ -76,9 +76,11 @@ interface LawsuitDeadline {
   id: string;
   title: string;
   date: string;
+  time: string;
   type: string;
   completed: boolean;
   notes: string;
+  attendees: string[];
 }
 
 interface LawsuitDetails {
