@@ -4,12 +4,13 @@ import { UnifiedStepRow } from "./UnifiedStepRow";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function AnnualStepDetailRow({
-  step, index, declarationId, projectId,
+  step, index, declarationId, projectId, clientDropboxPath,
 }: {
   step: AccountingStep;
   index: number;
   declarationId: string;
   projectId: string;
+  clientDropboxPath?: string;
 }) {
   const toggleStep = useToggleAnnualStep();
   const updateDetails = useUpdateAnnualStepDetails();
@@ -20,6 +21,7 @@ export function AnnualStepDetailRow({
       step={step}
       index={index}
       projectId={projectId}
+      clientDropboxPath={clientDropboxPath}
       showTimer={false}
       onToggle={(checked) => toggleStep.mutate({ declarationId, projectId, stepKey: step.key, completed: checked })}
       onSave={(updates) => {
