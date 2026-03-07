@@ -176,11 +176,59 @@ Deno.serve(async (req) => {
         break;
       }
 
-      default:
-        return new Response(JSON.stringify({ error: "Unknown action" }), {
-          status: 400,
-          headers: corsHeaders,
+      case "reply": {
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/reply`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ comment: params.comment }),
         });
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`Reply failed [${res.status}]: ${errBody}`);
+        }
+        result = { success: true };
+        break;
+      }
+
+      case "reply-all": {
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/replyAll`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ comment: params.comment }),
+        });
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`ReplyAll failed [${res.status}]: ${errBody}`);
+        }
+        result = { success: true };
+        break;
+      }
+
+      case "forward": {
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/forward`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            comment: params.comment,
+            toRecipients: params.toRecipients,
+          }),
+        });
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`Forward failed [${res.status}]: ${errBody}`);
+        }
+        result = { success: true };
+        break;
+      }
     }
 
     return new Response(JSON.stringify(result), {
