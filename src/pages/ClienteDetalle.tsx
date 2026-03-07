@@ -17,9 +17,11 @@ import {
   ExternalLink,
   FolderOpen,
   Pencil,
+  Shield,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
+import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
 
