@@ -220,11 +220,29 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
               {task.title}
             </span>
             <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-              {assigneeName && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <User className="h-3 w-3" />{assigneeName}
-                </Badge>
-              )}
+              {/* Inline assignee selector on header */}
+              <div onClick={(e) => e.stopPropagation()}>
+                <Select
+                  value={localAssignee || "__none__"}
+                  onValueChange={async (v) => {
+                    const newAssignee = v === "__none__" ? null : v;
+                    setLocalAssignee(newAssignee || "");
+                    await supabase.from("tasks").update({ assigned_to: newAssignee } as any).eq("id", task.id);
+                    onUpdate();
+                  }}
+                >
+                  <SelectTrigger className="h-6 text-[10px] w-auto min-w-[100px] border-dashed gap-1 px-2">
+                    <User className="h-3 w-3 shrink-0" />
+                    <SelectValue placeholder="Sin asignar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sin asignar</SelectItem>
+                    {profiles.map((p) => (
+                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               {localCollaborators.length > 0 && (
                 <Badge variant="secondary" className="text-xs gap-1">
                   +{localCollaborators.length}
