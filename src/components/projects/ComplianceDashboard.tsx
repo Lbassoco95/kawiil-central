@@ -104,15 +104,9 @@ export function ComplianceDashboard({ projectId, clientId }: ComplianceDashboard
     enabled: !!user && !!projectId,
   });
 
-  const updateTask = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("tasks").update({ status } as any).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
-    },
-  });
+  const refreshTasks = () => {
+    queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
+  };
 
   const today = useMemo(() => nowMX(), []);
 
