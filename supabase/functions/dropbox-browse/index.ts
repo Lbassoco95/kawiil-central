@@ -294,8 +294,9 @@ serve(async (req) => {
     const body = await req.json();
     const { path = '', action = 'list', file_content, file_name } = body;
 
-    const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN);
-    const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId);
+    const adminMemberId = await getTeamAdminMemberId(DROPBOX_ACCESS_TOKEN);
+    const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN, adminMemberId);
+    const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
     if (action === 'list') {
       const { data, resolvedPath } = await resolvePathAndList(dbxHeaders, path || '');
