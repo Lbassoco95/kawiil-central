@@ -132,6 +132,10 @@ const ClienteDetalle = () => {
         <Tabs defaultValue="general" className="space-y-4">
           <TabsList>
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="cumplimiento">
+              <Shield className="h-4 w-4 mr-1" />
+              Cumplimiento
+            </TabsTrigger>
             <TabsTrigger value="proyectos">
               Proyectos ({projects.length})
             </TabsTrigger>
