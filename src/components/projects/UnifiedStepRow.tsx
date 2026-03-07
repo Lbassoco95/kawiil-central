@@ -314,6 +314,7 @@ export function UnifiedStepRow({
               documentIds={step.document_ids || []}
               onDocumentAdded={handleDocumentAdded}
               projectId={projectId}
+              clientDropboxPath={clientDropboxPath}
               disabled={saving}
             />
 
