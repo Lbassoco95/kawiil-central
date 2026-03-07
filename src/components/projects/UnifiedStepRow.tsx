@@ -54,6 +54,7 @@ export interface UnifiedStepRowProps {
   saving?: boolean;
   showTimer?: boolean;
   showCheckbox?: boolean;
+  clientDropboxPath?: string;
   /** Extra content like appointment date fields */
   extraFields?: React.ReactNode;
 }
