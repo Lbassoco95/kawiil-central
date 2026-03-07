@@ -80,9 +80,9 @@ export function ComplianceDashboard({ projectId, clientId }: ComplianceDashboard
         .select("*, compliance_task_templates(category, due_description)")
         .eq("project_id", projectId)
         .eq("area", "cumplimiento" as any)
-        .order("due_date", { ascending: true });
+        .order("due_date", { ascending: true }) as any;
       if (error) throw error;
-      return data as ComplianceTask[];
+      return (data || []) as ComplianceTask[];
     },
     enabled: !!user && !!projectId,
   });

@@ -165,7 +165,7 @@ export function useComplianceTemplates(entityTypeIds: string[]) {
         .eq("is_active", true)
         .order("sort_order");
       if (error) throw error;
-      return data as (ComplianceTaskTemplate & { compliance_entity_types: ComplianceEntityType })[];
+      return data as any[];
     },
     enabled: !!user && entityTypeIds.length > 0,
   });
