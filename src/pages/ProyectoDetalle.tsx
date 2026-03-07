@@ -11,6 +11,7 @@ import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
 import { AnnualDeclarationDashboard } from "@/components/projects/AnnualDeclarationDashboard";
 import { GestoriaDashboard } from "@/components/projects/GestoriaDashboard";
+import { ComplianceDashboard } from "@/components/projects/ComplianceDashboard";
 import { ProjectGeneralTab } from "@/components/projects/ProjectGeneralTab";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
