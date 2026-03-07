@@ -39,6 +39,7 @@ const AREA_ORDER: ServiceArea[] = [
   "legal",
   "softlanding",
   "pld_ft",
+  "cumplimiento",
   "juicios",
   "gestoria",
   "constitucion_nacional",
