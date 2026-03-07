@@ -375,6 +375,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
               documentIds={[]}
               onDocumentAdded={() => {}}
               projectId={projectId}
+              clientDropboxPath={clientDropboxPath}
               disabled={saving}
             />
 
