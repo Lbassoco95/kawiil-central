@@ -133,7 +133,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
     setLeadAttorney("");
     setSubstituteAttorney("");
     setAuthorizedPersons([]);
-    setNewAuthorized("");
+    
   };
 
   return (
