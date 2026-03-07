@@ -75,6 +75,7 @@ export interface ComplianceTaskRowProps {
     dropbox_links?: any;
   };
   projectId: string;
+  clientDropboxPath?: string;
   urgencyBadge: React.ReactNode;
   onUpdate: () => void;
 }
