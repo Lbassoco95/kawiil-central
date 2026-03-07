@@ -161,6 +161,12 @@ const ProyectoDetalle = () => {
                 Juicio
               </TabsTrigger>
             )}
+            {isCumplimiento && (
+              <TabsTrigger value="cumplimiento">
+                <Shield className="h-4 w-4 mr-1" />
+                Cumplimiento
+              </TabsTrigger>
+            )}
             <TabsTrigger value="tareas">Tareas ({tasks.length})</TabsTrigger>
           </TabsList>
 
