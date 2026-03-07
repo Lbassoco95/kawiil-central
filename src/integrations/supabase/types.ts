@@ -242,6 +242,67 @@ export type Database = {
           },
         ]
       }
+      client_compliance_config: {
+        Row: {
+          authorization_date: string | null
+          client_id: string
+          compliance_officer_name: string | null
+          created_at: string
+          entity_type_id: string
+          id: string
+          is_active: boolean
+          organization_id: string
+          registration_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          authorization_date?: string | null
+          client_id: string
+          compliance_officer_name?: string | null
+          created_at?: string
+          entity_type_id: string
+          id?: string
+          is_active?: boolean
+          organization_id: string
+          registration_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          authorization_date?: string | null
+          client_id?: string
+          compliance_officer_name?: string | null
+          created_at?: string
+          entity_type_id?: string
+          id?: string
+          is_active?: boolean
+          organization_id?: string
+          registration_number?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_compliance_config_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_compliance_config_entity_type_id_fkey"
+            columns: ["entity_type_id"]
+            isOneToOne: false
+            referencedRelation: "compliance_entity_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_compliance_config_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           address: string | null
@@ -315,6 +376,95 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      compliance_entity_types: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          group_name: string
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          group_name: string
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          group_name?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
+      compliance_task_templates: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          due_day: number | null
+          due_description: string | null
+          due_month: number | null
+          due_month_2: number | null
+          entity_type_id: string
+          id: string
+          is_active: boolean
+          legal_basis: string | null
+          periodicity: string
+          sort_order: number
+          task_name: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          due_day?: number | null
+          due_description?: string | null
+          due_month?: number | null
+          due_month_2?: number | null
+          entity_type_id: string
+          id?: string
+          is_active?: boolean
+          legal_basis?: string | null
+          periodicity: string
+          sort_order?: number
+          task_name: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          due_day?: number | null
+          due_description?: string | null
+          due_month?: number | null
+          due_month_2?: number | null
+          entity_type_id?: string
+          id?: string
+          is_active?: boolean
+          legal_basis?: string | null
+          periodicity?: string
+          sort_order?: number
+          task_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "compliance_task_templates_entity_type_id_fkey"
+            columns: ["entity_type_id"]
+            isOneToOne: false
+            referencedRelation: "compliance_entity_types"
             referencedColumns: ["id"]
           },
         ]
@@ -779,6 +929,9 @@ export type Database = {
           assigned_to: string | null
           checklist: Json | null
           client_id: string | null
+          compliance_period: string | null
+          compliance_periodicity: string | null
+          compliance_template_id: string | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -801,6 +954,9 @@ export type Database = {
           assigned_to?: string | null
           checklist?: Json | null
           client_id?: string | null
+          compliance_period?: string | null
+          compliance_periodicity?: string | null
+          compliance_template_id?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -823,6 +979,9 @@ export type Database = {
           assigned_to?: string | null
           checklist?: Json | null
           client_id?: string | null
+          compliance_period?: string | null
+          compliance_periodicity?: string | null
+          compliance_template_id?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -846,6 +1005,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_compliance_template_id_fkey"
+            columns: ["compliance_template_id"]
+            isOneToOne: false
+            referencedRelation: "compliance_task_templates"
             referencedColumns: ["id"]
           },
           {
@@ -960,6 +1126,7 @@ export type Database = {
         | "juicios"
         | "gestoria"
         | "constitucion_nacional"
+        | "cumplimiento"
       task_priority: "urgente" | "alta" | "media" | "baja"
       task_status:
         | "pendiente"
@@ -1107,6 +1274,7 @@ export const Constants = {
         "juicios",
         "gestoria",
         "constitucion_nacional",
+        "cumplimiento",
       ],
       task_priority: ["urgente", "alta", "media", "baja"],
       task_status: [
