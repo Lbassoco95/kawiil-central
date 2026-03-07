@@ -1,28 +1,60 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useOutlookEmails, useEmailDetail } from "@/hooks/useMicrosoft";
-import { Search, Mail, MailOpen, Paperclip, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail } from "@/hooks/useMicrosoft";
+import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+
+type EmailAction = "reply" | "reply-all" | "forward" | null;
 
 export function EmailView() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  const [emailAction, setEmailAction] = useState<EmailAction>(null);
+  const [replyText, setReplyText] = useState("");
+  const [forwardTo, setForwardTo] = useState("");
 
   const { data: emails = [], isLoading } = useOutlookEmails("inbox", debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
+  const replyEmail = useReplyEmail();
+  const forwardEmail = useForwardEmail();
 
-  // Debounce search
   const handleSearch = (val: string) => {
     setSearch(val);
     clearTimeout((window as any).__emailSearchTimeout);
     (window as any).__emailSearchTimeout = setTimeout(() => setDebouncedSearch(val), 500);
   };
+
+  const handleSendReply = () => {
+    if (!selectedEmailId || !replyText.trim()) return;
+    if (emailAction === "forward") {
+      if (!forwardTo.trim()) return;
+      forwardEmail.mutate(
+        { messageId: selectedEmailId, comment: replyText, toRecipients: forwardTo.split(",").map((s) => s.trim()) },
+        { onSuccess: resetAction }
+      );
+    } else {
+      replyEmail.mutate(
+        { messageId: selectedEmailId, comment: replyText, replyAll: emailAction === "reply-all" },
+        { onSuccess: resetAction }
+      );
+    }
+  };
+
+  const resetAction = () => {
+    setEmailAction(null);
+    setReplyText("");
+    setForwardTo("");
+  };
+
+  const isSending = replyEmail.isPending || forwardEmail.isPending;
 
   return (
     <div className="space-y-4">
@@ -53,7 +85,7 @@ export function EmailView() {
             <Card
               key={email.id}
               className={`cursor-pointer transition-colors hover:border-primary/50 ${!email.isRead ? "bg-primary/5" : ""}`}
-              onClick={() => setSelectedEmailId(email.id)}
+              onClick={() => { setSelectedEmailId(email.id); resetAction(); }}
             >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
@@ -92,8 +124,8 @@ export function EmailView() {
       )}
 
       {/* Email detail dialog */}
-      <Dialog open={!!selectedEmailId} onOpenChange={(open) => !open && setSelectedEmailId(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <Dialog open={!!selectedEmailId} onOpenChange={(open) => { if (!open) { setSelectedEmailId(null); resetAction(); } }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           {detailLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin" />
@@ -101,7 +133,7 @@ export function EmailView() {
           ) : emailDetail ? (
             <>
               <DialogHeader>
-                <DialogTitle className="text-lg">{emailDetail.subject || "(sin asunto)"}</DialogTitle>
+                <DialogTitle className="text-lg pr-8">{emailDetail.subject || "(sin asunto)"}</DialogTitle>
                 <div className="text-sm text-muted-foreground space-y-1 mt-2">
                   <p>
                     <strong>De:</strong> {emailDetail.from?.emailAddress?.name} &lt;{emailDetail.from?.emailAddress?.address}&gt;
@@ -118,7 +150,71 @@ export function EmailView() {
                   </p>
                 </div>
               </DialogHeader>
-              <div className="mt-4 prose prose-sm max-w-none dark:prose-invert">
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 border-t border-b border-border py-2">
+                <Button
+                  variant={emailAction === "reply" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setEmailAction(emailAction === "reply" ? null : "reply"); setReplyText(""); }}
+                >
+                  <Reply className="mr-1 h-3.5 w-3.5" /> Responder
+                </Button>
+                <Button
+                  variant={emailAction === "reply-all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setEmailAction(emailAction === "reply-all" ? null : "reply-all"); setReplyText(""); }}
+                >
+                  <ReplyAll className="mr-1 h-3.5 w-3.5" /> Responder a todos
+                </Button>
+                <Button
+                  variant={emailAction === "forward" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setEmailAction(emailAction === "forward" ? null : "forward"); setReplyText(""); setForwardTo(""); }}
+                >
+                  <Forward className="mr-1 h-3.5 w-3.5" /> Reenviar
+                </Button>
+              </div>
+
+              {/* Reply/Forward form */}
+              {emailAction && (
+                <div className="space-y-3 border border-border rounded-lg p-3 bg-muted/30">
+                  {emailAction === "forward" && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Para (separar con coma)</Label>
+                      <Input
+                        placeholder="correo@ejemplo.com"
+                        value={forwardTo}
+                        onChange={(e) => setForwardTo(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-xs">
+                      {emailAction === "forward" ? "Mensaje" : "Respuesta"}
+                    </Label>
+                    <Textarea
+                      placeholder={emailAction === "forward" ? "Mensaje al reenviar..." : "Escribe tu respuesta..."}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      rows={4}
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={handleSendReply} disabled={isSending || !replyText.trim()}>
+                      {isSending ? (
+                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Send className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      {emailAction === "forward" ? "Reenviar" : "Enviar respuesta"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Email body */}
+              <div className="flex-1 overflow-y-auto mt-2 prose prose-sm max-w-none dark:prose-invert">
                 {emailDetail.body?.contentType === "html" ? (
                   <div dangerouslySetInnerHTML={{ __html: emailDetail.body.content }} />
                 ) : (
