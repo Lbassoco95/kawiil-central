@@ -48,6 +48,7 @@ import { formatMX } from "@/lib/dateUtils";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { useProfiles } from "@/hooks/useTasks";
+import { UserOrTextMulti } from "./UserOrTextInput";
 
 interface StageAttachment {
   id: string;
@@ -153,7 +154,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState<string | null>(null);
   const [dropboxPickerStage, setDropboxPickerStage] = useState<string | null>(null);
   const [newDeadline, setNewDeadline] = useState({ title: "", date: "", time: "", type: "termino", notes: "", attendees: [] as string[] });
-  const [newDeadlineAttendee, setNewDeadlineAttendee] = useState("");
+  
   const [newStageTemplate, setNewStageTemplate] = useState("contestacion");
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
   const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
@@ -270,7 +271,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     const updated = { ...lawsuitDetails, deadlines: [...(lawsuitDetails.deadlines || []), dl] };
     updateLawsuit.mutate(updated);
     setNewDeadline({ title: "", date: "", time: "", type: "termino", notes: "", attendees: [] });
-    setNewDeadlineAttendee("");
+    
     setDeadlineDialogOpen(false);
     toast.success("Término agregado");
   };
@@ -810,42 +811,12 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             {/* Attendees */}
             <div className="space-y-2">
               <Label>¿Quiénes asistirán?</Label>
-              <div className="flex flex-wrap gap-1.5 mb-1">
-                {(newDeadline.attendees || []).map((name, idx) => (
-                  <Badge key={idx} variant="secondary" className="text-xs gap-1">
-                    {name}
-                    <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() =>
-                      setNewDeadline((p) => ({ ...p, attendees: p.attendees.filter((_, i) => i !== idx) }))
-                    } />
-                  </Badge>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Nombre de quien asistirá"
-                  value={newDeadlineAttendee}
-                  onChange={(e) => setNewDeadlineAttendee(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newDeadlineAttendee.trim()) {
-                      e.preventDefault();
-                      setNewDeadline((p) => ({ ...p, attendees: [...p.attendees, newDeadlineAttendee.trim()] }));
-                      setNewDeadlineAttendee("");
-                    }
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!newDeadlineAttendee.trim()}
-                  onClick={() => {
-                    setNewDeadline((p) => ({ ...p, attendees: [...p.attendees, newDeadlineAttendee.trim()] }));
-                    setNewDeadlineAttendee("");
-                  }}
-                >
-                  Agregar
-                </Button>
-              </div>
+              <UserOrTextMulti
+                values={newDeadline.attendees || []}
+                onChange={(vals) => setNewDeadline((p) => ({ ...p, attendees: vals }))}
+                profiles={profiles.map((p) => ({ user_id: p.user_id, full_name: p.full_name }))}
+                placeholder="Nombre o seleccionar usuario..."
+              />
             </div>
 
             <div className="space-y-2">

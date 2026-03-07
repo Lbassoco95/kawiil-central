@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
+import { UserOrTextSingle, UserOrTextMulti } from "./UserOrTextInput";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,7 +66,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
   const [leadAttorney, setLeadAttorney] = useState("");
   const [substituteAttorney, setSubstituteAttorney] = useState("");
   const [authorizedPersons, setAuthorizedPersons] = useState<string[]>([]);
-  const [newAuthorized, setNewAuthorized] = useState("");
+  
   const { user } = useAuth();
   const { data: clients } = useClients();
   const { data: profiles } = useOrgProfiles();
@@ -132,7 +133,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
     setLeadAttorney("");
     setSubstituteAttorney("");
     setAuthorizedPersons([]);
-    setNewAuthorized("");
+    
   };
 
   return (
@@ -229,19 +230,21 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
             <div className="space-y-2">
               <Label>Abogado Patrono</Label>
-              <Input
-                placeholder="Nombre del abogado patrono"
+              <UserOrTextSingle
                 value={leadAttorney}
-                onChange={(e) => setLeadAttorney(e.target.value)}
+                onChange={setLeadAttorney}
+                profiles={profiles?.map((p) => ({ user_id: p.user_id, full_name: p.full_name })) || []}
+                placeholder="Escribir nombre o seleccionar usuario..."
               />
             </div>
 
             <div className="space-y-2">
               <Label>Abogado Sustituto</Label>
-              <Input
-                placeholder="Nombre del abogado sustituto"
+              <UserOrTextSingle
                 value={substituteAttorney}
-                onChange={(e) => setSubstituteAttorney(e.target.value)}
+                onChange={setSubstituteAttorney}
+                profiles={profiles?.map((p) => ({ user_id: p.user_id, full_name: p.full_name })) || []}
+                placeholder="Escribir nombre o seleccionar usuario..."
               />
             </div>
           </div>
@@ -249,44 +252,13 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
           {/* Autorizados */}
           <div className="space-y-2">
             <Label>Autorizados</Label>
-            <div className="flex flex-wrap gap-1.5 mb-1">
-              {authorizedPersons.map((name, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs gap-1">
-                  {name}
-                  <X
-                    className="h-3 w-3 cursor-pointer hover:text-destructive"
-                    onClick={() => setAuthorizedPersons(authorizedPersons.filter((_, i) => i !== idx))}
-                  />
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Nombre del autorizado"
-                value={newAuthorized}
-                onChange={(e) => setNewAuthorized(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newAuthorized.trim()) {
-                    e.preventDefault();
-                    setAuthorizedPersons([...authorizedPersons, newAuthorized.trim()]);
-                    setNewAuthorized("");
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!newAuthorized.trim()}
-                onClick={() => {
-                  setAuthorizedPersons([...authorizedPersons, newAuthorized.trim()]);
-                  setNewAuthorized("");
-                }}
-              >
-                Agregar
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">Presiona Enter o el botón para agregar. Pueden o no ser usuarios del sistema.</p>
+            <UserOrTextMulti
+              values={authorizedPersons}
+              onChange={setAuthorizedPersons}
+              profiles={profiles?.map((p) => ({ user_id: p.user_id, full_name: p.full_name })) || []}
+              placeholder="Nombre del autorizado"
+              hint="Presiona Enter o el botón para agregar. Pueden o no ser usuarios del sistema."
+            />
           </div>
 
           <div className="space-y-2">
