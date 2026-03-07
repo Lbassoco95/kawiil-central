@@ -529,6 +529,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                       updateLawsuit.mutate(updated);
                     }}
                     projectId={projectId}
+                    clientDropboxPath={dropboxInitialPath || undefined}
                   />
 
                   {/* Legacy attachments */}
