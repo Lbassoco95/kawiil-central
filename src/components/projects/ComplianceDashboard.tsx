@@ -396,48 +396,15 @@ export function ComplianceDashboard({ projectId, clientId }: ComplianceDashboard
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <CardContent className="pt-0 pb-3 px-4">
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {group.tasks.map((task) => (
-                        <div
+                        <ComplianceTaskRow
                           key={task.id}
-                          className={`flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-                            task.status === "completada" ? "opacity-60" : "hover:bg-muted/50"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <input
-                              type="checkbox"
-                              checked={task.status === "completada"}
-                              onChange={() =>
-                                updateTask.mutate({
-                                  id: task.id,
-                                  status: task.status === "completada" ? "pendiente" : "completada",
-                                })
-                              }
-                              className="h-4 w-4 rounded border-muted-foreground/30 cursor-pointer"
-                            />
-                            <span className={`truncate ${task.status === "completada" ? "line-through" : ""}`}>
-                              {task.title}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {task.compliance_periodicity && (
-                              <Badge variant="outline" className="text-[10px]">
-                                {PERIODICITY_LABELS[task.compliance_periodicity] || task.compliance_periodicity}
-                              </Badge>
-                            )}
-                            {task.compliance_period && (
-                              <span className="text-[10px] text-muted-foreground">{task.compliance_period}</span>
-                            )}
-                            {task.due_date && (
-                              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                <Calendar className="h-3 w-3" />
-                                {formatMX(task.due_date, "dd MMM")}
-                              </span>
-                            )}
-                            {getUrgencyBadge(task)}
-                          </div>
-                        </div>
+                          task={task}
+                          projectId={projectId}
+                          urgencyBadge={getUrgencyBadge(task)}
+                          onUpdate={refreshTasks}
+                        />
                       ))}
                     </div>
                   </CardContent>
