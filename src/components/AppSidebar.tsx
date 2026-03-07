@@ -24,6 +24,7 @@ const navItems = [
   { title: "Clientes", url: "/clientes", icon: Users },
   { title: "Proyectos", url: "/proyectos", icon: FolderKanban },
   { title: "Tareas", url: "/tareas", icon: CheckSquare },
+  { title: "Microsoft 365", url: "/microsoft365", icon: Calendar },
   { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Administración", url: "/admin", icon: Settings },
 ];
