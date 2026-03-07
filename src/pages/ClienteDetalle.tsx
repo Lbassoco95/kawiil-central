@@ -261,6 +261,10 @@ const ClienteDetalle = () => {
             </div>
           </TabsContent>
 
+          <TabsContent value="cumplimiento">
+            <ComplianceClientSection clientId={client.id} />
+          </TabsContent>
+
           <TabsContent value="proyectos">
             <ClientProjectsTab client={client} projects={projects} />
           </TabsContent>
