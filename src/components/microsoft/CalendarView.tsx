@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCalendarEvents, useCreateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useMicrosoft";
 import { CDMX_TZ } from "@/lib/dateUtils";
@@ -27,6 +28,7 @@ import {
 import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
 import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 type ViewMode = "day" | "3days" | "week" | "month";
 
@@ -77,7 +79,15 @@ export function CalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showCreate, setShowCreate] = useState(false);
-  const [newEvent, setNewEvent] = useState({ subject: "", startTime: "09:00", endTime: "10:00" });
+  const [newEvent, setNewEvent] = useState({
+    subject: "",
+    startTime: "09:00",
+    endTime: "10:00",
+    attendees: "",
+    location: "",
+    description: "",
+    isOnlineMeeting: true,
+  });
 
   const viewDays = useMemo(() => {
     switch (viewMode) {
@@ -187,28 +197,83 @@ export function CalendarView() {
 
   const getTimedEventsForSlot = (date: Date, slotMinutes: number) => {
     const slotEnd = slotMinutes + SLOT_MINUTES;
-    return getEventsForDay(date).filter((e: any) => {
-      if (e._isAllDay) return false;
-      const h = e._parsedStart.getHours();
-      const m = e._parsedStart.getMinutes();
-      const total = h * 60 + m;
-      return total >= slotMinutes && total < slotEnd;
-    });
+    return getEventsForDay(date)
+      .filter((e: any) => !e._isAllDay)
+      .map((e: any) => {
+        const startTotal = e._parsedStart.getHours() * 60 + e._parsedStart.getMinutes();
+        const endDt = e.end?.dateTime ? parseEventTime(e.end.dateTime) : null;
+        const endTotal = endDt ? endDt.getHours() * 60 + endDt.getMinutes() : startTotal + SLOT_MINUTES;
+
+        // Consideramos que el evento cubre el slot si hay traslape entre
+        // [startTotal, endTotal) y [slotMinutes, slotEnd)
+        const coversSlot = startTotal < slotEnd && endTotal > slotMinutes;
+        const isStartSlot = startTotal >= slotMinutes && startTotal < slotEnd;
+
+        return {
+          ...e,
+          _coversSlot: coversSlot,
+          _isStartSlot: isStartSlot,
+          _startTotal: startTotal,
+          _endTotal: endTotal,
+        };
+      })
+      .filter((e: any) => e._coversSlot);
   };
 
   const handleCreateEvent = () => {
     if (!newEvent.subject) return;
     const dateStr = format(selectedDate, "yyyy-MM-dd");
+    const attendees = newEvent.attendees
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((address) => ({
+        emailAddress: { address },
+        type: "required",
+      }));
+
+    const baseEvent: any = {
+      subject: newEvent.subject,
+      start: { dateTime: `${dateStr}T${newEvent.startTime}:00`, timeZone: CDMX_TZ },
+      end: { dateTime: `${dateStr}T${newEvent.endTime}:00`, timeZone: CDMX_TZ },
+    };
+
+    if (newEvent.description.trim()) {
+      baseEvent.body = {
+        contentType: "HTML",
+        content: newEvent.description.trim(),
+      };
+    }
+
+    if (newEvent.location.trim()) {
+      baseEvent.location = {
+        displayName: newEvent.location.trim(),
+      };
+    }
+
+    if (attendees.length > 0) {
+      baseEvent.attendees = attendees;
+    }
+
+    if (newEvent.isOnlineMeeting) {
+      baseEvent.isOnlineMeeting = true;
+      baseEvent.onlineMeetingProvider = "teamsForBusiness";
+    }
+
     createEvent.mutate(
-      {
-        subject: newEvent.subject,
-        start: { dateTime: `${dateStr}T${newEvent.startTime}:00`, timeZone: CDMX_TZ },
-        end: { dateTime: `${dateStr}T${newEvent.endTime}:00`, timeZone: CDMX_TZ },
-      },
+      baseEvent,
       {
         onSuccess: () => {
           setShowCreate(false);
-          setNewEvent({ subject: "", startTime: "09:00", endTime: "10:00" });
+          setNewEvent({
+            subject: "",
+            startTime: "09:00",
+            endTime: "10:00",
+            attendees: "",
+            location: "",
+            description: "",
+            isOnlineMeeting: true,
+          });
         },
       }
     );
@@ -394,9 +459,22 @@ export function CalendarView() {
                           const categoryClasses = getCategoryClasses(primaryCategory);
                           const meetingUrl: string | undefined =
                             event.onlineMeeting?.joinUrl || event.onlineMeetingUrl;
+
+                          // Para que el bloque cubra todo el rango (por ejemplo 06:00–07:00),
+                          // mostramos el contenido completo solo en el slot inicial y en los
+                          // siguientes slots mostramos un "relleno" visual.
+                          if (!event._isStartSlot) {
+                            return (
+                              <div
+                                key={event.id + "-" + slotMinutes}
+                                className="bg-primary/10 rounded h-full"
+                              />
+                            );
+                          }
+
                           return (
                             <div
-                              key={event.id}
+                              key={event.id + "-" + slotMinutes}
                               className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative"
                               title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                             >

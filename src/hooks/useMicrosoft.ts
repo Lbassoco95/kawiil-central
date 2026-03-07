@@ -92,6 +92,10 @@ export function useCreateCalendarEvent() {
       start: { dateTime: string; timeZone: string };
       end: { dateTime: string; timeZone: string };
       body?: { contentType: string; content: string };
+      location?: { displayName: string };
+      attendees?: { emailAddress: { address: string }; type?: string }[];
+      isOnlineMeeting?: boolean;
+      onlineMeetingProvider?: string;
     }) => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "create-event", params: { event } },
