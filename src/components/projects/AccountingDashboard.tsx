@@ -39,6 +39,7 @@ function PeriodCard({
 }: {
   period: AccountingPeriod;
   projectId: string;
+  clientDropboxPath?: string;
 }) {
   const [open, setOpen] = useState(period.status !== "completado");
   const completed = period.steps.filter((s) => s.completed).length;
