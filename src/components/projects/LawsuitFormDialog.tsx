@@ -86,6 +86,9 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
         court: court || null,
         plaintiff: plaintiff || null,
         defendant: defendant || null,
+        lead_attorney: leadAttorney || null,
+        substitute_attorney: substituteAttorney || null,
+        authorized_persons: authorizedPersons.length > 0 ? authorizedPersons : [],
         stages: DEFAULT_STAGES,
         deadlines: [],
       };
