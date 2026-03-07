@@ -574,14 +574,27 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                         {dl.completed && <CheckCircle2 className="h-3 w-3" />}
                       </button>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className={`text-sm font-medium ${dl.completed ? "line-through" : ""}`}>
                             {dl.title}
                           </span>
                           <Badge variant="outline" className="text-xs">
                             {DEADLINE_TYPE_LABELS[dl.type] || dl.type}
                           </Badge>
+                          {dl.time && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" /> {dl.time}
+                            </span>
+                          )}
                         </div>
+                        {(dl.attendees || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            <span className="text-xs text-muted-foreground">Asistirán:</span>
+                            {(dl.attendees || []).map((a, i) => (
+                              <Badge key={i} variant="secondary" className="text-xs">{a}</Badge>
+                            ))}
+                          </div>
+                        )}
                         {dl.notes && (
                           <p className="text-xs text-muted-foreground mt-0.5">{dl.notes}</p>
                         )}
