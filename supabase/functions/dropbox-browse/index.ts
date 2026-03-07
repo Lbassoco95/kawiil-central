@@ -266,6 +266,12 @@ serve(async (req) => {
       });
     }
 
+    if (action === "upload") {
+      const { file_content, file_name } = await req.json().catch(() => ({ file_content: null, file_name: null }));
+      // file_content comes from the initial parse, re-read from body won't work.
+      // We get it from the original parsed body.
+    }
+
     if (action === "get_link") {
       let shareUrl = "";
       try {
