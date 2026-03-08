@@ -33,6 +33,7 @@ const navItems = [
   { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Notificaciones", url: "/notificaciones", icon: Bell },
   { title: "Despacho", url: "/despacho", icon: Building2 },
+  { title: "Kawiil AI", url: "/asistente", icon: Sparkles },
   { title: "Administración", url: "/admin", icon: Settings },
 ];
 
