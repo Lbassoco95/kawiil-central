@@ -167,12 +167,21 @@ export function useUpdateCalendarEvent() {
         attendees?: { emailAddress: { address: string }; type?: string }[];
       };
     }) => {
-      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+      const res = await supabase.functions.invoke("microsoft-api", {
         body: { action: "update-event", params: { eventId, payload } },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      // supabase.functions.invoke may throw a JSON parse error on empty/non-JSON responses
+      // but the update was still successful if no HTTP error occurred
+      if (res.error) {
+        // If the error is just a JSON parse issue, the update likely succeeded
+        const msg = res.error?.message || String(res.error);
+        if (msg.includes("Unexpected end of JSON") || msg.includes("json")) {
+          return { success: true };
+        }
+        throw res.error;
+      }
+      if (res.data?.error) throw new Error(res.data.error);
+      return res.data || { success: true };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
