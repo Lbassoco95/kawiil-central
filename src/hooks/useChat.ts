@@ -13,6 +13,7 @@ export interface ChatMessage {
 export interface ChatConversation {
   id: string;
   title: string;
+  folder: string | null;
   created_at: string;
   updated_at: string;
 }
