@@ -11,10 +11,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Save, Pencil, X } from "lucide-react";
+import { Save, Pencil, X, AlertTriangle } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
 import { formatDateMX } from "@/lib/dateUtils";
 import type { Database } from "@/integrations/supabase/types";
+
+const CRITICALITY_OPTIONS = [
+  { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "atencion", label: "🟡 Atención", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  { value: "critico", label: "🔴 Crítico", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
+];
+
+const DELAY_CATEGORIES = [
+  { value: "__none__", label: "Sin atraso" },
+  { value: "atraso_cliente", label: "Atraso del cliente" },
+  { value: "atraso_sat", label: "Atraso del SAT / autoridad" },
+  { value: "recurso_interno", label: "Recurso interno" },
+  { value: "dependencia_externa", label: "Dependencia externa" },
+  { value: "otro", label: "Otro" },
+];
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
@@ -51,6 +66,9 @@ export function ProjectGeneralTab({ project }: Props) {
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const [startDate, setStartDate] = useState(project.start_date || "");
   const [endDate, setEndDate] = useState(project.end_date || "");
+  const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
+  const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
+  const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
 
   const handleSave = () => {
     updateProject.mutate(
@@ -60,7 +78,10 @@ export function ProjectGeneralTab({ project }: Props) {
         status,
         start_date: startDate || null,
         end_date: endDate || null,
-      },
+        criticality_level: criticalityLevel,
+        delay_category: delayCategory || null,
+        delay_notes: delayNotes || null,
+      } as any,
       {
         onSuccess: () => setEditing(false),
       }
@@ -72,8 +93,13 @@ export function ProjectGeneralTab({ project }: Props) {
     setStatus(project.status);
     setStartDate(project.start_date || "");
     setEndDate(project.end_date || "");
+    setCriticalityLevel((project as any).criticality_level || "normal");
+    setDelayCategory((project as any).delay_category || "");
+    setDelayNotes((project as any).delay_notes || "");
     setEditing(false);
   };
+
+  const currentCriticality = CRITICALITY_OPTIONS.find(c => c.value === ((project as any).criticality_level || "normal"));
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -163,6 +189,50 @@ export function ProjectGeneralTab({ project }: Props) {
               <span>{project.end_date ? formatDateMX(project.end_date) : "—"}</span>
             )}
           </div>
+
+          {/* Criticality level */}
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Semáforo</span>
+            {editing ? (
+              <Select value={criticalityLevel} onValueChange={setCriticalityLevel}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CRITICALITY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Badge variant="outline" className={currentCriticality?.color}>
+                {currentCriticality?.label}
+              </Badge>
+            )}
+          </div>
+
+          {/* Delay category */}
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Motivo de atraso</span>
+            {editing ? (
+              <Select value={delayCategory || "__none__"} onValueChange={(v) => setDelayCategory(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DELAY_CATEGORIES.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-sm">
+                {(project as any).delay_category
+                  ? DELAY_CATEGORIES.find(d => d.value === (project as any).delay_category)?.label || (project as any).delay_category
+                  : "—"}
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -186,6 +256,32 @@ export function ProjectGeneralTab({ project }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Delay notes card - only show if there's a delay category */}
+      {(editing || (project as any).delay_category) && (
+        <Card className="md:col-span-2 border-warning/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              Notas de atraso / situación
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {editing ? (
+              <Textarea
+                className="min-h-[80px] text-sm"
+                placeholder="Describe la situación: motivo del atraso, factores externos, plan de acción..."
+                value={delayNotes}
+                onChange={(e) => setDelayNotes(e.target.value)}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {(project as any).delay_notes || "Sin notas de atraso."}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

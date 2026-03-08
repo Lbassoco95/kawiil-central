@@ -124,6 +124,11 @@ const ProyectoDetalle = () => {
                   {SERVICE_LABELS[project.area]}
                 </span>
               )}
+              {(project as any).criticality_level === "critico" && <span title="Crítico">🔴</span>}
+              {(project as any).criticality_level === "atencion" && <span title="Atención">🟡</span>}
+              {(project as any).delay_category && (
+                <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>
+              )}
             </div>
             {clientName && (
               <p className="text-sm text-muted-foreground mt-0.5">Cliente: {clientName}</p>

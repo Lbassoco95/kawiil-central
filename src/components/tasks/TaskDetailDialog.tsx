@@ -17,7 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { MentionTextarea } from "./MentionTextarea";
@@ -42,6 +42,21 @@ const priorityLabels: Record<string, string> = {
   media: "🟡 Media",
   baja: "🟢 Baja",
 };
+
+const CRITICALITY_OPTIONS = [
+  { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "atencion", label: "🟡 Atención", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  { value: "critico", label: "🔴 Crítico", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
+];
+
+const DELAY_CATEGORIES = [
+  { value: "__none__", label: "Sin atraso" },
+  { value: "atraso_cliente", label: "Atraso del cliente" },
+  { value: "atraso_sat", label: "Atraso del SAT / autoridad" },
+  { value: "recurso_interno", label: "Recurso interno" },
+  { value: "dependencia_externa", label: "Dependencia externa" },
+  { value: "otro", label: "Otro" },
+];
 
 export function TaskDetailDialog({ taskId, onClose }: Props) {
   const { task, isLoading, comments, assignees, documents } = useTaskDetail(taskId ?? undefined);
@@ -207,6 +222,53 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
             {task.description && (
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.description}</p>
             )}
+
+            {/* Criticality & Delay tracking */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg border bg-muted/20">
+              <div>
+                <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
+                <Select
+                  value={(task as any).criticality_level || "normal"}
+                  onValueChange={(v) => updateTask.mutate({ id: taskId, criticality_level: v } as any)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CRITICALITY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
+                <Select
+                  value={(task as any).delay_category || "__none__"}
+                  onValueChange={(v) => updateTask.mutate({ id: taskId, delay_category: v === "__none__" ? null : v } as any)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DELAY_CATEGORIES.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {((task as any).delay_category) && (
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="text-xs text-muted-foreground block mb-1">Notas</span>
+                  <Textarea
+                    className="text-xs min-h-[60px]"
+                    placeholder="Describe la situación..."
+                    defaultValue={(task as any).delay_notes || ""}
+                    onBlur={(e) => updateTask.mutate({ id: taskId, delay_notes: e.target.value || null } as any)}
+                  />
+                </div>
+              )}
+            </div>
 
             {/* Assignees - editable */}
             <div>

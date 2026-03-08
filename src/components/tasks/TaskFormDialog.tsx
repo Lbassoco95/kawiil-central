@@ -32,6 +32,8 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [projectId, setProjectId] = useState(defaultProjectId || "");
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
+  const [criticalityLevel, setCriticalityLevel] = useState("normal");
+  const [delayCategory, setDelayCategory] = useState("");
 
   const createTask = useCreateTask();
   const { data: profiles } = useProfiles();
@@ -53,6 +55,8 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
         project_id: projectId || undefined,
         additional_assignees: additionalAssignees,
         dropbox_links: dropboxLinks,
+        criticality_level: criticalityLevel,
+        delay_category: delayCategory || undefined,
       },
       {
         onSuccess: () => {
@@ -75,6 +79,8 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     setProjectId("");
     setDropboxLinks([]);
     setNewLink("");
+    setCriticalityLevel("normal");
+    setDelayCategory("");
   };
 
   const addAssignee = (userId: string) => {
@@ -99,6 +105,21 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     { value: "alta", label: "🟠 Alta" },
     { value: "media", label: "🟡 Media" },
     { value: "baja", label: "🟢 Baja" },
+  ];
+
+  const criticalityOptions = [
+    { value: "normal", label: "🟢 Normal" },
+    { value: "atencion", label: "🟡 Atención" },
+    { value: "critico", label: "🔴 Crítico" },
+  ];
+
+  const delayCategoryOptions = [
+    { value: "__none__", label: "Sin atraso" },
+    { value: "atraso_cliente", label: "Atraso del cliente" },
+    { value: "atraso_sat", label: "Atraso del SAT / autoridad" },
+    { value: "recurso_interno", label: "Recurso interno" },
+    { value: "dependencia_externa", label: "Dependencia externa" },
+    { value: "otro", label: "Otro" },
   ];
 
   return (
@@ -136,6 +157,32 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {priorityOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Criticality & Delay */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Semáforo de criticidad</Label>
+              <Select value={criticalityLevel} onValueChange={setCriticalityLevel}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {criticalityOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Motivo de atraso</Label>
+              <Select value={delayCategory || "__none__"} onValueChange={(v) => setDelayCategory(v === "__none__" ? "" : v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {delayCategoryOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                   ))}
                 </SelectContent>
