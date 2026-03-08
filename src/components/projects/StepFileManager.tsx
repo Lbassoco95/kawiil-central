@@ -32,6 +32,8 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [dropboxUploadFile, setDropboxUploadFile] = useState<File | null>(null);
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const [signDoc, setSignDoc] = useState<{ name: string; url: string } | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
 
