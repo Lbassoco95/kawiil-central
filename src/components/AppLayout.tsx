@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
+import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -13,6 +14,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           {children}
         </div>
       </main>
+      <FloatingAIChat />
     </div>
   );
 }
