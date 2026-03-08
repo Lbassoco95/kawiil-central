@@ -16,6 +16,7 @@ import {
   Mail,
   Building2,
   Bell,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
