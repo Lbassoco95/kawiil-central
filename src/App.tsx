@@ -17,6 +17,7 @@ import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
 import Microsoft365 from "./pages/Microsoft365";
 import Despacho from "./pages/Despacho";
+import Notificaciones from "./pages/Notificaciones";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/microsoft365" element={<ProtectedRoute><Microsoft365 /></ProtectedRoute>} />
             <Route path="/documentos" element={<ProtectedRoute><Documentos /></ProtectedRoute>} />
             <Route path="/despacho" element={<ProtectedRoute><Despacho /></ProtectedRoute>} />
+            <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

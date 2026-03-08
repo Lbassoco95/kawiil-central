@@ -20,7 +20,6 @@ import {
   useInternalComunicados,
   useCreateInternalComunicado,
   useDeleteInternalComunicado,
-  useUpcomingDeadlines,
 } from "@/hooks/useInternalDespacho";
 import { useUserRole } from "@/hooks/useUserRole";
 import { formatMX } from "@/lib/dateUtils";
@@ -29,7 +28,6 @@ import {
   Building2,
   FileText,
   Megaphone,
-  CalendarClock,
   Plus,
   Upload,
   Trash2,
@@ -52,7 +50,6 @@ export default function Despacho() {
 
   const { data: procedures = [], isLoading: proceduresLoading } = useInternalProcedures();
   const { data: comunicados = [], isLoading: comunicadosLoading } = useInternalComunicados();
-  const { data: deadlines, isLoading: deadlinesLoading } = useUpcomingDeadlines(30);
 
   const createProcedure = useCreateInternalProcedure();
   const deleteProcedure = useDeleteInternalProcedure();
@@ -111,12 +108,12 @@ export default function Despacho() {
             Despacho
           </h1>
           <p className="text-sm text-muted-foreground">
-            Uso interno: procedimientos, manuales, comunicados y fechas por vencer
+            Uso interno: procedimientos, manuales y comunicados del despacho
           </p>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsList className="grid w-full max-w-sm grid-cols-2">
             <TabsTrigger value="procedimientos" className="flex items-center gap-1.5">
               <FileText className="h-4 w-4" />
               Procedimientos
@@ -124,10 +121,6 @@ export default function Despacho() {
             <TabsTrigger value="comunicados" className="flex items-center gap-1.5">
               <Megaphone className="h-4 w-4" />
               Comunicados
-            </TabsTrigger>
-            <TabsTrigger value="fechas" className="flex items-center gap-1.5">
-              <CalendarClock className="h-4 w-4" />
-              Fechas por vencer
             </TabsTrigger>
           </TabsList>
 
@@ -265,82 +258,6 @@ export default function Despacho() {
                     </CardContent>
                   </Card>
                 ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="fechas" className="mt-6">
-            <p className="text-sm text-muted-foreground mb-4">
-              Tareas y obligaciones con fecha de vencimiento en los próximos 30 días
-            </p>
-            {deadlinesLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {(deadlines?.tasks?.length ?? 0) > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground mb-2">Tareas</h3>
-                    <div className="space-y-2">
-                      {(deadlines?.tasks ?? []).map((t: any) => (
-                        <Card key={t.id}>
-                          <CardContent className="p-3 flex items-center justify-between gap-2 flex-wrap">
-                            <div>
-                              <span className="font-medium text-sm">{t.title}</span>
-                              {(t.client_name || t.project_name) && (
-                                <p className="text-xs text-muted-foreground">
-                                  {[t.client_name, t.project_name].filter(Boolean).join(" · ")}
-                                </p>
-                              )}
-                            </div>
-                            <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
-                              {formatMX(t.due_date, "dd MMM yyyy")}
-                            </span>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {(deadlines?.steps?.length ?? 0) > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground mb-2">
-                      Obligaciones (períodos contables)
-                    </h3>
-                    <div className="space-y-2">
-                      {(deadlines?.steps ?? []).map((s: any) => (
-                        <Card key={s.id}>
-                          <CardContent className="p-3 flex items-center justify-between gap-2 flex-wrap">
-                            <div>
-                              <span className="font-medium text-sm">{s.label}</span>
-                              <p className="text-xs text-muted-foreground">
-                                {s.project_name}
-                                {s.client_name ? ` · ${s.client_name}` : ""} — {s.period_label}
-                              </p>
-                            </div>
-                            <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
-                              {formatMX(s.due_date, "dd MMM yyyy")}
-                            </span>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {(!deadlines?.tasks?.length && !deadlines?.steps?.length) && (
-                  <Card>
-                    <CardContent className="p-8 text-center">
-                      <CalendarClock className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                      <h3 className="mt-4 text-lg font-medium text-foreground">
-                        Sin fechas por vencer
-                      </h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        No hay tareas ni obligaciones con vencimiento en los próximos 30 días.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
               </div>
             )}
           </TabsContent>
