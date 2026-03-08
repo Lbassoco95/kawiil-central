@@ -43,6 +43,21 @@ const priorityLabels: Record<string, string> = {
   baja: "🟢 Baja",
 };
 
+const CRITICALITY_OPTIONS = [
+  { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "atencion", label: "🟡 Atención", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  { value: "critico", label: "🔴 Crítico", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
+];
+
+const DELAY_CATEGORIES = [
+  { value: "__none__", label: "Sin atraso" },
+  { value: "atraso_cliente", label: "Atraso del cliente" },
+  { value: "atraso_sat", label: "Atraso del SAT / autoridad" },
+  { value: "recurso_interno", label: "Recurso interno" },
+  { value: "dependencia_externa", label: "Dependencia externa" },
+  { value: "otro", label: "Otro" },
+];
+
 export function TaskDetailDialog({ taskId, onClose }: Props) {
   const { task, isLoading, comments, assignees, documents } = useTaskDetail(taskId ?? undefined);
   const addComment = useAddComment();
