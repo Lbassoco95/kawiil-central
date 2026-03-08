@@ -36,7 +36,7 @@ serve(async (req) => {
     const { data: isAdmin } = await adminClient.rpc('is_admin_or_manager', { _user_id: callerUser.id });
     if (!isAdmin) throw new Error('Only admins and managers can create users');
 
-    const { email, full_name, password, role, area, phone } = await req.json();
+    const { email, full_name, password, role, area, phone, microsoft_email, microsoft_user_id } = await req.json();
 
     if (!email || !full_name || !role) {
       throw new Error('Email, full_name, and role are required');
