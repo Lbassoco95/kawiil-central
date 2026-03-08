@@ -14,7 +14,7 @@ import {
   useUpdateCalendarEvent,
   useOutlookCategories,
 } from "@/hooks/useMicrosoft";
-import { CDMX_TZ } from "@/lib/dateUtils";
+import { CDMX_TZ, formatMX } from "@/lib/dateUtils";
 import {
   format,
   startOfWeek,
@@ -32,7 +32,6 @@ import {
   subDays,
   isSameMonth,
 } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
 import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -49,15 +48,11 @@ const TIME_SLOTS = Array.from(
 );
 const SLOT_HEIGHT = 32;
 
-/** Parse an event datetime string into CDMX-adjusted Date. Returns fallback if invalid. */
+/** Parsea fecha/hora ISO del evento. Usar formatMX() para mostrar en zona CDMX. */
 function parseEventTime(dt: string, fallback = new Date()): Date {
   if (!dt || typeof dt !== "string") return fallback;
   try {
-    if (dt.includes("T") && !dt.includes("Z") && !dt.includes("+") && !dt.includes("-", 10)) {
-      const d = new Date(dt);
-      return isNaN(d.getTime()) ? fallback : d;
-    }
-    const d = toZonedTime(parseISO(dt), CDMX_TZ);
+    const d = parseISO(dt);
     return isNaN(d.getTime()) ? fallback : d;
   } catch {
     return fallback;
@@ -145,10 +140,10 @@ export function CalendarView() {
         .join(", ");
       setEditForm({
         subject: source.subject ?? "",
-        startDate: format(parsedStart, "yyyy-MM-dd"),
-        startTime: format(parsedStart, "HH:mm"),
-        endDate: format(parsedEnd, "yyyy-MM-dd"),
-        endTime: format(parsedEnd, "HH:mm"),
+        startDate: formatMX(parsedStart, "yyyy-MM-dd"),
+        startTime: formatMX(parsedStart, "HH:mm"),
+        endDate: formatMX(parsedEnd, "yyyy-MM-dd"),
+        endTime: formatMX(parsedEnd, "HH:mm"),
         location: source.location?.displayName ?? "",
         description: safeDescription(source.body?.content),
         categories: Array.isArray(source.categories) ? [...source.categories] : [],
@@ -239,7 +234,7 @@ export function CalendarView() {
 
         const parsedStart = parseEventTime(rawStart);
         if (isNaN(parsedStart.getTime())) return;
-        const dateKey = format(parsedStart, "yyyy-MM-dd");
+        const dateKey = formatMX(parsedStart, "yyyy-MM-dd");
 
         const isAllDay =
           e.isAllDay === true ||
@@ -599,8 +594,8 @@ export function CalendarView() {
                           ((clampedEnd - clampedStart) / SLOT_MINUTES) * SLOT_HEIGHT - 4
                         );
 
-                        const startStr = format(event._parsedStart, "HH:mm");
-                        const endStr = endDt ? format(endDt, "HH:mm") : "";
+                        const startStr = formatMX(event._parsedStart, "HH:mm");
+                        const endStr = endDt ? formatMX(endDt, "HH:mm") : "";
                         const primaryCategory: string | undefined = event.categories?.[0];
                         const categoryClasses = getCategoryClasses(primaryCategory);
                         const meetingUrl: string | undefined =
@@ -705,7 +700,7 @@ export function CalendarView() {
                     </div>
                     <div className="space-y-0.5">
                       {dayEvents.slice(0, 3).map((event: any) => {
-                        const time = event._parsedStart ? format(event._parsedStart, "HH:mm") : "";
+                        const time = event._parsedStart ? formatMX(event._parsedStart, "HH:mm") : "";
                         return (
                           <div
                             key={event.id}
