@@ -125,8 +125,12 @@ export function CalendarView() {
     attendees: "",
   });
 
+  // cachedEvent is defined after hooks below but we reference it via a ref-like lookup
+  const getCachedEvent = () => selectedEventId ? (Array.isArray((eventsData as any)) ? (eventsData as any[]).find((e: any) => e.id === selectedEventId) : null) : null;
+
   useEffect(() => {
-    const source = eventDetail || (cachedEvent && selectedEventId ? cachedEvent : null);
+    const cached = getCachedEvent();
+    const source = eventDetail || (cached && selectedEventId ? cached : null);
     if (!source) return;
     try {
       const start = source.start?.dateTime || source.start?.date;
