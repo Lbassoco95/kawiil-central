@@ -109,6 +109,10 @@ export function CalendarView() {
     categories: [] as string[],
   });
 
+  const { data: eventDetail, isLoading: eventDetailLoading } = useEventDetail(selectedEventId);
+  const updateEvent = useUpdateCalendarEvent();
+  const { data: outlookCategories = [] } = useOutlookCategories();
+
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
 
   const handleDrop = useCallback(
@@ -145,10 +149,6 @@ export function CalendarView() {
     },
     [draggedEvent, updateEvent]
   );
-
-  const { data: eventDetail, isLoading: eventDetailLoading } = useEventDetail(selectedEventId);
-  const updateEvent = useUpdateCalendarEvent();
-  const { data: outlookCategories = [] } = useOutlookCategories();
 
   const [editForm, setEditForm] = useState({
     subject: "",
