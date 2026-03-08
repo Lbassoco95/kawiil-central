@@ -405,7 +405,7 @@ Deno.serve(async (req) => {
           pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         };
 
-        const putRes = await fetch(
+        let putRes = await fetch(
           `${GRAPH_BASE}/me/drive/root:/${encodeURI(folderPath)}/${encodeURIComponent(fileName)}:/content`,
           {
             method: "PUT",
@@ -416,6 +416,21 @@ Deno.serve(async (req) => {
             body: new Uint8Array(0),
           }
         );
+
+        // Fallback: if nested path fails (common when tenant path behavior differs), create in root
+        if (putRes.status === 404) {
+          putRes = await fetch(
+            `${GRAPH_BASE}/me/drive/root:/${encodeURIComponent(fileName)}:/content`,
+            {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": mimeTypes[docType] || "application/octet-stream",
+              },
+              body: new Uint8Array(0),
+            }
+          );
+        }
 
         if (!putRes.ok) {
           const errBody = await putRes.text();
