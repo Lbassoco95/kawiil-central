@@ -93,8 +93,13 @@ export function ProjectGeneralTab({ project }: Props) {
     setStatus(project.status);
     setStartDate(project.start_date || "");
     setEndDate(project.end_date || "");
+    setCriticalityLevel((project as any).criticality_level || "normal");
+    setDelayCategory((project as any).delay_category || "");
+    setDelayNotes((project as any).delay_notes || "");
     setEditing(false);
   };
+
+  const currentCriticality = CRITICALITY_OPTIONS.find(c => c.value === ((project as any).criticality_level || "normal"));
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
