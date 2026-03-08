@@ -28,6 +28,12 @@ export function PersonalDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const today = useMemo(() => nowMX(), []);
+  const { data: orgUsers } = useOrgUsers();
+  const userCelula = useMemo(() => {
+    if (!orgUsers || !user) return null;
+    const profile = orgUsers.find((u) => u.user_id === user.id);
+    return profile?.area ?? null;
+  }, [orgUsers, user]);
   const quote = useMemo(() => getWeeklyQuote(), []);
 
   // My tasks
