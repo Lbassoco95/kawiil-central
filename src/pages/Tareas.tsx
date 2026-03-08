@@ -105,6 +105,15 @@ INSTRUCCIONES:
           </Button>
         </div>
 
+        {/* AI Tasks Summary */}
+        <AISummaryCard
+          cacheKey={`tasks-${user?.id}-${area}`}
+          contextPrompt={tasksSummaryPrompt}
+          title="Panorama de tareas — Kawiil AI"
+          ready={!!tasks && tasks.length > 0}
+          userId={user?.id}
+        />
+
         {/* Assigned project steps */}
         {assignedSteps.length > 0 && (
           <section>
