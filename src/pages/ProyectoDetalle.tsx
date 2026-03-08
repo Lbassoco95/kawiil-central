@@ -180,6 +180,10 @@ const ProyectoDetalle = () => {
               </TabsTrigger>
             )}
             <TabsTrigger value="tareas">Tareas ({tasks.length})</TabsTrigger>
+            <TabsTrigger value="comentarios">
+              <MessageSquare className="h-4 w-4 mr-1" />
+              Comentarios
+            </TabsTrigger>
             <TabsTrigger value="firmas">
               <PenTool className="h-4 w-4 mr-1" />
               Firmas
