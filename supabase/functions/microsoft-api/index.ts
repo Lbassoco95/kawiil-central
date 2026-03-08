@@ -346,29 +346,58 @@ Deno.serve(async (req) => {
         const fileName = params.fileName || `Documento.${docType}`;
         const folderPath = params.folderPath || "Kawiil";
 
-        // Ensure folder path exists by creating each segment
-        const segments = folderPath.split("/").filter(Boolean);
-        let parentPath = "";
-        for (const seg of segments) {
-          const parentUrl = parentPath
-            ? `${GRAPH_BASE}/me/drive/root:/${parentPath}:/children`
-            : `${GRAPH_BASE}/me/drive/root/children`;
-          const mkRes = await fetch(parentUrl, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              name: seg,
-              folder: {},
-              "@microsoft.graph.conflictBehavior": "useExisting",
-            }),
+        const getItemByPath = async (path: string) => {
+          const res = await fetch(`${GRAPH_BASE}/me/drive/root:/${encodeURI(path)}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
           });
-          // consume body regardless
-          await mkRes.text();
-          parentPath = parentPath ? `${parentPath}/${seg}` : seg;
-        }
+          if (res.status === 404) return null;
+          if (!res.ok) {
+            const errBody = await res.text();
+            throw new Error(`Read OneDrive path failed [${res.status}]: ${errBody}`);
+          }
+          return await res.json();
+        };
+
+        const ensureFolderPathExists = async (path: string) => {
+          const segments = path.split("/").filter(Boolean);
+          let currentPath = "";
+
+          for (const segment of segments) {
+            currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+            const existing = await getItemByPath(currentPath);
+            if (existing) continue;
+
+            const parentPath = currentPath.includes("/")
+              ? currentPath.slice(0, currentPath.lastIndexOf("/"))
+              : "";
+
+            const createUrl = parentPath
+              ? `${GRAPH_BASE}/me/drive/root:/${encodeURI(parentPath)}:/children`
+              : `${GRAPH_BASE}/me/drive/root/children`;
+
+            const createRes = await fetch(createUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                name: segment,
+                folder: {},
+                "@microsoft.graph.conflictBehavior": "fail",
+              }),
+            });
+
+            if (!createRes.ok && createRes.status !== 409) {
+              const errBody = await createRes.text();
+              throw new Error(`Create OneDrive folder failed [${createRes.status}]: ${errBody}`);
+            }
+
+            if (createRes.body) await createRes.text();
+          }
+        };
+
+        await ensureFolderPathExists(folderPath);
 
         const mimeTypes: Record<string, string> = {
           docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -377,7 +406,7 @@ Deno.serve(async (req) => {
         };
 
         const putRes = await fetch(
-          `${GRAPH_BASE}/me/drive/root:/${folderPath}/${fileName}:/content`,
+          `${GRAPH_BASE}/me/drive/root:/${encodeURI(folderPath)}/${encodeURIComponent(fileName)}:/content`,
           {
             method: "PUT",
             headers: {
