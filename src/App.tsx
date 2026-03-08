@@ -44,7 +44,8 @@ const App = () => (
             <Route path="/microsoft365/calendario" element={<ProtectedRoute><Microsoft365Calendario /></ProtectedRoute>} />
             <Route path="/microsoft365/correo" element={<ProtectedRoute><Microsoft365Correo /></ProtectedRoute>} />
             <Route path="/documentos" element={<ProtectedRoute><Documentos /></ProtectedRoute>} />
-            <Route path="/despacho" element={<ProtectedRoute><Despacho /></ProtectedRoute>} />
+            <Route path="/hub" element={<ProtectedRoute><Hub /></ProtectedRoute>} />
+            <Route path="/despacho" element={<Navigate to="/hub" replace />} />
             <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
             <Route path="/asistente" element={<ProtectedRoute><AsistenteIA /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />

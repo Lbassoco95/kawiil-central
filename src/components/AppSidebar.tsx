@@ -32,7 +32,7 @@ const navItems = [
   { title: "Correo", url: "/microsoft365/correo", icon: Mail },
   { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Notificaciones", url: "/notificaciones", icon: Bell },
-  { title: "Despacho", url: "/despacho", icon: Building2 },
+  { title: "Hub", url: "/hub", icon: Building2 },
   { title: "Kawiil AI", url: "/asistente", icon: Sparkles },
   { title: "Administración", url: "/admin", icon: Settings },
 ];
