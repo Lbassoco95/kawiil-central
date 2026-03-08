@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +12,7 @@ import { logActivity } from "@/lib/activityLog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { SendToSignDialog } from "@/components/documents/SendToSignDialog";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 interface Props {
   documentIds: string[];
@@ -31,6 +32,8 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [dropboxUploadFile, setDropboxUploadFile] = useState<File | null>(null);
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const [signDoc, setSignDoc] = useState<{ name: string; url: string } | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
 
@@ -304,6 +307,19 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
                 )}
                 <span className="truncate flex-1">{doc.name}</span>
               </div>
+              {/* Open in Dropbox to resume editing */}
+              {doc.external_path && (
+                <button
+                  className="shrink-0 p-0.5 rounded hover:bg-primary/10 transition-colors"
+                  title="Abrir en Dropbox"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(doc.external_path!, "_blank");
+                  }}
+                >
+                  <ExternalLink className="h-3 w-3 text-primary" />
+                </button>
+              )}
               {doc.external_path && (
                 <button
                   className="shrink-0 p-0.5 rounded hover:bg-primary/10 transition-colors"
@@ -320,6 +336,16 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
                 className="h-3 w-3 text-muted-foreground shrink-0 cursor-pointer"
                 onClick={() => setPreviewDoc(doc)}
               />
+              <button
+                className="shrink-0 p-0.5 rounded hover:bg-destructive/10 transition-colors"
+                title="Eliminar archivo"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteDoc(doc.id);
+                }}
+              >
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </button>
               <span className="text-muted-foreground shrink-0">{formatDateMX(doc.created_at)}</span>
             </div>
           ))}
@@ -347,6 +373,28 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
         onClose={() => setSignDoc(null)}
         fileUrl={signDoc?.url}
         fileName={signDoc?.name}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deleteDoc}
+        onOpenChange={(o) => { if (!o) setDeleteDoc(null); }}
+        title="¿Eliminar este archivo?"
+        description="Se desvinculará del paso. Si es un archivo de Dropbox, no se eliminará de Dropbox."
+        isPending={deleting}
+        onConfirm={async () => {
+          if (!deleteDoc) return;
+          setDeleting(true);
+          try {
+            await supabase.from("documents").delete().eq("id", deleteDoc);
+            onDocumentAdded(documentIds.filter((id) => id !== deleteDoc));
+            toast.success("Archivo eliminado del paso");
+          } catch (err: any) {
+            toast.error("Error: " + err.message);
+          } finally {
+            setDeleting(false);
+            setDeleteDoc(null);
+          }
+        }}
       />
     </div>
   );
