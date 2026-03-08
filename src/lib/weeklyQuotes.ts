@@ -1,0 +1,63 @@
+// Frases reflexivas para la vida — una por semana, ciclo de 52
+const QUOTES: { text: string; author: string }[] = [
+  { text: "No todo lo que se enfrenta puede cambiarse, pero nada puede cambiarse hasta que se enfrenta.", author: "James Baldwin" },
+  { text: "A veces el camino más largo es el más honesto.", author: "Proverbio" },
+  { text: "Lo que niegas te somete. Lo que aceptas te transforma.", author: "Carl Jung" },
+  { text: "No es la carga lo que te derrumba, sino la forma en que la cargas.", author: "Lou Holtz" },
+  { text: "El río llega a la meta porque aprendió a sortear los obstáculos.", author: "Lao Tzu" },
+  { text: "Donde hay una voluntad hay un camino, pero a veces el camino es sentarse un rato.", author: "Anónimo" },
+  { text: "La paciencia no es la habilidad de esperar, sino de mantener una buena actitud mientras esperas.", author: "Joyce Meyer" },
+  { text: "Las heridas que no se ven son las que más tardan en sanar.", author: "Anónimo" },
+  { text: "A veces tienes que soltar la vida que planeaste para vivir la que te espera.", author: "Joseph Campbell" },
+  { text: "El silencio es a veces la mejor respuesta.", author: "Dalai Lama" },
+  { text: "No se trata de tener tiempo, se trata de hacer tiempo.", author: "Anónimo" },
+  { text: "La vida no se mide por las veces que respiras, sino por los momentos que te dejan sin aliento.", author: "Maya Angelou" },
+  { text: "Cada mañana nacemos de nuevo. Lo que hacemos hoy es lo que más importa.", author: "Buda" },
+  { text: "El único viaje imposible es el que nunca comienzas.", author: "Tony Robbins" },
+  { text: "A veces lo que parece el final es realmente un nuevo comienzo.", author: "Anónimo" },
+  { text: "No puedes calmar la tormenta, pero puedes calmarte a ti mismo.", author: "Timber Hawkeye" },
+  { text: "Lo que hoy parece un sacrificio, mañana será tu mayor fortaleza.", author: "Anónimo" },
+  { text: "El agua que no corre hace un pantano; la mente que no trabaja hace lo mismo.", author: "Victor Hugo" },
+  { text: "No necesitas ver toda la escalera, solo da el primer paso.", author: "Martin Luther King Jr." },
+  { text: "Las cosas más bellas del mundo no se ven ni se tocan, se sienten con el corazón.", author: "Antoine de Saint-Exupéry" },
+  { text: "La vida es como montar en bicicleta: para mantener el equilibrio, hay que seguir pedaleando.", author: "Albert Einstein" },
+  { text: "Lo que la oruga llama el fin del mundo, el maestro lo llama mariposa.", author: "Richard Bach" },
+  { text: "No es lo que te pasa, sino cómo reaccionas lo que importa.", author: "Epícteto" },
+  { text: "A veces las personas más fuertes son las que más sonríen a través del dolor.", author: "Anónimo" },
+  { text: "El secreto de la existencia no consiste solamente en vivir, sino en saber para qué se vive.", author: "Fyodor Dostoyevsky" },
+  { text: "No todo final es malo y no todo comienzo es bueno.", author: "Anónimo" },
+  { text: "Si no puedes volar, corre. Si no puedes correr, camina. Pero sigue avanzando.", author: "Martin Luther King Jr." },
+  { text: "El dolor que sientes hoy será la fuerza que sientes mañana.", author: "Anónimo" },
+  { text: "Haz lo que puedas, con lo que tengas, donde estés.", author: "Theodore Roosevelt" },
+  { text: "La vida es demasiado importante como para tomársela en serio.", author: "Oscar Wilde" },
+  { text: "El tiempo pone a cada quien en su lugar y a cada cosa en su sitio.", author: "Proverbio" },
+  { text: "Cuando todo parezca ir en tu contra, recuerda que el avión despega contra el viento.", author: "Henry Ford" },
+  { text: "No busques los errores, busca el remedio.", author: "Henry Ford" },
+  { text: "Lo que defines te confina. Déjate sorprender.", author: "Anónimo" },
+  { text: "La esperanza no es la convicción de que algo saldrá bien, sino la certeza de que algo tiene sentido.", author: "Václav Havel" },
+  { text: "No hay atajos para ningún lugar que merezca la pena.", author: "Beverly Sills" },
+  { text: "A veces la mejor decisión del día es descansar.", author: "Anónimo" },
+  { text: "El que tiene un porqué para vivir puede soportar casi cualquier cómo.", author: "Friedrich Nietzsche" },
+  { text: "La gratitud convierte lo que tenemos en suficiente.", author: "Melody Beattie" },
+  { text: "No dejes que el ruido de las opiniones ajenas silencie tu propia voz interior.", author: "Steve Jobs" },
+  { text: "El mejor momento para plantar un árbol fue hace 20 años. El segundo mejor momento es ahora.", author: "Proverbio chino" },
+  { text: "Todo pasa, lo bueno y lo malo. Lo importante es qué te llevas de cada cosa.", author: "Anónimo" },
+  { text: "La simplicidad es la máxima sofisticación.", author: "Leonardo da Vinci" },
+  { text: "No mires el reloj; haz lo que él hace: sigue adelante.", author: "Sam Levenson" },
+  { text: "La vida te pondrá obstáculos, pero los límites los pones tú.", author: "Anónimo" },
+  { text: "Nuestra mayor gloria no está en no caer nunca, sino en levantarnos cada vez que caemos.", author: "Confucio" },
+  { text: "A veces necesitas alejarte para ver las cosas con claridad.", author: "Anónimo" },
+  { text: "El éxito no es definitivo, el fracaso no es fatal: lo que cuenta es el valor de continuar.", author: "Winston Churchill" },
+  { text: "La verdadera generosidad hacia el futuro consiste en darlo todo en el presente.", author: "Albert Camus" },
+  { text: "No es la especie más fuerte la que sobrevive, sino la que mejor se adapta al cambio.", author: "Charles Darwin" },
+  { text: "Conócete, acéptate, supérate.", author: "San Agustín" },
+  { text: "El presente es lo único que realmente tienes. Úsalo bien.", author: "Anónimo" },
+];
+
+export function getWeeklyQuote(): { text: string; author: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const diff = now.getTime() - start.getTime();
+  const weekNumber = Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
+  return QUOTES[weekNumber % QUOTES.length];
+}
