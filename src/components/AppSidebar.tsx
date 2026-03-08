@@ -16,6 +16,7 @@ import {
   Mail,
   Building2,
   Bell,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const navItems = [
   { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Notificaciones", url: "/notificaciones", icon: Bell },
   { title: "Despacho", url: "/despacho", icon: Building2 },
+  { title: "Kawiil AI", url: "/asistente", icon: Sparkles },
   { title: "Administración", url: "/admin", icon: Settings },
 ];
 
