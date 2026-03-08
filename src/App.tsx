@@ -17,7 +17,7 @@ import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
 import Microsoft365Calendario from "./pages/Microsoft365Calendario";
 import Microsoft365Correo from "./pages/Microsoft365Correo";
-import Despacho from "./pages/Despacho";
+import Hub from "./pages/Hub";
 import Notificaciones from "./pages/Notificaciones";
 import AsistenteIA from "./pages/AsistenteIA";
 import NotFound from "./pages/NotFound";
