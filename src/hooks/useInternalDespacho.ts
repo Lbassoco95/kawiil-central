@@ -22,6 +22,38 @@ export function useInternalProcedures() {
   });
 }
 
+export function useProcedureVersions(procedureId: string | null) {
+  return useQuery({
+    queryKey: ["procedure-versions", procedureId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("procedure_versions")
+        .select("*")
+        .eq("procedure_id", procedureId)
+        .order("version_number", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!procedureId,
+  });
+}
+
+export function useProcedureComments(procedureId: string | null) {
+  return useQuery({
+    queryKey: ["procedure-comments", procedureId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("procedure_comments")
+        .select("*")
+        .eq("procedure_id", procedureId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!procedureId,
+  });
+}
+
 export function useCreateInternalProcedure() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -51,10 +83,23 @@ export function useCreateInternalProcedure() {
           file_size: input.file.size,
           mime_type: input.file.type,
           uploaded_by: user!.id,
+          current_version: 1,
         })
         .select()
         .single();
       if (error) throw error;
+
+      // Create version 1 entry
+      await (supabase as any).from("procedure_versions").insert({
+        procedure_id: data.id,
+        version_number: 1,
+        file_path: filePath,
+        file_size: input.file.size,
+        mime_type: input.file.type,
+        uploaded_by: user!.id,
+        change_notes: "Versión inicial",
+      });
+
       return data;
     },
     onSuccess: () => {
@@ -65,12 +110,108 @@ export function useCreateInternalProcedure() {
   });
 }
 
+export function useUploadNewVersion() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (input: { procedureId: string; file: File; changeNotes?: string; currentVersion: number }) => {
+      const newVersion = input.currentVersion + 1;
+      const filePath = `${INTERNAL_PROCEDURES_PATH}/${Date.now()}_v${newVersion}_${input.file.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, input.file);
+      if (uploadError) throw uploadError;
+
+      // Insert version record
+      await (supabase as any).from("procedure_versions").insert({
+        procedure_id: input.procedureId,
+        version_number: newVersion,
+        file_path: filePath,
+        file_size: input.file.size,
+        mime_type: input.file.type,
+        uploaded_by: user!.id,
+        change_notes: input.changeNotes || null,
+      });
+
+      // Update procedure to point to new version
+      await (supabase as any)
+        .from("internal_procedures")
+        .update({
+          file_path: filePath,
+          file_size: input.file.size,
+          mime_type: input.file.type,
+          current_version: newVersion,
+        })
+        .eq("id", input.procedureId);
+
+      return newVersion;
+    },
+    onSuccess: (version) => {
+      queryClient.invalidateQueries({ queryKey: ["internal-procedures"] });
+      queryClient.invalidateQueries({ queryKey: ["procedure-versions"] });
+      toast.success(`Versión ${version} subida`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useCreateProcedureComment() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (input: { procedureId: string; content: string }) => {
+      const { data, error } = await (supabase as any)
+        .from("procedure_comments")
+        .insert({
+          procedure_id: input.procedureId,
+          user_id: user!.id,
+          content: input.content,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["procedure-comments", vars.procedureId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useDeleteProcedureComment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: { id: string; procedureId: string }) => {
+      const { error } = await (supabase as any).from("procedure_comments").delete().eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["procedure-comments", vars.procedureId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 export function useDeleteInternalProcedure() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (row: { id: string; file_path: string }) => {
-      await supabase.storage.from("documents").remove([row.file_path]);
+      // Get all version file paths to delete from storage
+      const { data: versions } = await (supabase as any)
+        .from("procedure_versions")
+        .select("file_path")
+        .eq("procedure_id", row.id);
+
+      const filePaths = [row.file_path, ...(versions || []).map((v: any) => v.file_path)];
+      const uniquePaths = [...new Set(filePaths)];
+      await supabase.storage.from("documents").remove(uniquePaths);
+
       const { error } = await (supabase as any).from("internal_procedures").delete().eq("id", row.id);
       if (error) throw error;
     },
