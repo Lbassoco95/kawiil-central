@@ -73,17 +73,14 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
 
   const loadPreview = async (filePath: string) => {
     setPreviewUrl(null);
-    const mimeType = procedure?.mime_type || "";
-    const isPdfFile = mimeType === "application/pdf";
-    
-    if (isPdfFile) {
-      // Use signed URL for PDFs - Chrome blocks blob URLs in iframes
-      const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
-      if (data?.signedUrl) setPreviewUrl(data.signedUrl);
-    } else {
-      // Use blob URL for images and other files
-      const { data } = await supabase.storage.from("documents").download(filePath);
-      if (data) setPreviewUrl(URL.createObjectURL(data));
+    // Download file as blob and create object URL with correct MIME type
+    const { data } = await supabase.storage.from("documents").download(filePath);
+    if (data) {
+      // Re-create blob with explicit MIME type to ensure Chrome handles it correctly
+      const mimeType = procedure?.mime_type || data.type || "application/octet-stream";
+      const typedBlob = new Blob([data], { type: mimeType });
+      const url = URL.createObjectURL(typedBlob);
+      setPreviewUrl(url);
     }
   };
 
@@ -187,7 +184,16 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : isPdf ? (
-                  <iframe src={previewUrl} className="w-full h-full rounded-lg border" title="Vista previa" />
+                  <object data={`${previewUrl}#toolbar=1&navpanes=0`} type="application/pdf" className="w-full h-full rounded-lg border">
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                      <FileText className="h-12 w-12 opacity-40" />
+                      <p className="text-sm">No se puede mostrar el PDF en el navegador</p>
+                      <Button variant="outline" size="sm" onClick={() => handleDownloadVersion(procedure.file_path)}>
+                        <Download className="h-3.5 w-3.5 mr-1.5" />
+                        Descargar PDF
+                      </Button>
+                    </div>
+                  </object>
                 ) : isImage ? (
                   <div className="flex items-center justify-center h-full">
                     <img src={previewUrl} alt={procedure.title} className="max-w-full max-h-full object-contain rounded-lg" />

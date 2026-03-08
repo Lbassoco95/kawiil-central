@@ -83,16 +83,16 @@ export function useCreateInternalProcedure() {
           file_size: input.file.size,
           mime_type: input.file.type,
           uploaded_by: user!.id,
-          current_version: 1,
+          current_version: 2,
         })
         .select()
         .single();
       if (error) throw error;
 
-      // Create version 1 entry
+      // Create version 2 entry (initial upload)
       await (supabase as any).from("procedure_versions").insert({
         procedure_id: data.id,
-        version_number: 1,
+        version_number: 2,
         file_path: filePath,
         file_size: input.file.size,
         mime_type: input.file.type,
