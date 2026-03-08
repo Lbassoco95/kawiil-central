@@ -130,7 +130,7 @@ const AsistenteIA = () => {
             <Sparkles className="h-4 w-4 text-primary" />
             <h1 className="text-sm font-semibold text-foreground">Kawiil AI</h1>
             <span className="text-[10px] text-muted-foreground bg-primary/10 px-2 py-0.5 rounded-full">
-              OpenAI
+              OpenAI · Tool Calling
             </span>
           </div>
 
