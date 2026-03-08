@@ -5,9 +5,53 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Cache the team root namespace ID and admin member ID
+// Cache the team root namespace ID, admin member ID, and refreshed access token
 let cachedRootNamespaceId: string | null = null;
 let cachedAdminMemberId: string | null = null;
+let cachedAccessToken: string | null = null;
+let cachedTokenExpiry: number = 0;
+
+async function getValidAccessToken(): Promise<string> {
+  // If we have a cached token that's still valid (with 5 min buffer), use it
+  if (cachedAccessToken && Date.now() < cachedTokenExpiry - 300_000) {
+    return cachedAccessToken;
+  }
+
+  const refreshToken = Deno.env.get('DROPBOX_REFRESH_TOKEN');
+  const appKey = Deno.env.get('DROPBOX_APP_KEY');
+  const appSecret = Deno.env.get('DROPBOX_APP_SECRET');
+
+  if (!refreshToken || !appKey || !appSecret) {
+    // Fallback to static token if refresh credentials aren't configured
+    const staticToken = Deno.env.get('DROPBOX_ACCESS_TOKEN');
+    if (!staticToken) throw new Error('No Dropbox credentials configured');
+    return staticToken;
+  }
+
+  console.log('Refreshing Dropbox access token...');
+  const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Authorization': `Basic ${btoa(`${appKey}:${appSecret}`)}`,
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Failed to refresh Dropbox token: ${errText}`);
+  }
+
+  const data = await response.json();
+  cachedAccessToken = data.access_token;
+  cachedTokenExpiry = Date.now() + (data.expires_in * 1000);
+  console.log('Dropbox access token refreshed successfully');
+  return cachedAccessToken!;
+}
 
 async function getTeamAdminMemberId(token: string): Promise<string | null> {
   if (cachedAdminMemberId) return cachedAdminMemberId;
