@@ -22,6 +22,8 @@ export function EmailView() {
   const [emailAction, setEmailAction] = useState<EmailAction>(null);
   const [replyText, setReplyText] = useState("");
   const [forwardTo, setForwardTo] = useState("");
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const { isAdminOrManager } = useUserRole();
 
   const { data: emails = [], isLoading } = useOutlookEmails("inbox", debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
