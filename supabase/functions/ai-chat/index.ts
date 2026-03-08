@@ -121,6 +121,34 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_team_members",
+      description: "Obtiene los miembros del equipo (Kawiilers) de la organización. Puede contar o listar con detalle.",
+      parameters: {
+        type: "object",
+        properties: {
+          count_only: { type: "boolean", description: "Si true, retorna solo conteo total y por área/rol" },
+          area: { type: "string", description: "Filtrar por área/célula" },
+          active_only: { type: "boolean", description: "Solo usuarios activos (default true)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_celulas",
+      description: "Obtiene las células (áreas de trabajo) de la organización con sus responsables.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 async function executeTool(
@@ -155,7 +183,6 @@ async function executeTool(
     }
     case "get_clients": {
       if (args.count_only) {
-        // Get all clients with minimal fields for counting
         let q = supabase.from("clients")
           .select("name, status, services")
           .eq("organization_id", orgId);
@@ -163,7 +190,6 @@ async function executeTool(
         const { data, error } = await q;
         if (error) return { error: error.message };
         
-        // Build summary
         const total = data?.length || 0;
         const byStatus: Record<string, number> = {};
         const byService: Record<string, number> = {};
@@ -238,6 +264,79 @@ async function executeTool(
       const { data, error } = await q;
       return error ? { error: error.message } : data;
     }
+    case "get_team_members": {
+      const activeOnly = args.active_only !== false;
+      
+      // Get profiles
+      let q = supabase.from("profiles")
+        .select("user_id, full_name, email, area, is_active, phone")
+        .eq("organization_id", orgId);
+      if (activeOnly) q = q.eq("is_active", true);
+      if (args.area) q = q.eq("area", args.area);
+      q = q.order("full_name");
+      const { data: profiles, error: profErr } = await q;
+      if (profErr) return { error: profErr.message };
+
+      // Get roles for these users
+      const userIds = (profiles || []).map((p: any) => p.user_id);
+      const { data: roles } = await supabase.from("user_roles")
+        .select("user_id, role")
+        .in("user_id", userIds);
+      
+      const roleMap: Record<string, string> = {};
+      for (const r of roles || []) {
+        roleMap[r.user_id] = r.role;
+      }
+
+      if (args.count_only) {
+        const total = profiles?.length || 0;
+        const byArea: Record<string, number> = {};
+        const byRole: Record<string, number> = {};
+        for (const p of profiles || []) {
+          const area = p.area || "Sin área";
+          byArea[area] = (byArea[area] || 0) + 1;
+          const role = roleMap[p.user_id] || "sin_rol";
+          byRole[role] = (byRole[role] || 0) + 1;
+        }
+        return { total_kawiilers: total, por_area: byArea, por_rol: byRole };
+      }
+
+      return (profiles || []).map((p: any) => ({
+        nombre: p.full_name,
+        email: p.email,
+        area: p.area || "Sin área",
+        rol: roleMap[p.user_id] || "sin_rol",
+        activo: p.is_active,
+        telefono: p.phone,
+      }));
+    }
+    case "get_celulas": {
+      const { data, error } = await supabase.from("celulas")
+        .select("name, slug, description, color, is_active, responsible_user_id")
+        .eq("organization_id", orgId)
+        .eq("is_active", true)
+        .order("name");
+      if (error) return { error: error.message };
+      
+      // Resolve responsible names
+      const respIds = (data || []).filter((c: any) => c.responsible_user_id).map((c: any) => c.responsible_user_id);
+      let nameMap: Record<string, string> = {};
+      if (respIds.length > 0) {
+        const { data: profs } = await supabase.from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", respIds);
+        for (const p of profs || []) {
+          nameMap[p.user_id] = p.full_name;
+        }
+      }
+      
+      return (data || []).map((c: any) => ({
+        nombre: c.name,
+        slug: c.slug,
+        descripcion: c.description,
+        responsable: nameMap[c.responsible_user_id] || null,
+      }));
+    }
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
@@ -276,7 +375,13 @@ serve(async (req) => {
     const orgId = profile?.organization_id;
     const { messages } = await req.json();
 
-    const systemPrompt = `Eres el asistente inteligente de Kawiil, una plataforma de gestión para despachos contables y legales en México. Tu nombre es Kawiil AI.
+    const systemPrompt = `Eres el asistente inteligente INTERNO de Kawiil, una plataforma de gestión para despachos contables y legales en México. Tu nombre es Kawiil AI.
+
+IMPORTANTE - CONTEXTO DE SEGURIDAD:
+- Eres la IA INTERNA del despacho Kawiil. Solo los miembros del equipo (Kawiilers) tienen acceso a ti.
+- Tienes acceso completo a la información interna: equipo, clientes, proyectos, tareas, células.
+- NUNCA debes compartir información interna con personas externas. Esta IA es exclusivamente para uso del equipo.
+- En el futuro existirá una IA separada para clientes que solo verá su propia información. Tú NO eres esa IA.
 
 Contexto del usuario:
 - Nombre: ${profile?.full_name || "Usuario"}
@@ -285,6 +390,8 @@ Contexto del usuario:
 
 Tienes acceso a herramientas para consultar datos reales del sistema:
 - Puedes ver tareas (propias y del equipo), clientes, proyectos y recordatorios
+- Puedes consultar los miembros del equipo (Kawiilers), sus roles y áreas
+- Puedes ver las células de trabajo y sus responsables
 - Puedes crear recordatorios para el usuario
 - Puedes analizar fechas de vencimiento próximas
 
@@ -293,10 +400,13 @@ Tu rol:
 2. **Gestión de agenda**: Usa las herramientas para revisar tareas y crear recordatorios inteligentes.
 3. **Priorización**: Analiza carga de trabajo real y sugiere orden de prioridad.
 4. **Consultas operativas**: SAT, IMSS, ISR, IVA, DIOT, etc.
-5. **Análisis de equipo**: Distribución de tareas por área o persona.
+5. **Análisis de equipo**: Distribución de tareas por área o persona. Consulta de Kawiilers activos.
+6. **Información organizacional**: Células, roles, estructura del equipo.
 
 IMPORTANTE:
 - Cuando pregunten sobre tareas, pendientes o agenda, USA las herramientas para datos reales.
+- Cuando pregunten sobre el equipo, Kawiilers o usuarios, USA get_team_members.
+- Cuando pregunten sobre células o áreas, USA get_celulas.
 - Si sugiere crear un recordatorio, CRÉALO con la herramienta.
 - Responde siempre en español con markdown.
 - Sé conciso pero completo.`;
@@ -357,13 +467,11 @@ IMPORTANTE:
         continue;
       }
 
-      // Final response - stream it back as SSE for the frontend
+      // Final response
       const finalContent = msg.content || "";
-      // Simulate SSE chunks for compatibility with existing frontend
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         start(controller) {
-          // Split content into chunks for streaming feel
           const chunkSize = 15;
           for (let i = 0; i < finalContent.length; i += chunkSize) {
             const chunk = finalContent.slice(i, i + chunkSize);
@@ -380,7 +488,6 @@ IMPORTANTE:
       });
     }
 
-    // If we exhausted tool rounds, return error
     return new Response(JSON.stringify({ error: "Demasiadas consultas internas" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
