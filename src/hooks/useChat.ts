@@ -252,5 +252,7 @@ export function useChat() {
     loadConversation,
     startNewChat,
     deleteConversation: deleteConversation.mutate,
+    updateConversationFolder,
+    renameConversation,
   };
 }
