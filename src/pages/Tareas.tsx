@@ -153,6 +153,9 @@ const Tareas = () => {
                     <h3 className="text-[13px] font-medium text-foreground truncate">{task.title}</h3>
                     <Badge className={`text-[10px] border-0 px-1.5 py-0 ${priorityColors[task.priority]}`} variant="secondary">{task.priority}</Badge>
                     <Badge className={`text-[10px] border-0 px-1.5 py-0 ${statusLabels[task.status]?.color}`} variant="secondary">{statusLabels[task.status]?.label}</Badge>
+                    {(task as any).criticality_level === "critico" && <span className="text-[10px]" title="Crítico">🔴</span>}
+                    {(task as any).criticality_level === "atencion" && <span className="text-[10px]" title="Atención">🟡</span>}
+                    {(task as any).delay_category && <Badge variant="outline" className="text-[9px] px-1 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>}
                   </div>
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                     {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
