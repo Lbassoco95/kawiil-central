@@ -101,7 +101,12 @@ export function AppSidebar() {
                 onClick={() => setMobileOpen(false)}
               >
                 <item.icon className="h-[15px] w-[15px] shrink-0 opacity-70" />
-                <span>{item.title}</span>
+                <span className="flex-1">{item.title}</span>
+                {item.url === "/notificaciones" && unreadCount > 0 && (
+                  <span className="bg-primary text-primary-foreground text-[10px] rounded-full px-1.5 py-0 font-bold leading-4">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
