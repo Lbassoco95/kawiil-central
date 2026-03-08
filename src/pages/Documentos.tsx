@@ -6,17 +6,20 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useDocuments, useDeleteDocument } from "@/hooks/useDocuments";
 import { DocumentFormDialog } from "@/components/documents/DocumentFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { formatMX } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   Plus, Search, FileText, Link, ExternalLink, Trash2, Upload,
   Eye, Folder, FolderOpen, ChevronLeft, Image,
-  FileSpreadsheet, File, FileCode, Loader2, HardDrive, Cloud
+  FileSpreadsheet, File, FileCode, Loader2, HardDrive, Cloud,
+  FolderPlus, Pencil
 } from "lucide-react";
 
 // ─── File icon helper ─────────────────────────────────────────
@@ -54,20 +57,29 @@ interface DropboxEntry {
 }
 
 function DropboxLiveBrowser() {
-  const [currentPath, setCurrentPath] = useState("/Kawiil Mx");
+  const { user } = useAuth();
+  const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Mi carpeta";
+
+  // "ROOT" is a virtual state showing two root folders
+  const [currentPath, setCurrentPath] = useState<string | null>(null); // null = root view
   const [entries, setEntries] = useState<DropboxEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [linkLoading, setLinkLoading] = useState<string | null>(null);
-  const [initialLoaded, setInitialLoaded] = useState(false);
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<DropboxEntry | null>(null);
+  const [renameName, setRenameName] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const browse = async (path: string) => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: { path: path || "/Kawiil Mx", action: "list" },
+        body: { path, action: "list" },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
@@ -77,24 +89,29 @@ function DropboxLiveBrowser() {
       toast.error("Error al navegar Dropbox: " + (e.message || "Error desconocido"));
     } finally {
       setLoading(false);
-      setInitialLoaded(true);
     }
   };
 
-  // Load on first render
-  if (!initialLoaded && !loading) {
-    browse("/Kawiil Mx");
-  }
-
   const openFolder = (path: string) => {
-    setPathHistory((prev) => [...prev, currentPath]);
+    setPathHistory((prev) => [...prev, currentPath || "ROOT"]);
     browse(path);
   };
 
   const goBack = () => {
-    const prev = pathHistory[pathHistory.length - 1] ?? "/Kawiil Mx";
+    const prev = pathHistory[pathHistory.length - 1];
     setPathHistory((p) => p.slice(0, -1));
-    browse(prev);
+    if (!prev || prev === "ROOT") {
+      setCurrentPath(null);
+      setEntries([]);
+    } else {
+      browse(prev);
+    }
+  };
+
+  const goToRoot = () => {
+    setPathHistory([]);
+    setCurrentPath(null);
+    setEntries([]);
   };
 
   const openFileLink = async (entry: DropboxEntry) => {
@@ -115,7 +132,7 @@ function DropboxLiveBrowser() {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !currentPath) return;
     setUploading(true);
     try {
       const reader = new FileReader();
@@ -144,28 +161,78 @@ function DropboxLiveBrowser() {
     }
   };
 
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim() || !currentPath) return;
+    setCreatingFolder(true);
+    try {
+      const folderPath = `${currentPath}/${newFolderName.trim()}`;
+      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
+        body: { action: "create_folder", folder_path: folderPath },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      toast.success(`Carpeta "${newFolderName.trim()}" creada`);
+      setCreateFolderOpen(false);
+      setNewFolderName("");
+      browse(currentPath);
+    } catch (err: any) {
+      toast.error("Error al crear carpeta: " + err.message);
+    } finally {
+      setCreatingFolder(false);
+    }
+  };
+
+  const handleRename = async () => {
+    if (!renameName.trim() || !renameTarget) return;
+    setRenaming(true);
+    try {
+      const parentPath = renameTarget.path.substring(0, renameTarget.path.lastIndexOf("/"));
+      const toPath = `${parentPath}/${renameName.trim()}`;
+      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
+        body: { action: "rename", from_path: renameTarget.path, to_path: toPath },
+      });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      toast.success(`Renombrado a "${renameName.trim()}"`);
+      setRenameTarget(null);
+      setRenameName("");
+      if (currentPath) browse(currentPath);
+    } catch (err: any) {
+      toast.error("Error al renombrar: " + err.message);
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   const folders = entries.filter((e) => e.type === "folder").sort((a, b) => a.name.localeCompare(b.name));
   const files = entries.filter((e) => e.type === "file").sort((a, b) => a.name.localeCompare(b.name));
 
-  const relativePath = currentPath.replace("/Kawiil Mx", "") || "/";
-  const breadcrumbs = relativePath.split("/").filter(Boolean);
+  // Root view: show two folders
+  const isRoot = currentPath === null;
+
+  // Build breadcrumbs
+  const breadcrumbs: string[] = [];
+  if (currentPath) {
+    const parts = currentPath.split("/").filter(Boolean);
+    breadcrumbs.push(...parts);
+  }
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm min-w-0">
-          {pathHistory.length > 0 && (
+          {!isRoot && (
             <Button variant="ghost" size="sm" className="h-7 px-2 shrink-0" onClick={goBack}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
           )}
           <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
           <button
-            onClick={() => { setPathHistory([]); browse("/Kawiil Mx"); }}
+            onClick={goToRoot}
             className="text-muted-foreground hover:text-foreground hover:underline font-medium"
           >
-            Kawiil Mx
+            Dropbox
           </button>
           {breadcrumbs.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1">
@@ -176,24 +243,54 @@ function DropboxLiveBrowser() {
             </span>
           ))}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            disabled={uploading}
-            onClick={() => fileRef.current?.click()}
-          >
-            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-            Subir archivo
-          </Button>
-        </div>
+        {!isRoot && (
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setCreateFolderOpen(true)}
+            >
+              <FolderPlus className="h-3 w-3" />
+              Nueva carpeta
+            </Button>
+            <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+            >
+              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+              Subir archivo
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="border rounded-lg divide-y">
-        {loading ? (
+        {isRoot ? (
+          <>
+            <button
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+              onClick={() => openFolder(`/${userName}`)}
+            >
+              <Folder className="h-5 w-5 text-primary shrink-0" />
+              <span className="text-sm font-medium truncate flex-1">{userName}</span>
+              <Badge variant="secondary" className="text-xs">Personal</Badge>
+            </button>
+            <button
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+              onClick={() => openFolder("/Kawiil Mx")}
+            >
+              <Folder className="h-5 w-5 text-primary shrink-0" />
+              <span className="text-sm font-medium truncate flex-1">Kawiil Mx</span>
+              <Badge variant="secondary" className="text-xs">Equipo</Badge>
+            </button>
+          </>
+        ) : loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
@@ -202,14 +299,30 @@ function DropboxLiveBrowser() {
         ) : (
           <>
             {folders.map((entry) => (
-              <button
+              <div
                 key={entry.id}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-                onClick={() => openFolder(entry.path)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
               >
-                <Folder className="h-5 w-5 text-primary shrink-0" />
-                <span className="text-sm font-medium truncate flex-1">{entry.name}</span>
-              </button>
+                <button
+                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  onClick={() => openFolder(entry.path)}
+                >
+                  <Folder className="h-5 w-5 text-primary shrink-0" />
+                  <span className="text-sm font-medium truncate flex-1">{entry.name}</span>
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRenameTarget(entry);
+                    setRenameName(entry.name);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             ))}
             {files.map((entry) => (
               <button
@@ -231,6 +344,50 @@ function DropboxLiveBrowser() {
           </>
         )}
       </div>
+
+      {/* Create Folder Dialog */}
+      <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nueva carpeta</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Nombre de la carpeta"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateFolderOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateFolder} disabled={creatingFolder || !newFolderName.trim()}>
+              {creatingFolder ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Crear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={!!renameTarget} onOpenChange={(open) => { if (!open) setRenameTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renombrar carpeta</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Nuevo nombre"
+            value={renameName}
+            onChange={(e) => setRenameName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleRename()}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>Cancelar</Button>
+            <Button onClick={handleRename} disabled={renaming || !renameName.trim()}>
+              {renaming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Renombrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
