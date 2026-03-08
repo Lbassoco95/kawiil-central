@@ -13,12 +13,12 @@ import { Progress } from "@/components/ui/progress";
 import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
+import { DailyBriefing } from "@/components/dashboard/DailyBriefing";
 import {
   Plus as PlusIcon,
   Trash2,
   Bell,
   CheckSquare,
-  Sparkles,
   ArrowRight,
   Quote,
 } from "lucide-react";
