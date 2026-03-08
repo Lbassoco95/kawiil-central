@@ -32,7 +32,6 @@ import {
   subDays,
   isSameMonth,
 } from "date-fns";
-import { es } from "date-fns/locale";
 import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -393,18 +392,18 @@ export function CalendarView() {
   const headerLabel = useMemo(() => {
     switch (viewMode) {
       case "day":
-        return format(currentDate, "EEEE d 'de' MMMM, yyyy", { locale: es });
+        return format(currentDate, "EEEE d 'de' MMMM, yyyy");
       case "3days": {
         const end = addDays(currentDate, 2);
-        return `${format(currentDate, "d MMM", { locale: es })} – ${format(end, "d MMM yyyy", { locale: es })}`;
+        return `${format(currentDate, "d MMM")} – ${format(end, "d MMM yyyy")}`;
       }
       case "week": {
         const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
         const we = endOfWeek(currentDate, { weekStartsOn: 1 });
-        return `${format(ws, "d MMM", { locale: es })} – ${format(we, "d MMM yyyy", { locale: es })}`;
+        return `${format(ws, "d MMM")} – ${format(we, "d MMM yyyy")}`;
       }
       case "month":
-        return format(currentDate, "MMMM yyyy", { locale: es });
+        return format(currentDate, "MMMM yyyy");
     }
   }, [viewMode, currentDate]);
 
@@ -473,10 +472,10 @@ export function CalendarView() {
                     onClick={() => { setSelectedDate(day); setShowCreate(true); }}
                   >
                     <div className="text-xs text-muted-foreground capitalize">
-                      {format(day, "EEE", { locale: es })}
+                      {format(day, "EEE")}
                     </div>
                     <div className={`text-sm font-medium ${isToday(day) ? "text-primary" : ""}`}>
-                      {format(day, "d", { locale: es })}
+                      {format(day, "d")}
                     </div>
                   </div>
                 ))}
@@ -734,7 +733,7 @@ export function CalendarView() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Nuevo evento – {format(selectedDate, "EEEE d 'de' MMMM, yyyy", { locale: es })}</DialogTitle>
+            <DialogTitle>Nuevo evento – {format(selectedDate, "EEEE d 'de' MMMM, yyyy")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">

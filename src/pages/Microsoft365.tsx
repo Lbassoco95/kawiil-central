@@ -1,12 +1,17 @@
-import { useState } from "react";
+import { lazy, Suspense } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { CalendarView } from "@/components/microsoft/CalendarView";
-import { EmailView } from "@/components/microsoft/EmailView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { Calendar, Mail, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+
+const CalendarView = lazy(() =>
+  import("@/components/microsoft/CalendarView").then((m) => ({ default: m.CalendarView }))
+);
+const EmailView = lazy(() =>
+  import("@/components/microsoft/EmailView").then((m) => ({ default: m.EmailView }))
+);
 
 const Microsoft365 = () => {
   const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
@@ -46,7 +51,9 @@ const Microsoft365 = () => {
               <Calendar className="h-5 w-5 text-primary" />
               <h2 className="text-lg font-semibold text-foreground">Calendario</h2>
             </div>
-            <CalendarView />
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+              <CalendarView />
+            </Suspense>
           </section>
 
           <Separator />
@@ -57,7 +64,9 @@ const Microsoft365 = () => {
               <Mail className="h-5 w-5 text-primary" />
               <h2 className="text-lg font-semibold text-foreground">Correo</h2>
             </div>
-            <EmailView />
+            <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+              <EmailView />
+            </Suspense>
           </section>
         </div>
       </ErrorBoundary>

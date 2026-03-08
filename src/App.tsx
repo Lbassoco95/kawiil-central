@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,10 +16,11 @@ import Admin from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
 import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
-import Microsoft365 from "./pages/Microsoft365";
 import Despacho from "./pages/Despacho";
 import Notificaciones from "./pages/Notificaciones";
 import NotFound from "./pages/NotFound";
+
+const Microsoft365 = lazy(() => import("./pages/Microsoft365"));
 
 const queryClient = new QueryClient();
 
@@ -38,7 +40,7 @@ const App = () => (
             <Route path="/proyectos" element={<ProtectedRoute><Proyectos /></ProtectedRoute>} />
             <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
             <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
-            <Route path="/microsoft365" element={<ProtectedRoute><Microsoft365 /></ProtectedRoute>} />
+            <Route path="/microsoft365" element={<ProtectedRoute><Suspense fallback={<div className="flex min-h-[50vh] items-center justify-center"><span className="text-muted-foreground">Cargando Microsoft 365…</span></div>}><Microsoft365 /></Suspense>} />
             <Route path="/documentos" element={<ProtectedRoute><Documentos /></ProtectedRoute>} />
             <Route path="/despacho" element={<ProtectedRoute><Despacho /></ProtectedRoute>} />
             <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
