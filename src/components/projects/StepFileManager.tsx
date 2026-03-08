@@ -197,6 +197,34 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
             Local
           </Button>
+          {/* Create Office doc in OneDrive */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                disabled={disabled || createOneDriveDoc.isPending}
+              >
+                {createOneDriveDoc.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Office
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleCreateDoc("docx")}>
+                <FileType className="h-3.5 w-3.5 mr-2 text-blue-600" />
+                Word
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCreateDoc("xlsx")}>
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-2 text-green-600" />
+                Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCreateDoc("pptx")}>
+                <Presentation className="h-3.5 w-3.5 mr-2 text-orange-600" />
+                PowerPoint
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
