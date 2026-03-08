@@ -29,23 +29,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { OrgUser } from "@/hooks/useOrgUsers";
-import type { Database } from "@/integrations/supabase/types";
+import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
+import type { AppGrado } from "@/lib/gradoLabels";
 import { useEffect } from "react";
-
-type AppRole = Database["public"]["Enums"]["app_role"];
-
-const ROLE_LABELS: Record<AppRole, string> = {
-  admin: "Administrador",
-  manager: "Gerente",
-  staff: "Staff",
-  viewer: "Viewer (solo lectura)",
-};
 
 const editSchema = z.object({
   full_name: z.string().trim().min(1, "El nombre es requerido").max(200),
   phone: z.string().trim().max(20).optional().or(z.literal("")),
   area: z.string().optional().or(z.literal("")),
-  role: z.enum(["admin", "manager", "staff", "viewer"] as const),
+  role: z.enum(["en_formacion", "ejecutor", "referente", "transformador"] as const),
 });
 
 type EditFormValues = z.infer<typeof editSchema>;
@@ -68,7 +60,6 @@ function useUpdateUser() {
       profileData: { full_name: string; phone?: string | null; area?: string | null };
       role: string;
     }) => {
-      // Update profile
       const { error: profileError } = await supabase
         .from("profiles")
         .update({
@@ -79,11 +70,10 @@ function useUpdateUser() {
         .eq("user_id", userId);
       if (profileError) throw profileError;
 
-      // Update role — upsert
       const { error: roleError } = await supabase
         .from("user_roles")
         .upsert(
-          { user_id: userId, role: role as AppRole },
+          { user_id: userId, role: role as any },
           { onConflict: "user_id" }
         );
       if (roleError) throw roleError;
@@ -107,7 +97,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
       full_name: "",
       phone: "",
       area: "",
-      role: "staff",
+      role: "ejecutor",
     },
   });
 
@@ -117,7 +107,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
         full_name: user.full_name,
         phone: user.phone || "",
         area: user.area || "",
-        role: (user.role as AppRole) || "staff",
+        role: (user.role as AppGrado) || "ejecutor",
       });
     }
   }, [user, open, form]);
@@ -179,7 +169,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
               name="role"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Rol *</FormLabel>
+                  <FormLabel>Grado *</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -187,8 +177,8 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {(Object.entries(ROLE_LABELS) as [AppRole, string][]).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      {GRADO_SELECT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -202,7 +192,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
               name="area"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Área</FormLabel>
+                  <FormLabel>Célula</FormLabel>
                   <Select
                     onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
                     value={field.value || "__none__"}

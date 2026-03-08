@@ -29,21 +29,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInviteUser, useCreateUser } from "@/hooks/useOrgUsers";
 import { Mail, UserPlus } from "lucide-react";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
-import type { Database } from "@/integrations/supabase/types";
-
-type AppRole = Database["public"]["Enums"]["app_role"];
-
-const ROLE_LABELS: Record<AppRole, string> = {
-  admin: "Administrador",
-  manager: "Gerente",
-  staff: "Staff",
-  viewer: "Viewer (solo lectura)",
-};
+import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
 
 const inviteSchema = z.object({
   email: z.string().trim().email("Email inválido"),
   full_name: z.string().trim().min(1, "El nombre es requerido").max(200),
-  role: z.enum(["admin", "manager", "staff", "viewer"] as const),
+  role: z.enum(["en_formacion", "ejecutor", "referente", "transformador"] as const),
   area: z.string().optional().or(z.literal("")),
   phone: z.string().trim().max(20).optional().or(z.literal("")),
 });
@@ -71,7 +62,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
     defaultValues: {
       email: "",
       full_name: "",
-      role: "staff",
+      role: "ejecutor",
       area: "",
       phone: "",
     },
@@ -82,7 +73,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
     defaultValues: {
       email: "",
       full_name: "",
-      role: "staff",
+      role: "ejecutor",
       area: "",
       phone: "",
       password: "",
@@ -172,7 +163,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
           name="role"
           render={({ field }: any) => (
             <FormItem>
-              <FormLabel>Rol *</FormLabel>
+              <FormLabel>Grado *</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
@@ -180,8 +171,8 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {(Object.entries(ROLE_LABELS) as [AppRole, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  {GRADO_SELECT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -195,11 +186,11 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
           name="area"
           render={({ field }: any) => (
             <FormItem>
-              <FormLabel>Área</FormLabel>
+              <FormLabel>Célula</FormLabel>
               <Select onValueChange={field.onChange} value={field.value || ""}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar área" />
+                    <SelectValue placeholder="Seleccionar célula" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -220,7 +211,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Agregar usuario</DialogTitle>
+          <DialogTitle>Agregar Kawiiler</DialogTitle>
         </DialogHeader>
 
         <Tabs value={method} onValueChange={(v) => setMethod(v as "invite" | "create")}>
@@ -240,7 +231,7 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
               <form onSubmit={inviteForm.handleSubmit(onInviteSubmit)} className="space-y-4">
                 {renderFields(inviteForm)}
                 <p className="text-xs text-muted-foreground">
-                  Se enviará un email de invitación para que el usuario configure su contraseña.
+                  Se enviará un email de invitación para que el Kawiiler configure su contraseña.
                 </p>
                 <div className="flex justify-end gap-3 pt-2">
                   <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -258,9 +249,9 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
             {createdCredentials ? (
               <div className="space-y-4">
                 <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
-                  <p className="font-medium text-sm">✅ Usuario creado exitosamente</p>
+                  <p className="font-medium text-sm">✅ Kawiiler creado exitosamente</p>
                   <p className="text-sm text-muted-foreground">
-                    Comparte estas credenciales con el usuario. Al iniciar sesión por primera vez, se le pedirá cambiar su contraseña.
+                    Comparte estas credenciales con el Kawiiler. Al iniciar sesión por primera vez, se le pedirá cambiar su contraseña.
                   </p>
                   <div className="space-y-2 font-mono text-sm bg-background rounded p-3 border">
                     <p><span className="text-muted-foreground">Email:</span> {createdCredentials.email}</p>
@@ -291,14 +282,14 @@ export function UserFormDialog({ open, onOpenChange }: UserFormDialogProps) {
                     )}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Se generará una contraseña provisional. El usuario deberá cambiarla en su primer inicio de sesión.
+                    Se generará una contraseña provisional. El Kawiiler deberá cambiarla en su primer inicio de sesión.
                   </p>
                   <div className="flex justify-end gap-3 pt-2">
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                       Cancelar
                     </Button>
                     <Button type="submit" disabled={isPending}>
-                      {isPending ? "Creando..." : "Crear usuario"}
+                      {isPending ? "Creando..." : "Crear Kawiiler"}
                     </Button>
                   </div>
                 </form>

@@ -29,21 +29,12 @@ import { Badge } from "@/components/ui/badge";
 import { useCreateUser } from "@/hooks/useOrgUsers";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { UserPlus, Mail } from "lucide-react";
-import type { Database } from "@/integrations/supabase/types";
-
-type AppRole = Database["public"]["Enums"]["app_role"];
-
-const ROLE_LABELS: Record<AppRole, string> = {
-  admin: "Administrador",
-  manager: "Gerente",
-  staff: "Staff",
-  viewer: "Viewer (solo lectura)",
-};
+import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
 
 const schema = z.object({
   email: z.string().trim().email("Email inválido"),
   full_name: z.string().trim().min(1, "El nombre es requerido").max(200),
-  role: z.enum(["admin", "manager", "staff", "viewer"] as const),
+  role: z.enum(["en_formacion", "ejecutor", "referente", "transformador"] as const),
   area: z.string().optional().or(z.literal("")),
   phone: z.string().trim().max(20).optional().or(z.literal("")),
   password: z.string().optional().or(z.literal("")),
@@ -78,20 +69,19 @@ export function CreateUserFromEmailDialog({
     defaultValues: {
       email: senderEmail || "",
       full_name: senderName || "",
-      role: "staff",
+      role: "ejecutor",
       area: "",
       phone: "",
       password: "",
     },
   });
 
-  // Reset form when dialog opens with new sender data
   useEffect(() => {
     if (open) {
       form.reset({
         email: senderEmail || "",
         full_name: senderName || "",
-        role: "staff",
+        role: "ejecutor",
         area: "",
         phone: "",
         password: "",
@@ -127,7 +117,7 @@ export function CreateUserFromEmailDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            Dar de alta desde correo
+            Dar de alta Kawiiler desde correo
           </DialogTitle>
         </DialogHeader>
 
@@ -151,9 +141,9 @@ export function CreateUserFromEmailDialog({
         {createdCredentials ? (
           <div className="space-y-4">
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
-              <p className="font-medium text-sm">✅ Usuario creado exitosamente</p>
+              <p className="font-medium text-sm">✅ Kawiiler creado exitosamente</p>
               <p className="text-sm text-muted-foreground">
-                Comparte estas credenciales con el usuario. Al iniciar sesión
+                Comparte estas credenciales con el Kawiiler. Al iniciar sesión
                 por primera vez, se le pedirá cambiar su contraseña.
               </p>
               <div className="space-y-2 font-mono text-sm bg-background rounded p-3 border">
@@ -241,7 +231,7 @@ export function CreateUserFromEmailDialog({
                   name="role"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Rol *</FormLabel>
+                      <FormLabel>Grado *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         defaultValue={field.value}
@@ -252,11 +242,9 @@ export function CreateUserFromEmailDialog({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {(
-                            Object.entries(ROLE_LABELS) as [AppRole, string][]
-                          ).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>
-                              {label}
+                          {GRADO_SELECT_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -271,14 +259,14 @@ export function CreateUserFromEmailDialog({
                   name="area"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Área</FormLabel>
+                      <FormLabel>Célula</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value || ""}
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar área" />
+                            <SelectValue placeholder="Seleccionar célula" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -314,7 +302,7 @@ export function CreateUserFromEmailDialog({
               />
 
               <p className="text-xs text-muted-foreground">
-                Se creará el usuario con su cuenta de Microsoft vinculada. Al
+                Se creará el Kawiiler con su cuenta de Microsoft vinculada. Al
                 iniciar sesión podrá conectar Outlook automáticamente.
               </p>
 
@@ -327,7 +315,7 @@ export function CreateUserFromEmailDialog({
                   Cancelar
                 </Button>
                 <Button type="submit" disabled={createUser.isPending}>
-                  {createUser.isPending ? "Creando..." : "Crear usuario"}
+                  {createUser.isPending ? "Creando..." : "Crear Kawiiler"}
                 </Button>
               </div>
             </form>

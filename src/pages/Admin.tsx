@@ -1,7 +1,7 @@
 import { AppLayout } from "@/components/AppLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UserManagement } from "@/components/admin/UserManagement";
-import { AreaManagement } from "@/components/admin/AreaManagement";
+import { CelulaManagement } from "@/components/admin/CelulaManagement";
 import { CatalogManagement } from "@/components/admin/CatalogManagement";
 
 const Admin = () => {
@@ -10,13 +10,13 @@ const Admin = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Administración</h1>
-          <p className="text-sm text-muted-foreground">Gestión de usuarios, roles y catálogos</p>
+          <p className="text-sm text-muted-foreground">Gestión de Kawiilers, grados y catálogos</p>
         </div>
 
         <Tabs defaultValue="usuarios">
           <TabsList>
-            <TabsTrigger value="usuarios">Usuarios</TabsTrigger>
-            <TabsTrigger value="areas">Áreas</TabsTrigger>
+            <TabsTrigger value="usuarios">Kawiilers</TabsTrigger>
+            <TabsTrigger value="celulas">Células</TabsTrigger>
             <TabsTrigger value="catalogos">Catálogos</TabsTrigger>
           </TabsList>
 
@@ -24,8 +24,8 @@ const Admin = () => {
             <UserManagement />
           </TabsContent>
 
-          <TabsContent value="areas" className="mt-4">
-            <AreaManagement />
+          <TabsContent value="celulas" className="mt-4">
+            <CelulaManagement />
           </TabsContent>
 
           <TabsContent value="catalogos" className="mt-4">
