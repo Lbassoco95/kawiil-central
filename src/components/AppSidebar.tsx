@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Calendar,
+  Building2,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const navItems = [
   { title: "Tareas", url: "/tareas", icon: CheckSquare },
   { title: "Microsoft 365", url: "/microsoft365", icon: Calendar },
   { title: "Documentos", url: "/documentos", icon: FileText },
+  { title: "Despacho", url: "/despacho", icon: Building2 },
   { title: "Administración", url: "/admin", icon: Settings },
 ];
 
