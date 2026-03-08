@@ -152,6 +152,9 @@ export function useCreateTask() {
       project_id?: string;
       additional_assignees?: string[];
       dropbox_links?: string[];
+      criticality_level?: string;
+      delay_category?: string;
+      delay_notes?: string;
     }) => {
       const { data: profile } = await supabase
         .from("profiles")
