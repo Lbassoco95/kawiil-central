@@ -151,20 +151,95 @@ Deno.serve(async (req) => {
       }
 
       case "update-event": {
-        const res = await fetch(`${GRAPH_BASE}/me/events/${params.eventId}`, {
+        const encodedEventId = encodeURIComponent(params.eventId);
+
+        // Snapshot previo para fallback en ocurrencias recurrentes
+        const beforeRes = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const beforeEvent = beforeRes.ok ? await beforeRes.json() : null;
+
+        const res = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
           method: "PATCH",
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
+            Prefer: 'outlook.timezone="America/Mexico_City", return=representation',
           },
           body: JSON.stringify(params.payload),
         });
+
         if (!res.ok) {
           const errBody = await res.text();
           throw new Error(`Update event failed [${res.status}]: ${errBody}`);
         }
-        const text = await res.text();
-        result = text ? JSON.parse(text) : { success: true };
+
+        const patchText = await res.text();
+        let updatedEvent: any = patchText ? JSON.parse(patchText) : null;
+
+        // Verifica estado final (Graph a veces responde 200 sin aplicar cambios a occurrences)
+        if (!updatedEvent) {
+          const verifyRes = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (verifyRes.ok) updatedEvent = await verifyRes.json();
+        }
+
+        const desiredStart = params?.payload?.start?.dateTime as string | undefined;
+        const desiredEnd = params?.payload?.end?.dateTime as string | undefined;
+        const appliedStart = updatedEvent?.start?.dateTime as string | undefined;
+        const appliedEnd = updatedEvent?.end?.dateTime as string | undefined;
+
+        const updateApplied =
+          (!desiredStart || (appliedStart && appliedStart.startsWith(desiredStart))) &&
+          (!desiredEnd || (appliedEnd && appliedEnd.startsWith(desiredEnd)));
+
+        // Fallback para ocurrencias que no aceptan PATCH directo: clonar en nuevo horario y eliminar ocurrencia original
+        if (!updateApplied && beforeEvent?.type === "occurrence") {
+          const clonePayload: Record<string, any> = {
+            subject: beforeEvent.subject,
+            start: params?.payload?.start || beforeEvent.start,
+            end: params?.payload?.end || beforeEvent.end,
+            body: beforeEvent.body,
+            attendees: beforeEvent.attendees,
+            categories: beforeEvent.categories,
+            isOnlineMeeting: !!beforeEvent.isOnlineMeeting,
+            onlineMeetingProvider: beforeEvent.isOnlineMeeting ? "teamsForBusiness" : undefined,
+            location: beforeEvent?.location?.displayName
+              ? { displayName: beforeEvent.location.displayName }
+              : undefined,
+          };
+
+          const createRes = await fetch(`${GRAPH_BASE}/me/events`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(clonePayload),
+          });
+
+          if (!createRes.ok) {
+            const errBody = await createRes.text();
+            throw new Error(`Fallback create event failed [${createRes.status}]: ${errBody}`);
+          }
+
+          const createdEvent = await createRes.json();
+
+          await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+
+          result = {
+            ...createdEvent,
+            migratedFromOccurrence: true,
+            previousEventId: params.eventId,
+          };
+        } else {
+          result = updatedEvent || { success: true };
+        }
+
         break;
       }
 
