@@ -6,7 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2 } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare } from "lucide-react";
+import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
@@ -179,6 +180,10 @@ const ProyectoDetalle = () => {
               </TabsTrigger>
             )}
             <TabsTrigger value="tareas">Tareas ({tasks.length})</TabsTrigger>
+            <TabsTrigger value="comentarios">
+              <MessageSquare className="h-4 w-4 mr-1" />
+              Comentarios
+            </TabsTrigger>
             <TabsTrigger value="firmas">
               <PenTool className="h-4 w-4 mr-1" />
               Firmas
@@ -282,6 +287,10 @@ const ProyectoDetalle = () => {
               defaultClientId={project.client_id || undefined}
               defaultArea={project.area || undefined}
             />
+          </TabsContent>
+
+          <TabsContent value="comentarios">
+            <ProjectCommentsTab projectId={project.id} projectName={project.name} />
           </TabsContent>
 
           {/* Dropbox Sign tab */}

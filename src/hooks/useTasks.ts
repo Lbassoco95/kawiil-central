@@ -223,8 +223,10 @@ export function useAddComment() {
       });
       if (error) throw error;
     },
-    onSuccess: (_, vars) => {
+    onSuccess: async (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["task-comments", vars.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-notifications-count"] });
       toast.success("Comentario guardado");
 
       if (vars.mentions && vars.mentions.length > 0) {
@@ -233,6 +235,36 @@ export function useAddComment() {
           comment_preview: vars.content.substring(0, 100),
           mentioned_ids: vars.mentions,
         });
+
+        // Create in-app notifications for mentioned users
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("organization_id, full_name")
+            .eq("user_id", user!.id)
+            .single();
+
+          if (profile) {
+            const notifications = vars.mentions
+              .filter((uid) => uid !== user!.id)
+              .map((uid) => ({
+                user_id: uid,
+                type: "mention" as const,
+                title: `${profile.full_name} te mencionó en una tarea`,
+                body: vars.content.substring(0, 200),
+                entity_type: "task",
+                entity_id: vars.taskId,
+                source_user_id: user!.id,
+                organization_id: profile.organization_id,
+              }));
+
+            if (notifications.length > 0) {
+              await supabase.from("notifications").insert(notifications);
+            }
+          }
+        } catch {
+          // Non-critical, don't block
+        }
       }
     },
     onError: (err: Error) => {

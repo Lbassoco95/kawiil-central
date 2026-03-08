@@ -22,6 +22,7 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useUnreadCount } from "@/hooks/useMentionNotifications";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -43,6 +44,7 @@ export function AppSidebar() {
   const { signOut, user } = useAuth();
   const isMobile = useIsMobile();
   const { isAdminOrManager } = useUserRole();
+  const { data: unreadCount = 0 } = useUnreadCount();
 
   const visibleNavItems = navItems.filter(
     (item) => item.url !== "/admin" || isAdminOrManager
@@ -99,7 +101,12 @@ export function AppSidebar() {
                 onClick={() => setMobileOpen(false)}
               >
                 <item.icon className="h-[15px] w-[15px] shrink-0 opacity-70" />
-                <span>{item.title}</span>
+                <span className="flex-1">{item.title}</span>
+                {item.url === "/notificaciones" && unreadCount > 0 && (
+                  <span className="bg-primary text-primary-foreground text-[10px] rounded-full px-1.5 py-0 font-bold leading-4">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
@@ -151,8 +158,18 @@ export function AppSidebar() {
             )}
             activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
           >
-            <item.icon className="h-[15px] w-[15px] shrink-0 opacity-70" />
-            {!collapsed && <span>{item.title}</span>}
+            <span className="relative shrink-0">
+              <item.icon className="h-[15px] w-[15px] opacity-70" />
+              {item.url === "/notificaciones" && unreadCount > 0 && collapsed && (
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary" />
+              )}
+            </span>
+            {!collapsed && <span className="flex-1">{item.title}</span>}
+            {!collapsed && item.url === "/notificaciones" && unreadCount > 0 && (
+              <span className="bg-primary text-primary-foreground text-[10px] rounded-full px-1.5 py-0 font-bold leading-4">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
