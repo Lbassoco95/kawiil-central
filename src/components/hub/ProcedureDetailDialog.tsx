@@ -73,17 +73,14 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
 
   const loadPreview = async (filePath: string) => {
     setPreviewUrl(null);
-    const mimeType = procedure?.mime_type || "";
-    const isPdfFile = mimeType === "application/pdf";
-    
-    if (isPdfFile) {
-      // Use signed URL for PDFs - Chrome blocks blob URLs in iframes
-      const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
-      if (data?.signedUrl) setPreviewUrl(data.signedUrl);
-    } else {
-      // Use blob URL for images and other files
-      const { data } = await supabase.storage.from("documents").download(filePath);
-      if (data) setPreviewUrl(URL.createObjectURL(data));
+    // Download file as blob and create object URL with correct MIME type
+    const { data } = await supabase.storage.from("documents").download(filePath);
+    if (data) {
+      // Re-create blob with explicit MIME type to ensure Chrome handles it correctly
+      const mimeType = procedure?.mime_type || data.type || "application/octet-stream";
+      const typedBlob = new Blob([data], { type: mimeType });
+      const url = URL.createObjectURL(typedBlob);
+      setPreviewUrl(url);
     }
   };
 
