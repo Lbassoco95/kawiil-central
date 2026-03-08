@@ -154,9 +154,10 @@ export function CalendarView() {
       });
     } catch (_) {
       // Si algo falla al parsear, dejar el formulario con valores por defecto
-      setEditForm((prev) => ({ ...prev, subject: (eventDetail || cachedEvent)?.subject ?? prev.subject }));
+      const cached2 = getCachedEvent();
+      setEditForm((prev) => ({ ...prev, subject: (eventDetail || cached2)?.subject ?? prev.subject }));
     }
-  }, [eventDetail, cachedEvent, selectedEventId]);
+  }, [eventDetail, eventsData, selectedEventId]);
 
   const viewDays = useMemo(() => {
     switch (viewMode) {
