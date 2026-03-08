@@ -15,3 +15,5 @@ project_id = "apfjafxiykkiydepmswk"
     verify_jwt = false
   [functions.dropbox-token-exchange]
     verify_jwt = false
+  [functions.backup-data]
+    verify_jwt = false
