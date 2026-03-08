@@ -234,16 +234,16 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
             Local
           </Button>
-          {/* Create Office doc in OneDrive */}
+          {/* Create Office doc in Dropbox */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs gap-1"
-                disabled={disabled || createOneDriveDoc.isPending}
+                disabled={disabled || createDropboxDoc.isPending}
               >
-                {createOneDriveDoc.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                {createDropboxDoc.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
                 Office
               </Button>
             </DropdownMenuTrigger>
