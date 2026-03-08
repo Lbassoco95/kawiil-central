@@ -11,10 +11,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Save, Pencil, X } from "lucide-react";
+import { Save, Pencil, X, AlertTriangle } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
 import { formatDateMX } from "@/lib/dateUtils";
 import type { Database } from "@/integrations/supabase/types";
+
+const CRITICALITY_OPTIONS = [
+  { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+  { value: "atencion", label: "🟡 Atención", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  { value: "critico", label: "🔴 Crítico", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
+];
+
+const DELAY_CATEGORIES = [
+  { value: "__none__", label: "Sin atraso" },
+  { value: "atraso_cliente", label: "Atraso del cliente" },
+  { value: "atraso_sat", label: "Atraso del SAT / autoridad" },
+  { value: "recurso_interno", label: "Recurso interno" },
+  { value: "dependencia_externa", label: "Dependencia externa" },
+  { value: "otro", label: "Otro" },
+];
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
