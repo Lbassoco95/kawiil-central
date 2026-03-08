@@ -789,6 +789,8 @@ export type Database = {
           id: string
           invitation_accepted: boolean
           is_active: boolean
+          microsoft_email: string | null
+          microsoft_user_id: string | null
           onboarding_status: string
           organization_id: string
           phone: string | null
@@ -804,6 +806,8 @@ export type Database = {
           id?: string
           invitation_accepted?: boolean
           is_active?: boolean
+          microsoft_email?: string | null
+          microsoft_user_id?: string | null
           onboarding_status?: string
           organization_id: string
           phone?: string | null
@@ -819,6 +823,8 @@ export type Database = {
           id?: string
           invitation_accepted?: boolean
           is_active?: boolean
+          microsoft_email?: string | null
+          microsoft_user_id?: string | null
           onboarding_status?: string
           organization_id?: string
           phone?: string | null
