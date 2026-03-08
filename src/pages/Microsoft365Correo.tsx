@@ -32,10 +32,7 @@ const Microsoft365Correo = () => {
       <ErrorBoundary>
         <div className="space-y-6">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-foreground">Correo</h1>
-              <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">Solo lectura</span>
-            </div>
+            <h1 className="text-xl font-semibold text-foreground">Correo</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               Outlook · {profile?.displayName || profile?.mail || ""} · Referencia rápida para emergencias
             </p>

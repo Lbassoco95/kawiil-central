@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail } from "@/hooks/useMicrosoft";
+import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail, useMarkEmailRead } from "@/hooks/useMicrosoft";
 import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send, UserPlus } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -29,6 +29,14 @@ export function EmailView() {
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
+  const markRead = useMarkEmailRead();
+
+  const handleOpenEmail = (email: any) => {
+    setSelectedEmailId(email.id);
+    if (!email.isRead) {
+      markRead.mutate(email.id);
+    }
+  };
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -89,7 +97,7 @@ export function EmailView() {
             <Card
               key={email.id}
               className={`cursor-pointer transition-colors hover:border-primary/50 ${!email.isRead ? "bg-primary/5" : ""}`}
-              onClick={() => { setSelectedEmailId(email.id); resetAction(); }}
+              onClick={() => { handleOpenEmail(email); resetAction(); }}
             >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">

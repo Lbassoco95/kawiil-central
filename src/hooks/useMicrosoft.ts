@@ -308,6 +308,26 @@ export function useReplyEmail() {
   });
 }
 
+export function useMarkEmailRead() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "mark-read", params: { messageId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onMutate: async (messageId) => {
+      queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((e: any) => (e.id === messageId ? { ...e, isRead: true } : e));
+      });
+    },
+  });
+}
+
 export function useForwardEmail() {
   const queryClient = useQueryClient();
 
