@@ -374,6 +374,28 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
         fileUrl={signDoc?.url}
         fileName={signDoc?.name}
       />
+
+      <DeleteConfirmDialog
+        open={!!deleteDoc}
+        onOpenChange={(o) => { if (!o) setDeleteDoc(null); }}
+        title="¿Eliminar este archivo?"
+        description="Se desvinculará del paso. Si es un archivo de Dropbox, no se eliminará de Dropbox."
+        isPending={deleting}
+        onConfirm={async () => {
+          if (!deleteDoc) return;
+          setDeleting(true);
+          try {
+            await supabase.from("documents").delete().eq("id", deleteDoc);
+            onDocumentAdded(documentIds.filter((id) => id !== deleteDoc));
+            toast.success("Archivo eliminado del paso");
+          } catch (err: any) {
+            toast.error("Error: " + err.message);
+          } finally {
+            setDeleting(false);
+            setDeleteDoc(null);
+          }
+        }}
+      />
     </div>
   );
 }
