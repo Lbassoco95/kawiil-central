@@ -22,8 +22,7 @@ export function FloatingAIChat() {
     startNewChat,
   } = useChat();
 
-  // Don't show on the full AI assistant page
-  if (location.pathname === "/asistente") return null;
+  const isAssistantPage = location.pathname === "/asistente";
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -34,6 +33,9 @@ export function FloatingAIChat() {
       setTimeout(() => textareaRef.current?.focus(), 100);
     }
   }, [open, minimized]);
+
+  // Don't show on the full AI assistant page
+  if (isAssistantPage) return null;
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
