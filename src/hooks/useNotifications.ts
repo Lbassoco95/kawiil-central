@@ -50,7 +50,7 @@ export function useDueDateAlerts() {
         return { overdue: [], dueSoon: [], stepsOverdue: [], stepsDueSoon: [] };
       }
 
-      const statuses = ["pendiente", "en_progreso", "en_revision"];
+      const statuses: ("pendiente" | "en_progreso" | "en_revision")[] = ["pendiente", "en_progreso", "en_revision"];
 
       const { data: allTasks, error: tasksError } = await supabase
         .from("tasks")

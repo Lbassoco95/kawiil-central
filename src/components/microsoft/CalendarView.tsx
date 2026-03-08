@@ -125,35 +125,6 @@ export function CalendarView() {
     attendees: "",
   });
 
-  useEffect(() => {
-    const source = eventDetail || (cachedEvent && selectedEventId ? cachedEvent : null);
-    if (!source) return;
-    try {
-      const start = source.start?.dateTime || source.start?.date;
-      const end = source.end?.dateTime || source.end?.date;
-      const parsedStart = parseEventTime(start, new Date());
-      const parsedEnd = parseEventTime(end, new Date(parsedStart.getTime() + 60 * 60 * 1000));
-      const attendeesStr = (source.attendees || [])
-        .map((a: any) => a.emailAddress?.address)
-        .filter(Boolean)
-        .join(", ");
-      setEditForm({
-        subject: source.subject ?? "",
-        startDate: formatMX(parsedStart, "yyyy-MM-dd"),
-        startTime: formatMX(parsedStart, "HH:mm"),
-        endDate: formatMX(parsedEnd, "yyyy-MM-dd"),
-        endTime: formatMX(parsedEnd, "HH:mm"),
-        location: source.location?.displayName ?? "",
-        description: safeDescription(source.body?.content),
-        categories: Array.isArray(source.categories) ? [...source.categories] : [],
-        attendees: attendeesStr,
-      });
-    } catch (_) {
-      // Si algo falla al parsear, dejar el formulario con valores por defecto
-      setEditForm((prev) => ({ ...prev, subject: (eventDetail || cachedEvent)?.subject ?? prev.subject }));
-    }
-  }, [eventDetail, cachedEvent, selectedEventId]);
-
   const viewDays = useMemo(() => {
     switch (viewMode) {
       case "day":
@@ -203,6 +174,34 @@ export function CalendarView() {
     () => (selectedEventId ? events.find((e: any) => e.id === selectedEventId) : null),
     [events, selectedEventId]
   );
+
+  useEffect(() => {
+    const source = eventDetail || (cachedEvent && selectedEventId ? cachedEvent : null);
+    if (!source) return;
+    try {
+      const start = source.start?.dateTime || source.start?.date;
+      const end = source.end?.dateTime || source.end?.date;
+      const parsedStart = parseEventTime(start, new Date());
+      const parsedEnd = parseEventTime(end, new Date(parsedStart.getTime() + 60 * 60 * 1000));
+      const attendeesStr = (source.attendees || [])
+        .map((a: any) => a.emailAddress?.address)
+        .filter(Boolean)
+        .join(", ");
+      setEditForm({
+        subject: source.subject ?? "",
+        startDate: formatMX(parsedStart, "yyyy-MM-dd"),
+        startTime: formatMX(parsedStart, "HH:mm"),
+        endDate: formatMX(parsedEnd, "yyyy-MM-dd"),
+        endTime: formatMX(parsedEnd, "HH:mm"),
+        location: source.location?.displayName ?? "",
+        description: safeDescription(source.body?.content),
+        categories: Array.isArray(source.categories) ? [...source.categories] : [],
+        attendees: attendeesStr,
+      });
+    } catch (_) {
+      setEditForm((prev) => ({ ...prev, subject: (eventDetail || cachedEvent)?.subject ?? prev.subject }));
+    }
+  }, [eventDetail, cachedEvent, selectedEventId]);
 
   const goNext = () => {
     switch (viewMode) {

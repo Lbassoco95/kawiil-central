@@ -11,7 +11,7 @@ export function useInternalProcedures() {
   return useQuery({
     queryKey: ["internal-procedures"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("internal_procedures")
         .select("*")
         .order("created_at", { ascending: false });
@@ -41,7 +41,7 @@ export function useCreateInternalProcedure() {
         .upload(filePath, input.file);
       if (uploadError) throw uploadError;
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("internal_procedures")
         .insert({
           organization_id: profile.organization_id,
@@ -71,7 +71,7 @@ export function useDeleteInternalProcedure() {
   return useMutation({
     mutationFn: async (row: { id: string; file_path: string }) => {
       await supabase.storage.from("documents").remove([row.file_path]);
-      const { error } = await supabase.from("internal_procedures").delete().eq("id", row.id);
+      const { error } = await (supabase as any).from("internal_procedures").delete().eq("id", row.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -88,7 +88,7 @@ export function useInternalComunicados() {
   return useQuery({
     queryKey: ["internal-comunicados"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("internal_comunicados")
         .select("*")
         .order("is_pinned", { ascending: false })
@@ -113,7 +113,7 @@ export function useCreateInternalComunicado() {
         .single();
       if (!profile?.organization_id) throw new Error("Sin organización");
 
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("internal_comunicados")
         .insert({
           organization_id: profile.organization_id,
@@ -140,7 +140,7 @@ export function useDeleteInternalComunicado() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("internal_comunicados").delete().eq("id", id);
+      const { error } = await (supabase as any).from("internal_comunicados").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
