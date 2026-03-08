@@ -219,13 +219,23 @@ export function useUpdateCalendarEvent() {
       }
       toast.error("Error al actualizar evento: " + err.message);
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
+      // Mantener el cambio visual inmediato y sincronizar después
       toast.success("Evento actualizado");
+
+      // Refetch diferido para evitar que Graph devuelva estado viejo inmediato
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+      }, 2500);
+
+      // Segundo refetch de seguridad por consistencia eventual
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+        queryClient.invalidateQueries({ queryKey: ["calendar-event-detail", vars.eventId] });
+      }, 7000);
     },
     onSettled: () => {
-      // Always refetch after mutation settles to ensure server state
-      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-event-detail"] });
+      // no-op: invalidación diferida en onSuccess
     },
   });
 }
