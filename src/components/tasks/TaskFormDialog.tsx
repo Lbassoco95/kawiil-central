@@ -79,6 +79,8 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     setProjectId("");
     setDropboxLinks([]);
     setNewLink("");
+    setCriticalityLevel("normal");
+    setDelayCategory("");
   };
 
   const addAssignee = (userId: string) => {
