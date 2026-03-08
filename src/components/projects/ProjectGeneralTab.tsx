@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,10 @@ import {
 } from "@/components/ui/select";
 import { Save, Pencil, X, AlertTriangle } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { formatDateMX } from "@/lib/dateUtils";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -61,6 +65,7 @@ interface Props {
 
 export function ProjectGeneralTab({ project }: Props) {
   const updateProject = useUpdateProject();
+  const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const [description, setDescription] = useState(project.description || "");
   const [status, setStatus] = useState<ProjectStatus>(project.status);
@@ -69,6 +74,60 @@ export function ProjectGeneralTab({ project }: Props) {
   const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
   const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
   const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
+
+  // Fetch project tasks for AI summary
+  const { data: projectTasks } = useQuery({
+    queryKey: ["project-tasks-summary", project.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("title, status, priority, due_date, area, assigned_to")
+        .eq("project_id", project.id)
+        .order("due_date", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const clientName = (project as any).clients?.name || "Interno";
+  const areaLabel = SERVICE_LABELS[project.area || ""] || project.area || "Sin área";
+
+  const projectSummaryPrompt = useMemo(() => {
+    const tasks = projectTasks ?? [];
+    const pending = tasks.filter(t => ["pendiente", "en_progreso", "en_revision"].includes(t.status));
+    const completed = tasks.filter(t => t.status === "completada");
+    const overdue = pending.filter(t => t.due_date && new Date(t.due_date) < new Date());
+    const totalPct = tasks.length > 0 ? Math.round((completed.length / tasks.length) * 100) : 0;
+
+    return `Genera un resumen ejecutivo breve del proyecto. Español mexicano, tono profesional, emojis.
+
+PROYECTO: ${project.name}
+CLIENTE: ${clientName}
+ÁREA: ${areaLabel}
+ESTADO: ${project.status}
+SEMÁFORO: ${(project as any).criticality_level || "normal"}
+MOTIVO DE ATRASO: ${(project as any).delay_category || "ninguno"}
+NOTAS DE ATRASO: ${(project as any).delay_notes || "sin notas"}
+INICIO: ${project.start_date || "no definido"}
+FIN ESTIMADO: ${project.end_date || "no definido"}
+DESCRIPCIÓN: ${project.description || "sin descripción"}
+
+TAREAS:
+- Total: ${tasks.length}
+- Completadas: ${completed.length} (${totalPct}%)
+- Pendientes: ${pending.length}
+- Vencidas: ${overdue.length}
+${pending.slice(0, 8).map(t => `  • ${t.title} [${t.priority}] ${t.due_date ? `vence: ${t.due_date}` : ""}`).join("\n")}
+
+INSTRUCCIONES:
+1. Resume en 3-4 puntos el estado actual del proyecto con emojis.
+2. Indica el porcentaje de avance y qué falta por hacer.
+3. Si hay tareas vencidas o semáforo en atención/crítico, destácalo.
+4. Si hay motivo de atraso, explícalo con contexto.
+5. Sugiere la siguiente acción prioritaria.
+6. Máximo 100 palabras. Usa markdown.`;
+  }, [project, projectTasks, clientName, areaLabel]);
 
   const handleSave = () => {
     updateProject.mutate(
@@ -282,6 +341,17 @@ export function ProjectGeneralTab({ project }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {/* AI Project Summary */}
+      <div className="md:col-span-2">
+        <AISummaryCard
+          cacheKey={`project-${project.id}`}
+          contextPrompt={projectSummaryPrompt}
+          title="Resumen del proyecto — Kawiil AI"
+          ready={!!projectTasks}
+          userId={user?.id}
+        />
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { TeamMonthlyPerformance } from "@/components/dashboard/TeamMonthlyPerformance";
+import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -194,8 +195,42 @@ export function TeamDashboard() {
     return "text-muted-foreground";
   };
 
+  const teamSummaryPrompt = useMemo(() => {
+    const criticalProjects = projects?.filter((p: any) => p.criticality_level === "critico" || p.delay_category) ?? [];
+    return `Genera un resumen ejecutivo breve del estado del equipo Kawiil para el dashboard. Usa español mexicano, tono profesional y cercano con emojis.
+
+DATOS:
+- Clientes activos: ${activeClients}
+- Proyectos activos: ${activeProjects}
+- Tareas pendientes totales: ${pendingTasks.length}
+- Tareas completadas: ${completedTasks.length}
+- Por vencer en 7 días: ${dueSoon}
+
+AVANCE POR CÉLULA:
+${areaStats.map(a => `- ${a.label}: ${a.pct}% completado (${a.pending} pendientes, ${a.overdue} vencidas)`).join("\n")}
+
+PROYECTOS CRÍTICOS O CON ATRASO:
+${criticalProjects.length > 0 ? criticalProjects.map((p: any) => `- ${p.name} (${(p as any).clients?.name || "interno"}): criticidad=${(p as any).criticality_level || "normal"}, motivo_atraso=${(p as any).delay_category || "ninguno"}`).join("\n") : "Ninguno"}
+
+INSTRUCCIONES:
+1. Resume en 3-5 puntos con emojis el estado general del equipo.
+2. Destaca células con mejor desempeño y las que necesitan atención.
+3. Si hay proyectos críticos o con atraso, menciónalos con contexto.
+4. Si hay muchas tareas vencidas en alguna célula, sugiere acción.
+5. Cierra con una observación motivadora.
+6. Máximo 120 palabras. Usa markdown.`;
+  }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects]);
+
   return (
     <div className="space-y-8">
+      {/* AI Team Summary */}
+      <AISummaryCard
+        cacheKey={`team-dashboard-${user?.id}`}
+        contextPrompt={teamSummaryPrompt}
+        title="Resumen del equipo — Kawiil AI"
+        ready={!!allTasks && !!projects}
+        userId={user?.id}
+      />
       {/* Stats */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
