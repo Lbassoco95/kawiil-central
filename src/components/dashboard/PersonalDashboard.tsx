@@ -109,6 +109,14 @@ export function PersonalDashboard() {
 
   return (
     <div className="space-y-8">
+      {/* AI Daily Briefing */}
+      <DailyBriefing
+        tasksCount={totalPending}
+        completedToday={completedToday ?? 0}
+        overdueCount={overdueTasks}
+        remindersCount={pendingReminders.length}
+      />
+
       {/* Weekly Quote */}
       <div className="rounded-2xl bg-primary/5 border border-primary/10 p-6 relative overflow-hidden">
         <Quote className="absolute top-4 right-4 h-8 w-8 text-primary/10" />
