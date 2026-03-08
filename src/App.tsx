@@ -19,6 +19,7 @@ import Microsoft365Calendario from "./pages/Microsoft365Calendario";
 import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Despacho from "./pages/Despacho";
 import Notificaciones from "./pages/Notificaciones";
+import AsistenteIA from "./pages/AsistenteIA";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
