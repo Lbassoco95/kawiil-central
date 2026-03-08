@@ -36,7 +36,7 @@ serve(async (req) => {
     const { data: isAdmin } = await adminClient.rpc('is_admin_or_manager', { _user_id: callerUser.id });
     if (!isAdmin) throw new Error('Only admins and managers can create users');
 
-    const { email, full_name, password, role, area, phone } = await req.json();
+    const { email, full_name, password, role, area, phone, microsoft_email, microsoft_user_id } = await req.json();
 
     if (!email || !full_name || !role) {
       throw new Error('Email, full_name, and role are required');
@@ -69,15 +69,19 @@ serve(async (req) => {
     const newUserId = createData.user.id;
 
     // Update profile
+    const profileUpdate: Record<string, any> = {
+      full_name,
+      area: area || null,
+      phone: phone || null,
+      organization_id: orgId,
+      onboarding_status: 'password_set',
+    };
+    if (microsoft_email) profileUpdate.microsoft_email = microsoft_email;
+    if (microsoft_user_id) profileUpdate.microsoft_user_id = microsoft_user_id;
+
     const { error: profileError } = await adminClient
       .from('profiles')
-      .update({
-        full_name,
-        area: area || null,
-        phone: phone || null,
-        organization_id: orgId,
-        onboarding_status: 'password_set',
-      })
+      .update(profileUpdate)
       .eq('user_id', newUserId);
 
     if (profileError) console.error('Profile update error:', profileError);

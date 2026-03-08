@@ -7,9 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail } from "@/hooks/useMicrosoft";
-import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send } from "lucide-react";
+import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send, UserPlus } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { CreateUserFromEmailDialog } from "./CreateUserFromEmailDialog";
+import { useUserRole } from "@/hooks/useUserRole";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
@@ -20,6 +22,8 @@ export function EmailView() {
   const [emailAction, setEmailAction] = useState<EmailAction>(null);
   const [replyText, setReplyText] = useState("");
   const [forwardTo, setForwardTo] = useState("");
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const { isAdminOrManager } = useUserRole();
 
   const { data: emails = [], isLoading } = useOutlookEmails("inbox", debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
@@ -174,6 +178,16 @@ export function EmailView() {
                 >
                   <Forward className="mr-1 h-3.5 w-3.5" /> Reenviar
                 </Button>
+                {isAdminOrManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => setCreateUserOpen(true)}
+                  >
+                    <UserPlus className="mr-1 h-3.5 w-3.5" /> Dar de alta
+                  </Button>
+                )}
               </div>
 
               {/* Reply/Forward form */}
@@ -225,6 +239,14 @@ export function EmailView() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* Create user from email dialog */}
+      <CreateUserFromEmailDialog
+        open={createUserOpen}
+        onOpenChange={setCreateUserOpen}
+        senderName={emailDetail?.from?.emailAddress?.name}
+        senderEmail={emailDetail?.from?.emailAddress?.address}
+      />
     </div>
   );
 }
