@@ -205,7 +205,7 @@ export function PersonalDashboard() {
               className="text-sm h-9 w-36 bg-secondary/30 border-0"
             />
             <Button size="sm" variant="ghost" onClick={handleAddReminder} disabled={!newReminder.trim()}>
-              <Plus className="h-4 w-4" />
+              <PlusIcon className="h-4 w-4" />
             </Button>
           </div>
 
