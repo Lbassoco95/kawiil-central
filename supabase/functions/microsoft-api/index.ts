@@ -237,7 +237,7 @@ Deno.serve(async (req) => {
             previousEventId: params.eventId,
           };
         } else {
-          result = updatedEvent || { success: true };
+          result = persistedEvent || patchEvent || { success: true };
         }
 
         break;
