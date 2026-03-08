@@ -224,6 +224,53 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.description}</p>
             )}
 
+            {/* Criticality & Delay tracking */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg border bg-muted/20">
+              <div>
+                <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
+                <Select
+                  value={(task as any).criticality_level || "normal"}
+                  onValueChange={(v) => updateTask.mutate({ id: taskId, criticality_level: v } as any)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CRITICALITY_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
+                <Select
+                  value={(task as any).delay_category || "__none__"}
+                  onValueChange={(v) => updateTask.mutate({ id: taskId, delay_category: v === "__none__" ? null : v } as any)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DELAY_CATEGORIES.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {((task as any).delay_category) && (
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="text-xs text-muted-foreground block mb-1">Notas</span>
+                  <Textarea
+                    className="text-xs min-h-[60px]"
+                    placeholder="Describe la situación..."
+                    defaultValue={(task as any).delay_notes || ""}
+                    onBlur={(e) => updateTask.mutate({ id: taskId, delay_notes: e.target.value || null } as any)}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Assignees - editable */}
             <div>
               <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
