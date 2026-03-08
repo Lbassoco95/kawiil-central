@@ -341,6 +341,17 @@ INSTRUCCIONES:
           </CardContent>
         </Card>
       )}
+
+      {/* AI Project Summary */}
+      <div className="md:col-span-2">
+        <AISummaryCard
+          cacheKey={`project-${project.id}`}
+          contextPrompt={projectSummaryPrompt}
+          title="Resumen del proyecto — Kawiil AI"
+          ready={!!projectTasks}
+          userId={user?.id}
+        />
+      </div>
     </div>
   );
 }
