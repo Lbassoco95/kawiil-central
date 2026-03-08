@@ -29,6 +29,14 @@ export function EmailView() {
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
+  const markRead = useMarkEmailRead();
+
+  const handleOpenEmail = (email: any) => {
+    setSelectedEmailId(email.id);
+    if (!email.isRead) {
+      markRead.mutate(email.id);
+    }
+  };
 
   const handleSearch = (val: string) => {
     setSearch(val);
