@@ -89,7 +89,7 @@ export function EmailView() {
             <Card
               key={email.id}
               className={`cursor-pointer transition-colors hover:border-primary/50 ${!email.isRead ? "bg-primary/5" : ""}`}
-              onClick={() => { setSelectedEmailId(email.id); resetAction(); }}
+              onClick={() => { handleOpenEmail(email); resetAction(); }}
             >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
