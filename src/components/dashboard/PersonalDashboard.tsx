@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
+import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
 import {
   Plus as PlusIcon,
   Trash2,
@@ -151,6 +152,9 @@ export function PersonalDashboard() {
 
       {/* Performance Chart */}
       <PerformanceChart />
+
+      {/* Monthly Performance */}
+      <MonthlyPerformance />
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Tasks */}

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { TeamMonthlyPerformance } from "@/components/dashboard/TeamMonthlyPerformance";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -279,6 +280,9 @@ export function TeamDashboard() {
           </div>
         </section>
       )}
+
+      {/* Monthly Performance by Celula */}
+      {isAdminOrManager && <TeamMonthlyPerformance />}
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* My Tasks */}
