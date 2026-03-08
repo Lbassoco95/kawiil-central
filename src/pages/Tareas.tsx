@@ -4,7 +4,6 @@ import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight } from "lucide-react";
 import { useTasks, useDeleteTask } from "@/hooks/useTasks";
@@ -17,18 +16,18 @@ import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { formatMX } from "@/lib/dateUtils";
 
 const priorityColors: Record<string, string> = {
-  urgente: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  alta: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  media: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  baja: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  urgente: "bg-destructive/10 text-destructive",
+  alta: "bg-warning/10 text-warning",
+  media: "bg-primary/10 text-primary",
+  baja: "bg-success/10 text-success",
 };
 
 const statusLabels: Record<string, { label: string; color: string }> = {
   pendiente: { label: "Pendiente", color: "bg-muted text-muted-foreground" },
-  en_progreso: { label: "En progreso", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  en_revision: { label: "En revisión", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  completada: { label: "Completada", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  cancelada: { label: "Cancelada", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+  en_progreso: { label: "En progreso", color: "bg-primary/10 text-primary" },
+  en_revision: { label: "En revisión", color: "bg-warning/10 text-warning" },
+  completada: { label: "Completada", color: "bg-success/10 text-success" },
+  cancelada: { label: "Cancelada", color: "bg-destructive/10 text-destructive" },
 };
 
 const stepStatusLabels: Record<string, string> = {
@@ -60,124 +59,132 @@ const Tareas = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Tareas</h1>
-            <p className="text-sm text-muted-foreground">Gestión de tareas y actividades internas</p>
+            <h1 className="text-xl font-semibold text-foreground">Tareas</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Gestión de tareas y actividades internas</p>
           </div>
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="mr-2 h-4 w-4" /> Nueva tarea
+          <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
           </Button>
         </div>
 
         {/* Assigned project steps */}
         {assignedSteps.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ClipboardList className="h-4 w-4" />
-                Mis pasos de proyecto asignados
-                <Badge variant="secondary">{assignedSteps.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="space-y-1">
-                {assignedSteps.slice(0, 10).map((step) => (
-                  <div
-                    key={step.id}
-                    className="flex items-center gap-3 text-sm cursor-pointer hover:bg-muted/50 rounded-md px-3 py-2 transition-colors"
-                    onClick={() => navigate(`/proyectos/${step.projectId}`)}
-                  >
-                    <Badge variant="outline" className="text-xs shrink-0">{step.sourceLabel}</Badge>
-                    <span className="flex-1 truncate font-medium">{step.stepLabel}</span>
-                    {step.clientName && (
-                      <span className="text-xs text-muted-foreground shrink-0">{step.clientName}</span>
-                    )}
-                    {step.dueDate && (
-                      <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {formatMX(step.dueDate, "dd MMM")}
-                      </span>
-                    )}
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {stepStatusLabels[step.status] || step.status}
-                    </Badge>
-                    <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                  </div>
-                ))}
-                {assignedSteps.length > 10 && (
-                  <p className="text-xs text-muted-foreground text-center py-1">
-                    +{assignedSteps.length - 10} pasos más
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <ClipboardList className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Mis pasos de proyecto asignados</h2>
+              <span className="text-[10px] text-muted-foreground">{assignedSteps.length}</span>
+            </div>
+            <div className="space-y-px">
+              {assignedSteps.slice(0, 10).map((step) => (
+                <div
+                  key={step.id}
+                  className="flex items-center gap-3 text-sm cursor-pointer hover:bg-secondary/40 rounded-lg px-3 py-2.5 transition-colors"
+                  onClick={() => navigate(`/proyectos/${step.projectId}`)}
+                >
+                  <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">{step.sourceLabel}</span>
+                  <span className="flex-1 truncate text-[13px] font-medium text-foreground">{step.stepLabel}</span>
+                  {step.clientName && (
+                    <span className="text-[11px] text-muted-foreground shrink-0">{step.clientName}</span>
+                  )}
+                  {step.dueDate && (
+                    <span className="text-[11px] text-muted-foreground shrink-0 flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {formatMX(step.dueDate, "dd MMM")}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                    {stepStatusLabels[step.status] || step.status}
+                  </span>
+                  <ArrowRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                </div>
+              ))}
+              {assignedSteps.length > 10 && (
+                <p className="text-[11px] text-muted-foreground text-center py-1">
+                  +{assignedSteps.length - 10} pasos más
+                </p>
+              )}
+            </div>
+          </section>
         )}
 
-        <Tabs value={area} onValueChange={setArea}>
-          <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="todas">Todas</TabsTrigger>
-            {areaOptions.map((a) => (
-              <TabsTrigger key={a.value} value={a.value}>{a.label}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        {/* Area filter pills */}
+        <div className="flex flex-wrap gap-1.5">
+          {[{ value: "todas", label: "Todas" }, ...areaOptions].map((a) => {
+            const isActive = area === a.value;
+            return (
+              <button
+                key={a.value}
+                onClick={() => setArea(a.value)}
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                {a.label}
+              </button>
+            );
+          })}
+        </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar tareas..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar tareas..."
+            className="pl-9 h-9 text-sm bg-secondary/30 border-0 focus-visible:ring-1"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
 
         {isLoading ? (
-          <Card><CardContent className="p-6 text-center text-muted-foreground">Cargando tareas...</CardContent></Card>
+          <p className="text-center text-muted-foreground py-12 text-sm">Cargando tareas...</p>
         ) : tasks && tasks.length > 0 ? (
-          <div className="space-y-2">
+          <div className="divide-y divide-border/40">
             {tasks.map((task) => (
-              <Card key={task.id} className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setSelectedTaskId(task.id)}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-medium text-foreground truncate">{task.title}</h3>
-                        <Badge className={priorityColors[task.priority]} variant="secondary">{task.priority}</Badge>
-                        <Badge className={statusLabels[task.status]?.color} variant="secondary">{statusLabels[task.status]?.label}</Badge>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        {task.area && <span className="capitalize">{areaLabelMap[task.area] || task.area}</span>}
-                        {(task as any).clients?.name && (
-                          <span className="flex items-center gap-1"><User className="h-3 w-3" />{(task as any).clients.name}</span>
-                        )}
-                        {(task as any).projects?.name && <span>{(task as any).projects.name}</span>}
-                        {task.due_date && (
-                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>
-                        )}
-                      </div>
-                    </div>
-                    {isAdminOrManager && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+              <div
+                key={task.id}
+                className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
+                onClick={() => setSelectedTaskId(task.id)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <h3 className="text-[13px] font-medium text-foreground truncate">{task.title}</h3>
+                    <Badge className={`text-[10px] border-0 px-1.5 py-0 ${priorityColors[task.priority]}`} variant="secondary">{task.priority}</Badge>
+                    <Badge className={`text-[10px] border-0 px-1.5 py-0 ${statusLabels[task.status]?.color}`} variant="secondary">{statusLabels[task.status]?.label}</Badge>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                    {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
+                    {(task as any).clients?.name && (
+                      <span className="flex items-center gap-1"><User className="h-3 w-3" />{(task as any).clients.name}</span>
+                    )}
+                    {(task as any).projects?.name && <span>{(task as any).projects.name}</span>}
+                    {task.due_date && (
+                      <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>
                     )}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+                {isAdminOrManager && (
+                  <button
+                    className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         ) : (
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center py-12">
-                <CheckSquare className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <h3 className="mt-4 text-lg font-medium text-foreground">Sin tareas aún</h3>
-                <p className="mt-1 text-sm text-muted-foreground">Crea tu primera tarea para comenzar a organizar el trabajo.</p>
-                <Button className="mt-4" onClick={() => setShowCreate(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Crear tarea
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="text-center py-16">
+            <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
+            <h3 className="mt-3 text-sm font-medium text-foreground">Sin tareas aún</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Crea tu primera tarea para comenzar a organizar el trabajo.</p>
+            <Button className="mt-3" size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
+            </Button>
+          </div>
         )}
       </div>
 
