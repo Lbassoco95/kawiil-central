@@ -170,25 +170,63 @@ export function useUpdateCalendarEvent() {
       const res = await supabase.functions.invoke("microsoft-api", {
         body: { action: "update-event", params: { eventId, payload } },
       });
-      // supabase.functions.invoke may throw a JSON parse error on empty/non-JSON responses
-      // but the update was still successful if no HTTP error occurred
       if (res.error) {
-        // If the error is just a JSON parse issue, the update likely succeeded
         const msg = res.error?.message || String(res.error);
         if (msg.includes("Unexpected end of JSON") || msg.includes("json")) {
-          return { success: true };
+          return { success: true, eventId, payload };
         }
         throw res.error;
       }
       if (res.data?.error) throw new Error(res.data.error);
-      return res.data || { success: true };
+      return { ...(res.data || {}), success: true, eventId, payload };
+    },
+    onMutate: async ({ eventId, payload }) => {
+      // Cancel outgoing refetches so they don't overwrite optimistic update
+      await queryClient.cancelQueries({ queryKey: ["calendar-events"] });
+
+      // Snapshot previous value
+      const previousQueries = queryClient.getQueriesData({ queryKey: ["calendar-events"] });
+
+      // Optimistically update all calendar-events queries
+      queryClient.setQueriesData(
+        { queryKey: ["calendar-events"] },
+        (old: any) => {
+          if (!old?.value && !Array.isArray(old)) return old;
+          const events = old?.value || old;
+          if (!Array.isArray(events)) return old;
+          const updated = events.map((ev: any) => {
+            if (ev.id !== eventId) return ev;
+            return {
+              ...ev,
+              ...(payload.subject ? { subject: payload.subject } : {}),
+              ...(payload.start ? { start: payload.start } : {}),
+              ...(payload.end ? { end: payload.end } : {}),
+              ...(payload.categories ? { categories: payload.categories } : {}),
+            };
+          });
+          return old?.value ? { ...old, value: updated } : updated;
+        }
+      );
+
+      return { previousQueries };
+    },
+    onError: (err: Error, _vars, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        for (const [key, data] of context.previousQueries) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      toast.error("Error al actualizar evento: " + err.message);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-event-detail"] });
       toast.success("Evento actualizado");
     },
-    onError: (err: Error) => toast.error("Error al actualizar evento: " + err.message),
+    onSettled: () => {
+      // Always refetch after mutation settles to ensure server state
+      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-event-detail"] });
+    },
   });
 }
 
