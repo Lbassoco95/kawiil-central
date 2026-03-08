@@ -1,5 +1,4 @@
 import { AppLayout } from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -70,7 +69,6 @@ const Dashboard = () => {
     [pendingTasks, user]
   );
 
-  // ── Team workload ──
   const teamWorkload = useMemo(() => {
     if (!orgUsers || !allTasks) return [];
     const activeUsers = orgUsers.filter((u) => u.is_active && u.invitation_accepted);
@@ -97,7 +95,6 @@ const Dashboard = () => {
     }).filter((u) => u.total > 0).sort((a, b) => b.pending - a.pending);
   }, [orgUsers, allTasks, user, today]);
 
-  // ── Project progress ──
   const projectProgress = useMemo(() => {
     if (!projects || !allTasks) return [];
     return projects
@@ -121,7 +118,6 @@ const Dashboard = () => {
       .slice(0, 8);
   }, [projects, allTasks]);
 
-  // ── Client progress ──
   const clientProgress = useMemo(() => {
     if (!clients || !allTasks) return [];
     return clients
@@ -138,7 +134,6 @@ const Dashboard = () => {
       .slice(0, 8);
   }, [clients, allTasks]);
 
-  // ── Area indicators ──
   const areaStats = useMemo(() => {
     if (!allTasks) return [];
     const areas: Record<string, { pending: number; completed: number; overdue: number }> = {};
@@ -199,237 +194,218 @@ const Dashboard = () => {
     return "text-muted-foreground";
   };
 
-  const workloadLevel = (pending: number, overdue: number) => {
-    if (overdue > 0) return "border-destructive/30 bg-destructive/5";
-    if (pending > 8) return "border-warning/30 bg-warning/5";
-    if (pending <= 2) return "border-success/30 bg-success/5";
-    return "";
-  };
-
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Vista colaborativa del equipo</p>
+          <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Vista colaborativa del equipo</p>
         </div>
 
-        {/* Stats */}
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        {/* Stats — flat pills instead of cards */}
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
-            <Card
+            <button
               key={stat.label}
-              className={`cursor-pointer hover:shadow-md transition-shadow ${stat.highlight ? "border-destructive/40" : ""}`}
               onClick={() => navigate(stat.href)}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3.5 text-left transition-colors hover:bg-secondary/80 ${
+                stat.highlight ? "bg-destructive/5 hover:bg-destructive/10" : "bg-secondary/50"
+              }`}
             >
-              <CardContent className="pt-4 pb-3 px-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-muted-foreground">{stat.label}</span>
-                  <stat.icon className={`h-4 w-4 ${stat.highlight ? "text-destructive" : "text-primary"}`} />
-                </div>
-                <div className="text-2xl font-bold text-foreground">{stat.value}</div>
-              </CardContent>
-            </Card>
+              <stat.icon className={`h-4 w-4 shrink-0 ${stat.highlight ? "text-destructive" : "text-primary"}`} />
+              <div className="min-w-0">
+                <div className="text-xl font-semibold text-foreground leading-none">{stat.value}</div>
+                <div className="text-[11px] text-muted-foreground mt-1">{stat.label}</div>
+              </div>
+            </button>
           ))}
         </div>
 
-        {/* Area Indicators with progress */}
+        {/* Area Indicators */}
         {areaStats.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-primary" />
-                Avance por célula
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {areaStats.map((a) => (
-                  <div key={a.area} className="rounded-lg border p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${statusDot(a.status)}`} />
-                        <span className="text-sm font-medium">{a.label}</span>
-                      </div>
-                      <span className={`text-sm font-bold ${progressColor(a.pct)}`}>{a.pct}%</span>
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Avance por célula</h2>
+            </div>
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {areaStats.map((a) => (
+                <div key={a.area} className="rounded-xl bg-secondary/30 p-4">
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${statusDot(a.status)}`} />
+                      <span className="text-[13px] font-medium text-foreground">{a.label}</span>
                     </div>
-                    <Progress value={a.pct} className="h-1.5 mb-2" />
-                    <div className="flex justify-between text-[11px] text-muted-foreground">
-                      <span>{a.completed} completadas</span>
-                      <span>{a.pending} pendientes</span>
-                      {a.overdue > 0 && <span className="text-destructive font-medium">{a.overdue} vencidas</span>}
-                    </div>
+                    <span className={`text-[13px] font-semibold ${progressColor(a.pct)}`}>{a.pct}%</span>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <Progress value={a.pct} className="h-1 mb-2.5" />
+                  <div className="flex justify-between text-[11px] text-muted-foreground">
+                    <span>{a.completed} completadas</span>
+                    <span>{a.pending} pendientes</span>
+                    {a.overdue > 0 && <span className="text-destructive font-medium">{a.overdue} vencidas</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {/* Team Workload */}
         {isAdminOrManager && teamWorkload.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <UserCheck className="h-4 w-4 text-primary" />
-                Carga del equipo
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {teamWorkload.map((m) => (
-                  <div
-                    key={m.userId}
-                    className={`rounded-lg border p-3 transition-colors ${workloadLevel(m.pending, m.overdue)} ${m.isMe ? "ring-1 ring-primary/30" : ""}`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="min-w-0 flex-1 mr-2">
-                        <span className="text-sm font-medium block truncate">
-                          {m.name}
-                          {m.isMe && <span className="text-[10px] text-primary ml-1">(tú)</span>}
-                        </span>
-                        {m.area && <span className="text-[10px] text-muted-foreground">{m.area}</span>}
-                      </div>
-                      <span className={`text-sm font-bold ${progressColor(m.pct)}`}>{m.pct}%</span>
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <UserCheck className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Carga del equipo</h2>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {teamWorkload.map((m) => (
+                <div
+                  key={m.userId}
+                  className={`rounded-xl p-4 transition-colors ${
+                    m.overdue > 0 ? "bg-destructive/5" : m.pending > 8 ? "bg-warning/5" : "bg-secondary/30"
+                  } ${m.isMe ? "ring-1 ring-primary/20" : ""}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="min-w-0 flex-1 mr-2">
+                      <span className="text-[13px] font-medium text-foreground block truncate">
+                        {m.name}
+                        {m.isMe && <span className="text-[10px] text-primary ml-1">(tú)</span>}
+                      </span>
+                      {m.area && <span className="text-[10px] text-muted-foreground">{m.area}</span>}
                     </div>
-                    <Progress value={m.pct} className="h-1.5 mb-1.5" />
-                    <div className="flex gap-3 text-[11px] text-muted-foreground">
-                      <span>{m.pending} pendientes</span>
-                      <span>{m.completed} hechas</span>
-                      {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
-                    </div>
+                    <span className={`text-[13px] font-semibold ${progressColor(m.pct)}`}>{m.pct}%</span>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <Progress value={m.pct} className="h-1 mb-2" />
+                  <div className="flex gap-3 text-[11px] text-muted-foreground">
+                    <span>{m.pending} pendientes</span>
+                    <span>{m.completed} hechas</span>
+                    {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-8 lg:grid-cols-2">
           {/* My Tasks */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-primary" />
-                Mis tareas
-              </CardTitle>
+                <h2 className="text-sm font-semibold text-foreground">Mis tareas</h2>
+              </div>
               <button
                 onClick={() => navigate("/tareas")}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
                 Ver todas <ArrowRight className="h-3 w-3" />
               </button>
-            </CardHeader>
-            <CardContent>
-              {myTasks.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Sin tareas pendientes asignadas 🎉
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {myTasks.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center justify-between rounded-md border p-2.5 text-sm hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => navigate("/tareas")}
-                    >
-                      <span className="truncate flex-1 mr-2">{t.title}</span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {t.due_date && (
-                          <span className={`text-[11px] ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                            {formatDateMX(t.due_date)}
-                          </span>
-                        )}
-                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${priorityColor(t.priority)}`}>
-                          {t.priority}
-                        </Badge>
-                      </div>
+            </div>
+            {myTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Sin tareas pendientes asignadas 🎉
+              </p>
+            ) : (
+              <div className="space-y-px">
+                {myTasks.map((t) => (
+                  <button
+                    key={t.id}
+                    className="flex items-center justify-between w-full rounded-lg px-3 py-2.5 text-sm hover:bg-secondary/60 transition-colors text-left"
+                    onClick={() => navigate("/tareas")}
+                  >
+                    <span className="truncate flex-1 mr-3 text-foreground">{t.title}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {t.due_date && (
+                        <span className={`text-[11px] ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                          {formatDateMX(t.due_date)}
+                        </span>
+                      )}
+                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${priorityColor(t.priority)}`}>
+                        {t.priority}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* Project Progress */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
                 <FolderKanban className="h-4 w-4 text-primary" />
-                Avance de proyectos
-              </CardTitle>
+                <h2 className="text-sm font-semibold text-foreground">Avance de proyectos</h2>
+              </div>
               <button
                 onClick={() => navigate("/proyectos")}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
                 Ver todos <ArrowRight className="h-3 w-3" />
               </button>
-            </CardHeader>
-            <CardContent>
-              {projectProgress.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">Sin proyectos activos</p>
-              ) : (
-                <div className="space-y-3">
-                  {projectProgress.map((p) => (
-                    <div
-                      key={p.id}
-                      className="cursor-pointer hover:bg-muted/50 rounded-md p-2.5 -mx-1 transition-colors"
-                      onClick={() => navigate(`/proyectos/${p.id}`)}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="min-w-0 flex-1 mr-2">
-                          <span className="text-sm font-medium truncate block">{p.clientName}</span>
-                          <span className="text-xs text-muted-foreground truncate block">{p.name}</span>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className={`text-sm font-semibold ${progressColor(p.pct)}`}>{p.pct}%</span>
-                          <span className="text-[10px] text-muted-foreground block">{p.completed}/{p.total}</span>
-                        </div>
+            </div>
+            {projectProgress.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">Sin proyectos activos</p>
+            ) : (
+              <div className="space-y-px">
+                {projectProgress.map((p) => (
+                  <button
+                    key={p.id}
+                    className="w-full text-left rounded-lg p-3 hover:bg-secondary/60 transition-colors"
+                    onClick={() => navigate(`/proyectos/${p.id}`)}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="min-w-0 flex-1 mr-3">
+                        <span className="text-[13px] font-medium text-foreground truncate block">{p.clientName}</span>
+                        <span className="text-xs text-muted-foreground truncate block">{p.name}</span>
                       </div>
-                      <Progress value={p.pct} className="h-1.5" />
+                      <div className="text-right shrink-0">
+                        <span className={`text-[13px] font-semibold ${progressColor(p.pct)}`}>{p.pct}%</span>
+                        <span className="text-[10px] text-muted-foreground block">{p.completed}/{p.total}</span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <Progress value={p.pct} className="h-1" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         {/* Client Progress */}
         {clientProgress.length > 0 && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-primary" />
-                Avance por cliente
-              </CardTitle>
+                <h2 className="text-sm font-semibold text-foreground">Avance por cliente</h2>
+              </div>
               <button
                 onClick={() => navigate("/clientes")}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
               >
                 Ver todos <ArrowRight className="h-3 w-3" />
               </button>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {clientProgress.map((c) => (
-                  <div
-                    key={c.id}
-                    className="cursor-pointer rounded-lg border p-3 hover:shadow-sm transition-shadow"
-                    onClick={() => navigate(`/clientes/${c.id}`)}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium truncate flex-1 mr-2">{c.name}</span>
-                      <span className={`text-sm font-bold ${progressColor(c.pct)}`}>{c.pct}%</span>
-                    </div>
-                    <Progress value={c.pct} className="h-1.5 mb-1" />
-                    <span className="text-[10px] text-muted-foreground">{c.completed} de {c.total} tareas</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {clientProgress.map((c) => (
+                <button
+                  key={c.id}
+                  className="text-left rounded-xl bg-secondary/30 p-4 hover:bg-secondary/50 transition-colors"
+                  onClick={() => navigate(`/clientes/${c.id}`)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[13px] font-medium text-foreground truncate flex-1 mr-2">{c.name}</span>
+                    <span className={`text-[13px] font-semibold ${progressColor(c.pct)}`}>{c.pct}%</span>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <Progress value={c.pct} className="h-1 mb-1.5" />
+                  <span className="text-[10px] text-muted-foreground">{c.completed} de {c.total} tareas</span>
+                </button>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </AppLayout>

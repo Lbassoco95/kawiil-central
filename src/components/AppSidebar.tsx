@@ -46,78 +46,73 @@ export function AppSidebar() {
     (item) => item.url !== "/admin" || isAdminOrManager
   );
 
-  // Close mobile menu on route change
   useEffect(() => {
     setMobileOpen(false);
   }, []);
 
-  // On mobile, render a hamburger button + overlay drawer
   if (isMobile) {
     return (
       <>
-        {/* Hamburger button */}
         <button
           onClick={() => setMobileOpen(true)}
-          className="fixed top-3 left-3 z-50 flex items-center justify-center h-10 w-10 rounded-md bg-sidebar text-sidebar-foreground shadow-lg"
+          className="fixed top-3 left-3 z-50 flex items-center justify-center h-9 w-9 rounded-lg bg-sidebar text-sidebar-foreground shadow-md"
           aria-label="Abrir menú"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4" />
         </button>
 
-        {/* Overlay */}
         {mobileOpen && (
           <div
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
         )}
 
-        {/* Drawer */}
         <aside
           className={cn(
-            "fixed top-0 left-0 z-50 flex flex-col bg-sidebar text-sidebar-foreground h-screen w-64 transition-transform duration-200 shadow-xl",
+            "fixed top-0 left-0 z-50 flex flex-col bg-sidebar text-sidebar-foreground h-screen w-64 transition-transform duration-200",
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
-          <div className="flex items-center justify-between px-4 h-14 border-b border-sidebar-border">
-            <div className="flex items-center gap-2">
-              <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-8 w-8" />
-              <span className="font-semibold text-sidebar-accent-foreground text-base tracking-tight">
+          <div className="flex items-center justify-between px-4 h-14 border-b border-sidebar-border/50">
+            <div className="flex items-center gap-2.5">
+              <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-7 w-7" />
+              <span className="font-semibold text-sidebar-accent-foreground text-sm tracking-tight">
                 Kawiil OS
               </span>
             </div>
             <button onClick={() => setMobileOpen(false)} aria-label="Cerrar menú">
-              <X className="h-5 w-5 text-sidebar-foreground" />
+              <X className="h-4 w-4 text-sidebar-foreground" />
             </button>
           </div>
 
-          <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+          <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
             {visibleNavItems.map((item) => (
               <NavLink
                 key={item.url}
                 to={item.url}
                 end={item.url === "/"}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
                 activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                 onClick={() => setMobileOpen(false)}
               >
-                <item.icon className="h-4 w-4 shrink-0" />
+                <item.icon className="h-[15px] w-[15px] shrink-0 opacity-70" />
                 <span>{item.title}</span>
               </NavLink>
             ))}
           </nav>
 
-          <div className="border-t border-sidebar-border p-2 space-y-1">
+          <div className="border-t border-sidebar-border/50 p-2 space-y-0.5">
             {user && (
-              <div className="px-3 py-2 text-xs text-sidebar-foreground truncate">
+              <div className="px-2.5 py-1.5 text-[11px] text-sidebar-foreground/60 truncate">
                 {user.email}
               </div>
             )}
             <button
               onClick={() => { signOut(); setMobileOpen(false); }}
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
             >
-              <LogOut className="h-4 w-4 shrink-0" />
+              <LogOut className="h-[15px] w-[15px] shrink-0 opacity-70" />
               <span>Cerrar sesión</span>
             </button>
           </div>
@@ -126,72 +121,68 @@ export function AppSidebar() {
     );
   }
 
-  // Desktop sidebar
   return (
     <aside
       className={cn(
-        "flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-200 h-screen sticky top-0",
-        collapsed ? "w-16" : "w-60"
+        "flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border/50 transition-all duration-200 h-screen sticky top-0",
+        collapsed ? "w-14" : "w-56"
       )}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-4 h-14 border-b border-sidebar-border">
-        <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-8 w-8" />
+      <div className="flex items-center gap-2.5 px-3.5 h-14 border-b border-sidebar-border/50">
+        <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-7 w-7" />
         {!collapsed && (
-          <span className="font-semibold text-sidebar-accent-foreground text-base tracking-tight">
+          <span className="font-semibold text-sidebar-accent-foreground text-sm tracking-tight">
             Kawiil OS
           </span>
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 py-2 px-1.5 space-y-0.5 overflow-y-auto">
         {visibleNavItems.map((item) => (
           <NavLink
             key={item.url}
             to={item.url}
             end={item.url === "/"}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              collapsed && "justify-center px-2"
+              "flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-colors text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+              collapsed && "justify-center px-1.5"
             )}
             activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
           >
-            <item.icon className="h-4 w-4 shrink-0" />
+            <item.icon className="h-[15px] w-[15px] shrink-0 opacity-70" />
             {!collapsed && <span>{item.title}</span>}
           </NavLink>
         ))}
       </nav>
 
-      {/* Bottom */}
-      <div className="border-t border-sidebar-border p-2 space-y-1">
+      <div className="border-t border-sidebar-border/50 p-1.5 space-y-0.5">
         {!collapsed && user && (
-          <div className="px-3 py-2 text-xs text-sidebar-foreground truncate">
+          <div className="px-2.5 py-1.5 text-[11px] text-sidebar-foreground/60 truncate">
             {user.email}
           </div>
         )}
         <button
           onClick={signOut}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            collapsed && "justify-center px-2"
+            "flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+            collapsed && "justify-center px-1.5"
           )}
         >
-          <LogOut className="h-4 w-4 shrink-0" />
+          <LogOut className="h-[15px] w-[15px] shrink-0 opacity-70" />
           {!collapsed && <span>Cerrar sesión</span>}
         </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={cn(
-            "flex items-center gap-3 rounded-md px-3 py-2 text-sm w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            collapsed && "justify-center px-2"
+            "flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+            collapsed && "justify-center px-1.5"
           )}
         >
           {collapsed ? (
-            <ChevronRight className="h-4 w-4 shrink-0" />
+            <ChevronRight className="h-[15px] w-[15px] shrink-0 opacity-70" />
           ) : (
             <>
-              <ChevronLeft className="h-4 w-4 shrink-0" />
+              <ChevronLeft className="h-[15px] w-[15px] shrink-0 opacity-70" />
               <span>Colapsar</span>
             </>
           )}
