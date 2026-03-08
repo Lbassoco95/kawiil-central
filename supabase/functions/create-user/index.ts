@@ -69,15 +69,19 @@ serve(async (req) => {
     const newUserId = createData.user.id;
 
     // Update profile
+    const profileUpdate: Record<string, any> = {
+      full_name,
+      area: area || null,
+      phone: phone || null,
+      organization_id: orgId,
+      onboarding_status: 'password_set',
+    };
+    if (microsoft_email) profileUpdate.microsoft_email = microsoft_email;
+    if (microsoft_user_id) profileUpdate.microsoft_user_id = microsoft_user_id;
+
     const { error: profileError } = await adminClient
       .from('profiles')
-      .update({
-        full_name,
-        area: area || null,
-        phone: phone || null,
-        organization_id: orgId,
-        onboarding_status: 'password_set',
-      })
+      .update(profileUpdate)
       .eq('user_id', newUserId);
 
     if (profileError) console.error('Profile update error:', profileError);
