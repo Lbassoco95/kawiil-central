@@ -29,6 +29,8 @@ async function getValidAccessToken(): Promise<string> {
   }
 
   console.log('Refreshing Dropbox access token...');
+  console.log('Refresh token length:', refreshToken.length, 'starts:', refreshToken.substring(0, 10), 'ends:', refreshToken.substring(refreshToken.length - 10));
+  console.log('Refresh token has whitespace:', refreshToken !== refreshToken.trim());
   const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
     method: 'POST',
     headers: {
