@@ -1070,6 +1070,9 @@ export type Database = {
           constitution_details: Json | null
           created_at: string
           created_by: string | null
+          criticality_level: string | null
+          delay_category: string | null
+          delay_notes: string | null
           description: string | null
           end_date: string | null
           id: string
@@ -1088,6 +1091,9 @@ export type Database = {
           constitution_details?: Json | null
           created_at?: string
           created_by?: string | null
+          criticality_level?: string | null
+          delay_category?: string | null
+          delay_notes?: string | null
           description?: string | null
           end_date?: string | null
           id?: string
@@ -1106,6 +1112,9 @@ export type Database = {
           constitution_details?: Json | null
           created_at?: string
           created_by?: string | null
+          criticality_level?: string | null
+          delay_category?: string | null
+          delay_notes?: string | null
           description?: string | null
           end_date?: string | null
           id?: string
@@ -1307,6 +1316,9 @@ export type Database = {
           compliance_template_id: string | null
           created_at: string
           created_by: string | null
+          criticality_level: string | null
+          delay_category: string | null
+          delay_notes: string | null
           description: string | null
           dropbox_links: Json | null
           due_date: string | null
@@ -1332,6 +1344,9 @@ export type Database = {
           compliance_template_id?: string | null
           created_at?: string
           created_by?: string | null
+          criticality_level?: string | null
+          delay_category?: string | null
+          delay_notes?: string | null
           description?: string | null
           dropbox_links?: Json | null
           due_date?: string | null
@@ -1357,6 +1372,9 @@ export type Database = {
           compliance_template_id?: string | null
           created_at?: string
           created_by?: string | null
+          criticality_level?: string | null
+          delay_category?: string | null
+          delay_notes?: string | null
           description?: string | null
           dropbox_links?: Json | null
           due_date?: string | null
