@@ -348,8 +348,9 @@ serve(async (req) => {
   }
 
   try {
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!OPENAI_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI provider configured");
 
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -431,7 +432,68 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
 - Sé conciso pero completo. Prioriza claridad sobre longitud.
 - Cuando listes tareas, incluye: nombre, prioridad, fecha límite, cliente (si aplica).`;
 
-    // Tool calling loop (non-streaming)
+    // --- AI Provider abstraction: OpenAI primary, Lovable AI fallback ---
+    async function callAI(aiMessages: any[]): Promise<{ ok: boolean; status: number; data?: any; errorText?: string; provider: string }> {
+      // Try OpenAI first
+      if (OPENAI_API_KEY) {
+        try {
+          const response = await fetch(OPENAI_API_URL, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${OPENAI_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "gpt-4o-mini",
+              messages: aiMessages,
+              tools,
+              stream: false,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            return { ok: true, status: 200, data, provider: "openai" };
+          }
+
+          const errText = await response.text();
+          console.warn(`OpenAI failed [${response.status}]: ${errText.substring(0, 200)}`);
+          // Don't return yet — fall through to Lovable AI
+        } catch (e) {
+          console.warn("OpenAI request error:", e instanceof Error ? e.message : e);
+        }
+      }
+
+      // Fallback to Lovable AI
+      if (LOVABLE_API_KEY) {
+        console.log("Falling back to Lovable AI Gateway...");
+        const response = await fetch(AI_GATEWAY_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: aiMessages,
+            tools,
+            stream: false,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return { ok: true, status: 200, data, provider: "lovable" };
+        }
+
+        const errText = await response.text();
+        return { ok: false, status: response.status, errorText: errText, provider: "lovable" };
+      }
+
+      return { ok: false, status: 500, errorText: "No AI provider available", provider: "none" };
+    }
+
+    // Tool calling loop
     let aiMessages: any[] = [
       { role: "system", content: systemPrompt },
       ...messages,
@@ -440,41 +502,30 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
     const MAX_TOOL_ROUNDS = 5;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await fetch(AI_GATEWAY_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: aiMessages,
-          tools,
-          stream: false,
-        }),
-      });
+      const result = await callAI(aiMessages);
 
-      if (!response.ok) {
-        const status = response.status;
-        if (status === 429) {
+      if (!result.ok) {
+        if (result.status === 429) {
           return new Response(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." }), {
             status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        if (status === 402) {
+        if (result.status === 402) {
           return new Response(JSON.stringify({ error: "Créditos de IA agotados. Contacta al administrador." }), {
             status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        const t = await response.text();
-        console.error("AI Gateway error:", status, t);
+        console.error(`AI error [${result.provider}] [${result.status}]:`, result.errorText?.substring(0, 300));
         return new Response(JSON.stringify({ error: "Error del servicio de IA" }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const result = await response.json();
-      const choice = result.choices[0];
+      if (round === 0) {
+        console.log(`Using AI provider: ${result.provider}`);
+      }
+
+      const choice = result.data.choices[0];
       const msg = choice.message;
       aiMessages.push(msg);
 
