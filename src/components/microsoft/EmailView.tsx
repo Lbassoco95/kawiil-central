@@ -7,9 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail } from "@/hooks/useMicrosoft";
-import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send } from "lucide-react";
+import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send, UserPlus } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { CreateUserFromEmailDialog } from "./CreateUserFromEmailDialog";
+import { useUserRole } from "@/hooks/useUserRole";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
