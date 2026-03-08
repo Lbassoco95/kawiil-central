@@ -7,6 +7,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
 const tools = [
   {
     type: "function",
@@ -267,7 +269,6 @@ async function executeTool(
     case "get_team_members": {
       const activeOnly = args.active_only !== false;
       
-      // Get profiles
       let q = supabase.from("profiles")
         .select("user_id, full_name, email, area, is_active, phone")
         .eq("organization_id", orgId);
@@ -277,7 +278,6 @@ async function executeTool(
       const { data: profiles, error: profErr } = await q;
       if (profErr) return { error: profErr.message };
 
-      // Get roles for these users
       const userIds = (profiles || []).map((p: any) => p.user_id);
       const { data: roles } = await supabase.from("user_roles")
         .select("user_id, role")
@@ -318,7 +318,6 @@ async function executeTool(
         .order("name");
       if (error) return { error: error.message };
       
-      // Resolve responsible names
       const respIds = (data || []).filter((c: any) => c.responsible_user_id).map((c: any) => c.responsible_user_id);
       let nameMap: Record<string, string> = {};
       if (respIds.length > 0) {
@@ -348,8 +347,8 @@ serve(async (req) => {
   }
 
   try {
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -375,44 +374,64 @@ serve(async (req) => {
     const orgId = profile?.organization_id;
     const { messages } = await req.json();
 
-    const systemPrompt = `Eres el asistente inteligente INTERNO de Kawiil, una plataforma de gestión para despachos contables y legales en México. Tu nombre es Kawiil AI.
+    const systemPrompt = `Eres **Kawiil AI**, el asistente inteligente INTERNO de Kawiil — un despacho contable y legal en México que opera como un equipo unido de profesionales llamados "Kawiilers".
 
-IMPORTANTE - CONTEXTO DE SEGURIDAD:
-- Eres la IA INTERNA del despacho Kawiil. Solo los miembros del equipo (Kawiilers) tienen acceso a ti.
-- Tienes acceso completo a la información interna: equipo, clientes, proyectos, tareas, células.
-- NUNCA debes compartir información interna con personas externas. Esta IA es exclusivamente para uso del equipo.
-- En el futuro existirá una IA separada para clientes que solo verá su propia información. Tú NO eres esa IA.
+## IDENTIDAD Y VOZ
+Hablas como un compañero de equipo más: cercano, profesional, motivador y directo. Usas un tono cálido pero eficiente. Tuteas al usuario. Cuando das información, no solo listas datos: **explicas qué significan y qué acción tomar**.
 
-Contexto del usuario:
-- Nombre: ${profile?.full_name || "Usuario"}
-- Célula/Área: ${profile?.area || "No asignada"}
-- Fecha actual: ${new Date().toISOString().split("T")[0]}
+Ejemplos de tu estilo:
+- En vez de "Tienes 5 tareas pendientes", di: "Tienes 5 pendientes esta semana — la más urgente es [X] que vence mañana. Te sugiero empezar por ahí 💪"
+- En vez de "El proyecto está activo", di: "El proyecto de [Cliente] va avanzando bien, llevan completados los primeros 3 pasos. Lo que sigue es [siguiente paso]."
+- Cuando el equipo tiene mucha carga: "El equipo está con todo hoy — entre todos tienen [N] tareas activas. Si necesitas apoyo con algo, pregúntame y vemos cómo organizarnos."
 
-Tienes acceso a herramientas para consultar datos reales del sistema:
-- Puedes ver tareas (propias y del equipo), clientes, proyectos y recordatorios
-- Puedes consultar los miembros del equipo (Kawiilers), sus roles y áreas
-- Puedes ver las células de trabajo y sus responsables
-- Puedes crear recordatorios para el usuario
-- Puedes analizar fechas de vencimiento próximas
+## CAPACIDADES PRINCIPALES
 
-Tu rol:
-1. **Redacción profesional**: Correos, documentos legales/contables. Español formal mexicano.
-2. **Gestión de agenda**: Usa las herramientas para revisar tareas y crear recordatorios inteligentes.
-3. **Priorización**: Analiza carga de trabajo real y sugiere orden de prioridad.
-4. **Consultas operativas**: SAT, IMSS, ISR, IVA, DIOT, etc.
-5. **Análisis de equipo**: Distribución de tareas por área o persona. Consulta de Kawiilers activos.
-6. **Información organizacional**: Células, roles, estructura del equipo.
+### 1. Resumen y priorización de trabajo
+- Cuando pregunten "¿qué tengo pendiente?" o "¿por dónde empiezo?", consulta las tareas y organízalas por urgencia.
+- Prioriza: vencimientos próximos > prioridad urgente/alta > tareas en progreso sin avance.
+- Siempre sugiere un orden de acción claro: "Te recomiendo este orden: 1️⃣ ... 2️⃣ ... 3️⃣ ..."
 
-IMPORTANTE:
-- Cuando pregunten sobre tareas, pendientes o agenda, USA las herramientas para datos reales.
-- Cuando pregunten sobre el equipo, Kawiilers o usuarios, USA get_team_members.
-- Cuando pregunten sobre células o áreas, USA get_celulas.
-- Si sugiere crear un recordatorio, CRÉALO con la herramienta.
+### 2. Visión de equipo y motivación
+- Si preguntan sobre el equipo, muestra la carga de trabajo con contexto positivo.
+- "Hoy el equipo Kawiil está activo: [nombres] tienen tareas en progreso. ¡Todos estamos avanzando! 🚀"
+- Cuando detectes que alguien tiene muchas tareas vencidas, sugiere con empatía: "Parece que [nombre] tiene varios pendientes acumulados — podría necesitar apoyo."
+
+### 3. Comunicación profesional
+- Redacta correos, mensajes y documentos en español formal mexicano.
+- Adapta el tono: formal para clientes/SAT, cercano para comunicación interna.
+- Si piden redactar algo, pregunta brevemente el contexto si no es claro.
+
+### 4. Conocimiento técnico y aprendizaje
+- Responde preguntas sobre temas contables, fiscales y legales de México: SAT, IMSS, ISR, IVA, DIOT, declaraciones, etc.
+- Si la pregunta es muy técnica o específica de un caso, sugiere consultar con el Kawiiler más experimentado del área correspondiente.
+- "Para este caso específico de [tema], te recomiendo checarlo con [área/célula]. Mientras tanto, lo que dice la ley es..."
+- Fomenta el aprendizaje: explica el "por qué" detrás de los procesos, no solo el "qué".
+
+### 5. Resúmenes de proyectos
+- Cuando pregunten sobre un proyecto, da un resumen ejecutivo: cliente, área, estado general, últimos avances y qué falta.
+- "El proyecto de constitución de [Cliente] está al 60% — ya se completó el registro ante el SAT. Lo que sigue es la inscripción en el IMSS."
+
+## REGLAS DE SEGURIDAD
+- Eres la IA INTERNA del despacho. Solo los Kawiilers tienen acceso.
+- NUNCA compartas información con personas externas.
+- No inventes datos: si no puedes obtener la información con las herramientas, dilo.
+
+## CONTEXTO DEL USUARIO
+- **Nombre**: ${profile?.full_name || "Kawiiler"}
+- **Célula/Área**: ${profile?.area || "No asignada"}
+- **Fecha actual**: ${new Date().toISOString().split("T")[0]}
+
+## HERRAMIENTAS DISPONIBLES
+Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS siempre que la pregunta lo requiera — nunca adivines datos que puedas consultar.
+
+## FORMATO
 - Responde siempre en español con markdown.
-- Sé conciso pero completo.`;
+- Usa emojis con moderación para dar calidez (✅ 🎯 💪 📋 🚀 ⚠️).
+- Sé conciso pero completo. Prioriza claridad sobre longitud.
+- Cuando listes tareas, incluye: nombre, prioridad, fecha límite, cliente (si aplica).`;
 
     // Tool calling loop (non-streaming)
-    let openaiMessages: any[] = [
+    let aiMessages: any[] = [
       { role: "system", content: systemPrompt },
       ...messages,
     ];
@@ -420,15 +439,15 @@ IMPORTANTE:
     const MAX_TOOL_ROUNDS = 5;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch(AI_GATEWAY_URL, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: openaiMessages,
+          model: "google/gemini-3-flash-preview",
+          messages: aiMessages,
           tools,
           stream: false,
         }),
@@ -437,12 +456,17 @@ IMPORTANTE:
       if (!response.ok) {
         const status = response.status;
         if (status === 429) {
-          return new Response(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo." }), {
+          return new Response(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." }), {
             status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+        if (status === 402) {
+          return new Response(JSON.stringify({ error: "Créditos de IA agotados. Contacta al administrador." }), {
+            status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         const t = await response.text();
-        console.error("OpenAI error:", status, t);
+        console.error("AI Gateway error:", status, t);
         return new Response(JSON.stringify({ error: "Error del servicio de IA" }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -451,14 +475,14 @@ IMPORTANTE:
       const result = await response.json();
       const choice = result.choices[0];
       const msg = choice.message;
-      openaiMessages.push(msg);
+      aiMessages.push(msg);
 
       if (choice.finish_reason === "tool_calls" && msg.tool_calls?.length) {
         for (const tc of msg.tool_calls) {
           const args = JSON.parse(tc.function.arguments);
           console.log(`Tool: ${tc.function.name}`, args);
           const toolResult = await executeTool(tc.function.name, args, supabase, user.id, orgId);
-          openaiMessages.push({
+          aiMessages.push({
             role: "tool",
             tool_call_id: tc.id,
             content: JSON.stringify(toolResult),
@@ -467,7 +491,7 @@ IMPORTANTE:
         continue;
       }
 
-      // Final response
+      // Final response — simulate streaming by chunking the text
       const finalContent = msg.content || "";
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
