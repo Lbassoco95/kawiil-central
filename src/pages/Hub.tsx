@@ -19,21 +19,23 @@ import {
   useCreateInternalComunicado,
   useDeleteInternalComunicado,
 } from "@/hooks/useInternalDespacho";
+import { ProcedureDetailDialog } from "@/components/hub/ProcedureDetailDialog";
 import { useUserRole } from "@/hooks/useUserRole";
 import { formatMX } from "@/lib/dateUtils";
-import { supabase } from "@/integrations/supabase/client";
 import {
   FileText,
   Megaphone,
   Plus,
   Upload,
   Trash2,
-  Download,
   Pin,
   Loader2,
+  Eye,
+  History,
+  MessageCircle,
 } from "lucide-react";
 
-export default function Despacho() {
+export default function Hub() {
   const { isAdminOrManager } = useUserRole();
   const [tab, setTab] = useState<"procedimientos" | "comunicados">("procedimientos");
   const [procedureDialogOpen, setProcedureDialogOpen] = useState(false);
@@ -44,6 +46,7 @@ export default function Despacho() {
   const [comunicadoTitle, setComunicadoTitle] = useState("");
   const [comunicadoBody, setComunicadoBody] = useState("");
   const [comunicadoPinned, setComunicadoPinned] = useState(false);
+  const [selectedProcedure, setSelectedProcedure] = useState<any>(null);
 
   const { data: procedures = [], isLoading: proceduresLoading } = useInternalProcedures();
   const { data: comunicados = [], isLoading: comunicadosLoading } = useInternalComunicados();
@@ -69,17 +72,12 @@ export default function Despacho() {
     );
   };
 
-  const getProcedureDownloadUrl = async (filePath: string) => {
-    const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 60);
-    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-  };
-
   return (
     <AppLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Despacho</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Uso interno: procedimientos, manuales y comunicados</p>
+          <h1 className="text-xl font-semibold text-foreground">Hub</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Centro de conocimiento: manuales, procedimientos y comunicados</p>
         </div>
 
         {/* Tab pills */}
@@ -125,32 +123,44 @@ export default function Despacho() {
                 <p className="mt-1 text-xs text-muted-foreground">Los administradores pueden subir manuales y procedimientos aquí.</p>
               </div>
             ) : (
-              <div className="divide-y divide-border/40">
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {procedures.map((proc: any) => (
-                  <div key={proc.id} className="flex items-center justify-between gap-3 py-3 px-1">
-                    <div className="min-w-0">
-                      <h3 className="text-[13px] font-medium text-foreground">{proc.title}</h3>
-                      {proc.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{proc.description}</p>
-                      )}
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {formatMX(proc.created_at, "dd MMM yyyy")}
-                        {proc.file_size && ` · ${(proc.file_size / 1024).toFixed(0)} KB`}
-                      </p>
+                  <div
+                    key={proc.id}
+                    className="group rounded-xl bg-secondary/20 hover:bg-secondary/40 border border-border/30 hover:border-border/60 p-4 cursor-pointer transition-all"
+                    onClick={() => setSelectedProcedure(proc)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <FileText className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-[13px] font-medium text-foreground line-clamp-2">{proc.title}</h3>
+                        {proc.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{proc.description}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => getProcedureDownloadUrl(proc.file_path)}>
-                        <Download className="h-3 w-3 mr-1" />
-                        Descargar
-                      </Button>
-                      {isAdminOrManager && (
-                        <button
-                          className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
-                          onClick={() => deleteProcedure.mutate({ id: proc.id, file_path: proc.file_path })}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
+                          v{proc.current_version || 1}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {formatMX(proc.updated_at || proc.created_at, "dd MMM yyyy")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Eye className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        {isAdminOrManager && (
+                          <button
+                            className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
+                            onClick={(e) => { e.stopPropagation(); deleteProcedure.mutate({ id: proc.id, file_path: proc.file_path }); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -162,7 +172,7 @@ export default function Despacho() {
         {tab === "comunicados" && (
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Avisos y comunicados internos del despacho</p>
+              <p className="text-sm text-muted-foreground">Avisos y comunicados internos</p>
               {isAdminOrManager && (
                 <Button size="sm" onClick={() => setComunicadoDialogOpen(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -213,6 +223,13 @@ export default function Despacho() {
           </section>
         )}
       </div>
+
+      {/* Procedure Detail Dialog */}
+      <ProcedureDetailDialog
+        procedure={selectedProcedure}
+        open={!!selectedProcedure}
+        onOpenChange={(open) => { if (!open) setSelectedProcedure(null); }}
+      />
 
       {/* Dialog: Subir procedimiento */}
       <Dialog open={procedureDialogOpen} onOpenChange={setProcedureDialogOpen}>
