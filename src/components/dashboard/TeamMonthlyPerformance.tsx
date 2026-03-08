@@ -57,8 +57,8 @@ export function TeamMonthlyPerformance() {
 
     activeUsers.forEach((u) => {
       const celulaSlug = u.area || "sin_celula";
-      const celulaInfo = celulas?.find((c) => c.slug === celulaSlug);
-      const celulaName = celulaInfo?.name || celulaSlug;
+      const celulaInfo = celulas?.find((c) => c.value === celulaSlug);
+      const celulaName = celulaInfo?.label || celulaSlug;
       const celulaColor = celulaInfo?.color || "#6366f1";
 
       if (!celulaMap[celulaSlug]) {
