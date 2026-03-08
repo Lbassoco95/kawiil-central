@@ -13,16 +13,24 @@ export function useUserRole() {
         .select("role")
         .eq("user_id", user!.id)
         .single();
-      if (error) return "staff";
+      if (error) return "ejecutor";
       return data.role;
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 
+  const currentRole = role || "ejecutor";
+  const isTransformador = currentRole === "transformador";
+  const isReferenteOrAbove = currentRole === "transformador" || currentRole === "referente";
+
   return {
-    role: role || "staff",
-    isAdmin: role === "admin",
-    isAdminOrManager: role === "admin" || role === "manager",
+    role: currentRole,
+    grado: currentRole,
+    isTransformador,
+    isReferenteOrAbove,
+    // Backward-compatible aliases
+    isAdmin: isTransformador,
+    isAdminOrManager: isReferenteOrAbove,
   };
 }

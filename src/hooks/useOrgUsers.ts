@@ -26,7 +26,6 @@ export function useOrgUsers() {
   return useQuery({
     queryKey: ["org-users"],
     queryFn: async () => {
-      // Get profiles
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("*")
@@ -34,7 +33,6 @@ export function useOrgUsers() {
 
       if (error) throw error;
 
-      // Get roles
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("*");
@@ -48,7 +46,7 @@ export function useOrgUsers() {
 
       return (profiles || []).map((p) => ({
         ...p,
-        role: roleMap.get(p.user_id) || "staff",
+        role: roleMap.get(p.user_id) || "ejecutor",
       })) as OrgUser[];
     },
     enabled: !!user,
