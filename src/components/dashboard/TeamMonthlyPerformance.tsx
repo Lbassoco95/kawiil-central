@@ -10,7 +10,7 @@ import { BarChart as BarChartIcon, ChevronDown, ChevronUp } from "lucide-react";
 export function TeamMonthlyPerformance() {
   const { user } = useAuth();
   const { data: orgUsers } = useOrgUsers();
-  const { data: celulas } = useCelulaOptions();
+  const { celulaOptions: celulas } = useCelulaOptions();
   const [expandedCelula, setExpandedCelula] = useState<string | null>(null);
 
   const now = new Date();
