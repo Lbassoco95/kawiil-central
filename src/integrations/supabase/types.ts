@@ -755,6 +755,50 @@ export type Database = {
         }
         Relationships: []
       }
+      mood_checkins: {
+        Row: {
+          celula: string | null
+          check_date: string
+          created_at: string
+          id: string
+          mood: number
+          organization_id: string
+          reason: string | null
+          time_of_day: string
+          user_id: string
+        }
+        Insert: {
+          celula?: string | null
+          check_date?: string
+          created_at?: string
+          id?: string
+          mood: number
+          organization_id: string
+          reason?: string | null
+          time_of_day?: string
+          user_id: string
+        }
+        Update: {
+          celula?: string | null
+          check_date?: string
+          created_at?: string
+          id?: string
+          mood?: number
+          organization_id?: string
+          reason?: string | null
+          time_of_day?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mood_checkins_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -1275,6 +1319,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_celula_mood_stats: {
+        Args: { _end_date: string; _org_id: string; _start_date: string }
+        Returns: {
+          avg_mood: number
+          celula: string
+          check_date: string
+          time_of_day: string
+          total_responses: number
+        }[]
+      }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {

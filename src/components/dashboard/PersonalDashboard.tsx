@@ -3,15 +3,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useReminders } from "@/hooks/useReminders";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { getWeeklyQuote } from "@/lib/weeklyQuotes";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
+import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
+import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import {
-  Clock,
-  Plus,
+  Plus as PlusIcon,
   Trash2,
   Bell,
   CheckSquare,
@@ -26,6 +28,12 @@ export function PersonalDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const today = useMemo(() => nowMX(), []);
+  const { data: orgUsers } = useOrgUsers();
+  const userCelula = useMemo(() => {
+    if (!orgUsers || !user) return null;
+    const profile = orgUsers.find((u) => u.user_id === user.id);
+    return profile?.area ?? null;
+  }, [orgUsers, user]);
   const quote = useMemo(() => getWeeklyQuote(), []);
 
   // My tasks
@@ -109,6 +117,9 @@ export function PersonalDashboard() {
         <p className="text-xs text-muted-foreground mt-3">— {quote.author}</p>
       </div>
 
+      {/* Mood Check-in */}
+      <MoodCheckin userCelula={userCelula} />
+
       {/* Today's Summary */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
@@ -137,6 +148,9 @@ export function PersonalDashboard() {
         </div>
         <Progress value={progressPct} className="h-1.5" />
       </div>
+
+      {/* Performance Chart */}
+      <PerformanceChart />
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Tasks */}
@@ -203,7 +217,7 @@ export function PersonalDashboard() {
               className="text-sm h-9 w-36 bg-secondary/30 border-0"
             />
             <Button size="sm" variant="ghost" onClick={handleAddReminder} disabled={!newReminder.trim()}>
-              <Plus className="h-4 w-4" />
+              <PlusIcon className="h-4 w-4" />
             </Button>
           </div>
 
