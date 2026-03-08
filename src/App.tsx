@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
@@ -15,7 +15,8 @@ import Admin from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
 import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
-import Microsoft365 from "./pages/Microsoft365";
+import Microsoft365Calendario from "./pages/Microsoft365Calendario";
+import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Despacho from "./pages/Despacho";
 import Notificaciones from "./pages/Notificaciones";
 import NotFound from "./pages/NotFound";
@@ -38,7 +39,9 @@ const App = () => (
             <Route path="/proyectos" element={<ProtectedRoute><Proyectos /></ProtectedRoute>} />
             <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
             <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
-            <Route path="/microsoft365" element={<ProtectedRoute><Microsoft365 /></ProtectedRoute>} />
+            <Route path="/microsoft365" element={<Navigate to="/microsoft365/calendario" replace />} />
+            <Route path="/microsoft365/calendario" element={<ProtectedRoute><Microsoft365Calendario /></ProtectedRoute>} />
+            <Route path="/microsoft365/correo" element={<ProtectedRoute><Microsoft365Correo /></ProtectedRoute>} />
             <Route path="/documentos" element={<ProtectedRoute><Documentos /></ProtectedRoute>} />
             <Route path="/despacho" element={<ProtectedRoute><Despacho /></ProtectedRoute>} />
             <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />

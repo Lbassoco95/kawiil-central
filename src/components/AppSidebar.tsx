@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Calendar,
+  Mail,
   Building2,
   Bell,
 } from "lucide-react";
@@ -26,7 +27,8 @@ const navItems = [
   { title: "Clientes", url: "/clientes", icon: Users },
   { title: "Proyectos", url: "/proyectos", icon: FolderKanban },
   { title: "Tareas", url: "/tareas", icon: CheckSquare },
-  { title: "Microsoft 365", url: "/microsoft365", icon: Calendar },
+  { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar },
+  { title: "Correo", url: "/microsoft365/correo", icon: Mail },
   { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Notificaciones", url: "/notificaciones", icon: Bell },
   { title: "Despacho", url: "/despacho", icon: Building2 },
