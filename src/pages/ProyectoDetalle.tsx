@@ -289,6 +289,10 @@ const ProyectoDetalle = () => {
             />
           </TabsContent>
 
+          <TabsContent value="comentarios">
+            <ProjectCommentsTab projectId={project.id} projectName={project.name} />
+          </TabsContent>
+
           {/* Dropbox Sign tab */}
           <TabsContent value="firmas">
             <Card>
