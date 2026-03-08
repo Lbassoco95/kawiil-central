@@ -44,6 +44,7 @@ export function AppSidebar() {
   const { signOut, user } = useAuth();
   const isMobile = useIsMobile();
   const { isAdminOrManager } = useUserRole();
+  const { data: unreadCount = 0 } = useUnreadCount();
 
   const visibleNavItems = navItems.filter(
     (item) => item.url !== "/admin" || isAdminOrManager
