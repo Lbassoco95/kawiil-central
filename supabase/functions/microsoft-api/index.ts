@@ -139,6 +139,39 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "event-detail": {
+        const res = await fetch(`${GRAPH_BASE}/me/events/${params.eventId}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Prefer: 'outlook.timezone="America/Mexico_City"',
+          },
+        });
+        result = await res.json();
+        break;
+      }
+
+      case "update-event": {
+        const res = await fetch(`${GRAPH_BASE}/me/events/${params.eventId}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(params.payload),
+        });
+        result = await res.json();
+        break;
+      }
+
+      case "outlook-categories": {
+        const res = await fetch(`${GRAPH_BASE}/me/outlook/masterCategories`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const json = await res.json();
+        result = json.value || [];
+        break;
+      }
+
       case "emails": {
         const top = params?.top || 20;
         const folder = params?.folder || "inbox";

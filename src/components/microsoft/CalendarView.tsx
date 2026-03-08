@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -6,7 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useCalendarEvents, useCreateCalendarEvent, useDeleteCalendarEvent } from "@/hooks/useMicrosoft";
+import {
+  useCalendarEvents,
+  useCreateCalendarEvent,
+  useDeleteCalendarEvent,
+  useEventDetail,
+  useUpdateCalendarEvent,
+  useOutlookCategories,
+} from "@/hooks/useMicrosoft";
 import { CDMX_TZ } from "@/lib/dateUtils";
 import {
   format,
@@ -27,8 +34,9 @@ import {
 } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { es } from "date-fns/locale";
-import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type ViewMode = "day" | "3days" | "week" | "month";
 
@@ -79,6 +87,7 @@ export function CalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [newEvent, setNewEvent] = useState({
     subject: "",
     startTime: "09:00",
@@ -87,7 +96,47 @@ export function CalendarView() {
     location: "",
     description: "",
     isOnlineMeeting: true,
+    categories: [] as string[],
   });
+
+  const { data: eventDetail, isLoading: eventDetailLoading } = useEventDetail(selectedEventId);
+  const updateEvent = useUpdateCalendarEvent();
+  const { data: outlookCategories = [] } = useOutlookCategories();
+
+  const [editForm, setEditForm] = useState({
+    subject: "",
+    startDate: "",
+    startTime: "09:00",
+    endDate: "",
+    endTime: "10:00",
+    location: "",
+    description: "",
+    categories: [] as string[],
+    attendees: "",
+  });
+
+  useEffect(() => {
+    if (!eventDetail) return;
+    const start = eventDetail.start?.dateTime || eventDetail.start?.date;
+    const end = eventDetail.end?.dateTime || eventDetail.end?.date;
+    const parsedStart = start ? parseEventTime(start) : new Date();
+    const parsedEnd = end ? parseEventTime(end) : new Date();
+    const attendeesStr = (eventDetail.attendees || [])
+      .map((a: any) => a.emailAddress?.address)
+      .filter(Boolean)
+      .join(", ");
+    setEditForm({
+      subject: eventDetail.subject || "",
+      startDate: format(parsedStart, "yyyy-MM-dd"),
+      startTime: format(parsedStart, "HH:mm"),
+      endDate: format(parsedEnd, "yyyy-MM-dd"),
+      endTime: format(parsedEnd, "HH:mm"),
+      location: eventDetail.location?.displayName || "",
+      description: eventDetail.body?.content?.replace(/<[^>]*>/g, "") || "",
+      categories: Array.isArray(eventDetail.categories) ? [...eventDetail.categories] : [],
+      attendees: attendeesStr,
+    });
+  }, [eventDetail]);
 
   const viewDays = useMemo(() => {
     switch (viewMode) {
@@ -235,6 +284,10 @@ export function CalendarView() {
       baseEvent.onlineMeetingProvider = "teamsForBusiness";
     }
 
+    if (newEvent.categories.length > 0) {
+      baseEvent.categories = newEvent.categories;
+    }
+
     createEvent.mutate(
       baseEvent,
       {
@@ -248,10 +301,67 @@ export function CalendarView() {
             location: "",
             description: "",
             isOnlineMeeting: true,
+            categories: [],
           });
         },
       }
     );
+  };
+
+  const handleUpdateEvent = () => {
+    if (!selectedEventId) return;
+    const attendees = editForm.attendees
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((address) => ({
+        emailAddress: { address },
+        type: "required",
+      }));
+
+    const payload: any = {
+      subject: editForm.subject,
+      start: {
+        dateTime: `${editForm.startDate}T${editForm.startTime}:00`,
+        timeZone: CDMX_TZ,
+      },
+      end: {
+        dateTime: `${editForm.endDate}T${editForm.endTime}:00`,
+        timeZone: CDMX_TZ,
+      },
+      location: editForm.location.trim() ? { displayName: editForm.location.trim() } : undefined,
+      body: editForm.description.trim()
+        ? { contentType: "HTML", content: editForm.description.trim() }
+        : undefined,
+      categories: editForm.categories,
+      attendees: attendees.length > 0 ? attendees : undefined,
+    };
+    Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+
+    updateEvent.mutate(
+      { eventId: selectedEventId, payload },
+      {
+        onSuccess: () => setSelectedEventId(null),
+      }
+    );
+  };
+
+  const toggleEditCategory = (name: string) => {
+    setEditForm((prev) => ({
+      ...prev,
+      categories: prev.categories.includes(name)
+        ? prev.categories.filter((c) => c !== name)
+        : [...prev.categories, name],
+    }));
+  };
+
+  const toggleNewEventCategory = (name: string) => {
+    setNewEvent((prev) => ({
+      ...prev,
+      categories: prev.categories.includes(name)
+        ? prev.categories.filter((c) => c !== name)
+        : [...prev.categories, name],
+    }));
   };
 
   const headerLabel = useMemo(() => {
@@ -368,8 +478,12 @@ export function CalendarView() {
                       {allDayEvents.map((event: any) => (
                         <div
                           key={event.id}
-                          className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[11px] truncate group relative"
+                          className="bg-primary/20 text-primary rounded px-1.5 py-0.5 text-[11px] truncate group relative cursor-pointer"
                           title={event.subject}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEventId(event.id);
+                          }}
                         >
                           <span className="font-medium">{event.subject}</span>
                           <button
@@ -468,11 +582,11 @@ export function CalendarView() {
                             style={{ top, height }}
                           >
                             <div
-                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm"
+                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm cursor-pointer"
                               title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedDate(day);
+                                setSelectedEventId(event.id);
                               }}
                             >
                               <div className="flex items-start gap-1 pr-4">
@@ -564,8 +678,12 @@ export function CalendarView() {
                         return (
                           <div
                             key={event.id}
-                            className="bg-primary/15 text-primary rounded px-1 py-0.5 text-[10px] truncate"
+                            className="bg-primary/15 text-primary rounded px-1 py-0.5 text-[10px] truncate cursor-pointer"
                             title={`${time} ${event.subject}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEventId(event.id);
+                            }}
                           >
                             {time && <span className="font-medium mr-1">{time}</span>}
                             {event.subject}
@@ -658,6 +776,25 @@ export function CalendarView() {
                 rows={4}
               />
             </div>
+            {outlookCategories.length > 0 && (
+              <div className="space-y-2">
+                <Label>Etiquetas (categorías)</Label>
+                <div className="flex flex-wrap gap-2">
+                  {outlookCategories.map((cat: any) => (
+                    <label
+                      key={cat.displayName || cat.id}
+                      className="flex items-center gap-1.5 text-sm cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={newEvent.categories.includes(cat.displayName)}
+                        onCheckedChange={() => toggleNewEventCategory(cat.displayName)}
+                      />
+                      <span>{cat.displayName}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">Zona horaria: América/Ciudad de México</p>
           </div>
           <DialogFooter>
@@ -665,6 +802,149 @@ export function CalendarView() {
             <Button onClick={handleCreateEvent} disabled={createEvent.isPending || !newEvent.subject}>
               {createEvent.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Crear evento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ver / Editar evento */}
+      <Dialog open={!!selectedEventId} onOpenChange={(open) => !open && setSelectedEventId(null)}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4" />
+              Ver y editar evento
+            </DialogTitle>
+          </DialogHeader>
+          {eventDetailLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : eventDetail ? (
+            <div className="space-y-4 py-2">
+              {eventDetail.onlineMeeting?.joinUrl && (
+                <div className="flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(eventDetail.onlineMeeting.joinUrl, "_blank")}
+                  >
+                    <Video className="mr-1 h-4 w-4" /> Unirse a la reunión (Teams)
+                  </Button>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Asunto</Label>
+                <Input
+                  value={editForm.subject}
+                  onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })}
+                  placeholder="Asunto del evento"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Fecha inicio</Label>
+                  <Input
+                    type="date"
+                    value={editForm.startDate}
+                    onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Hora inicio</Label>
+                  <Input
+                    type="time"
+                    value={editForm.startTime}
+                    onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Fecha fin</Label>
+                  <Input
+                    type="date"
+                    value={editForm.endDate}
+                    onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Hora fin</Label>
+                  <Input
+                    type="time"
+                    value={editForm.endTime}
+                    onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Ubicación</Label>
+                <Input
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                  placeholder="Lugar o dirección"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Invitados (correos separados por coma)</Label>
+                <Input
+                  value={editForm.attendees}
+                  onChange={(e) => setEditForm({ ...editForm, attendees: e.target.value })}
+                  placeholder="email@ejemplo.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Descripción</Label>
+                <Textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+              {outlookCategories.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Etiquetas (categorías)</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {outlookCategories.map((cat: any) => (
+                      <label
+                        key={cat.displayName || cat.id}
+                        className="flex items-center gap-1.5 text-sm cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={editForm.categories.includes(cat.displayName)}
+                          onCheckedChange={() => toggleEditCategory(cat.displayName)}
+                        />
+                        <span>{cat.displayName}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedEventId) {
+                  deleteEvent.mutate(selectedEventId, { onSuccess: () => setSelectedEventId(null) });
+                }
+              }}
+              disabled={deleteEvent.isPending}
+            >
+              {deleteEvent.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Eliminar
+            </Button>
+            <div className="flex-1" />
+            <Button variant="outline" onClick={() => setSelectedEventId(null)}>
+              Cerrar
+            </Button>
+            <Button
+              onClick={handleUpdateEvent}
+              disabled={updateEvent.isPending || !editForm.subject}
+            >
+              {updateEvent.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Guardar cambios
             </Button>
           </DialogFooter>
         </DialogContent>

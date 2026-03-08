@@ -94,6 +94,7 @@ export function useCreateCalendarEvent() {
       body?: { contentType: string; content: string };
       location?: { displayName: string };
       attendees?: { emailAddress: { address: string }; type?: string }[];
+      categories?: string[];
       isOnlineMeeting?: boolean;
       onlineMeetingProvider?: string;
     }) => {
@@ -124,8 +125,77 @@ export function useDeleteCalendarEvent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-event-detail"] });
       toast.success("Evento eliminado");
     },
+  });
+}
+
+export function useEventDetail(eventId: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["calendar-event-detail", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "event-detail", params: { eventId } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    enabled: !!user && !!eventId,
+  });
+}
+
+export function useUpdateCalendarEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      eventId,
+      payload,
+    }: {
+      eventId: string;
+      payload: {
+        subject?: string;
+        start?: { dateTime: string; timeZone: string };
+        end?: { dateTime: string; timeZone: string };
+        body?: { contentType: string; content: string };
+        location?: { displayName: string };
+        categories?: string[];
+        attendees?: { emailAddress: { address: string }; type?: string }[];
+      };
+    }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "update-event", params: { eventId, payload } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-event-detail"] });
+      toast.success("Evento actualizado");
+    },
+    onError: (err: Error) => toast.error("Error al actualizar evento: " + err.message),
+  });
+}
+
+export function useOutlookCategories() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["outlook-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "outlook-categories" },
+      });
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: !!user,
   });
 }
 
