@@ -593,12 +593,24 @@ export function CalendarView() {
                         setShowCreate(true);
                       }}
                     >
-                      {/* Fondo por slot */}
+                      {/* Fondo por slot - drop targets */}
                       {TIME_SLOTS.map((slotMinutes) => (
                         <div
                           key={slotMinutes}
                           className="border-b border-border/60 last:border-b-0"
                           style={{ height: `${SLOT_HEIGHT}px` }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.add("bg-primary/10");
+                          }}
+                          onDragLeave={(e) => {
+                            e.currentTarget.classList.remove("bg-primary/10");
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove("bg-primary/10");
+                            handleDrop(day, slotMinutes);
+                          }}
                         />
                       ))}
 
