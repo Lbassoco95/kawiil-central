@@ -200,7 +200,8 @@ export function CalendarView() {
     return addDays(last, 1).toISOString();
   }, [viewMode, currentDate, viewDays]);
 
-  const { data: events = [], isLoading } = useCalendarEvents(rangeStart, rangeEnd);
+  const { data: eventsData, isLoading } = useCalendarEvents(rangeStart, rangeEnd);
+  const events = Array.isArray(eventsData) ? eventsData : [];
   const createEvent = useCreateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
 
@@ -229,34 +230,37 @@ export function CalendarView() {
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
+    const eventsList = Array.isArray(events) ? events : [];
 
-    events.forEach((e: any) => {
-      const rawStart = e.start?.dateTime || e.start?.date;
-      if (!rawStart) return;
+    eventsList.forEach((e: any) => {
+      try {
+        const rawStart = e?.start?.dateTime || e?.start?.date;
+        if (!rawStart) return;
 
-      const parsedStart = parseEventTime(rawStart);
-      const dateKey = format(parsedStart, "yyyy-MM-dd");
+        const parsedStart = parseEventTime(rawStart);
+        if (isNaN(parsedStart.getTime())) return;
+        const dateKey = format(parsedStart, "yyyy-MM-dd");
 
-      // En Microsoft Graph, los eventos de día completo vienen con isAllDay=true
-      // y normalmente usan solo fecha (sin hora). Detectamos eso para
-      // poder mostrarlos en una banda de "Todo el día", similar a Outlook.
-      const isAllDay =
-        e.isAllDay === true ||
-        (!!e.start?.date && !e.start?.dateTime) ||
-        (!!e.end?.date && !e.end?.dateTime);
+        const isAllDay =
+          e.isAllDay === true ||
+          (!!e.start?.date && !e.start?.dateTime) ||
+          (!!e.end?.date && !e.end?.dateTime);
 
-      const enhancedEvent = {
-        ...e,
-        _parsedStart: parsedStart,
-        _isAllDay: isAllDay,
-      };
+        const enhancedEvent = {
+          ...e,
+          _parsedStart: parsedStart,
+          _isAllDay: isAllDay,
+        };
 
-      if (!map.has(dateKey)) map.set(dateKey, []);
-      map.get(dateKey)!.push(enhancedEvent);
+        if (!map.has(dateKey)) map.set(dateKey, []);
+        map.get(dateKey)!.push(enhancedEvent);
+      } catch {
+        // omitir evento con datos inválidos para no romper la vista
+      }
     });
 
     map.forEach((evts) =>
-      evts.sort((a: any, b: any) => a._parsedStart.getTime() - b._parsedStart.getTime())
+      evts.sort((a: any, b: any) => (a._parsedStart?.getTime() ?? 0) - (b._parsedStart?.getTime() ?? 0))
     );
 
     return map;

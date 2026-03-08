@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CalendarView } from "@/components/microsoft/CalendarView";
 import { EmailView } from "@/components/microsoft/EmailView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
@@ -30,34 +31,36 @@ const Microsoft365 = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Microsoft 365</h1>
-          <p className="text-sm text-muted-foreground">
-            Calendario y correo de Outlook · {profile?.displayName || profile?.mail || ""}
-          </p>
+      <ErrorBoundary>
+        <div className="space-y-8">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Microsoft 365</h1>
+            <p className="text-sm text-muted-foreground">
+              Calendario y correo de Outlook · {profile?.displayName || profile?.mail || ""}
+            </p>
+          </div>
+
+          {/* Calendar Section */}
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Calendario</h2>
+            </div>
+            <CalendarView />
+          </section>
+
+          <Separator />
+
+          {/* Email Section */}
+          <section>
+            <div className="flex items-center gap-2 mb-4">
+              <Mail className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Correo</h2>
+            </div>
+            <EmailView />
+          </section>
         </div>
-
-        {/* Calendar Section */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Calendar className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground">Calendario</h2>
-          </div>
-          <CalendarView />
-        </section>
-
-        <Separator />
-
-        {/* Email Section */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Mail className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground">Correo</h2>
-          </div>
-          <EmailView />
-        </section>
-      </div>
+      </ErrorBoundary>
     </AppLayout>
   );
 };
