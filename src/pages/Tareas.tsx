@@ -41,6 +41,7 @@ const stepStatusLabels: Record<string, string> = {
 
 const Tareas = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [area, setArea] = useState("todas");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -55,6 +56,41 @@ const Tareas = () => {
     area: area !== "todas" ? area : undefined,
     search: search || undefined,
   });
+
+  const tasksSummaryPrompt = useMemo(() => {
+    if (!tasks) return "";
+    const pending = tasks.filter((t: any) => ["pendiente", "en_progreso", "en_revision"].includes(t.status));
+    const overdue = pending.filter((t: any) => t.due_date && new Date(t.due_date) < new Date());
+    const critical = tasks.filter((t: any) => (t as any).criticality_level === "critico");
+    const byPriority: Record<string, number> = {};
+    const byArea: Record<string, number> = {};
+    pending.forEach((t: any) => {
+      byPriority[t.priority] = (byPriority[t.priority] || 0) + 1;
+      if (t.area) byArea[areaLabelMap[t.area] || t.area] = (byArea[areaLabelMap[t.area] || t.area] || 0) + 1;
+    });
+
+    return `Genera un resumen breve del estado de las tareas del equipo. Español mexicano, tono profesional, emojis.
+
+DATOS:
+- Total tareas visibles: ${tasks.length}
+- Pendientes: ${pending.length}
+- Vencidas: ${overdue.length}
+- Críticas (semáforo rojo): ${critical.length}
+- Pasos de proyecto asignados a mí: ${assignedSteps.length}
+
+POR PRIORIDAD: ${Object.entries(byPriority).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
+POR CÉLULA: ${Object.entries(byArea).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
+
+TAREAS VENCIDAS MÁS ANTIGUAS:
+${overdue.slice(0, 5).map((t: any) => `- ${t.title} (${t.priority}, vence: ${t.due_date})`).join("\n") || "Ninguna"}
+
+INSTRUCCIONES:
+1. Resume en 3-4 puntos el panorama de tareas con emojis.
+2. Si hay vencidas, menciona las más urgentes.
+3. Si hay críticas, destácalas.
+4. Sugiere por dónde empezar hoy.
+5. Máximo 100 palabras. Usa markdown.`;
+  }, [tasks, assignedSteps, areaLabelMap]);
 
   return (
     <AppLayout>
