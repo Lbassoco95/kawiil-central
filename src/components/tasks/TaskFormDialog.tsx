@@ -55,6 +55,8 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
         project_id: projectId || undefined,
         additional_assignees: additionalAssignees,
         dropbox_links: dropboxLinks,
+        criticality_level: criticalityLevel,
+        delay_category: delayCategory || undefined,
       },
       {
         onSuccess: () => {
