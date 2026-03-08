@@ -66,6 +66,9 @@ export function ProjectGeneralTab({ project }: Props) {
   const [status, setStatus] = useState<ProjectStatus>(project.status);
   const [startDate, setStartDate] = useState(project.start_date || "");
   const [endDate, setEndDate] = useState(project.end_date || "");
+  const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
+  const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
+  const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
 
   const handleSave = () => {
     updateProject.mutate(
