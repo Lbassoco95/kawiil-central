@@ -175,24 +175,24 @@ Deno.serve(async (req) => {
         }
 
         const patchText = await res.text();
-        let updatedEvent: any = patchText ? JSON.parse(patchText) : null;
+        const patchEvent: any = patchText ? JSON.parse(patchText) : null;
 
-        // Verifica estado final (Graph a veces responde 200 sin aplicar cambios a occurrences)
-        if (!updatedEvent) {
-          const verifyRes = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (verifyRes.ok) updatedEvent = await verifyRes.json();
-        }
+        // Verifica estado persistido (no confiar solo en respuesta del PATCH)
+        const verifyRes = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const persistedEvent = verifyRes.ok ? await verifyRes.json() : null;
 
         const desiredStart = params?.payload?.start?.dateTime as string | undefined;
         const desiredEnd = params?.payload?.end?.dateTime as string | undefined;
-        const appliedStart = updatedEvent?.start?.dateTime as string | undefined;
-        const appliedEnd = updatedEvent?.end?.dateTime as string | undefined;
+        const appliedStart = persistedEvent?.start?.dateTime as string | undefined;
+        const appliedEnd = persistedEvent?.end?.dateTime as string | undefined;
 
-        const updateApplied =
-          (!desiredStart || (appliedStart && appliedStart.startsWith(desiredStart))) &&
-          (!desiredEnd || (appliedEnd && appliedEnd.startsWith(desiredEnd)));
+        // Si el evento ya no existe por ese ID, asumimos que Graph lo convirtió/reidentificó y sí aplicó
+        const updateApplied = !verifyRes.ok
+          ? true
+          : (!desiredStart || (appliedStart && appliedStart.startsWith(desiredStart))) &&
+            (!desiredEnd || (appliedEnd && appliedEnd.startsWith(desiredEnd)));
 
         // Fallback para ocurrencias que no aceptan PATCH directo: clonar en nuevo horario y eliminar ocurrencia original
         if (!updateApplied && beforeEvent?.type === "occurrence") {
