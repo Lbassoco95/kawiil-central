@@ -55,17 +55,33 @@ export function useChat() {
   }, []);
 
   // Create new conversation
-  const createConversation = useCallback(async (title: string) => {
+  const createConversation = useCallback(async (title: string, folder?: string) => {
     const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
     const { data, error } = await supabase
       .from("chat_conversations" as any)
-      .insert({ user_id: user!.id, organization_id: orgRes.data, title } as any)
+      .insert({ user_id: user!.id, organization_id: orgRes.data, title, folder: folder || null } as any)
       .select()
       .single();
     if (error) throw error;
     qc.invalidateQueries({ queryKey: ["chat-conversations"] });
     return (data as any).id as string;
   }, [user, qc]);
+
+  // Update conversation folder
+  const updateConversationFolder = useCallback(async (conversationId: string, folder: string | null) => {
+    await supabase.from("chat_conversations" as any)
+      .update({ folder } as any)
+      .eq("id", conversationId);
+    qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+  }, [qc]);
+
+  // Rename conversation
+  const renameConversation = useCallback(async (conversationId: string, title: string) => {
+    await supabase.from("chat_conversations" as any)
+      .update({ title } as any)
+      .eq("id", conversationId);
+    qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+  }, [qc]);
 
   // Save message to DB
   const saveMessage = useCallback(async (conversationId: string, role: string, content: string) => {
