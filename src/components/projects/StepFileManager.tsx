@@ -34,6 +34,13 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [signDoc, setSignDoc] = useState<{ name: string; url: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
+  const createOneDriveDoc = useCreateOneDriveDoc();
+
+  const handleCreateDoc = (docType: "docx" | "xlsx" | "pptx") => {
+    const extensions = { docx: "Word", xlsx: "Excel", pptx: "PowerPoint" };
+    const fileName = `${extensions[docType]} - Paso ${projectId.slice(0, 6)}.${docType}`;
+    createOneDriveDoc.mutate({ docType, fileName, folderPath: "Kawiil/Proyectos" });
+  };
 
   const { data: documents = [] } = useQuery({
     queryKey: ["step-docs", ...documentIds],
