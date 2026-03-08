@@ -73,10 +73,17 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
 
   const loadPreview = async (filePath: string) => {
     setPreviewUrl(null);
-    const { data } = await supabase.storage.from("documents").download(filePath);
-    if (data) {
-      const url = URL.createObjectURL(data);
-      setPreviewUrl(url);
+    const mimeType = procedure?.mime_type || "";
+    const isPdfFile = mimeType === "application/pdf";
+    
+    if (isPdfFile) {
+      // Use signed URL for PDFs - Chrome blocks blob URLs in iframes
+      const { data } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
+      if (data?.signedUrl) setPreviewUrl(data.signedUrl);
+    } else {
+      // Use blob URL for images and other files
+      const { data } = await supabase.storage.from("documents").download(filePath);
+      if (data) setPreviewUrl(URL.createObjectURL(data));
     }
   };
 
