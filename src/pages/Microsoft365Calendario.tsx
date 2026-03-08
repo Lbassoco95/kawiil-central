@@ -31,11 +31,8 @@ const Microsoft365Calendario = () => {
       <ErrorBoundary>
         <div className="space-y-6">
           <div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">Calendario</h1>
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h1 className="text-xl font-semibold text-foreground">Calendario</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
               Outlook · {profile?.displayName || profile?.mail || ""}
             </p>
           </div>
