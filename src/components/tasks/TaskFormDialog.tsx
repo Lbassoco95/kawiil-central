@@ -164,6 +164,32 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
             </div>
           </div>
 
+          {/* Criticality & Delay */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Semáforo de criticidad</Label>
+              <Select value={criticalityLevel} onValueChange={setCriticalityLevel}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {criticalityOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Motivo de atraso</Label>
+              <Select value={delayCategory || "__none__"} onValueChange={(v) => setDelayCategory(v === "__none__" ? "" : v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {delayCategoryOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Fecha límite</Label>
