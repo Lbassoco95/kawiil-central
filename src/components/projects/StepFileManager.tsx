@@ -307,6 +307,19 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
                 )}
                 <span className="truncate flex-1">{doc.name}</span>
               </div>
+              {/* Open in Dropbox to resume editing */}
+              {doc.external_path && (
+                <button
+                  className="shrink-0 p-0.5 rounded hover:bg-primary/10 transition-colors"
+                  title="Abrir en Dropbox"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(doc.external_path!, "_blank");
+                  }}
+                >
+                  <ExternalLink className="h-3 w-3 text-primary" />
+                </button>
+              )}
               {doc.external_path && (
                 <button
                   className="shrink-0 p-0.5 rounded hover:bg-primary/10 transition-colors"
@@ -323,6 +336,16 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
                 className="h-3 w-3 text-muted-foreground shrink-0 cursor-pointer"
                 onClick={() => setPreviewDoc(doc)}
               />
+              <button
+                className="shrink-0 p-0.5 rounded hover:bg-destructive/10 transition-colors"
+                title="Eliminar archivo"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteDoc(doc.id);
+                }}
+              >
+                <Trash2 className="h-3 w-3 text-destructive" />
+              </button>
               <span className="text-muted-foreground shrink-0">{formatDateMX(doc.created_at)}</span>
             </div>
           ))}
