@@ -17,8 +17,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { formatMX } from "@/lib/dateUtils";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
