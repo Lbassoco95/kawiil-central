@@ -109,27 +109,27 @@ const ProyectoDetalle = () => {
     <AppLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/proyectos")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+        <div className="flex items-start gap-3">
+          <button onClick={() => navigate("/proyectos")} className="mt-1 p-1 rounded-lg hover:bg-secondary/60 transition-colors">
+            <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+          </button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-foreground truncate">{project.name}</h1>
-              <Badge variant="outline" className={STATUS_STYLES[project.status]}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-semibold text-foreground truncate">{project.name}</h1>
+              <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[project.status]}`}>
                 {STATUS_LABELS[project.status]}
               </Badge>
               {project.area && (
-                <Badge variant="secondary">{SERVICE_LABELS[project.area]}</Badge>
+                <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                  {SERVICE_LABELS[project.area]}
+                </span>
               )}
             </div>
             {clientName && (
-              <p className="text-sm text-muted-foreground mt-1">
-                Cliente: {clientName}
-              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">Cliente: {clientName}</p>
             )}
             {project.description && (
-              <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{project.description}</p>
             )}
           </div>
         </div>

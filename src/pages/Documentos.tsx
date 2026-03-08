@@ -608,13 +608,13 @@ const Documentos = () => {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Documentos</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-semibold text-foreground">Documentos</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
               {viewMode === "dropbox" ? "Explorador de archivos en Dropbox" : "Documentos registrados en la aplicación"}
             </p>
           </div>
-          <Button onClick={() => setFormOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
             Nuevo documento
           </Button>
         </div>
