@@ -534,6 +534,41 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'rename') {
+      const fromPath = body.from_path || path;
+      const toPath = body.to_path;
+      if (!fromPath || !toPath) {
+        throw new Error('from_path and to_path are required for rename');
+      }
+
+      const response = await fetch('https://api.dropboxapi.com/2/files/move_v2', {
+        method: 'POST',
+        headers: dbxHeaders,
+        body: JSON.stringify({
+          from_path: fromPath,
+          to_path: toPath,
+          autorename: false,
+          allow_ownership_transfer: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Dropbox rename error [${response.status}]: ${errText}`);
+      }
+
+      const result = await response.json();
+      const metadata = result.metadata || {};
+
+      return new Response(JSON.stringify({
+        success: true,
+        name: metadata.name,
+        path: metadata.path_display || toPath,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
