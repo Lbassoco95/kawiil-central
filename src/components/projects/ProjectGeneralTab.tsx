@@ -129,7 +129,7 @@ export function ProjectGeneralTab({ project }: Props) {
           {/* Area */}
           {project.area && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Área</span>
+              <span className="text-muted-foreground">Célula</span>
               <span>{SERVICE_LABELS[project.area] || project.area}</span>
             </div>
           )}

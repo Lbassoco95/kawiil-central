@@ -3,8 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
-// ─── Areas ───
-export interface Area {
+// ─── Células (antes Áreas) ───
+export interface Celula {
   id: string;
   name: string;
   slug: string;
@@ -16,38 +16,47 @@ export interface Area {
   created_at: string;
 }
 
-export function useAreas() {
+/** @deprecated Use Celula instead */
+export type Area = Celula;
+
+export function useCelulas() {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["areas"],
+    queryKey: ["celulas"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("areas" as any).select("*").order("name");
+      const { data, error } = await supabase.from("celulas" as any).select("*").order("name");
       if (error) throw error;
-      return data as unknown as Area[];
+      return data as unknown as Celula[];
     },
     enabled: !!user,
   });
 }
 
-export function useUpsertArea() {
+/** @deprecated Use useCelulas instead */
+export const useAreas = useCelulas;
+
+export function useUpsertCelula() {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (area: Partial<Area> & { name: string; slug: string }) => {
+    mutationFn: async (celula: Partial<Celula> & { name: string; slug: string }) => {
       const orgId = await getOrgId(user!.id);
-      const payload = { ...area, organization_id: orgId };
-      if (area.id) {
-        const { error } = await supabase.from("areas" as any).update(payload).eq("id", area.id);
+      const payload = { ...celula, organization_id: orgId };
+      if (celula.id) {
+        const { error } = await supabase.from("celulas" as any).update(payload).eq("id", celula.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("areas" as any).insert(payload);
+        const { error } = await supabase.from("celulas" as any).insert(payload);
         if (error) throw error;
       }
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["areas"] }); toast.success("Área guardada"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["celulas"] }); toast.success("Célula guardada"); },
     onError: (e) => toast.error(e.message),
   });
 }
+
+/** @deprecated Use useUpsertCelula instead */
+export const useUpsertArea = useUpsertCelula;
 
 // ─── Document Types ───
 export interface DocumentType {
@@ -177,17 +186,20 @@ export function useUpsertTaxObligation() {
 }
 
 // ─── Delete hooks ───
-export function useDeleteArea() {
+export function useDeleteCelula() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("areas" as any).delete().eq("id", id);
+      const { error } = await supabase.from("celulas" as any).delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["areas"] }); toast.success("Área eliminada"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["celulas"] }); toast.success("Célula eliminada"); },
     onError: (e) => toast.error(e.message),
   });
 }
+
+/** @deprecated Use useDeleteCelula instead */
+export const useDeleteArea = useDeleteCelula;
 
 export function useDeleteDocumentType() {
   const qc = useQueryClient();

@@ -156,10 +156,10 @@ export function ProjectFormDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label>Área de servicio</Label>
+              <Label>Célula de servicio</Label>
               <Select value={area} onValueChange={(v) => { setArea(v); setSelectedObligations([]); }}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar área" />
+                  <SelectValue placeholder="Seleccionar célula" />
                 </SelectTrigger>
                 <SelectContent>
                   {areaOptions.map((opt) => (

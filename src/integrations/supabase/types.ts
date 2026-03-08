@@ -160,7 +160,42 @@ export type Database = {
           },
         ]
       }
-      areas: {
+      catalog_tags: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_tags_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      celulas: {
         Row: {
           color: string | null
           created_at: string
@@ -200,41 +235,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "areas_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      catalog_tags: {
-        Row: {
-          color: string | null
-          created_at: string
-          id: string
-          is_active: boolean
-          name: string
-          organization_id: string
-        }
-        Insert: {
-          color?: string | null
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          name: string
-          organization_id: string
-        }
-        Update: {
-          color?: string | null
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          name?: string
-          organization_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "catalog_tags_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1240,7 +1240,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "staff" | "viewer"
+      app_role: "transformador" | "referente" | "ejecutor" | "en_formacion"
       client_status: "activo" | "inactivo" | "prospecto"
       client_type: "persona_moral" | "persona_fisica"
       document_source: "supabase" | "dropbox"
@@ -1388,7 +1388,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "staff", "viewer"],
+      app_role: ["transformador", "referente", "ejecutor", "en_formacion"],
       client_status: ["activo", "inactivo", "prospecto"],
       client_type: ["persona_moral", "persona_fisica"],
       document_source: ["supabase", "dropbox"],

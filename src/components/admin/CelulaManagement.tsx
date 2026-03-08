@@ -3,14 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Loader2, Pencil, Trash2, ChevronDown, ChevronUp, Mail, User, Palette } from "lucide-react";
+import { Building2, Plus, Loader2, Pencil, Trash2, ChevronDown, ChevronUp, User, Palette } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useAreas, useUpsertArea, useDeleteArea, type Area } from "@/hooks/useCatalogs";
+import { useCelulas, useUpsertCelula, useDeleteCelula, type Celula } from "@/hooks/useCatalogs";
 import { useOrgProfiles } from "@/hooks/useClients";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -18,15 +18,15 @@ import {
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { formatMX } from "@/lib/dateUtils";
 
-export function AreaManagement() {
-  const { data: areas, isLoading } = useAreas();
+export function CelulaManagement() {
+  const { data: celulas, isLoading } = useCelulas();
   const { data: profiles } = useOrgProfiles();
-  const upsert = useUpsertArea();
-  const deleteArea = useDeleteArea();
-  const [editing, setEditing] = useState<Area | null>(null);
+  const upsert = useUpsertCelula();
+  const deleteCelula = useDeleteCelula();
+  const [editing, setEditing] = useState<Celula | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Area | null>(null);
-  const [expandedArea, setExpandedArea] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Celula | null>(null);
+  const [expandedCelula, setExpandedCelula] = useState<string | null>(null);
 
   const [form, setForm] = useState({ name: "", slug: "", description: "", color: "#6366f1", responsible_user_id: "" });
 
@@ -36,14 +36,14 @@ export function AreaManagement() {
     setDialogOpen(true);
   };
 
-  const openEdit = (area: Area) => {
-    setEditing(area);
+  const openEdit = (celula: Celula) => {
+    setEditing(celula);
     setForm({
-      name: area.name,
-      slug: area.slug,
-      description: area.description || "",
-      color: area.color || "#6366f1",
-      responsible_user_id: area.responsible_user_id || "",
+      name: celula.name,
+      slug: celula.slug,
+      description: celula.description || "",
+      color: celula.color || "#6366f1",
+      responsible_user_id: celula.responsible_user_id || "",
     });
     setDialogOpen(true);
   };
@@ -64,11 +64,11 @@ export function AreaManagement() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await deleteArea.mutateAsync(deleteTarget.id);
+    await deleteCelula.mutateAsync(deleteTarget.id);
     setDeleteTarget(null);
   };
 
-  const responsibleName = (userId: string | null) => {
+  const guiaName = (userId: string | null) => {
     if (!userId || !profiles) return null;
     return profiles.find((p) => p.user_id === userId)?.full_name;
   };
@@ -78,39 +78,39 @@ export function AreaManagement() {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <CardTitle className="text-base flex items-center gap-2">
           <Building2 className="h-4 w-4" />
-          Áreas de servicio
+          Células colaborativas
         </CardTitle>
         <Button size="sm" onClick={openNew}>
-          <Plus className="h-4 w-4 mr-1" /> Nueva área
+          <Plus className="h-4 w-4 mr-1" /> Nueva célula
         </Button>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-        ) : !areas?.length ? (
-          <p className="text-center text-sm text-muted-foreground py-8">No hay áreas configuradas</p>
+        ) : !celulas?.length ? (
+          <p className="text-center text-sm text-muted-foreground py-8">No hay células configuradas</p>
         ) : (
           <div className="space-y-2">
-            {areas.map((area) => (
+            {celulas.map((celula) => (
               <Collapsible
-                key={area.id}
-                open={expandedArea === area.id}
-                onOpenChange={(open) => setExpandedArea(open ? area.id : null)}
+                key={celula.id}
+                open={expandedCelula === celula.id}
+                onOpenChange={(open) => setExpandedCelula(open ? celula.id : null)}
               >
                 <div className="rounded-lg border hover:bg-muted/30 transition-colors">
                   <CollapsibleTrigger asChild>
                     <button className="flex items-center gap-3 w-full p-3 text-left">
-                      <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: area.color || "#6366f1" }} />
+                      <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: celula.color || "#6366f1" }} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm">{area.name}</span>
-                          {!area.is_active && <Badge variant="outline" className="text-[10px]">Inactiva</Badge>}
+                          <span className="font-medium text-sm">{celula.name}</span>
+                          {!celula.is_active && <Badge variant="outline" className="text-[10px]">Inactiva</Badge>}
                         </div>
-                        {area.description && (
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">{area.description}</p>
+                        {celula.description && (
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{celula.description}</p>
                         )}
                       </div>
-                      {expandedArea === area.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                      {expandedCelula === celula.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                     </button>
                   </CollapsibleTrigger>
 
@@ -119,43 +119,43 @@ export function AreaManagement() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-muted-foreground text-xs">Slug</span>
-                          <p className="font-medium">{area.slug}</p>
+                          <p className="font-medium">{celula.slug}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground text-xs">Estado</span>
                           <p>
-                            <Badge variant={area.is_active ? "default" : "outline"}>
-                              {area.is_active ? "Activa" : "Inactiva"}
+                            <Badge variant={celula.is_active ? "default" : "outline"}>
+                              {celula.is_active ? "Activa" : "Inactiva"}
                             </Badge>
                           </p>
                         </div>
                         <div>
                           <span className="text-muted-foreground text-xs flex items-center gap-1"><Palette className="h-3 w-3" /> Color</span>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <div className="h-4 w-4 rounded border" style={{ backgroundColor: area.color || "#6366f1" }} />
-                            <span className="font-mono text-xs">{area.color || "#6366f1"}</span>
+                            <div className="h-4 w-4 rounded border" style={{ backgroundColor: celula.color || "#6366f1" }} />
+                            <span className="font-mono text-xs">{celula.color || "#6366f1"}</span>
                           </div>
                         </div>
                         <div>
-                          <span className="text-muted-foreground text-xs flex items-center gap-1"><User className="h-3 w-3" /> Responsable</span>
-                          <p className="font-medium">{responsibleName(area.responsible_user_id) || "Sin asignar"}</p>
+                          <span className="text-muted-foreground text-xs flex items-center gap-1"><User className="h-3 w-3" /> Guía</span>
+                          <p className="font-medium">{guiaName(celula.responsible_user_id) || "Sin asignar"}</p>
                         </div>
-                        {area.description && (
+                        {celula.description && (
                           <div className="col-span-2">
                             <span className="text-muted-foreground text-xs">Descripción</span>
-                            <p className="text-sm">{area.description}</p>
+                            <p className="text-sm">{celula.description}</p>
                           </div>
                         )}
                         <div>
                           <span className="text-muted-foreground text-xs">Creada</span>
-                          <p className="text-xs">{formatMX(area.created_at, "dd MMM yyyy")}</p>
+                          <p className="text-xs">{formatMX(celula.created_at, "dd MMM yyyy")}</p>
                         </div>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2 pt-1">
-                        <Button variant="outline" size="sm" onClick={() => openEdit(area)}>
+                        <Button variant="outline" size="sm" onClick={() => openEdit(celula)}>
                           <Pencil className="h-3.5 w-3.5 mr-1" /> Editar
                         </Button>
-                        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(area)}>
+                        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(celula)}>
                           <Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar
                         </Button>
                       </div>
@@ -171,12 +171,12 @@ export function AreaManagement() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editing ? "Editar área" : "Nueva área"}</DialogTitle>
+            <DialogTitle>{editing ? "Editar célula" : "Nueva célula"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Nombre *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre del área" />
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nombre de la célula" />
             </div>
             <div>
               <Label>Slug</Label>
@@ -195,7 +195,7 @@ export function AreaManagement() {
                 </div>
               </div>
               <div>
-                <Label>Responsable</Label>
+                <Label>Guía</Label>
                 <Select value={form.responsible_user_id} onValueChange={(v) => setForm({ ...form, responsible_user_id: v })}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
@@ -219,10 +219,10 @@ export function AreaManagement() {
       <DeleteConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title={`¿Eliminar el área "${deleteTarget?.name}"?`}
+        title={`¿Eliminar la célula "${deleteTarget?.name}"?`}
         description="Se eliminará permanentemente. Si hay proyectos o tareas asociados, la eliminación podría fallar."
         onConfirm={handleDelete}
-        isPending={deleteArea.isPending}
+        isPending={deleteCelula.isPending}
       />
     </Card>
   );
