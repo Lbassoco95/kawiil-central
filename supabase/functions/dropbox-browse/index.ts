@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,26 +12,53 @@ let cachedAdminMemberId: string | null = null;
 let cachedAccessToken: string | null = null;
 let cachedTokenExpiry: number = 0;
 
+async function getRefreshTokenFromDb(): Promise<string | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !serviceKey) return null;
+    
+    const supabase = createClient(supabaseUrl, serviceKey);
+    const { data } = await supabase
+      .from('integrations')
+      .select('config')
+      .eq('provider', 'dropbox')
+      .eq('is_active', true)
+      .single();
+    
+    return data?.config?.refresh_token || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getValidAccessToken(): Promise<string> {
   // If we have a cached token that's still valid (with 5 min buffer), use it
   if (cachedAccessToken && Date.now() < cachedTokenExpiry - 300_000) {
     return cachedAccessToken;
   }
 
-  const refreshToken = Deno.env.get('DROPBOX_REFRESH_TOKEN');
+  let refreshToken = Deno.env.get('DROPBOX_REFRESH_TOKEN');
   const appKey = Deno.env.get('DROPBOX_APP_KEY');
   const appSecret = Deno.env.get('DROPBOX_APP_SECRET');
 
+  // If env refresh token looks wrong (too short, not the right format), try DB
+  if (!refreshToken || refreshToken.length < 50) {
+    console.log('Env refresh token missing or too short, checking database...');
+    const dbToken = await getRefreshTokenFromDb();
+    if (dbToken) {
+      refreshToken = dbToken;
+      console.log('Using refresh token from database');
+    }
+  }
+
   if (!refreshToken || !appKey || !appSecret) {
-    // Fallback to static token if refresh credentials aren't configured
     const staticToken = Deno.env.get('DROPBOX_ACCESS_TOKEN');
     if (!staticToken) throw new Error('No Dropbox credentials configured');
     return staticToken;
   }
 
   console.log('Refreshing Dropbox access token...');
-  console.log('Refresh token length:', refreshToken.length, 'starts:', refreshToken.substring(0, 10), 'ends:', refreshToken.substring(refreshToken.length - 10));
-  console.log('Refresh token has whitespace:', refreshToken !== refreshToken.trim());
   const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
     method: 'POST',
     headers: {
