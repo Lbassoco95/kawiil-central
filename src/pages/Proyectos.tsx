@@ -166,6 +166,11 @@ const Proyectos = () => {
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {(project as any).criticality_level === "critico" && <span title="Crítico">🔴</span>}
+                  {(project as any).criticality_level === "atencion" && <span title="Atención">🟡</span>}
+                  {(project as any).delay_category && (
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>
+                  )}
                   <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[project.status]}`}>
                     {STATUS_LABELS[project.status]}
                   </Badge>
