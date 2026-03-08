@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -112,6 +112,43 @@ export function CalendarView() {
   const { data: eventDetail, isLoading: eventDetailLoading } = useEventDetail(selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
+
+  const [draggedEvent, setDraggedEvent] = useState<any>(null);
+
+  const handleDrop = useCallback(
+    (day: Date, slotMinutes: number) => {
+      if (!draggedEvent) return;
+      const startDt = parseEventTime(
+        draggedEvent.start?.dateTime || draggedEvent.start?.date,
+        new Date()
+      );
+      const endDt = parseEventTime(
+        draggedEvent.end?.dateTime || draggedEvent.end?.date,
+        new Date(startDt.getTime() + 60 * 60 * 1000)
+      );
+      const durationMs = endDt.getTime() - startDt.getTime();
+
+      const newStartDate = format(day, "yyyy-MM-dd");
+      const newStartHour = Math.floor(slotMinutes / 60);
+      const newStartMin = slotMinutes % 60;
+      const newStartTime = `${newStartHour.toString().padStart(2, "0")}:${newStartMin.toString().padStart(2, "0")}`;
+
+      const newEndMs = new Date(`${newStartDate}T${newStartTime}:00`).getTime() + durationMs;
+      const newEnd = new Date(newEndMs);
+      const newEndDate = format(newEnd, "yyyy-MM-dd");
+      const newEndTime = format(newEnd, "HH:mm");
+
+      updateEvent.mutate({
+        eventId: draggedEvent.id,
+        payload: {
+          start: { dateTime: `${newStartDate}T${newStartTime}:00`, timeZone: CDMX_TZ },
+          end: { dateTime: `${newEndDate}T${newEndTime}:00`, timeZone: CDMX_TZ },
+        },
+      });
+      setDraggedEvent(null);
+    },
+    [draggedEvent, updateEvent]
+  );
 
   const [editForm, setEditForm] = useState({
     subject: "",
@@ -556,12 +593,24 @@ export function CalendarView() {
                         setShowCreate(true);
                       }}
                     >
-                      {/* Fondo por slot */}
+                      {/* Fondo por slot - drop targets */}
                       {TIME_SLOTS.map((slotMinutes) => (
                         <div
                           key={slotMinutes}
                           className="border-b border-border/60 last:border-b-0"
                           style={{ height: `${SLOT_HEIGHT}px` }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.add("bg-primary/10");
+                          }}
+                          onDragLeave={(e) => {
+                            e.currentTarget.classList.remove("bg-primary/10");
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove("bg-primary/10");
+                            handleDrop(day, slotMinutes);
+                          }}
                         />
                       ))}
 
@@ -602,11 +651,18 @@ export function CalendarView() {
                         return (
                           <div
                             key={event.id}
-                            className="absolute inset-x-0 px-0.5"
+                            className={`absolute inset-x-0 px-0.5 ${draggedEvent?.id === event.id ? "opacity-40" : ""}`}
                             style={{ top, height }}
+                            draggable
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              setDraggedEvent(event);
+                              e.dataTransfer.effectAllowed = "move";
+                            }}
+                            onDragEnd={() => setDraggedEvent(null)}
                           >
                             <div
-                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm cursor-pointer"
+                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm cursor-grab active:cursor-grabbing"
                               title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                               onClick={(e) => {
                                 e.stopPropagation();

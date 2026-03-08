@@ -159,7 +159,12 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify(params.payload),
         });
-        result = await res.json();
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`Update event failed [${res.status}]: ${errBody}`);
+        }
+        const text = await res.text();
+        result = text ? JSON.parse(text) : { success: true };
         break;
       }
 
