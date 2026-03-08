@@ -189,6 +189,50 @@ export function ProjectGeneralTab({ project }: Props) {
               <span>{project.end_date ? formatDateMX(project.end_date) : "—"}</span>
             )}
           </div>
+
+          {/* Criticality level */}
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Semáforo</span>
+            {editing ? (
+              <Select value={criticalityLevel} onValueChange={setCriticalityLevel}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CRITICALITY_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Badge variant="outline" className={currentCriticality?.color}>
+                {currentCriticality?.label}
+              </Badge>
+            )}
+          </div>
+
+          {/* Delay category */}
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Motivo de atraso</span>
+            {editing ? (
+              <Select value={delayCategory || "__none__"} onValueChange={(v) => setDelayCategory(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DELAY_CATEGORIES.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-sm">
+                {(project as any).delay_category
+                  ? DELAY_CATEGORIES.find(d => d.value === (project as any).delay_category)?.label || (project as any).delay_category
+                  : "—"}
+              </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
