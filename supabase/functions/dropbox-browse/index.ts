@@ -569,6 +569,93 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'create_office_doc') {
+      // Create an empty Office document in Dropbox and return a share link
+      const docType = body.doc_type || 'docx'; // docx, xlsx, pptx
+      const docName = body.doc_name || `Documento.${docType}`;
+      const folderPath = body.folder_path || path;
+
+      if (!folderPath) {
+        throw new Error('folder_path is required for create_office_doc');
+      }
+
+      const fullPath = `${folderPath.replace(/\/$/, '')}/${docName}`;
+
+      // Upload an empty file (Dropbox will recognize the extension and allow editing in Office Online)
+      const uploadHeaders: Record<string, string> = {
+        'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
+        'Content-Type': 'application/octet-stream',
+        'Dropbox-API-Arg': JSON.stringify({
+          path: fullPath,
+          mode: 'add',
+          autorename: true,
+          mute: false,
+        }),
+      };
+
+      if (adminMemberId) {
+        uploadHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
+      }
+      if (rootNamespaceId) {
+        uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
+          '.tag': 'root',
+          root: rootNamespaceId,
+        });
+      }
+
+      const uploadRes = await fetch('https://content.dropboxapi.com/2/files/upload', {
+        method: 'POST',
+        headers: uploadHeaders,
+        body: new Uint8Array(0),
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        throw new Error(`Dropbox create_office_doc upload error [${uploadRes.status}]: ${errText}`);
+      }
+
+      const uploadResult = await uploadRes.json();
+      const uploadedPath = uploadResult.path_display || fullPath;
+
+      // Get a shared link for the file
+      let shareUrl = '';
+      try {
+        const linkRes = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+          method: 'POST',
+          headers: dbxHeaders,
+          body: JSON.stringify({ path: uploadedPath }),
+        });
+        if (linkRes.ok) {
+          const linkData = await linkRes.json();
+          shareUrl = linkData.url;
+        } else {
+          const linkErr = await linkRes.json();
+          if (linkErr?.error?.['.tag'] === 'shared_link_already_exists') {
+            const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
+              method: 'POST',
+              headers: dbxHeaders,
+              body: JSON.stringify({ path: uploadedPath, direct_only: true }),
+            });
+            if (listRes.ok) {
+              const listData = await listRes.json();
+              if (listData.links?.length > 0) shareUrl = listData.links[0].url;
+            }
+          }
+        }
+      } catch (linkError) {
+        console.error('Error creating share link for office doc:', linkError);
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        name: uploadResult.name,
+        path: uploadedPath,
+        url: shareUrl,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

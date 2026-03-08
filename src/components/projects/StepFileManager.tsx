@@ -3,10 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useCreateOneDriveDoc } from "@/hooks/useMicrosoft";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDateMX } from "@/lib/dateUtils";
 import { logActivity } from "@/lib/activityLog";
@@ -34,12 +33,50 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [signDoc, setSignDoc] = useState<{ name: string; url: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
-  const createOneDriveDoc = useCreateOneDriveDoc();
+
+  const createDropboxDoc = useMutation({
+    mutationFn: async ({ docType, docName, folderPath }: { docType: string; docName: string; folderPath: string }) => {
+      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
+        body: { action: "create_office_doc", doc_type: docType, doc_name: docName, folder_path: folderPath },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { success: boolean; name: string; path: string; url: string };
+    },
+    onSuccess: async (data) => {
+      toast.success(`${data.name} creado en Dropbox`);
+      // Auto-register as document linked to this project
+      if (user && data.url) {
+        try {
+          const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+          const { data: doc, error } = await supabase
+            .from("documents")
+            .insert({
+              name: data.name,
+              external_path: data.url,
+              organization_id: orgId!,
+              project_id: projectId,
+              uploaded_by: user.id,
+              source: "dropbox" as const,
+            })
+            .select()
+            .single();
+          if (!error && doc) {
+            onDocumentAdded([...documentIds, doc.id]);
+          }
+        } catch {}
+        // Open the Dropbox share URL (which opens in Dropbox web with Office editing)
+        window.open(data.url, "_blank");
+      }
+    },
+    onError: (err: Error) => toast.error("Error al crear documento: " + err.message),
+  });
 
   const handleCreateDoc = (docType: "docx" | "xlsx" | "pptx") => {
-    const extensions = { docx: "Word", xlsx: "Excel", pptx: "PowerPoint" };
-    const fileName = `${extensions[docType]} - Paso ${projectId.slice(0, 6)}.${docType}`;
-    createOneDriveDoc.mutate({ docType, fileName, folderPath: "Kawiil/Proyectos" });
+    const labels = { docx: "Word", xlsx: "Excel", pptx: "PowerPoint" };
+    const docName = `${labels[docType]} - ${new Date().toLocaleDateString("es-MX")}.${docType}`;
+    const folderPath = clientDropboxPath || "/Kawiil Mx";
+    createDropboxDoc.mutate({ docType, docName, folderPath });
   };
 
   const { data: documents = [] } = useQuery({
@@ -197,16 +234,16 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
             Local
           </Button>
-          {/* Create Office doc in OneDrive */}
+          {/* Create Office doc in Dropbox */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 text-xs gap-1"
-                disabled={disabled || createOneDriveDoc.isPending}
+                disabled={disabled || createDropboxDoc.isPending}
               >
-                {createOneDriveDoc.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                {createDropboxDoc.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
                 Office
               </Button>
             </DropdownMenuTrigger>
