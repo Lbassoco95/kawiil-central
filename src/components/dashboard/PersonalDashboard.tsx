@@ -273,20 +273,6 @@ export function PersonalDashboard() {
         </section>
       </div>
 
-      {/* AI Insights placeholder */}
-      <section className="rounded-2xl bg-secondary/20 border border-border/40 p-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Asistente IA</h2>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Próximamente: tu asistente inteligente analizará tus patrones de trabajo, te ayudará a priorizar tareas 
-          y te asistirá con redacción de correos y documentos. También podrás consultarle sobre actividades y proyectos.
-        </p>
-        <Button variant="outline" size="sm" className="mt-4 text-xs" disabled>
-          <Sparkles className="h-3 w-3 mr-1" /> Abrir chat IA
-        </Button>
-      </section>
     </div>
   );
 }
