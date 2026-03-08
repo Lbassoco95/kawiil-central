@@ -12,6 +12,7 @@ import { logActivity } from "@/lib/activityLog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { SendToSignDialog } from "@/components/documents/SendToSignDialog";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 interface Props {
   documentIds: string[];
