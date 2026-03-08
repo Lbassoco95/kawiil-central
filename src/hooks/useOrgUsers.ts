@@ -93,6 +93,8 @@ interface CreateUserParams {
   role: string;
   area?: string;
   phone?: string;
+  microsoft_email?: string;
+  microsoft_user_id?: string;
 }
 
 export function useCreateUser() {
