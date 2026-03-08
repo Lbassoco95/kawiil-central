@@ -745,6 +745,7 @@ export type Database = {
       internal_procedures: {
         Row: {
           created_at: string
+          current_version: number
           description: string | null
           file_path: string
           file_size: number | null
@@ -757,6 +758,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          current_version?: number
           description?: string | null
           file_path: string
           file_size?: number | null
@@ -769,6 +771,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          current_version?: number
           description?: string | null
           file_path?: string
           file_size?: number | null
@@ -889,6 +892,85 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      procedure_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          procedure_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          procedure_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          procedure_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procedure_comments_procedure_id_fkey"
+            columns: ["procedure_id"]
+            isOneToOne: false
+            referencedRelation: "internal_procedures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      procedure_versions: {
+        Row: {
+          change_notes: string | null
+          created_at: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          procedure_id: string
+          uploaded_by: string | null
+          version_number: number
+        }
+        Insert: {
+          change_notes?: string | null
+          created_at?: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          procedure_id: string
+          uploaded_by?: string | null
+          version_number?: number
+        }
+        Update: {
+          change_notes?: string | null
+          created_at?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          procedure_id?: string
+          uploaded_by?: string | null
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "procedure_versions_procedure_id_fkey"
+            columns: ["procedure_id"]
+            isOneToOne: false
+            referencedRelation: "internal_procedures"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
