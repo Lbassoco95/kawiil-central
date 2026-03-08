@@ -330,10 +330,7 @@ serve(async (req) => {
   }
 
   try {
-    const DROPBOX_ACCESS_TOKEN = Deno.env.get('DROPBOX_ACCESS_TOKEN');
-    if (!DROPBOX_ACCESS_TOKEN) {
-      throw new Error('DROPBOX_ACCESS_TOKEN is not configured');
-    }
+    const DROPBOX_ACCESS_TOKEN = await getValidAccessToken();
 
     const body = await req.json();
     const { path = '', action = 'list', file_content, file_name } = body;
