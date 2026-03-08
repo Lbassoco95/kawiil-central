@@ -342,27 +342,40 @@ Deno.serve(async (req) => {
       }
 
       case "create-onedrive-doc": {
-        // Create a blank document in OneDrive and return the web URL
-        const docType = params.docType || "docx"; // docx, xlsx, pptx
+        const docType = params.docType || "docx";
         const fileName = params.fileName || `Documento.${docType}`;
         const folderPath = params.folderPath || "Kawiil";
 
-        // Ensure folder exists
-        try {
-          await fetch(`${GRAPH_BASE}/me/drive/root:/${folderPath}:/children`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
+        // Ensure folder path exists by creating each segment
+        const segments = folderPath.split("/").filter(Boolean);
+        let parentPath = "";
+        for (const seg of segments) {
+          const parentUrl = parentPath
+            ? `${GRAPH_BASE}/me/drive/root:/${parentPath}:/children`
+            : `${GRAPH_BASE}/me/drive/root/children`;
+          const mkRes = await fetch(parentUrl, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: seg,
+              folder: {},
+              "@microsoft.graph.conflictBehavior": "useExisting",
+            }),
           });
-        } catch {}
+          // consume body regardless
+          await mkRes.text();
+          parentPath = parentPath ? `${parentPath}/${seg}` : seg;
+        }
 
-        // Create empty file using the special createUploadSession or just put an empty file
-        // For Office docs, create via special endpoint
         const mimeTypes: Record<string, string> = {
           docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         };
 
-        // Use empty content upload
         const putRes = await fetch(
           `${GRAPH_BASE}/me/drive/root:/${folderPath}/${fileName}:/content`,
           {
@@ -381,15 +394,11 @@ Deno.serve(async (req) => {
         }
 
         const createdFile = await putRes.json();
-
-        // Get the web URL for editing online
-        const webUrl = createdFile.webUrl;
-
         result = {
           success: true,
           id: createdFile.id,
           name: createdFile.name,
-          webUrl,
+          webUrl: createdFile.webUrl,
           parentPath: createdFile.parentReference?.path,
         };
         break;
