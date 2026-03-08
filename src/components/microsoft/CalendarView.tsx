@@ -49,12 +49,28 @@ const TIME_SLOTS = Array.from(
 );
 const SLOT_HEIGHT = 32;
 
-/** Parse an event datetime string into CDMX-adjusted Date */
-function parseEventTime(dt: string): Date {
-  if (dt.includes("T") && !dt.includes("Z") && !dt.includes("+") && !dt.includes("-", 10)) {
-    return new Date(dt);
+/** Parse an event datetime string into CDMX-adjusted Date. Returns fallback if invalid. */
+function parseEventTime(dt: string, fallback = new Date()): Date {
+  if (!dt || typeof dt !== "string") return fallback;
+  try {
+    if (dt.includes("T") && !dt.includes("Z") && !dt.includes("+") && !dt.includes("-", 10)) {
+      const d = new Date(dt);
+      return isNaN(d.getTime()) ? fallback : d;
+    }
+    const d = toZonedTime(parseISO(dt), CDMX_TZ);
+    return isNaN(d.getTime()) ? fallback : d;
+  } catch {
+    return fallback;
   }
-  return toZonedTime(parseISO(dt), CDMX_TZ);
+}
+
+function safeDescription(content: unknown): string {
+  if (typeof content !== "string") return "";
+  try {
+    return content.replace(/<[^>]*>/g, "").trim() || "";
+  } catch {
+    return "";
+  }
 }
 
 function minutesToLabel(totalMinutes: number) {
@@ -116,51 +132,31 @@ export function CalendarView() {
   });
 
   useEffect(() => {
-    if (eventDetail) {
-      const start = eventDetail.start?.dateTime || eventDetail.start?.date;
-      const end = eventDetail.end?.dateTime || eventDetail.end?.date;
-      const parsedStart = start ? parseEventTime(start) : new Date();
-      const parsedEnd = end ? parseEventTime(end) : new Date();
-      const attendeesStr = (eventDetail.attendees || [])
+    const source = eventDetail || (cachedEvent && selectedEventId ? cachedEvent : null);
+    if (!source) return;
+    try {
+      const start = source.start?.dateTime || source.start?.date;
+      const end = source.end?.dateTime || source.end?.date;
+      const parsedStart = parseEventTime(start, new Date());
+      const parsedEnd = parseEventTime(end, new Date(parsedStart.getTime() + 60 * 60 * 1000));
+      const attendeesStr = (source.attendees || [])
         .map((a: any) => a.emailAddress?.address)
         .filter(Boolean)
         .join(", ");
       setEditForm({
-        subject: eventDetail.subject || "",
+        subject: source.subject ?? "",
         startDate: format(parsedStart, "yyyy-MM-dd"),
         startTime: format(parsedStart, "HH:mm"),
         endDate: format(parsedEnd, "yyyy-MM-dd"),
         endTime: format(parsedEnd, "HH:mm"),
-        location: eventDetail.location?.displayName || "",
-        description: eventDetail.body?.content?.replace(/<[^>]*>/g, "") || "",
-        categories: Array.isArray(eventDetail.categories) ? [...eventDetail.categories] : [],
+        location: source.location?.displayName ?? "",
+        description: safeDescription(source.body?.content),
+        categories: Array.isArray(source.categories) ? [...source.categories] : [],
         attendees: attendeesStr,
       });
-      return;
-    }
-    if (cachedEvent && selectedEventId) {
-      const start = cachedEvent.start?.dateTime || cachedEvent.start?.date;
-      const end = cachedEvent.end?.dateTime || cachedEvent.end?.date;
-      const parsedStart = start ? parseEventTime(start) : new Date();
-      const parsedEnd = end ? parseEventTime(end) : new Date();
-      const attendeesStr = (cachedEvent.attendees || [])
-        .map((a: any) => a.emailAddress?.address)
-        .filter(Boolean)
-        .join(", ");
-      setEditForm({
-        subject: cachedEvent.subject || "",
-        startDate: format(parsedStart, "yyyy-MM-dd"),
-        startTime: format(parsedStart, "HH:mm"),
-        endDate: format(parsedEnd, "yyyy-MM-dd"),
-        endTime: format(parsedEnd, "HH:mm"),
-        location: cachedEvent.location?.displayName || "",
-        description:
-          (typeof cachedEvent.body?.content === "string"
-            ? cachedEvent.body.content.replace(/<[^>]*>/g, "")
-            : "") || "",
-        categories: Array.isArray(cachedEvent.categories) ? [...cachedEvent.categories] : [],
-        attendees: attendeesStr,
-      });
+    } catch (_) {
+      // Si algo falla al parsear, dejar el formulario con valores por defecto
+      setEditForm((prev) => ({ ...prev, subject: (eventDetail || cachedEvent)?.subject ?? prev.subject }));
     }
   }, [eventDetail, cachedEvent, selectedEventId]);
 
