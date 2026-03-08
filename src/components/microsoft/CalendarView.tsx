@@ -597,21 +597,36 @@ export function CalendarView() {
                       {TIME_SLOTS.map((slotMinutes) => (
                         <div
                           key={slotMinutes}
-                          className="border-b border-border/60 last:border-b-0"
+                          className="border-b border-border/60 last:border-b-0 transition-colors duration-100 relative"
                           style={{ height: `${SLOT_HEIGHT}px` }}
                           onDragOver={(e) => {
                             e.preventDefault();
-                            e.currentTarget.classList.add("bg-primary/10");
+                            e.dataTransfer.dropEffect = "move";
+                            e.currentTarget.classList.add("bg-primary/20");
+                            // Show time label
+                            const label = e.currentTarget.querySelector(".drop-label");
+                            if (label) (label as HTMLElement).style.display = "block";
                           }}
                           onDragLeave={(e) => {
-                            e.currentTarget.classList.remove("bg-primary/10");
+                            e.currentTarget.classList.remove("bg-primary/20");
+                            const label = e.currentTarget.querySelector(".drop-label");
+                            if (label) (label as HTMLElement).style.display = "none";
                           }}
                           onDrop={(e) => {
                             e.preventDefault();
-                            e.currentTarget.classList.remove("bg-primary/10");
+                            e.currentTarget.classList.remove("bg-primary/20");
+                            const label = e.currentTarget.querySelector(".drop-label");
+                            if (label) (label as HTMLElement).style.display = "none";
                             handleDrop(day, slotMinutes);
                           }}
-                        />
+                        >
+                          <span
+                            className="drop-label absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-primary pointer-events-none z-10"
+                            style={{ display: "none" }}
+                          >
+                            {minutesToLabel(slotMinutes)}
+                          </span>
+                        </div>
                       ))}
 
                       {/* Capa de eventos */}
