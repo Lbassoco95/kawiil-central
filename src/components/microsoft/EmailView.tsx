@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail } from "@/hooks/useMicrosoft";
+import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail, useMarkEmailRead } from "@/hooks/useMicrosoft";
 import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send, UserPlus } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
