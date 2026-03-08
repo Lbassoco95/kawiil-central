@@ -44,13 +44,15 @@ const tools = [
     type: "function",
     function: {
       name: "get_clients",
-      description: "Busca clientes de la organización por nombre o RFC.",
+      description: "Busca clientes de la organización por nombre, RFC o servicio. Puede contar totales o listar con detalle. Usa count_only=true para obtener conteos por servicio/estatus.",
       parameters: {
         type: "object",
         properties: {
           search: { type: "string", description: "Texto para buscar en nombre o RFC" },
           status: { type: "string", enum: ["activo", "inactivo", "prospecto"] },
-          limit: { type: "number" },
+          service: { type: "string", enum: ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento"], description: "Filtrar por servicio contratado" },
+          count_only: { type: "boolean", description: "Si true, retorna solo conteos agrupados por servicio y estatus (para preguntas de '¿cuántos?')" },
+          limit: { type: "number", description: "Máximo de resultados (default 100)" },
         },
         additionalProperties: false,
       },
