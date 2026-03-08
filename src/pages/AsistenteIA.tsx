@@ -18,10 +18,10 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const SUGGESTIONS = [
-  "Ayúdame a redactar un correo profesional para un cliente",
-  "¿Cómo debo priorizar mis tareas pendientes?",
-  "Redacta una respuesta formal sobre el cumplimiento fiscal",
-  "Explícame los plazos para la declaración anual de ISR",
+  "¿Cuáles son mis tareas pendientes más urgentes?",
+  "Crea recordatorios para mis tareas que vencen esta semana",
+  "¿Cómo está la carga de trabajo del equipo?",
+  "Redacta un correo profesional para un cliente sobre su declaración",
 ];
 
 const AsistenteIA = () => {
