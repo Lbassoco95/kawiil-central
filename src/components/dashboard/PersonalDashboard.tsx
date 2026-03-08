@@ -152,6 +152,9 @@ export function PersonalDashboard() {
       {/* Performance Chart */}
       <PerformanceChart />
 
+      {/* Monthly Performance */}
+      <MonthlyPerformance />
+
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Tasks */}
         <section>
