@@ -120,9 +120,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Área</Label>
+              <Label>Célula</Label>
               <Select value={area} onValueChange={setArea}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar área" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Seleccionar célula" /></SelectTrigger>
                 <SelectContent>
                   {areaOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
