@@ -116,27 +116,53 @@ export function CalendarView() {
   });
 
   useEffect(() => {
-    if (!eventDetail) return;
-    const start = eventDetail.start?.dateTime || eventDetail.start?.date;
-    const end = eventDetail.end?.dateTime || eventDetail.end?.date;
-    const parsedStart = start ? parseEventTime(start) : new Date();
-    const parsedEnd = end ? parseEventTime(end) : new Date();
-    const attendeesStr = (eventDetail.attendees || [])
-      .map((a: any) => a.emailAddress?.address)
-      .filter(Boolean)
-      .join(", ");
-    setEditForm({
-      subject: eventDetail.subject || "",
-      startDate: format(parsedStart, "yyyy-MM-dd"),
-      startTime: format(parsedStart, "HH:mm"),
-      endDate: format(parsedEnd, "yyyy-MM-dd"),
-      endTime: format(parsedEnd, "HH:mm"),
-      location: eventDetail.location?.displayName || "",
-      description: eventDetail.body?.content?.replace(/<[^>]*>/g, "") || "",
-      categories: Array.isArray(eventDetail.categories) ? [...eventDetail.categories] : [],
-      attendees: attendeesStr,
-    });
-  }, [eventDetail]);
+    if (eventDetail) {
+      const start = eventDetail.start?.dateTime || eventDetail.start?.date;
+      const end = eventDetail.end?.dateTime || eventDetail.end?.date;
+      const parsedStart = start ? parseEventTime(start) : new Date();
+      const parsedEnd = end ? parseEventTime(end) : new Date();
+      const attendeesStr = (eventDetail.attendees || [])
+        .map((a: any) => a.emailAddress?.address)
+        .filter(Boolean)
+        .join(", ");
+      setEditForm({
+        subject: eventDetail.subject || "",
+        startDate: format(parsedStart, "yyyy-MM-dd"),
+        startTime: format(parsedStart, "HH:mm"),
+        endDate: format(parsedEnd, "yyyy-MM-dd"),
+        endTime: format(parsedEnd, "HH:mm"),
+        location: eventDetail.location?.displayName || "",
+        description: eventDetail.body?.content?.replace(/<[^>]*>/g, "") || "",
+        categories: Array.isArray(eventDetail.categories) ? [...eventDetail.categories] : [],
+        attendees: attendeesStr,
+      });
+      return;
+    }
+    if (cachedEvent && selectedEventId) {
+      const start = cachedEvent.start?.dateTime || cachedEvent.start?.date;
+      const end = cachedEvent.end?.dateTime || cachedEvent.end?.date;
+      const parsedStart = start ? parseEventTime(start) : new Date();
+      const parsedEnd = end ? parseEventTime(end) : new Date();
+      const attendeesStr = (cachedEvent.attendees || [])
+        .map((a: any) => a.emailAddress?.address)
+        .filter(Boolean)
+        .join(", ");
+      setEditForm({
+        subject: cachedEvent.subject || "",
+        startDate: format(parsedStart, "yyyy-MM-dd"),
+        startTime: format(parsedStart, "HH:mm"),
+        endDate: format(parsedEnd, "yyyy-MM-dd"),
+        endTime: format(parsedEnd, "HH:mm"),
+        location: cachedEvent.location?.displayName || "",
+        description:
+          (typeof cachedEvent.body?.content === "string"
+            ? cachedEvent.body.content.replace(/<[^>]*>/g, "")
+            : "") || "",
+        categories: Array.isArray(cachedEvent.categories) ? [...cachedEvent.categories] : [],
+        attendees: attendeesStr,
+      });
+    }
+  }, [eventDetail, cachedEvent, selectedEventId]);
 
   const viewDays = useMemo(() => {
     switch (viewMode) {
@@ -181,6 +207,11 @@ export function CalendarView() {
   const { data: events = [], isLoading } = useCalendarEvents(rangeStart, rangeEnd);
   const createEvent = useCreateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
+
+  const cachedEvent = useMemo(
+    () => (selectedEventId ? events.find((e: any) => e.id === selectedEventId) : null),
+    [events, selectedEventId]
+  );
 
   const goNext = () => {
     switch (viewMode) {
@@ -776,9 +807,9 @@ export function CalendarView() {
                 rows={4}
               />
             </div>
-            {outlookCategories.length > 0 && (
-              <div className="space-y-2">
-                <Label>Etiquetas (categorías)</Label>
+            <div className="space-y-2">
+              <Label>Etiquetas (categorías)</Label>
+              {outlookCategories.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {outlookCategories.map((cat: any) => (
                     <label
@@ -793,8 +824,22 @@ export function CalendarView() {
                     </label>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <Input
+                  placeholder="Ej: Personal, Trabajo (separadas por coma)"
+                  value={newEvent.categories.join(", ")}
+                  onChange={(e) =>
+                    setNewEvent({
+                      ...newEvent,
+                      categories: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">Zona horaria: América/Ciudad de México</p>
           </div>
           <DialogFooter>
@@ -816,18 +861,27 @@ export function CalendarView() {
               Ver y editar evento
             </DialogTitle>
           </DialogHeader>
-          {eventDetailLoading ? (
+          {eventDetailLoading && !cachedEvent ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : eventDetail ? (
+          ) : (cachedEvent || eventDetail) ? (
             <div className="space-y-4 py-2">
-              {eventDetail.onlineMeeting?.joinUrl && (
+              {(eventDetail?.onlineMeeting?.joinUrl ||
+                cachedEvent?.onlineMeeting?.joinUrl ||
+                cachedEvent?.onlineMeetingUrl) && (
                 <div className="flex justify-end">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(eventDetail.onlineMeeting.joinUrl, "_blank")}
+                    onClick={() =>
+                      window.open(
+                        eventDetail?.onlineMeeting?.joinUrl ||
+                          cachedEvent?.onlineMeeting?.joinUrl ||
+                          cachedEvent?.onlineMeetingUrl,
+                        "_blank"
+                      )
+                    }
                   >
                     <Video className="mr-1 h-4 w-4" /> Unirse a la reunión (Teams)
                   </Button>
@@ -901,9 +955,9 @@ export function CalendarView() {
                   rows={3}
                 />
               </div>
-              {outlookCategories.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Etiquetas (categorías)</Label>
+              <div className="space-y-2">
+                <Label>Etiquetas (categorías)</Label>
+                {outlookCategories.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {outlookCategories.map((cat: any) => (
                       <label
@@ -918,8 +972,22 @@ export function CalendarView() {
                       </label>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <Input
+                    placeholder="Ej: Personal, Trabajo (separadas por coma)"
+                    value={editForm.categories.join(", ")}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        categories: e.target.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                )}
+              </div>
             </div>
           ) : null}
           <DialogFooter>
