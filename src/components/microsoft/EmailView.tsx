@@ -178,6 +178,16 @@ export function EmailView() {
                 >
                   <Forward className="mr-1 h-3.5 w-3.5" /> Reenviar
                 </Button>
+                {isAdminOrManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => setCreateUserOpen(true)}
+                  >
+                    <UserPlus className="mr-1 h-3.5 w-3.5" /> Dar de alta
+                  </Button>
+                )}
               </div>
 
               {/* Reply/Forward form */}
@@ -229,6 +239,14 @@ export function EmailView() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* Create user from email dialog */}
+      <CreateUserFromEmailDialog
+        open={createUserOpen}
+        onOpenChange={setCreateUserOpen}
+        senderName={emailDetail?.from?.emailAddress?.name}
+        senderEmail={emailDetail?.from?.emailAddress?.address}
+      />
     </div>
   );
 }
