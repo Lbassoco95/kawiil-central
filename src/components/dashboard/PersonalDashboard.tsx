@@ -117,6 +117,9 @@ export function PersonalDashboard() {
         <p className="text-xs text-muted-foreground mt-3">— {quote.author}</p>
       </div>
 
+      {/* Mood Check-in */}
+      <MoodCheckin userCelula={userCelula} />
+
       {/* Today's Summary */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
@@ -145,6 +148,9 @@ export function PersonalDashboard() {
         </div>
         <Progress value={progressPct} className="h-1.5" />
       </div>
+
+      {/* Performance Chart */}
+      <PerformanceChart />
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Tasks */}
