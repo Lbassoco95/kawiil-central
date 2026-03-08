@@ -78,7 +78,10 @@ export function ProjectGeneralTab({ project }: Props) {
         status,
         start_date: startDate || null,
         end_date: endDate || null,
-      },
+        criticality_level: criticalityLevel,
+        delay_category: delayCategory || null,
+        delay_notes: delayNotes || null,
+      } as any,
       {
         onSuccess: () => setEditing(false),
       }
