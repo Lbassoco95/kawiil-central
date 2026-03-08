@@ -3,15 +3,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useReminders } from "@/hooks/useReminders";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { getWeeklyQuote } from "@/lib/weeklyQuotes";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
+import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
+import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import {
-  Clock,
-  Plus,
+  Plus as PlusIcon,
   Trash2,
   Bell,
   CheckSquare,
