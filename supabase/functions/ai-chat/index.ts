@@ -44,13 +44,15 @@ const tools = [
     type: "function",
     function: {
       name: "get_clients",
-      description: "Busca clientes de la organización por nombre o RFC.",
+      description: "Busca clientes de la organización por nombre, RFC o servicio. Puede contar totales o listar con detalle. Usa count_only=true para obtener conteos por servicio/estatus.",
       parameters: {
         type: "object",
         properties: {
           search: { type: "string", description: "Texto para buscar en nombre o RFC" },
           status: { type: "string", enum: ["activo", "inactivo", "prospecto"] },
-          limit: { type: "number" },
+          service: { type: "string", enum: ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento"], description: "Filtrar por servicio contratado" },
+          count_only: { type: "boolean", description: "Si true, retorna solo conteos agrupados por servicio y estatus (para preguntas de '¿cuántos?')" },
+          limit: { type: "number", description: "Máximo de resultados (default 100)" },
         },
         additionalProperties: false,
       },
@@ -152,12 +154,42 @@ async function executeTool(
       return error ? { error: error.message } : data;
     }
     case "get_clients": {
+      if (args.count_only) {
+        // Get all clients with minimal fields for counting
+        let q = supabase.from("clients")
+          .select("name, status, services")
+          .eq("organization_id", orgId);
+        if (args.status) q = q.eq("status", args.status);
+        const { data, error } = await q;
+        if (error) return { error: error.message };
+        
+        // Build summary
+        const total = data?.length || 0;
+        const byStatus: Record<string, number> = {};
+        const byService: Record<string, number> = {};
+        let sinServicio = 0;
+        
+        for (const c of data || []) {
+          byStatus[c.status] = (byStatus[c.status] || 0) + 1;
+          if (!c.services || c.services.length === 0) {
+            sinServicio++;
+          } else {
+            for (const s of c.services) {
+              byService[s] = (byService[s] || 0) + 1;
+            }
+          }
+        }
+        
+        return { total, por_estatus: byStatus, por_servicio: byService, sin_servicio: sinServicio };
+      }
+      
       let q = supabase.from("clients")
-        .select("name, rfc, email, status, services, contact_name, phone")
+        .select("name, rfc, email, status, services, contact_name, phone, primary_area, has_payroll")
         .eq("organization_id", orgId);
       if (args.search) q = q.or(`name.ilike.%${args.search}%,rfc.ilike.%${args.search}%`);
       if (args.status) q = q.eq("status", args.status);
-      q = q.order("name").limit(args.limit || 15);
+      if (args.service) q = q.contains("services", [args.service]);
+      q = q.order("name").limit(args.limit || 100);
       const { data, error } = await q;
       return error ? { error: error.message } : data;
     }
