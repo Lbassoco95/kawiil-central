@@ -651,11 +651,18 @@ export function CalendarView() {
                         return (
                           <div
                             key={event.id}
-                            className="absolute inset-x-0 px-0.5"
+                            className={`absolute inset-x-0 px-0.5 ${draggedEvent?.id === event.id ? "opacity-40" : ""}`}
                             style={{ top, height }}
+                            draggable
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              setDraggedEvent(event);
+                              e.dataTransfer.effectAllowed = "move";
+                            }}
+                            onDragEnd={() => setDraggedEvent(null)}
                           >
                             <div
-                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm cursor-pointer"
+                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm cursor-grab active:cursor-grabbing"
                               title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                               onClick={(e) => {
                                 e.stopPropagation();
