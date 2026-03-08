@@ -1,7 +1,9 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useCreateOneDriveDoc } from "@/hooks/useMicrosoft";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
@@ -32,6 +34,13 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [signDoc, setSignDoc] = useState<{ name: string; url: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
+  const createOneDriveDoc = useCreateOneDriveDoc();
+
+  const handleCreateDoc = (docType: "docx" | "xlsx" | "pptx") => {
+    const extensions = { docx: "Word", xlsx: "Excel", pptx: "PowerPoint" };
+    const fileName = `${extensions[docType]} - Paso ${projectId.slice(0, 6)}.${docType}`;
+    createOneDriveDoc.mutate({ docType, fileName, folderPath: "Kawiil/Proyectos" });
+  };
 
   const { data: documents = [] } = useQuery({
     queryKey: ["step-docs", ...documentIds],
@@ -188,6 +197,34 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
             Local
           </Button>
+          {/* Create Office doc in OneDrive */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                disabled={disabled || createOneDriveDoc.isPending}
+              >
+                {createOneDriveDoc.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Office
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleCreateDoc("docx")}>
+                <FileType className="h-3.5 w-3.5 mr-2 text-blue-600" />
+                Word
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCreateDoc("xlsx")}>
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-2 text-green-600" />
+                Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCreateDoc("pptx")}>
+                <Presentation className="h-3.5 w-3.5 mr-2 text-orange-600" />
+                PowerPoint
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

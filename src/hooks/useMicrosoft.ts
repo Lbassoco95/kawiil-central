@@ -308,6 +308,26 @@ export function useReplyEmail() {
   });
 }
 
+export function useCreateOneDriveDoc() {
+  return useMutation({
+    mutationFn: async ({ docType, fileName, folderPath }: { docType: "docx" | "xlsx" | "pptx"; fileName: string; folderPath?: string }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "create-onedrive-doc", params: { docType, fileName, folderPath } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { success: boolean; id: string; name: string; webUrl: string };
+    },
+    onSuccess: (data) => {
+      toast.success("Documento creado en OneDrive");
+      if (data.webUrl) {
+        window.open(data.webUrl, "_blank");
+      }
+    },
+    onError: (err: Error) => toast.error("Error al crear documento: " + err.message),
+  });
+}
+
 export function useMarkEmailRead() {
   const queryClient = useQueryClient();
 

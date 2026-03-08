@@ -341,6 +341,60 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "create-onedrive-doc": {
+        // Create a blank document in OneDrive and return the web URL
+        const docType = params.docType || "docx"; // docx, xlsx, pptx
+        const fileName = params.fileName || `Documento.${docType}`;
+        const folderPath = params.folderPath || "Kawiil";
+
+        // Ensure folder exists
+        try {
+          await fetch(`${GRAPH_BASE}/me/drive/root:/${folderPath}:/children`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+        } catch {}
+
+        // Create empty file using the special createUploadSession or just put an empty file
+        // For Office docs, create via special endpoint
+        const mimeTypes: Record<string, string> = {
+          docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        };
+
+        // Use empty content upload
+        const putRes = await fetch(
+          `${GRAPH_BASE}/me/drive/root:/${folderPath}/${fileName}:/content`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": mimeTypes[docType] || "application/octet-stream",
+            },
+            body: new Uint8Array(0),
+          }
+        );
+
+        if (!putRes.ok) {
+          const errBody = await putRes.text();
+          throw new Error(`Create OneDrive doc failed [${putRes.status}]: ${errBody}`);
+        }
+
+        const createdFile = await putRes.json();
+
+        // Get the web URL for editing online
+        const webUrl = createdFile.webUrl;
+
+        result = {
+          success: true,
+          id: createdFile.id,
+          name: createdFile.name,
+          webUrl,
+          parentPath: createdFile.parentReference?.path,
+        };
+        break;
+      }
+
       case "forward": {
         const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/forward`, {
           method: "POST",
