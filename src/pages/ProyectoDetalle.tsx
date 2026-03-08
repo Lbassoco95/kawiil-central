@@ -27,9 +27,9 @@ type ServiceArea = Database["public"]["Enums"]["service_area"];
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = {
-  activo: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  pausado: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  completado: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  activo: "bg-success/10 text-success",
+  pausado: "bg-warning/10 text-warning",
+  completado: "bg-primary/10 text-primary",
   cancelado: "bg-muted text-muted-foreground",
 };
 
@@ -109,27 +109,27 @@ const ProyectoDetalle = () => {
     <AppLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/proyectos")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+        <div className="flex items-start gap-3">
+          <button onClick={() => navigate("/proyectos")} className="mt-1 p-1 rounded-lg hover:bg-secondary/60 transition-colors">
+            <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+          </button>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-foreground truncate">{project.name}</h1>
-              <Badge variant="outline" className={STATUS_STYLES[project.status]}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-semibold text-foreground truncate">{project.name}</h1>
+              <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[project.status]}`}>
                 {STATUS_LABELS[project.status]}
               </Badge>
               {project.area && (
-                <Badge variant="secondary">{SERVICE_LABELS[project.area]}</Badge>
+                <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                  {SERVICE_LABELS[project.area]}
+                </span>
               )}
             </div>
             {clientName && (
-              <p className="text-sm text-muted-foreground mt-1">
-                Cliente: {clientName}
-              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">Cliente: {clientName}</p>
             )}
             {project.description && (
-              <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{project.description}</p>
             )}
           </div>
         </div>
@@ -245,31 +245,23 @@ const ProyectoDetalle = () => {
               </div>
 
               {tasks.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/50" />
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      Sin tareas en este proyecto.
-                    </p>
-                    <Button variant="outline" className="mt-3" onClick={() => setShowTaskForm(true)}>
-                      <Plus className="h-4 w-4 mr-1" />Crear primera tarea
-                    </Button>
-                  </CardContent>
-                </Card>
+                <div className="text-center py-16">
+                  <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
+                  <p className="mt-3 text-sm text-muted-foreground">Sin tareas en este proyecto.</p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowTaskForm(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />Crear primera tarea
+                  </Button>
+                </div>
               ) : (
-                <div className="grid gap-3">
+                <div className="divide-y divide-border/40">
                   {tasks.map((t) => (
-                    <Card key={t.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="font-medium text-foreground truncate">{t.title}</h4>
-                          <div className="flex gap-2 shrink-0">
-                            <Badge variant="outline" className="text-xs">{t.priority}</Badge>
-                            <Badge variant="secondary" className="text-xs">{t.status}</Badge>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                      <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
+                      <div className="flex gap-1.5 shrink-0">
+                        <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.priority}</span>
+                        <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.status}</span>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
