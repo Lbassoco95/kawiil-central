@@ -256,6 +256,32 @@ export function ProjectGeneralTab({ project }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {/* Delay notes card - only show if there's a delay category */}
+      {(editing || (project as any).delay_category) && (
+        <Card className="md:col-span-2 border-warning/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              Notas de atraso / situación
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {editing ? (
+              <Textarea
+                className="min-h-[80px] text-sm"
+                placeholder="Describe la situación: motivo del atraso, factores externos, plan de acción..."
+                value={delayNotes}
+                onChange={(e) => setDelayNotes(e.target.value)}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {(project as any).delay_notes || "Sin notas de atraso."}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
