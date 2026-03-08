@@ -109,6 +109,43 @@ export function CalendarView() {
     categories: [] as string[],
   });
 
+  const [draggedEvent, setDraggedEvent] = useState<any>(null);
+
+  const handleDrop = useCallback(
+    (day: Date, slotMinutes: number) => {
+      if (!draggedEvent) return;
+      const startDt = parseEventTime(
+        draggedEvent.start?.dateTime || draggedEvent.start?.date,
+        new Date()
+      );
+      const endDt = parseEventTime(
+        draggedEvent.end?.dateTime || draggedEvent.end?.date,
+        new Date(startDt.getTime() + 60 * 60 * 1000)
+      );
+      const durationMs = endDt.getTime() - startDt.getTime();
+
+      const newStartDate = format(day, "yyyy-MM-dd");
+      const newStartHour = Math.floor(slotMinutes / 60);
+      const newStartMin = slotMinutes % 60;
+      const newStartTime = `${newStartHour.toString().padStart(2, "0")}:${newStartMin.toString().padStart(2, "0")}`;
+
+      const newEndMs = new Date(`${newStartDate}T${newStartTime}:00`).getTime() + durationMs;
+      const newEnd = new Date(newEndMs);
+      const newEndDate = format(newEnd, "yyyy-MM-dd");
+      const newEndTime = format(newEnd, "HH:mm");
+
+      updateEvent.mutate({
+        eventId: draggedEvent.id,
+        payload: {
+          start: { dateTime: `${newStartDate}T${newStartTime}:00`, timeZone: CDMX_TZ },
+          end: { dateTime: `${newEndDate}T${newEndTime}:00`, timeZone: CDMX_TZ },
+        },
+      });
+      setDraggedEvent(null);
+    },
+    [draggedEvent, updateEvent]
+  );
+
   const { data: eventDetail, isLoading: eventDetailLoading } = useEventDetail(selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
