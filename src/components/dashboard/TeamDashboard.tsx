@@ -281,6 +281,9 @@ export function TeamDashboard() {
         </section>
       )}
 
+      {/* Monthly Performance by Celula */}
+      {isAdminOrManager && <TeamMonthlyPerformance />}
+
       <div className="grid gap-8 lg:grid-cols-2">
         {/* My Tasks */}
         <section>
