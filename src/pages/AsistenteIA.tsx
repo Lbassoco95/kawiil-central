@@ -1,21 +1,22 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { AppLayout } from "@/components/AppLayout";
-import { useChat } from "@/hooks/useChat";
+import { useChat, ChatConversation } from "@/hooks/useChat";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
-  Plus,
-  Send,
-  Trash2,
-  MessageSquare,
-  Sparkles,
-  Loader2,
-  PanelLeftClose,
-  PanelLeft,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub,
+  DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Plus, Send, Trash2, MessageSquare, Sparkles, Loader2,
+  PanelLeftClose, PanelLeft, FolderOpen, Folder, FolderPlus,
+  MoreHorizontal, Pencil, FolderInput, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { toast } from "sonner";
 
 const SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
@@ -24,23 +25,48 @@ const SUGGESTIONS = [
   "Redacta un correo profesional para un cliente sobre su declaración",
 ];
 
+const FOLDER_PRESETS = [
+  "📋 Proyectos",
+  "📊 Contabilidad",
+  "⚖️ Legal",
+  "📝 Redacción",
+  "🔍 Consultas",
+  "💡 Ideas",
+];
+
 const AsistenteIA = () => {
   const {
-    messages,
-    isStreaming,
-    conversations,
-    activeConversationId,
-    sendMessage,
-    loadConversation,
-    startNewChat,
-    deleteConversation,
+    messages, isStreaming, conversations, activeConversationId,
+    sendMessage, loadConversation, startNewChat, deleteConversation,
+    updateConversationFolder, renameConversation,
   } = useChat();
 
   const [input, setInput] = useState("");
   const [showSidebar, setShowSidebar] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["__none__"]));
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
+  const [showNewFolder, setShowNewFolder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const renameRef = useRef<HTMLInputElement>(null);
   const isMobile = useIsMobile();
+
+  // Group conversations by folder
+  const groupedConversations = useMemo(() => {
+    const groups: Record<string, ChatConversation[]> = {};
+    conversations.forEach((c) => {
+      const key = c.folder || "__none__";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
+    });
+    return groups;
+  }, [conversations]);
+
+  const folders = useMemo(() => {
+    return Object.keys(groupedConversations).filter(f => f !== "__none__").sort();
+  }, [groupedConversations]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -49,6 +75,13 @@ const AsistenteIA = () => {
   useEffect(() => {
     if (isMobile) setShowSidebar(false);
   }, [isMobile]);
+
+  useEffect(() => {
+    if (renamingId && renameRef.current) {
+      renameRef.current.focus();
+      renameRef.current.select();
+    }
+  }, [renamingId]);
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
@@ -71,6 +104,115 @@ const AsistenteIA = () => {
     ta.style.height = Math.min(ta.scrollHeight, 150) + "px";
   };
 
+  const toggleFolder = (folder: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folder)) next.delete(folder);
+      else next.add(folder);
+      return next;
+    });
+  };
+
+  const handleRenameSubmit = (id: string) => {
+    if (renameValue.trim()) {
+      renameConversation(id, renameValue.trim());
+    }
+    setRenamingId(null);
+  };
+
+  const handleCreateFolder = () => {
+    if (!newFolderName.trim()) return;
+    // Folders are created by assigning conversations to them
+    toast.success(`Carpeta "${newFolderName.trim()}" lista. Mueve conversaciones aquí.`);
+    setExpandedFolders(prev => new Set([...prev, newFolderName.trim()]));
+    setNewFolderName("");
+    setShowNewFolder(false);
+  };
+
+  const handleMoveToFolder = (convId: string, folder: string | null) => {
+    updateConversationFolder(convId, folder);
+    if (folder) {
+      setExpandedFolders(prev => new Set([...prev, folder]));
+    }
+    toast.success(folder ? `Movido a "${folder}"` : "Movido a conversaciones generales");
+  };
+
+  const renderConversation = (c: ChatConversation) => (
+    <div
+      key={c.id}
+      className={cn(
+        "group flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm cursor-pointer transition-colors",
+        activeConversationId === c.id
+          ? "bg-primary/10 text-foreground"
+          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+      )}
+      onClick={() => loadConversation(c.id)}
+    >
+      <MessageSquare className="h-3 w-3 shrink-0" />
+      {renamingId === c.id ? (
+        <Input
+          ref={renameRef}
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={() => handleRenameSubmit(c.id)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleRenameSubmit(c.id); if (e.key === "Escape") setRenamingId(null); }}
+          className="h-6 text-[12px] px-1 py-0 border-primary/30"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="truncate flex-1 text-[12px]">{c.title}</span>
+      )}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            onClick={(e) => e.stopPropagation()}
+            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity shrink-0"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem onClick={(e) => {
+            e.stopPropagation();
+            setRenamingId(c.id);
+            setRenameValue(c.title);
+          }}>
+            <Pencil className="h-3 w-3 mr-2" /> Renombrar
+          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <FolderInput className="h-3 w-3 mr-2" /> Mover a carpeta
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {c.folder && (
+                <DropdownMenuItem onClick={() => handleMoveToFolder(c.id, null)}>
+                  <FolderOpen className="h-3 w-3 mr-2" /> Sin carpeta
+                </DropdownMenuItem>
+              )}
+              {folders.filter(f => f !== c.folder).map(f => (
+                <DropdownMenuItem key={f} onClick={() => handleMoveToFolder(c.id, f)}>
+                  <Folder className="h-3 w-3 mr-2" /> {f}
+                </DropdownMenuItem>
+              ))}
+              {FOLDER_PRESETS.filter(f => !folders.includes(f) && f !== c.folder).map(f => (
+                <DropdownMenuItem key={f} onClick={() => handleMoveToFolder(c.id, f)}>
+                  <FolderPlus className="h-3 w-3 mr-2 text-muted-foreground" /> {f}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
+          >
+            <Trash2 className="h-3 w-3 mr-2" /> Eliminar
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+
   return (
     <AppLayout>
       <div className="flex h-[calc(100vh-4rem)] -mt-2">
@@ -81,35 +223,93 @@ const AsistenteIA = () => {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Conversaciones
               </span>
-              <Button size="sm" variant="ghost" onClick={startNewChat} className="h-7 w-7 p-0">
-                <Plus className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-0.5">
+                <Button size="sm" variant="ghost" onClick={() => setShowNewFolder(true)} className="h-7 w-7 p-0" title="Nueva carpeta">
+                  <FolderPlus className="h-3.5 w-3.5" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={startNewChat} className="h-7 w-7 p-0" title="Nueva conversación">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+
+            {showNewFolder && (
+              <div className="px-3 py-2 border-b border-border/30 flex gap-1.5">
+                <Input
+                  placeholder="Nombre de carpeta..."
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); if (e.key === "Escape") setShowNewFolder(false); }}
+                  className="h-7 text-xs"
+                  autoFocus
+                />
+                <Button size="sm" variant="default" className="h-7 w-7 p-0 shrink-0" onClick={handleCreateFolder} disabled={!newFolderName.trim()}>
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {conversations.length === 0 ? (
-                <p className="text-xs text-muted-foreground p-3 text-center">Sin conversaciones</p>
+                <div className="text-center py-8 px-3">
+                  <FolderOpen className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">Sin conversaciones</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                    Organiza tus chats en carpetas por proyecto o tema
+                  </p>
+                </div>
               ) : (
-                conversations.map((c) => (
-                  <div
-                    key={c.id}
-                    className={cn(
-                      "group flex items-center gap-2 rounded-lg px-3 py-2 text-sm cursor-pointer transition-colors",
-                      activeConversationId === c.id
-                        ? "bg-primary/10 text-foreground"
-                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-                    )}
-                    onClick={() => loadConversation(c.id)}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate flex-1 text-[13px]">{c.title}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))
+                <>
+                  {/* Folders */}
+                  {folders.map(folder => (
+                    <div key={folder}>
+                      <button
+                        className="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary/40 transition-colors"
+                        onClick={() => toggleFolder(folder)}
+                      >
+                        {expandedFolders.has(folder) ? (
+                          <ChevronDown className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-3 w-3 shrink-0" />
+                        )}
+                        <Folder className="h-3 w-3 shrink-0" />
+                        <span className="truncate flex-1 text-left">{folder}</span>
+                        <span className="text-[10px] text-muted-foreground/60">{groupedConversations[folder]?.length}</span>
+                      </button>
+                      {expandedFolders.has(folder) && (
+                        <div className="ml-3 pl-2 border-l border-border/30 space-y-0.5 mt-0.5">
+                          {groupedConversations[folder]?.map(renderConversation)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Ungrouped conversations */}
+                  {groupedConversations["__none__"]?.length > 0 && (
+                    <div>
+                      {folders.length > 0 && (
+                        <button
+                          className="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary/40 transition-colors"
+                          onClick={() => toggleFolder("__none__")}
+                        >
+                          {expandedFolders.has("__none__") ? (
+                            <ChevronDown className="h-3 w-3 shrink-0" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 shrink-0" />
+                          )}
+                          <MessageSquare className="h-3 w-3 shrink-0" />
+                          <span className="truncate flex-1 text-left">General</span>
+                          <span className="text-[10px] text-muted-foreground/60">{groupedConversations["__none__"]?.length}</span>
+                        </button>
+                      )}
+                      {(expandedFolders.has("__none__") || folders.length === 0) && (
+                        <div className={folders.length > 0 ? "ml-3 pl-2 border-l border-border/30 space-y-0.5 mt-0.5" : "space-y-0.5"}>
+                          {groupedConversations["__none__"]?.map(renderConversation)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -130,7 +330,7 @@ const AsistenteIA = () => {
             <Sparkles className="h-4 w-4 text-primary" />
             <h1 className="text-sm font-semibold text-foreground">Kawiil AI</h1>
             <span className="text-[10px] text-muted-foreground bg-primary/10 px-2 py-0.5 rounded-full">
-              OpenAI · Tool Calling
+              Asistente interno
             </span>
           </div>
 
@@ -155,6 +355,11 @@ const AsistenteIA = () => {
                       {s}
                     </button>
                   ))}
+                </div>
+                <div className="mt-8 text-center">
+                  <p className="text-xs text-muted-foreground/60">
+                    💡 Tip: Organiza tus conversaciones en carpetas por proyecto o tema para consultar fácilmente
+                  </p>
                 </div>
               </div>
             ) : (
