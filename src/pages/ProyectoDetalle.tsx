@@ -41,11 +41,13 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
 
 const ProyectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { data: project, isLoading } = useProjectDetail(id);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
 
