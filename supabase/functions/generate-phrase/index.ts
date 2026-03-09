@@ -162,9 +162,15 @@ FRASE: [la cita textual]
     }
 
     const aiData = await aiResp.json();
-    const phrase =
+    const rawPhrase =
       aiData.choices?.[0]?.message?.content?.trim() ||
-      "Cada día trae consigo la oportunidad de hacer algo extraordinario.";
+      "FRASE: Hazlo o no lo hagas, pero no lo intentes.\n— Yoda, Star Wars: El Imperio Contraataca";
+    
+    // Parse the structured format: "FRASE: ...\n— Author, Source"
+    let phrase = rawPhrase;
+    if (rawPhrase.startsWith("FRASE:")) {
+      phrase = rawPhrase.replace(/^FRASE:\s*/, "");
+    }
 
     // Save to cache using service role to bypass RLS for upsert
     const adminClient = createClient(
