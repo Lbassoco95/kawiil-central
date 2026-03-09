@@ -390,7 +390,8 @@ export function useUnreadEmailCount() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "emails", params: { folder: "inbox", top: 50 } },
       });
-      if (error) return 0;
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       const emails = data?.value || [];
       return emails.filter((e: any) => !e.isRead).length;
     },
