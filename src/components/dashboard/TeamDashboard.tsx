@@ -199,6 +199,38 @@ export function TeamDashboard() {
 
   const teamSummaryPrompt = useMemo(() => {
     const criticalProjects = projects?.filter((p: any) => p.criticality_level === "critico" || p.delay_category) ?? [];
+    
+    // Build project-specific context for active projects
+    const activeProjectDetails = projects?.filter((p) => p.status === "activo").map((p: any) => {
+      const pt = allTasks?.filter((t) => t.project_id === p.id) ?? [];
+      const ptPending = pt.filter(t => ["pendiente", "en_progreso", "en_revision"].includes(t.status));
+      const ptOverdue = ptPending.filter(t => t.due_date && new Date(t.due_date) < today);
+      
+      let areaDetail = "";
+      
+      // Lawsuit deadlines
+      if (p.area === "juicios" && p.lawsuit_details) {
+        const ld = p.lawsuit_details;
+        const deadlines = Array.isArray(ld.deadlines) ? ld.deadlines : [];
+        const upcoming = deadlines.filter((d: any) => !d.completed && d.date).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const overdueD = upcoming.filter((d: any) => new Date(d.date) < today);
+        if (upcoming.length > 0) {
+          areaDetail = ` | Próximas fechas: ${upcoming.slice(0, 2).map((d: any) => `${d.title} (${d.date})`).join(", ")}`;
+          if (overdueD.length > 0) areaDetail += ` ⚠️ ${overdueD.length} vencidas`;
+        }
+      }
+      
+      // Constitution/Gestoría progress
+      if ((p.area === "softlanding" || p.area === "constitucion_nacional" || p.area === "gestoria") && p.constitution_details) {
+        const phases = Array.isArray(p.constitution_details.phases) ? p.constitution_details.phases : [];
+        const allSteps = phases.flatMap((ph: any) => Array.isArray(ph.steps) ? ph.steps : []);
+        const done = allSteps.filter((s: any) => s.completed).length;
+        if (allSteps.length > 0) areaDetail = ` | Pasos: ${done}/${allSteps.length}`;
+      }
+      
+      return `  - ${p.name} (${SERVICE_LABELS[p.area as keyof typeof SERVICE_LABELS] || p.area || "sin área"}) — ${ptPending.length} pendientes, ${ptOverdue.length} vencidas${areaDetail}`;
+    }) ?? [];
+
     return `Genera un resumen ejecutivo breve del estado del equipo Kawiil para el dashboard. Usa español mexicano, tono profesional y cercano con emojis.
 
 DATOS:
@@ -211,17 +243,21 @@ DATOS:
 AVANCE POR CÉLULA:
 ${areaStats.map(a => `- ${a.label}: ${a.pct}% completado (${a.pending} pendientes, ${a.overdue} vencidas)`).join("\n")}
 
+PROYECTOS ACTIVOS CON DETALLE:
+${activeProjectDetails.slice(0, 10).join("\n") || "Ninguno"}
+
 PROYECTOS CRÍTICOS O CON ATRASO:
 ${criticalProjects.length > 0 ? criticalProjects.map((p: any) => `- ${p.name}: criticidad=${(p as any).criticality_level || "normal"}, motivo_atraso=${(p as any).delay_category || "ninguno"}`).join("\n") : "Ninguno"}
 
 INSTRUCCIONES:
 1. Resume en 3-5 puntos con emojis el estado general del equipo.
 2. Destaca células con mejor desempeño y las que necesitan atención.
-3. Si hay proyectos críticos o con atraso, menciónalos con contexto.
-4. Si hay muchas tareas vencidas en alguna célula, sugiere acción.
-5. Cierra con una observación motivadora.
-6. Máximo 120 palabras. Usa markdown.`;
-  }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects]);
+3. Si hay proyectos con audiencias o fechas clave próximas, menciónalos.
+4. Si hay proyectos críticos o con atraso, menciónalos con contexto.
+5. Si hay muchas tareas vencidas en alguna célula, sugiere acción.
+6. Cierra con una observación motivadora.
+7. Máximo 150 palabras. Usa markdown.`;
+  }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects, allTasks, today]);
 
   const tabClass = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm";
 
