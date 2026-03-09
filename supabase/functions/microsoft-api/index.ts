@@ -111,8 +111,8 @@ Deno.serve(async (req) => {
 
     if (tokenError || !tokenRow) {
       return new Response(JSON.stringify({ error: "Microsoft not connected", code: "NOT_CONNECTED" }), {
-        status: 404,
-        headers: corsHeaders,
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
