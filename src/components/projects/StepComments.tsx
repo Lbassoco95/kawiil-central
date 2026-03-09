@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/tasks/MentionTextarea";
 import {
-  Send, MessageSquare, Paperclip,
+  Send, MessageSquare, Paperclip, ScanLine,
   Link2, X, Loader2, ExternalLink,
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
