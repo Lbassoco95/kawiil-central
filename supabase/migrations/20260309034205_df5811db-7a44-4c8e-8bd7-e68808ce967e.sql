@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN dropbox_personal_folder text DEFAULT NULL;
