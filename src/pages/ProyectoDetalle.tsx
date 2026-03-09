@@ -260,7 +260,11 @@ const ProyectoDetalle = () => {
             ) : (
               <div className="divide-y divide-border/40">
                 {tasks.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between gap-3 py-3 px-1 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                    onClick={() => setSelectedTaskId(t.id)}
+                  >
                     <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
                     <div className="flex gap-1.5 shrink-0">
                       <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.priority}</span>
