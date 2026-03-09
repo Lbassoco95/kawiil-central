@@ -25,12 +25,18 @@ export function EmailView() {
   const [forwardTo, setForwardTo] = useState("");
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const { isAdminOrManager } = useUserRole();
+  const queryClient = useQueryClient();
 
   const { data: emails = [], isLoading } = useOutlookEmails("inbox", debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
   const markRead = useMarkEmailRead();
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedEmailId(null);
+    resetAction();
+  }, []);
 
   const handleOpenEmail = (email: any) => {
     setSelectedEmailId(email.id);
