@@ -153,7 +153,7 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       service_package: detectedPkg,
       extra_services: detectedPkg !== "individual" ? detectedExtras : [],
       individual_services: detectedPkg === "individual" ? (client.services || []) : [],
-      has_payroll: (client as any).has_payroll || false,
+      payroll_type: (client as any).payroll_type || "none",
       primary_area: client.primary_area || null,
       responsible_user_id: client.responsible_user_id || "",
       status: client.status,
