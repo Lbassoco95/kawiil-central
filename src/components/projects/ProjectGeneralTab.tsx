@@ -126,6 +126,7 @@ export function ProjectGeneralTab({ project }: Props) {
       const ld = (project as any).lawsuit_details;
       const stages = Array.isArray(ld.stages) ? ld.stages : [];
       const completedStages = stages.filter((s: any) => s.status === "completado");
+      const inProgressStages = stages.filter((s: any) => s.status === "en_progreso" || s.step_status === "en_progreso");
       const pendingStages = stages.filter((s: any) => s.status !== "completado" && s.status !== "no_aplica");
       
       const deadlines = Array.isArray(ld.deadlines) ? ld.deadlines : [];
@@ -144,7 +145,8 @@ DATOS DEL JUICIO:
 - Abogado Patrono: ${ld.lead_attorney || "no especificado"}
 - Abogado Sustituto: ${ld.substitute_attorney || "no especificado"}
 - Etapas procesales: ${completedStages.length} completadas / ${stages.length} total
-- Etapas pendientes: ${pendingStages.slice(0, 5).map((s: any) => `${s.label} (${s.status})`).join(", ") || "ninguna"}
+- En progreso: ${inProgressStages.length > 0 ? inProgressStages.map((s: any) => s.label).join(", ") : "ninguna"}
+- Etapas pendientes: ${pendingStages.slice(0, 5).map((s: any) => `${s.label} (${s.step_status || s.status})`).join(", ") || "ninguna"}
 
 TÉRMINOS Y FECHAS CLAVE (${deadlines.length} total, ${overdueDeadlines.length} vencidos):
 ${upcomingDeadlines.slice(0, 6).map((d: any) => {
