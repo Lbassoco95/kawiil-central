@@ -60,10 +60,8 @@ function DropboxLiveBrowser() {
   const { user } = useAuth();
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Mi carpeta";
 
-  const personalFolderKey = `dropbox_personal_folder_${user?.id}`;
-  const [personalFolderPath, setPersonalFolderPath] = useState<string | null>(() => {
-    try { return localStorage.getItem(personalFolderKey); } catch { return null; }
-  });
+  const [personalFolderPath, setPersonalFolderPath] = useState<string | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<DropboxEntry[]>([]);
@@ -79,25 +77,40 @@ function DropboxLiveBrowser() {
   const [renaming, setRenaming] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Picker state for when personal folder is not found
+  // Picker state for when personal folder is not set yet
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [pickerEntries, setPickerEntries] = useState<DropboxEntry[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+
+  // Load personal folder from profiles table on mount
+  useState(() => {
+    if (!user?.id) return;
+    supabase
+      .from("profiles")
+      .select("dropbox_personal_folder")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        const saved = data?.dropbox_personal_folder || null;
+        setPersonalFolderPath(saved);
+        setProfileLoaded(true);
+        // If no folder is saved, show the picker automatically
+        if (!saved) {
+          loadRootFoldersForPicker();
+        }
+      });
+  });
 
   const loadRootFoldersForPicker = async () => {
     setShowFolderPicker(true);
     setPickerLoading(true);
     try {
-      // Use the special action that lists the TRUE root namespace
-      // to show personal member folders (not the Kawiil Mx shared folder contents)
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { action: "list_personal_folders" },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const allEntries: DropboxEntry[] = data.entries || [];
-      // Show all folders at root level - these are the personal member folders + Kawiil Mx
-      // Exclude "Kawiil Mx" since that's the team shared folder, not a personal folder
       setPickerEntries(
         allEntries
           .filter((e) => e.type === "folder" && e.name !== "Kawiil Mx")
@@ -110,19 +123,19 @@ function DropboxLiveBrowser() {
     }
   };
 
-  const selectPersonalFolder = (entry: DropboxEntry) => {
-    try { localStorage.setItem(personalFolderKey, entry.path); } catch {}
+  const selectPersonalFolder = async (entry: DropboxEntry) => {
+    // Save to database permanently
+    if (user?.id) {
+      await supabase
+        .from("profiles")
+        .update({ dropbox_personal_folder: entry.path })
+        .eq("user_id", user.id);
+    }
     setPersonalFolderPath(entry.path);
     setShowFolderPicker(false);
     setPickerEntries([]);
     toast.success(`Carpeta personal configurada: ${entry.name}`);
     openFolder(entry.path);
-  };
-
-  const resetPersonalFolder = () => {
-    try { localStorage.removeItem(personalFolderKey); } catch {}
-    setPersonalFolderPath(null);
-    goToRoot();
   };
 
   const browse = async (path: string) => {
