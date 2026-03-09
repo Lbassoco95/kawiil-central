@@ -61,7 +61,15 @@ export function DropboxFilePicker({
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { path: targetPath, action: "list" },
       });
-      if (error) throw error;
+      if (error) {
+        const msg = data?.error || error.message || "Error desconocido";
+        if (msg.includes("path/not_found") || msg.includes("not_found")) {
+          toast.error("Carpeta no encontrada en Dropbox. Verifica que exista la ruta.");
+        } else {
+          toast.error("Error al navegar Dropbox: " + msg);
+        }
+        return;
+      }
       if (data.error) throw new Error(data.error);
       setEntries(data.entries || []);
       setCurrentPath(data.resolved_path || targetPath);
