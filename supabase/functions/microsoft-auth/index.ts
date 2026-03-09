@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
       "offline_access",
       "Calendars.ReadWrite",
       "Mail.Read",
+      "Mail.ReadWrite",
       "Mail.Send",
       "User.Read",
     ].join(" ");
