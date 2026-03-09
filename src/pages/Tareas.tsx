@@ -146,7 +146,7 @@ INSTRUCCIONES:
                       "flex items-center gap-3 text-sm cursor-pointer hover:bg-secondary/40 rounded-lg px-3 py-2.5 transition-colors",
                       isOverdue && "bg-destructive/5"
                     )}
-                    onClick={() => navigate(`/proyectos/${step.projectId}`)}
+                    onClick={() => navigate(`/proyectos/${step.projectId}?tab=${step.sourceType === "contabilidad" ? "contabilidad" : step.sourceType === "declaracion_anual" ? "declaracion_anual" : step.sourceType === "juicio" ? "juicio" : step.sourceType === "gestoria" ? "gestoria" : "general"}&step=${step.stepKey}`)}
                   >
                     <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">{step.sourceLabel}</span>
                     <span className="flex-1 truncate text-[13px] font-medium text-foreground">{step.stepLabel}</span>
