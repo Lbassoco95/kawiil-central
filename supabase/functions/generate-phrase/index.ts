@@ -35,25 +35,27 @@ serve(async (req) => {
       });
 
     const userId = claimsData.claims.sub as string;
-    const { mood_score, time_of_day } = await req.json();
+    const { mood_score, time_of_day, force_regenerate } = await req.json();
 
     // Check if we already have a phrase for this user/date/time
     const todayStr = new Date().toISOString().split("T")[0];
-    const { data: existing } = await supabase
-      .from("personalized_phrases")
-      .select("phrase")
-      .eq("user_id", userId)
-      .eq("phrase_date", todayStr)
-      .eq("time_of_day", time_of_day || "morning")
-      .maybeSingle();
+    if (!force_regenerate) {
+      const { data: existing } = await supabase
+        .from("personalized_phrases")
+        .select("phrase")
+        .eq("user_id", userId)
+        .eq("phrase_date", todayStr)
+        .eq("time_of_day", time_of_day || "morning")
+        .maybeSingle();
 
-    if (existing?.phrase) {
-      return new Response(
-        JSON.stringify({ phrase: existing.phrase, cached: true }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      if (existing?.phrase) {
+        return new Response(
+          JSON.stringify({ phrase: existing.phrase, cached: true }),
+          {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
     // Fetch user preferences
