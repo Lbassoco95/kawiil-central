@@ -44,6 +44,7 @@ const stepStatusLabels: Record<string, string> = {
 const Tareas = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  useTasksRealtime();
   const [area, setArea] = useState("todas");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);

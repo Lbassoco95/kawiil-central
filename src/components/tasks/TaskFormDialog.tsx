@@ -11,6 +11,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, Link } from "lucide-react";
+import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 
 interface Props {
   open: boolean;
