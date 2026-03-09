@@ -25,6 +25,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnnualStepDetailRow } from "./AnnualStepDetailRow";
+import { CriticalityDelayCard } from "./CriticalityDelayCard";
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; className: string }> = {
   pendiente: { label: "Pendiente", icon: Clock, className: "bg-muted text-muted-foreground" },
