@@ -295,6 +295,10 @@ export function useUpdateClient() {
           projectsToCreate.push({ name: `Cumplimiento — ${data.name}`, area: "cumplimiento" });
         }
 
+        if (addedServices.includes("representacion") && !existingAreas.includes("representacion")) {
+          projectsToCreate.push({ name: `Representación - ${data.name}`, area: "representacion" });
+        }
+
         for (const proj of projectsToCreate) {
           await supabase.from("projects").insert({
             name: proj.name,
