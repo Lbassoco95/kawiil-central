@@ -60,8 +60,12 @@ function DropboxLiveBrowser() {
   const { user } = useAuth();
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Mi carpeta";
 
-  // "ROOT" is a virtual state showing two root folders
-  const [currentPath, setCurrentPath] = useState<string | null>(null); // null = root view
+  const personalFolderKey = `dropbox_personal_folder_${user?.id}`;
+  const [personalFolderPath, setPersonalFolderPath] = useState<string | null>(() => {
+    try { return localStorage.getItem(personalFolderKey); } catch { return null; }
+  });
+
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<DropboxEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [pathHistory, setPathHistory] = useState<string[]>([]);
@@ -75,6 +79,49 @@ function DropboxLiveBrowser() {
   const [renaming, setRenaming] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Picker state for when personal folder is not found
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [pickerEntries, setPickerEntries] = useState<DropboxEntry[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+
+  const loadRootFoldersForPicker = async () => {
+    setShowFolderPicker(true);
+    setPickerLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
+        body: { path: "", action: "list" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const allEntries: DropboxEntry[] = data.entries || [];
+      // Show only folders, exclude "Kawiil Mx" since that's the team folder
+      setPickerEntries(
+        allEntries
+          .filter((e) => e.type === "folder" && e.name !== "Kawiil Mx")
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+    } catch (e: any) {
+      toast.error("Error al cargar carpetas: " + (e.message || "Error desconocido"));
+    } finally {
+      setPickerLoading(false);
+    }
+  };
+
+  const selectPersonalFolder = (entry: DropboxEntry) => {
+    try { localStorage.setItem(personalFolderKey, entry.path); } catch {}
+    setPersonalFolderPath(entry.path);
+    setShowFolderPicker(false);
+    setPickerEntries([]);
+    toast.success(`Carpeta personal configurada: ${entry.name}`);
+    openFolder(entry.path);
+  };
+
+  const resetPersonalFolder = () => {
+    try { localStorage.removeItem(personalFolderKey); } catch {}
+    setPersonalFolderPath(null);
+    goToRoot();
+  };
+
   const browse = async (path: string) => {
     if (!path || path.trim() === "" || path === "/") {
       toast.error("Ruta de carpeta inválida");
@@ -86,20 +133,21 @@ function DropboxLiveBrowser() {
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { path, action: "list" },
       });
-      // supabase.functions.invoke returns error for non-2xx, but data may still contain details
       if (error) {
         const errorMsg = data?.error || error.message || "";
         if (errorMsg.includes("path/not_found") || errorMsg.includes("not_found") || error.message?.includes("non-2xx")) {
-          toast.error("Carpeta no encontrada en Dropbox. Verifica que la carpeta exista o contacta al administrador.");
+          toast.info("No se encontró la carpeta. Selecciona tu carpeta personal de la lista.");
           goToRoot();
+          loadRootFoldersForPicker();
           return;
         }
         throw error;
       }
       if (data?.error) {
         if (data.error.includes("path/not_found") || data.error.includes("not_found")) {
-          toast.error("Carpeta no encontrada en Dropbox. Verifica que la carpeta exista o contacta al administrador.");
+          toast.info("No se encontró la carpeta. Selecciona tu carpeta personal de la lista.");
           goToRoot();
+          loadRootFoldersForPicker();
           return;
         }
         throw new Error(data.error);
@@ -231,15 +279,17 @@ function DropboxLiveBrowser() {
   const folders = entries.filter((e) => e.type === "folder").sort((a, b) => a.name.localeCompare(b.name));
   const files = entries.filter((e) => e.type === "file").sort((a, b) => a.name.localeCompare(b.name));
 
-  // Root view: show two folders
   const isRoot = currentPath === null;
 
-  // Build breadcrumbs
   const breadcrumbs: string[] = [];
   if (currentPath) {
     const parts = currentPath.split("/").filter(Boolean);
     breadcrumbs.push(...parts);
   }
+
+  const personalLabel = personalFolderPath
+    ? personalFolderPath.split("/").filter(Boolean).pop() || userName
+    : userName;
 
   return (
     <div className="space-y-4">
@@ -293,18 +343,69 @@ function DropboxLiveBrowser() {
         )}
       </div>
 
+      {/* Folder Picker Dialog */}
+      {showFolderPicker && (
+        <Card className="border-dashed border-2 border-primary/30">
+          <CardContent className="py-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Selecciona tu carpeta personal</p>
+                <p className="text-xs text-muted-foreground">No se encontró tu carpeta automáticamente. Elige la correcta de la lista.</p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setShowFolderPicker(false)}>
+                Cancelar
+              </Button>
+            </div>
+            <div className="border rounded-lg divide-y max-h-[300px] overflow-y-auto">
+              {pickerLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : pickerEntries.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-8">No se encontraron carpetas</p>
+              ) : (
+                pickerEntries.map((entry) => (
+                  <button
+                    key={entry.id}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+                    onClick={() => selectPersonalFolder(entry)}
+                  >
+                    <Folder className="h-5 w-5 text-amber-500 shrink-0" />
+                    <span className="text-sm font-medium truncate">{entry.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Content */}
       <div className="border rounded-lg divide-y">
         {isRoot ? (
           <>
-            <button
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-              onClick={() => openFolder(`/${userName}`)}
-            >
-              <Folder className="h-5 w-5 text-amber-500 shrink-0" />
-              <span className="text-sm font-medium truncate flex-1">{userName}</span>
-              <Badge variant="secondary" className="text-xs">Personal</Badge>
-            </button>
+            <div className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left">
+              <button
+                className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                onClick={() => openFolder(personalFolderPath || `/${userName}`)}
+              >
+                <Folder className="h-5 w-5 text-amber-500 shrink-0" />
+                <span className="text-sm font-medium truncate flex-1">{personalLabel}</span>
+                <Badge variant="secondary" className="text-xs">Personal</Badge>
+              </button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                title="Cambiar carpeta personal"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  loadRootFoldersForPicker();
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
             <button
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
               onClick={() => openFolder("/Kawiil Mx")}
