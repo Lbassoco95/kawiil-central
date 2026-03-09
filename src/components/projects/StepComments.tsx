@@ -85,10 +85,11 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         const path = `comment-attachments/${Date.now()}_${file.name}`;
         const { error } = await supabase.storage.from("documents").upload(path, file);
         if (error) throw error;
-        const { data: urlData } = supabase.storage.from("documents").getPublicUrl(path);
+        const { data: urlData } = await supabase.storage.from("documents").createSignedUrl(path, 60 * 60 * 24 * 365);
+        if (!urlData?.signedUrl) throw new Error("No se pudo generar URL");
         setAttachments((prev) => [
           ...prev,
-          { type: "image", name: file.name, url: urlData.publicUrl },
+          { type: "image", name: file.name, url: urlData.signedUrl, path },
         ]);
       }
     } catch (e: any) {
