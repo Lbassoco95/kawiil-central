@@ -68,6 +68,7 @@ export function UnifiedStepRow({
   const [timerRunning, setTimerRunning] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(step.time_spent_seconds || 0);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
+  const [localLabel, setLocalLabel] = useState(step.label);
   const [localDueDate, setLocalDueDate] = useState<Date | undefined>(step.due_date ? new Date(step.due_date) : undefined);
   const [localNotes, setLocalNotes] = useState(step.notes || "");
   const [localAssignee, setLocalAssignee] = useState<string | null>(step.assigned_to || null);
@@ -90,6 +91,7 @@ export function UnifiedStepRow({
 
   useEffect(() => {
     setLocalStatus((step.step_status as StepStatus) || "pendiente");
+    setLocalLabel(step.label);
     setLocalDueDate(step.due_date ? new Date(step.due_date) : undefined);
     setLocalNotes(step.notes || "");
     setLocalAssignee(step.assigned_to || null);
@@ -127,6 +129,7 @@ export function UnifiedStepRow({
 
   const handleSave = () => {
     const updates: Partial<AccountingStep> = {
+      label: localLabel,
       step_status: localStatus,
       due_date: localDueDate ? localDueDate.toISOString() : null,
       notes: localNotes || null,
@@ -240,7 +243,18 @@ export function UnifiedStepRow({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 ml-7 space-y-3 pb-1">
-            {/* Timer */}
+            {/* Editable name */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Nombre del paso</label>
+              <Input
+                className="text-sm h-8"
+                value={localLabel}
+                onChange={(e) => { setLocalLabel(e.target.value); markChanged(); }}
+                placeholder="Nombre del paso..."
+              />
+            </div>
+
+
             {showTimer && (
               <div className="flex items-center gap-3 rounded-md border border-border/50 bg-background px-3 py-2">
                 <Timer className="h-4 w-4 text-muted-foreground" />
