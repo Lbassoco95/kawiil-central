@@ -469,38 +469,38 @@ serve(async (req) => {
 
     if (action === 'list') {
       const requestedPath = typeof path === 'string' ? path.trim() : '';
-      const isIdPath = requestedPath.startsWith('id:');
+      const scoped = parseScopedPath(requestedPath);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
 
       // When browsing root, default to the shared team folder "Kawiil Mx"
       // to prevent users from seeing other members' personal folders
-      const browsePath = (!requestedPath || requestedPath === '/') ? '/Kawiil Mx' : requestedPath;
+      const browsePath = (!scoped.path || scoped.path === '/')
+        ? (scoped.namespaceId ? '' : '/Kawiil Mx')
+        : scoped.path;
 
-      let data: any;
-      let resolvedPath: string;
+      const { data, resolvedPath } = await resolvePathAndList(scopedHeaders, browsePath);
+      const entries = (data.entries || []).map((entry: any) => {
+        const entryPath = entry.path_display || '';
+        return {
+          id: entry.id,
+          name: entry.name,
+          path: scoped.namespaceId ? buildScopedPath(scoped.namespaceId, entryPath) : entryPath,
+          type: entry['.tag'],
+          size: entry.size || null,
+          modified: entry.client_modified || null,
+        };
+      });
 
-      if (isIdPath) {
-        const byIdResult = await listFolderRequest(dbxHeaders, { path: requestedPath });
-        if (!byIdResult.ok) {
-          throw new Error(`Dropbox API error [${byIdResult.status}]: ${byIdResult.raw}`);
-        }
-        data = byIdResult.data;
-        resolvedPath = requestedPath;
-      } else {
-        const resolved = await resolvePathAndList(dbxHeaders, browsePath);
-        data = resolved.data;
-        resolvedPath = resolved.resolvedPath;
-      }
+      const responseResolvedPath = scoped.namespaceId
+        ? buildScopedPath(scoped.namespaceId, resolvedPath)
+        : resolvedPath;
 
-      const entries = (data.entries || []).map((entry: any) => ({
-        id: entry.id,
-        name: entry.name,
-        path: entry.path_display || `id:${entry.id}`,
-        type: entry['.tag'],
-        size: entry.size || null,
-        modified: entry.client_modified || null,
-      }));
-
-      return new Response(JSON.stringify({ entries, has_more: data.has_more, resolved_path: resolvedPath }), {
+      return new Response(JSON.stringify({ entries, has_more: data.has_more, resolved_path: responseResolvedPath }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
