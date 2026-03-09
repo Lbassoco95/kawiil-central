@@ -24,21 +24,22 @@ export function AIDescriptionButton({ title, onGenerated }: Props) {
         body: {
           messages: [
             {
-              role: "system",
-              content:
-                "Eres un asistente de redacción para un despacho contable y legal. Tu tarea es generar una descripción clara, profesional y concisa para una tarea laboral. Responde SOLO con la descripción, sin encabezados ni explicaciones adicionales. Máximo 3 oraciones.",
-            },
-            {
               role: "user",
-              content: `Genera una descripción profesional para la siguiente tarea: "${title}"`,
+              content: `Actúa como asistente de redacción de un despacho contable y legal. Genera SOLO una descripción profesional y concisa (máximo 3 oraciones) para esta tarea laboral, sin encabezados ni explicaciones: "${title}"`,
             },
           ],
+          simple: true,
         },
       });
 
       if (error) throw error;
 
-      const text = data?.choices?.[0]?.message?.content || data?.content || data?.text;
+      const text =
+        data?.choices?.[0]?.message?.content ||
+        data?.content ||
+        data?.reply ||
+        (typeof data === "string" ? data : null);
+
       if (text) {
         onGenerated(text.trim());
         toast.success("Descripción generada");
