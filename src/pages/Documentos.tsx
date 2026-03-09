@@ -400,28 +400,14 @@ function DropboxLiveBrowser() {
       <div className="border rounded-lg divide-y">
         {isRoot ? (
           <>
-            <div className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left">
-              <button
-                className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                onClick={() => openFolder(personalFolderPath || `/${userName}`)}
-              >
-                <Folder className="h-5 w-5 text-amber-500 shrink-0" />
-                <span className="text-sm font-medium truncate flex-1">{personalLabel}</span>
-                <Badge variant="secondary" className="text-xs">Personal</Badge>
-              </button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                title="Cambiar carpeta personal"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  loadRootFoldersForPicker();
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            <button
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+              onClick={() => openFolder(personalFolderPath || `/${userName}`)}
+            >
+              <Folder className="h-5 w-5 text-amber-500 shrink-0" />
+              <span className="text-sm font-medium truncate flex-1">{personalLabel}</span>
+              <Badge variant="secondary" className="text-xs">Personal</Badge>
+            </button>
             <button
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
               onClick={() => openFolder("/Kawiil Mx")}
