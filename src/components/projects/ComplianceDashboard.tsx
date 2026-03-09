@@ -419,6 +419,9 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath }: 
         })}
       </div>
 
+      {/* Comments */}
+      <ProjectCommentsTab projectId={projectId} />
+
       {/* Generator modal for re-generation if needed */}
       <ComplianceTaskGeneratorModal
         open={generatorOpen}

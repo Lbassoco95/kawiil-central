@@ -906,6 +906,9 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Comments */}
+      <ProjectCommentsTab projectId={projectId} />
     </div>
   );
 }

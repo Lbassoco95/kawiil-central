@@ -187,6 +187,9 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
           );
         })}
       </div>
+
+      {/* Comments */}
+      <ProjectCommentsTab projectId={projectId} />
     </div>
   );
 }
