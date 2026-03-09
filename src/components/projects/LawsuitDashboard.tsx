@@ -49,6 +49,7 @@ import { formatMX } from "@/lib/dateUtils";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
+import { ProjectCommentsTab } from "./ProjectCommentsTab";
 import { useProfiles } from "@/hooks/useTasks";
 import { UserOrTextMulti } from "./UserOrTextInput";
 
