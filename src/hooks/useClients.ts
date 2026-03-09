@@ -127,10 +127,29 @@ export function useCreateClient() {
   });
 }
 
-export const PAYROLL_OBLIGATION_STEPS = [
+export const NOMINA_OBLIGATION_STEPS = [
   { key: "decl_isr_retenciones_nomina", label: "Declaración: ISR Retenciones (nómina)" },
   { key: "decl_imss", label: "Declaración: IMSS" },
   { key: "decl_isn", label: "Declaración: ISN" },
+];
+
+export const ASIMILADOS_OBLIGATION_STEPS = [
+  { key: "decl_isr_retenciones_asimilados", label: "Declaración: ISR Retenciones (asimilados)" },
+];
+
+/** Get the payroll obligation steps based on the payroll type */
+export function getPayrollSteps(payrollType: string | null): { key: string; label: string }[] {
+  if (!payrollType) return [];
+  if (payrollType === "nomina") return NOMINA_OBLIGATION_STEPS;
+  if (payrollType === "asimilados") return ASIMILADOS_OBLIGATION_STEPS;
+  if (payrollType === "ambos") return [...NOMINA_OBLIGATION_STEPS, ...ASIMILADOS_OBLIGATION_STEPS];
+  return [];
+}
+
+/** All possible payroll step keys for removal */
+const ALL_PAYROLL_KEYS = [
+  ...NOMINA_OBLIGATION_STEPS.map((s) => s.key),
+  ...ASIMILADOS_OBLIGATION_STEPS.map((s) => s.key),
 ];
 
 export function useUpdateClient() {
