@@ -323,12 +323,31 @@ export function useMarkEmailRead() {
       return data;
     },
     onMutate: async (messageId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
+      await queryClient.cancelQueries({ queryKey: ["unread-email-count"] });
+
+      // Optimistically update email list
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
         if (!Array.isArray(old)) return old;
         return old.map((e: any) => (e.id === messageId ? { ...e, isRead: true } : e));
       });
+
+      // Optimistically decrement unread count
+      queryClient.setQueryData(["unread-email-count"], (old: any) => {
+        return typeof old === "number" && old > 0 ? old - 1 : 0;
+      });
     },
     onSuccess: () => {
+      // Refetch after a short delay to sync with server
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+        queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      }, 2000);
+    },
+    onError: () => {
+      // Rollback on error
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
     },
   });
