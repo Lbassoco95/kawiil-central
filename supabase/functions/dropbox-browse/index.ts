@@ -735,7 +735,14 @@ serve(async (req) => {
       // Create an empty Office document in Dropbox and return a share link
       const docType = body.doc_type || 'docx'; // docx, xlsx, pptx
       const docName = body.doc_name || `Documento.${docType}`;
-      const folderPath = body.folder_path || path;
+      const scoped = parseScopedPath(body.folder_path || path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+      const folderPath = scoped.path;
 
       if (!folderPath) {
         throw new Error('folder_path is required for create_office_doc');
@@ -758,7 +765,12 @@ serve(async (req) => {
       if (adminMemberId) {
         uploadHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
       }
-      if (rootNamespaceId) {
+      if (scoped.namespaceId) {
+        uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
+          '.tag': 'namespace_id',
+          namespace_id: scoped.namespaceId,
+        });
+      } else if (rootNamespaceId) {
         uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
           '.tag': 'root',
           root: rootNamespaceId,
@@ -778,13 +790,14 @@ serve(async (req) => {
 
       const uploadResult = await uploadRes.json();
       const uploadedPath = uploadResult.path_display || fullPath;
+      const responsePath = scoped.namespaceId ? buildScopedPath(scoped.namespaceId, uploadedPath) : uploadedPath;
 
       // Get a shared link for the file
       let shareUrl = '';
       try {
         const linkRes = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
           method: 'POST',
-          headers: dbxHeaders,
+          headers: scopedHeaders,
           body: JSON.stringify({ path: uploadedPath }),
         });
         if (linkRes.ok) {
@@ -795,7 +808,7 @@ serve(async (req) => {
           if (linkErr?.error?.['.tag'] === 'shared_link_already_exists') {
             const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
               method: 'POST',
-              headers: dbxHeaders,
+              headers: scopedHeaders,
               body: JSON.stringify({ path: uploadedPath, direct_only: true }),
             });
             if (listRes.ok) {
@@ -811,7 +824,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         name: uploadResult.name,
-        path: uploadedPath,
+        path: responsePath,
         url: shareUrl,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
