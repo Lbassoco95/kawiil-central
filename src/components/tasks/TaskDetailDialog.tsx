@@ -234,7 +234,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
             )}
 
             {/* Criticality & Delay tracking */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg border bg-muted/20">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 rounded-lg border bg-muted/20">
               <div>
                 <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
                 <Select
