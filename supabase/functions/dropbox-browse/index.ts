@@ -169,6 +169,45 @@ function getDropboxHeaders(token: string, rootNamespaceId: string | null, adminM
   return headers;
 }
 
+function parseScopedPath(rawPath: string): { namespaceId: string | null; path: string } {
+  if (!rawPath?.startsWith('memberns:')) {
+    return { namespaceId: null, path: rawPath || '' };
+  }
+
+  const payload = rawPath.slice('memberns:'.length);
+  const separatorIndex = payload.indexOf(':');
+  if (separatorIndex === -1) {
+    return { namespaceId: payload || null, path: '' };
+  }
+
+  const namespaceId = payload.slice(0, separatorIndex) || null;
+  const scopedPath = payload.slice(separatorIndex + 1);
+  return { namespaceId, path: scopedPath === '/' ? '' : scopedPath };
+}
+
+function buildScopedPath(namespaceId: string, scopedPath: string) {
+  const normalized = scopedPath || '';
+  return `memberns:${namespaceId}:${normalized}`;
+}
+
+function getScopedDropboxHeaders(
+  token: string,
+  adminMemberId: string | null,
+  defaultRootNamespaceId: string | null,
+  namespaceId: string | null,
+): Record<string, string> {
+  const headers = getDropboxHeaders(token, defaultRootNamespaceId, adminMemberId);
+
+  if (namespaceId) {
+    headers['Dropbox-API-Path-Root'] = JSON.stringify({
+      '.tag': 'namespace_id',
+      namespace_id: namespaceId,
+    });
+  }
+
+  return headers;
+}
+
 function normalizeName(value: string): string {
   return value
     .normalize('NFD')
