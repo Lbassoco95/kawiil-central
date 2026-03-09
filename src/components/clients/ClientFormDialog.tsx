@@ -105,7 +105,7 @@ const clientSchema = z.object({
   service_package: z.enum(["softlanding", "backoffice", "individual"] as const),
   extra_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
   individual_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
-  has_payroll: z.boolean().default(false),
+  payroll_type: z.enum(["none", "nomina", "asimilados", "ambos"] as const).default("none"),
   primary_area: z.enum(ALL_SERVICE_AREAS).optional().nullable(),
   responsible_user_id: z.string().uuid().optional().nullable().or(z.literal("")),
   status: z.enum(["activo", "inactivo", "prospecto"] as const),
