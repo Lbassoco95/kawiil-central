@@ -174,6 +174,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
       await supabase
         .from("tasks")
         .update({
+          title: localTitle,
           status: localStatus as any,
           due_date: localDueDate ? localDueDate.toISOString().split("T")[0] : null,
           description: localNotes || null,
