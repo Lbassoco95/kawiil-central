@@ -348,10 +348,11 @@ export function useMarkEmailRead() {
         queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
       }, 2000);
     },
-    onError: () => {
+    onError: (err: Error) => {
       // Rollback on error
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      toast.error("Error al marcar correo como leído: " + err.message);
     },
   });
 }
