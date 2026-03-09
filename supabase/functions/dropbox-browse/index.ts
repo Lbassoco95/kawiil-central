@@ -434,8 +434,8 @@ serve(async (req) => {
             return {
               id: memberFolderId,
               name,
-              // Use folder ID (stable and resolvable) instead of inferred display-name path
-              path: `id:${memberFolderId}`,
+              // Use member namespace so subsequent list/get_link/upload calls can resolve correctly
+              path: buildScopedPath(memberFolderId, ''),
               type: 'folder',
               size: null,
               modified: null,
