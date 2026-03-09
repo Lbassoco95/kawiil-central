@@ -76,16 +76,19 @@ export function useCreateClient() {
         const projectsToCreate: Array<{ name: string; area: string; constitution_details?: any }> = [];
 
         // Contabilidad project for backoffice/softlanding (with constitution for softlanding)
-        if (services.includes("contabilidad") || isSoftlanding) {
+        if (isSoftlanding) {
+          projectsToCreate.push({
+            name: `Softlanding - ${data.name}`,
+            area: "softlanding",
+            constitution_details: {
+              steps: DEFAULT_CONSTITUTION_STEPS,
+              has_foreign_partners: true,
+            },
+          });
+        } else if (services.includes("contabilidad")) {
           projectsToCreate.push({
             name: `Contabilidad - ${data.name}`,
-            area: isSoftlanding ? "softlanding" : "contabilidad",
-            ...(isSoftlanding ? {
-              constitution_details: {
-                steps: DEFAULT_CONSTITUTION_STEPS,
-                has_foreign_partners: true,
-              },
-            } : {}),
+            area: "contabilidad",
           });
         }
 
@@ -263,14 +266,15 @@ export function useUpdateClient() {
 
         const projectsToCreate: Array<{ name: string; area: string }> = [];
 
-        if (
-          (addedServices.includes("contabilidad") || addedServices.includes("softlanding")) &&
-          !existingAreas.includes("contabilidad") &&
-          !existingAreas.includes("softlanding")
-        ) {
+        if (addedServices.includes("softlanding") && !existingAreas.includes("softlanding")) {
+          projectsToCreate.push({
+            name: `Softlanding - ${data.name}`,
+            area: "softlanding",
+          });
+        } else if (addedServices.includes("contabilidad") && !existingAreas.includes("contabilidad") && !existingAreas.includes("softlanding")) {
           projectsToCreate.push({
             name: `Contabilidad - ${data.name}`,
-            area: addedServices.includes("softlanding") ? "softlanding" : "contabilidad",
+            area: "contabilidad",
           });
         }
 
