@@ -16,7 +16,7 @@ interface Props {
   projectName?: string;
 }
 
-export function ProjectCommentsTab({ projectId, projectName }: Props) {
+export function ProjectCommentsTab({ projectId, projectName = "un proyecto" }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: orgProfiles } = useProfiles();
