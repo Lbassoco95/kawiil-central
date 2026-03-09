@@ -686,18 +686,26 @@ serve(async (req) => {
     }
 
     if (action === 'rename') {
-      const fromPath = body.from_path || path;
-      const toPath = body.to_path;
-      if (!fromPath || !toPath) {
+      const fromScoped = parseScopedPath(body.from_path || path);
+      const toScoped = parseScopedPath(body.to_path || '');
+      const namespaceId = fromScoped.namespaceId || toScoped.namespaceId;
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        namespaceId,
+      );
+
+      if (!fromScoped.path || !toScoped.path) {
         throw new Error('from_path and to_path are required for rename');
       }
 
       const response = await fetch('https://api.dropboxapi.com/2/files/move_v2', {
         method: 'POST',
-        headers: dbxHeaders,
+        headers: scopedHeaders,
         body: JSON.stringify({
-          from_path: fromPath,
-          to_path: toPath,
+          from_path: fromScoped.path,
+          to_path: toScoped.path,
           autorename: false,
           allow_ownership_transfer: false,
         }),
@@ -710,11 +718,14 @@ serve(async (req) => {
 
       const result = await response.json();
       const metadata = result.metadata || {};
+      const responsePath = namespaceId
+        ? buildScopedPath(namespaceId, metadata.path_display || toScoped.path)
+        : (metadata.path_display || toScoped.path);
 
       return new Response(JSON.stringify({
         success: true,
         name: metadata.name,
-        path: metadata.path_display || toPath,
+        path: responsePath,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
