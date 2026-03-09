@@ -49,13 +49,13 @@ const TASK_PRIORITY_STYLES: Record<TaskPriority, string> = {
   baja: "bg-muted text-muted-foreground",
 };
 
-const tabs = [
+const tabs: { key: string; label: string; icon?: typeof Shield }[] = [
   { key: "general", label: "General" },
   { key: "cumplimiento", label: "Cumplimiento", icon: Shield },
   { key: "proyectos", label: "Proyectos" },
   { key: "tareas", label: "Tareas" },
   { key: "documentos", label: "Documentos" },
-] as const;
+];
 
 const ClienteDetalle = () => {
   const { id } = useParams<{ id: string }>();
