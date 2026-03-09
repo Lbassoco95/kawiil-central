@@ -10,6 +10,7 @@ import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, Arrow
 import { useTasks, useDeleteTask } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
+import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -43,6 +44,7 @@ const stepStatusLabels: Record<string, string> = {
 const Tareas = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  useTasksRealtime();
   const [area, setArea] = useState("todas");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);

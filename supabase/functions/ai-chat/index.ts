@@ -431,7 +431,7 @@ serve(async (req) => {
       .single();
 
     const orgId = profile?.organization_id;
-    const { messages } = await req.json();
+    const { messages, simple } = await req.json();
 
     const systemPrompt = `Eres **Kawiil AI**, el asistente inteligente INTERNO de Kawiil — un despacho contable y legal en México que opera como un equipo unido de profesionales llamados "Kawiilers".
 
@@ -504,7 +504,7 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
 - Cuando listes tareas, incluye: nombre, prioridad, fecha límite, cliente (si aplica).`;
 
     // --- AI Provider abstraction: OpenAI primary, Lovable AI fallback ---
-    async function callAI(aiMessages: any[]): Promise<{ ok: boolean; status: number; data?: any; errorText?: string; provider: string }> {
+    async function callAI(aiMessages: any[], useTools = true): Promise<{ ok: boolean; status: number; data?: any; errorText?: string; provider: string }> {
       // Try OpenAI first
       if (OPENAI_API_KEY) {
         try {
@@ -517,7 +517,7 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
             body: JSON.stringify({
               model: "gpt-4o-mini",
               messages: aiMessages,
-              tools,
+              ...(useTools ? { tools } : {}),
               stream: false,
             }),
           });
@@ -547,7 +547,7 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
           body: JSON.stringify({
             model: "google/gemini-3-flash-preview",
             messages: aiMessages,
-            tools,
+            ...(useTools ? { tools } : {}),
             stream: false,
           }),
         });
@@ -562,6 +562,20 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
       }
 
       return { ok: false, status: 500, errorText: "No AI provider available", provider: "none" };
+    }
+
+    // Simple mode: no tools, return JSON directly
+    if (simple) {
+      const result = await callAI([...messages], false);
+      if (!result.ok) {
+        return new Response(JSON.stringify({ error: "Error del servicio de IA" }), {
+          status: result.status || 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const content = result.data.choices?.[0]?.message?.content || "";
+      return new Response(JSON.stringify({ content }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Tool calling loop

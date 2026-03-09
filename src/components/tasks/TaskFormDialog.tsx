@@ -11,6 +11,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, Link } from "lucide-react";
+import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 
 interface Props {
   open: boolean;
@@ -135,7 +136,10 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
           </div>
 
           <div>
-            <Label>Descripción</Label>
+            <div className="flex items-center justify-between">
+              <Label>Descripción</Label>
+              <AIDescriptionButton title={title} onGenerated={setDescription} />
+            </div>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalles adicionales..." rows={3} />
           </div>
 

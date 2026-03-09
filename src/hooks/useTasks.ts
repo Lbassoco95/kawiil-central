@@ -192,6 +192,10 @@ export function useCreateTask() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project"] });
+      queryClient.invalidateQueries({ queryKey: ["task"] });
       toast.success("Tarea creada exitosamente");
 
       if (data) {
@@ -284,6 +288,9 @@ export function useUpdateTask() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project"] });
       logActivity({ entityType: "task", entityId: vars.id, action: "updated", details: { changes: Object.keys(vars).filter(k => k !== "id") } });
 
       if (vars.status) {
@@ -305,6 +312,10 @@ export function useDeleteTask() {
     },
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project"] });
+      queryClient.invalidateQueries({ queryKey: ["task"] });
       logActivity({ entityType: "task", entityId: id, action: "deleted" });
       toast.success("Tarea eliminada");
     },
