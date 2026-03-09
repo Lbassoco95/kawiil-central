@@ -50,7 +50,7 @@ export function ProjectCommentsTab({ projectId, projectName }: Props) {
   });
 
   const addComment = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ content, mentionIds }: { content: string; mentionIds: string[] }) => {
       const { data: profile } = await supabase
         .from("profiles")
         .select("organization_id, full_name")
@@ -60,20 +60,20 @@ export function ProjectCommentsTab({ projectId, projectName }: Props) {
       const { error } = await supabase.from("project_comments").insert({
         project_id: projectId,
         user_id: user!.id,
-        content: text,
-        mentions: mentions,
+        content,
+        mentions: mentionIds,
       });
       if (error) throw error;
 
       // Create notifications for mentioned users
-      if (mentions.length > 0 && profile) {
-        const notifications = mentions
+      if (mentionIds.length > 0 && profile) {
+        const notifications = mentionIds
           .filter((uid) => uid !== user!.id)
           .map((uid) => ({
             user_id: uid,
             type: "mention",
             title: `${profile.full_name} te mencionó en el proyecto "${projectName}"`,
-            body: text.substring(0, 200),
+            body: content.substring(0, 200),
             entity_type: "project",
             entity_id: projectId,
             source_user_id: user!.id,
@@ -88,6 +88,7 @@ export function ProjectCommentsTab({ projectId, projectName }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project-comments", projectId] });
       queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-notifications-count"] });
       setText("");
       setMentions([]);
       toast.success("Comentario guardado");
