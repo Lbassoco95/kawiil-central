@@ -365,6 +365,35 @@ async function executeTool(
         responsable: nameMap[c.responsible_user_id] || null,
       }));
     }
+    case "get_hub_procedures": {
+      let q = supabase.from("internal_procedures")
+        .select("title, description, file_path, current_version, updated_at")
+        .eq("organization_id", orgId)
+        .order("updated_at", { ascending: false });
+      if (args.search) {
+        q = q.or(`title.ilike.%${args.search}%,description.ilike.%${args.search}%`);
+      }
+      q = q.limit(10);
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      if (!data || data.length === 0) return { message: "No se encontraron procedimientos con ese criterio. Intenta con otros términos de búsqueda." };
+      return data.map((p: any) => ({
+        titulo: p.title,
+        descripcion: p.description,
+        version: p.current_version,
+        actualizado: p.updated_at,
+      }));
+    }
+    case "get_hub_comunicados": {
+      const { data, error } = await supabase.from("internal_comunicados")
+        .select("title, body, is_pinned, created_at")
+        .eq("organization_id", orgId)
+        .order("is_pinned", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(args.limit || 5);
+      if (error) return { error: error.message };
+      return data;
+    }
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
