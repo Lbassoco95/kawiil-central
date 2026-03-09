@@ -88,7 +88,7 @@ export function PersonalDashboard() {
       const timeOfDay = hour < 14 ? "morning" : "afternoon";
 
       const { data, error } = await supabase.functions.invoke("generate-phrase", {
-        body: { mood_score: moodScore ?? null, time_of_day: timeOfDay },
+        body: { mood_score: moodScore ?? null, time_of_day: timeOfDay, force_regenerate: forceRegenerate ?? false },
       });
       if (error) throw error;
       if (data?.phrase) {
