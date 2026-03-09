@@ -90,8 +90,8 @@ function DropboxLiveBrowser() {
       .select("dropbox_personal_folder")
       .eq("user_id", user.id)
       .single()
-      .then(({ data }) => {
-        const saved = data?.dropbox_personal_folder || null;
+      .then(({ data }: any) => {
+        const saved = (data as any)?.dropbox_personal_folder || null;
         setPersonalFolderPath(saved);
         setProfileLoaded(true);
         // If no folder is saved, show the picker automatically
