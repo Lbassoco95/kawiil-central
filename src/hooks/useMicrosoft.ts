@@ -3,6 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+function isNotConnectedError(data: any, error: any) {
+  const errorMessage = String(error?.message || "").toLowerCase();
+  const dataCode = String(data?.code || "");
+  const dataError = String(data?.error || "").toLowerCase();
+
+  return (
+    dataCode === "NOT_CONNECTED" ||
+    dataError.includes("microsoft not connected") ||
+    errorMessage.includes("not_connected") ||
+    errorMessage.includes("microsoft not connected")
+  );
+}
+
 export function useMicrosoftConnection() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -30,7 +43,7 @@ export function useMicrosoftConnection() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
-        const popup = window.open(data.url, "microsoft-auth", "width=600,height=700");
+        window.open(data.url, "microsoft-auth", "width=600,height=700");
         return new Promise<void>((resolve, reject) => {
           const handler = (event: MessageEvent) => {
             if (event.data?.type === "microsoft-auth-success") {
@@ -76,6 +89,7 @@ export function useCalendarEvents(start?: string, end?: string) {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "calendar-events", params: { start, end } },
       });
+      if (isNotConnectedError(data, error)) return [];
       if (error) throw error;
       return data?.value || [];
     },
@@ -140,6 +154,7 @@ export function useEventDetail(eventId: string | null) {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "event-detail", params: { eventId } },
       });
+      if (isNotConnectedError(data, error)) return null;
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
@@ -249,6 +264,7 @@ export function useOutlookCategories() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "outlook-categories" },
       });
+      if (isNotConnectedError(data, error)) return [];
       if (error) throw error;
       return Array.isArray(data) ? data : [];
     },
@@ -265,6 +281,7 @@ export function useOutlookEmails(folder = "inbox", search?: string) {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "emails", params: { folder, search, top: 30 } },
       });
+      if (isNotConnectedError(data, error)) return [];
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data?.value || [];
@@ -283,6 +300,7 @@ export function useEmailDetail(messageId: string | null) {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "email-detail", params: { messageId } },
       });
+      if (isNotConnectedError(data, error)) return null;
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
@@ -391,6 +409,7 @@ export function useUnreadEmailCount() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "emails", params: { folder: "inbox", top: 50 } },
       });
+      if (isNotConnectedError(data, error)) return 0;
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const emails = data?.value || [];
@@ -401,3 +420,4 @@ export function useUnreadEmailCount() {
     staleTime: 30000,
   });
 }
+
