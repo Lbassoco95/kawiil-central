@@ -6,7 +6,7 @@ import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
-
+  useTasksRealtime();
   return (
     <div className="flex min-h-screen w-full bg-background">
       <AppSidebar />
