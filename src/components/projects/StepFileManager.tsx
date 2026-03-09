@@ -11,6 +11,7 @@ import { formatDateMX } from "@/lib/dateUtils";
 import { logActivity } from "@/lib/activityLog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
+import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { SendToSignDialog } from "@/components/documents/SendToSignDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
