@@ -169,6 +169,45 @@ function getDropboxHeaders(token: string, rootNamespaceId: string | null, adminM
   return headers;
 }
 
+function parseScopedPath(rawPath: string): { namespaceId: string | null; path: string } {
+  if (!rawPath?.startsWith('memberns:')) {
+    return { namespaceId: null, path: rawPath || '' };
+  }
+
+  const payload = rawPath.slice('memberns:'.length);
+  const separatorIndex = payload.indexOf(':');
+  if (separatorIndex === -1) {
+    return { namespaceId: payload || null, path: '' };
+  }
+
+  const namespaceId = payload.slice(0, separatorIndex) || null;
+  const scopedPath = payload.slice(separatorIndex + 1);
+  return { namespaceId, path: scopedPath === '/' ? '' : scopedPath };
+}
+
+function buildScopedPath(namespaceId: string, scopedPath: string) {
+  const normalized = scopedPath || '';
+  return `memberns:${namespaceId}:${normalized}`;
+}
+
+function getScopedDropboxHeaders(
+  token: string,
+  adminMemberId: string | null,
+  defaultRootNamespaceId: string | null,
+  namespaceId: string | null,
+): Record<string, string> {
+  const headers = getDropboxHeaders(token, defaultRootNamespaceId, adminMemberId);
+
+  if (namespaceId) {
+    headers['Dropbox-API-Path-Root'] = JSON.stringify({
+      '.tag': 'namespace_id',
+      namespace_id: namespaceId,
+    });
+  }
+
+  return headers;
+}
+
 function normalizeName(value: string): string {
   return value
     .normalize('NFD')
@@ -370,8 +409,6 @@ serve(async (req) => {
     const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
     if (action === 'list_personal_folders') {
-      // Use team members API to get all member folders
-      // This ensures we see ALL members' personal folders, not just admin's
       try {
         const membersRes = await fetch('https://api.dropboxapi.com/2/team/members/list_v2', {
           method: 'POST',
@@ -389,16 +426,16 @@ serve(async (req) => {
         const membersData = await membersRes.json();
         const members = membersData?.members || [];
 
-        // Build entries from team members - each member has a personal folder at root
         const entries = members
-          .filter((m: any) => m?.profile?.status?.['.tag'] === 'active')
+          .filter((m: any) => m?.profile?.status?.['.tag'] === 'active' && m?.profile?.member_folder_id)
           .map((m: any) => {
             const name = m.profile?.name?.display_name || m.profile?.email || 'Unknown';
-            const memberId = m.profile?.member_folder_id;
+            const memberFolderId = m.profile?.member_folder_id;
             return {
-              id: memberId || m.profile?.team_member_id || name,
+              id: memberFolderId,
               name,
-              path: `/${name}`,
+              // Use member namespace so subsequent list/get_link/upload calls can resolve correctly
+              path: buildScopedPath(memberFolderId, ''),
               type: 'folder',
               size: null,
               modified: null,
@@ -431,26 +468,54 @@ serve(async (req) => {
     }
 
     if (action === 'list') {
+      const requestedPath = typeof path === 'string' ? path.trim() : '';
+      const scoped = parseScopedPath(requestedPath);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+
       // When browsing root, default to the shared team folder "Kawiil Mx"
       // to prevent users from seeing other members' personal folders
-      const browsePath = (!path || path === '' || path === '/') ? '/Kawiil Mx' : path;
-      const { data, resolvedPath } = await resolvePathAndList(dbxHeaders, browsePath);
-      const entries = (data.entries || []).map((entry: any) => ({
-        id: entry.id,
-        name: entry.name,
-        path: entry.path_display,
-        type: entry['.tag'],
-        size: entry.size || null,
-        modified: entry.client_modified || null,
-      }));
+      const browsePath = (!scoped.path || scoped.path === '/')
+        ? (scoped.namespaceId ? '' : '/Kawiil Mx')
+        : scoped.path;
 
-      return new Response(JSON.stringify({ entries, has_more: data.has_more, resolved_path: resolvedPath }), {
+      const { data, resolvedPath } = await resolvePathAndList(scopedHeaders, browsePath);
+      const entries = (data.entries || []).map((entry: any) => {
+        const entryPath = entry.path_display || '';
+        return {
+          id: entry.id,
+          name: entry.name,
+          path: scoped.namespaceId ? buildScopedPath(scoped.namespaceId, entryPath) : entryPath,
+          type: entry['.tag'],
+          size: entry.size || null,
+          modified: entry.client_modified || null,
+        };
+      });
+
+      const responseResolvedPath = scoped.namespaceId
+        ? buildScopedPath(scoped.namespaceId, resolvedPath)
+        : resolvedPath;
+
+      return new Response(JSON.stringify({ entries, has_more: data.has_more, resolved_path: responseResolvedPath }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'upload') {
-      if (!file_content || !path) {
+      const scoped = parseScopedPath(path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+      const uploadTargetPath = scoped.path;
+
+      if (!file_content || !uploadTargetPath) {
         throw new Error('file_content and path are required for upload');
       }
 
@@ -460,7 +525,7 @@ serve(async (req) => {
         'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
         'Content-Type': 'application/octet-stream',
         'Dropbox-API-Arg': JSON.stringify({
-          path,
+          path: uploadTargetPath,
           mode: 'add',
           autorename: true,
           mute: false,
@@ -471,7 +536,12 @@ serve(async (req) => {
         uploadHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
       }
 
-      if (rootNamespaceId) {
+      if (scoped.namespaceId) {
+        uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
+          '.tag': 'namespace_id',
+          namespace_id: scoped.namespaceId,
+        });
+      } else if (rootNamespaceId) {
         uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
           '.tag': 'root',
           root: rootNamespaceId,
@@ -490,14 +560,15 @@ serve(async (req) => {
       }
 
       const result = await response.json();
-      const uploadedPath = result.path_display || path;
+      const uploadedPath = result.path_display || uploadTargetPath;
+      const responsePath = scoped.namespaceId ? buildScopedPath(scoped.namespaceId, uploadedPath) : uploadedPath;
 
       // Get a shared link for the uploaded file
       let shareUrl = '';
       try {
         const linkRes = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
           method: 'POST',
-          headers: dbxHeaders,
+          headers: scopedHeaders,
           body: JSON.stringify({ path: uploadedPath }),
         });
         if (linkRes.ok) {
@@ -508,7 +579,7 @@ serve(async (req) => {
           if (linkErr?.error?.['.tag'] === 'shared_link_already_exists') {
             const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
               method: 'POST',
-              headers: dbxHeaders,
+              headers: scopedHeaders,
               body: JSON.stringify({ path: uploadedPath, direct_only: true }),
             });
             if (listRes.ok) {
@@ -521,18 +592,26 @@ serve(async (req) => {
         console.error('Error getting share link after upload:', linkError);
       }
 
-      return new Response(JSON.stringify({ success: true, name: result.name, path: uploadedPath, url: shareUrl }), {
+      return new Response(JSON.stringify({ success: true, name: result.name, path: responsePath, url: shareUrl }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === "get_link") {
+      const scoped = parseScopedPath(path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+
       let shareUrl = "";
       try {
         const response = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
           method: 'POST',
-          headers: dbxHeaders,
-          body: JSON.stringify({ path }),
+          headers: scopedHeaders,
+          body: JSON.stringify({ path: scoped.path }),
         });
 
         if (response.ok) {
@@ -543,8 +622,8 @@ serve(async (req) => {
           if (errorBody?.error?.['.tag'] === 'shared_link_already_exists') {
             const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
               method: 'POST',
-              headers: dbxHeaders,
-              body: JSON.stringify({ path, direct_only: true }),
+              headers: scopedHeaders,
+              body: JSON.stringify({ path: scoped.path, direct_only: true }),
             });
             if (listRes.ok) {
               const listData = await listRes.json();
@@ -567,14 +646,22 @@ serve(async (req) => {
     }
 
     if (action === 'create_folder') {
-      const folderPath = body.folder_path || path;
+      const scoped = parseScopedPath(body.folder_path || path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+      const folderPath = scoped.path;
+
       if (!folderPath) {
         throw new Error('folder_path or path is required for create_folder');
       }
 
       const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
         method: 'POST',
-        headers: dbxHeaders,
+        headers: scopedHeaders,
         body: JSON.stringify({ path: folderPath, autorename: false }),
       });
 
@@ -585,29 +672,40 @@ serve(async (req) => {
 
       const result = await response.json();
       const metadata = result.metadata || {};
+      const responsePath = scoped.namespaceId
+        ? buildScopedPath(scoped.namespaceId, metadata.path_display || folderPath)
+        : (metadata.path_display || folderPath);
 
       return new Response(JSON.stringify({
         success: true,
         name: metadata.name,
-        path: metadata.path_display || folderPath,
+        path: responsePath,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'rename') {
-      const fromPath = body.from_path || path;
-      const toPath = body.to_path;
-      if (!fromPath || !toPath) {
+      const fromScoped = parseScopedPath(body.from_path || path);
+      const toScoped = parseScopedPath(body.to_path || '');
+      const namespaceId = fromScoped.namespaceId || toScoped.namespaceId;
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        namespaceId,
+      );
+
+      if (!fromScoped.path || !toScoped.path) {
         throw new Error('from_path and to_path are required for rename');
       }
 
       const response = await fetch('https://api.dropboxapi.com/2/files/move_v2', {
         method: 'POST',
-        headers: dbxHeaders,
+        headers: scopedHeaders,
         body: JSON.stringify({
-          from_path: fromPath,
-          to_path: toPath,
+          from_path: fromScoped.path,
+          to_path: toScoped.path,
           autorename: false,
           allow_ownership_transfer: false,
         }),
@@ -620,11 +718,14 @@ serve(async (req) => {
 
       const result = await response.json();
       const metadata = result.metadata || {};
+      const responsePath = namespaceId
+        ? buildScopedPath(namespaceId, metadata.path_display || toScoped.path)
+        : (metadata.path_display || toScoped.path);
 
       return new Response(JSON.stringify({
         success: true,
         name: metadata.name,
-        path: metadata.path_display || toPath,
+        path: responsePath,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -634,7 +735,14 @@ serve(async (req) => {
       // Create an empty Office document in Dropbox and return a share link
       const docType = body.doc_type || 'docx'; // docx, xlsx, pptx
       const docName = body.doc_name || `Documento.${docType}`;
-      const folderPath = body.folder_path || path;
+      const scoped = parseScopedPath(body.folder_path || path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+      const folderPath = scoped.path;
 
       if (!folderPath) {
         throw new Error('folder_path is required for create_office_doc');
@@ -657,7 +765,12 @@ serve(async (req) => {
       if (adminMemberId) {
         uploadHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
       }
-      if (rootNamespaceId) {
+      if (scoped.namespaceId) {
+        uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
+          '.tag': 'namespace_id',
+          namespace_id: scoped.namespaceId,
+        });
+      } else if (rootNamespaceId) {
         uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
           '.tag': 'root',
           root: rootNamespaceId,
@@ -677,13 +790,14 @@ serve(async (req) => {
 
       const uploadResult = await uploadRes.json();
       const uploadedPath = uploadResult.path_display || fullPath;
+      const responsePath = scoped.namespaceId ? buildScopedPath(scoped.namespaceId, uploadedPath) : uploadedPath;
 
       // Get a shared link for the file
       let shareUrl = '';
       try {
         const linkRes = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
           method: 'POST',
-          headers: dbxHeaders,
+          headers: scopedHeaders,
           body: JSON.stringify({ path: uploadedPath }),
         });
         if (linkRes.ok) {
@@ -694,7 +808,7 @@ serve(async (req) => {
           if (linkErr?.error?.['.tag'] === 'shared_link_already_exists') {
             const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
               method: 'POST',
-              headers: dbxHeaders,
+              headers: scopedHeaders,
               body: JSON.stringify({ path: uploadedPath, direct_only: true }),
             });
             if (listRes.ok) {
@@ -710,7 +824,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         name: uploadResult.name,
-        path: uploadedPath,
+        path: responsePath,
         url: shareUrl,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

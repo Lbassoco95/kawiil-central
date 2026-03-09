@@ -124,13 +124,18 @@ function DropboxLiveBrowser() {
   };
 
   const selectPersonalFolder = async (entry: DropboxEntry) => {
-    // Save to database permanently
     if (user?.id) {
-      await supabase
+      const { error } = await supabase
         .from("profiles")
         .update({ dropbox_personal_folder: entry.path } as any)
         .eq("user_id", user.id);
+
+      if (error) {
+        toast.error("No se pudo guardar tu carpeta personal");
+        return;
+      }
     }
+
     setPersonalFolderPath(entry.path);
     setShowFolderPicker(false);
     setPickerEntries([]);
@@ -297,13 +302,21 @@ function DropboxLiveBrowser() {
 
   const isRoot = currentPath === null;
 
+  const displayPath = useMemo(() => {
+    if (!currentPath) return null;
+    if (!currentPath.startsWith("memberns:")) return currentPath;
+
+    const scopedPath = currentPath.split(":").slice(2).join(":");
+    return scopedPath || "/";
+  }, [currentPath]);
+
   const breadcrumbs: string[] = [];
-  if (currentPath) {
-    const parts = currentPath.split("/").filter(Boolean);
+  if (displayPath && displayPath !== "/") {
+    const parts = displayPath.split("/").filter(Boolean);
     breadcrumbs.push(...parts);
   }
 
-  const personalLabel = personalFolderPath
+  const personalLabel = personalFolderPath && !personalFolderPath.startsWith("id:")
     ? personalFolderPath.split("/").filter(Boolean).pop() || userName
     : userName;
 
