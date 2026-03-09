@@ -170,11 +170,19 @@ export function AppSidebar() {
               {item.url === "/notificaciones" && unreadCount > 0 && collapsed && (
                 <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary" />
               )}
+              {item.url === "/microsoft365/correo" && unreadEmailCount > 0 && collapsed && (
+                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive" />
+              )}
             </span>
             {!collapsed && <span className="flex-1">{item.title}</span>}
             {!collapsed && item.url === "/notificaciones" && unreadCount > 0 && (
               <span className="bg-primary text-primary-foreground text-[10px] rounded-full px-1.5 py-0 font-bold leading-4">
                 {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+            {!collapsed && item.url === "/microsoft365/correo" && unreadEmailCount > 0 && (
+              <span className="bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 py-0 font-bold leading-4">
+                {unreadEmailCount > 99 ? "99+" : unreadEmailCount}
               </span>
             )}
           </NavLink>
