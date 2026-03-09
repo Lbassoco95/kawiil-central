@@ -417,7 +417,7 @@ INSTRUCCIONES:
       {/* Client Progress */}
       {clientProgress.length > 0 && (
         <section>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Avance por cliente</h2>
@@ -429,7 +429,12 @@ INSTRUCCIONES:
               Ver todos <ArrowRight className="h-3 w-3" />
             </button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricInsight
+            metricKey="client-progress"
+            ready={clientProgress.length > 0}
+            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance por cliente". Hay ${clientProgress.length} clientes con tareas, promedio ${Math.round(clientProgress.reduce((s, c) => s + c.pct, 0) / (clientProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
             {clientProgress.map((c) => (
               <button
                 key={c.id}
