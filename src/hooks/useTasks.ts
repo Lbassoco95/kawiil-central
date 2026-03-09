@@ -312,6 +312,10 @@ export function useDeleteTask() {
     },
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project"] });
+      queryClient.invalidateQueries({ queryKey: ["task"] });
       logActivity({ entityType: "task", entityId: id, action: "deleted" });
       toast.success("Tarea eliminada");
     },
