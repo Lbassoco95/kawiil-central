@@ -163,16 +163,16 @@ export function useUpdateClient() {
       previousServices,
     }: {
       id: string;
-      updates: Partial<ClientInsert> & { has_payroll?: boolean };
+      updates: Partial<ClientInsert> & { payroll_type?: string | null };
       previousServices: string[];
     }) => {
-      // Get previous has_payroll value
+      // Get previous payroll_type value
       const { data: prevClient } = await supabase
         .from("clients")
-        .select("has_payroll")
+        .select("payroll_type")
         .eq("id", id)
         .single();
-      const previousPayroll = (prevClient as any)?.has_payroll || false;
+      const previousPayrollType = (prevClient as any)?.payroll_type || null;
 
       const { data, error } = await supabase
         .from("clients")
@@ -240,10 +240,12 @@ export function useUpdateClient() {
         }
       }
 
-      // Handle payroll change: add/remove payroll steps from accounting periods
-      const newPayroll = (updates as any).has_payroll ?? previousPayroll;
-      if (newPayroll !== previousPayroll && data) {
-        // Find accounting projects for this client
+      // Handle payroll type change: add/remove payroll steps from accounting periods
+      const newPayrollType = (updates as any).payroll_type !== undefined
+        ? (updates as any).payroll_type
+        : previousPayrollType;
+
+      if (newPayrollType !== previousPayrollType && data) {
         const { data: accountingProjects } = await supabase
           .from("projects")
           .select("id")
@@ -252,6 +254,9 @@ export function useUpdateClient() {
           .neq("status", "cancelado");
 
         if (accountingProjects && accountingProjects.length > 0) {
+          const newStepsDef = getPayrollSteps(newPayrollType);
+          const newStepKeys = newStepsDef.map((s) => s.key);
+
           for (const proj of accountingProjects) {
             const { data: periods } = await supabase
               .from("accounting_periods")
@@ -260,31 +265,28 @@ export function useUpdateClient() {
 
             if (periods) {
               for (const period of periods) {
-                let steps = period.steps as any[];
-                if (newPayroll) {
-                  // Add payroll steps if not present
-                  const existingKeys = steps.map((s: any) => s.key);
-                  const toAdd = PAYROLL_OBLIGATION_STEPS.filter((ps) => !existingKeys.includes(ps.key));
-                  if (toAdd.length > 0) {
-                    steps = [
-                      ...steps,
-                      ...toAdd.map((ps) => ({
-                        key: ps.key,
-                        label: ps.label,
-                        completed: false,
-                        completed_at: null,
-                        completed_by: null,
-                        step_status: "pendiente",
-                        date: null,
-                        notes: null,
-                        document_ids: [],
-                      })),
-                    ];
-                  }
-                } else {
-                  // Remove payroll steps
-                  const payrollKeys = PAYROLL_OBLIGATION_STEPS.map((ps) => ps.key);
-                  steps = steps.filter((s: any) => !payrollKeys.includes(s.key));
+                // Remove all old payroll steps
+                let steps = (period.steps as any[]).filter(
+                  (s: any) => !ALL_PAYROLL_KEYS.includes(s.key)
+                );
+                // Add new payroll steps
+                const existingKeys = steps.map((s: any) => s.key);
+                const toAdd = newStepsDef.filter((ps) => !existingKeys.includes(ps.key));
+                if (toAdd.length > 0) {
+                  steps = [
+                    ...steps,
+                    ...toAdd.map((ps) => ({
+                      key: ps.key,
+                      label: ps.label,
+                      completed: false,
+                      completed_at: null,
+                      completed_by: null,
+                      step_status: "pendiente",
+                      date: null,
+                      notes: null,
+                      document_ids: [],
+                    })),
+                  ];
                 }
                 await supabase
                   .from("accounting_periods")
@@ -294,6 +296,51 @@ export function useUpdateClient() {
             }
           }
           queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
+        }
+
+        // Auto-create quarterly legal review task when payroll is activated
+        const hadPayroll = !!previousPayrollType;
+        const hasPayroll = !!newPayrollType;
+        if (!hadPayroll && hasPayroll && data) {
+          const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
+
+          // Find legal project responsible for this client
+          const { data: legalProject } = await supabase
+            .from("projects")
+            .select("responsible_user_id")
+            .eq("client_id", id)
+            .eq("area", "legal")
+            .neq("status", "cancelado")
+            .maybeSingle();
+
+          const assignTo = legalProject?.responsible_user_id || data.responsible_user_id || user!.id;
+
+          // Check if task already exists
+          const { data: existingTask } = await supabase
+            .from("tasks")
+            .select("id")
+            .eq("client_id", id)
+            .eq("is_recurring", true)
+            .eq("recurrence_pattern", "trimestral")
+            .ilike("title", "%revisión de contratos%")
+            .maybeSingle();
+
+          if (!existingTask) {
+            await supabase.from("tasks").insert({
+              title: `Revisión de contratos y estructura legal - ${data.name}`,
+              description: "Revisión trimestral de contratos laborales y estructura legal de contrataciones para verificar cumplimiento legal vigente.",
+              client_id: id,
+              organization_id: orgId!,
+              created_by: user!.id,
+              assigned_to: assignTo,
+              area: "legal",
+              priority: "media",
+              status: "pendiente",
+              is_recurring: true,
+              recurrence_pattern: "trimestral",
+            } as any);
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          }
         }
       }
 
