@@ -333,6 +333,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
 
   return (
     <div className="space-y-6">
+      <CriticalityDelayCard projectId={projectId} />
       {/* Summary cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

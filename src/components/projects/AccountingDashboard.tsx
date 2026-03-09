@@ -178,6 +178,7 @@ export function AccountingDashboard({ projectId, clientDropboxPath }: { projectI
 
   return (
     <div className="space-y-4">
+      <CriticalityDelayCard projectId={projectId} />
       {/* General AI Summary */}
       {periods && periods.length > 0 && (
         <AISummaryCard
