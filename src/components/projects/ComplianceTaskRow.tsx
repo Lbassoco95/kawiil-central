@@ -20,6 +20,7 @@ import { format, isPast, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { UserOrTextSingle, UserOrTextMulti } from "@/components/projects/UserOrTextInput";
 import { StepFileManager } from "@/components/projects/StepFileManager";
+import { StepComments } from "@/components/projects/StepComments";
 import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
