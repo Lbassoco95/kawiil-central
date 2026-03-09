@@ -152,6 +152,34 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_hub_procedures",
+      description: "Busca en los procedimientos y manuales internos del Hub. Útil cuando el usuario tiene dudas sobre cómo hacer algo, dónde encontrar información, procesos internos, o necesita orientación sobre la plataforma o los procedimientos del despacho.",
+      parameters: {
+        type: "object",
+        properties: {
+          search: { type: "string", description: "Texto de búsqueda para encontrar procedimientos relevantes (ej: 'declaración anual', 'alta IMSS', 'cómo facturar')" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_hub_comunicados",
+      description: "Obtiene los comunicados internos más recientes del equipo. Útil para saber qué novedades hay, anuncios importantes o avisos recientes.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Máximo de comunicados (default 5)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 async function executeTool(
