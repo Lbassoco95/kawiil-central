@@ -163,7 +163,7 @@ export function ProjectCommentsTab({ projectId, projectName }: Props) {
             onMentionsChange={setMentions}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                addComment.mutate();
+                if (text.trim()) addComment.mutate({ content: text, mentionIds: mentions });
               }
             }}
           />
