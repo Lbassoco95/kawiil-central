@@ -279,11 +279,10 @@ Deno.serve(async (req) => {
         const top = params?.top || 20;
         const folder = params?.folder || "inbox";
         const search = params?.search ? `&$search="${params.search}"` : "";
-        const res = await fetch(
-          `${GRAPH_BASE}/me/mailFolders/${folder}/messages?$top=${top}&$orderby=receivedDateTime desc${search}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+        result = await graphRequest(
+          accessToken,
+          `/me/mailFolders/${folder}/messages?$top=${top}&$orderby=receivedDateTime desc${search}`
         );
-        result = await res.json();
         break;
       }
 
