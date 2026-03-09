@@ -41,7 +41,7 @@ export function CriticalityDelayCard({ projectId }: Props) {
 
   // Read from cached project query
   const { data: project } = useQuery({
-    queryKey: ["project", projectId],
+    queryKey: ["project-criticality", projectId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
