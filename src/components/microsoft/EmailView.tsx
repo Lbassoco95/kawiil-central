@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,12 +25,18 @@ export function EmailView() {
   const [forwardTo, setForwardTo] = useState("");
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const { isAdminOrManager } = useUserRole();
+  const queryClient = useQueryClient();
 
   const { data: emails = [], isLoading } = useOutlookEmails("inbox", debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
   const markRead = useMarkEmailRead();
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedEmailId(null);
+    resetAction();
+  }, []);
 
   const handleOpenEmail = (email: any) => {
     setSelectedEmailId(email.id);
@@ -136,7 +143,7 @@ export function EmailView() {
       )}
 
       {/* Email detail dialog */}
-      <Dialog open={!!selectedEmailId} onOpenChange={(open) => { if (!open) { setSelectedEmailId(null); resetAction(); } }}>
+      <Dialog open={!!selectedEmailId} onOpenChange={(open) => { if (!open) handleCloseDetail(); }}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           {detailLoading ? (
             <div className="flex items-center justify-center py-8">
