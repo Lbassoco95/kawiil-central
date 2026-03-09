@@ -103,6 +103,35 @@ export function useCreateClient() {
             console.error(`Error creating auto project (${proj.area}):`, projectError);
           }
         }
+
+        // Auto-create quarterly legal review task when payroll is set on creation
+        const payrollType = (client as any).payroll_type || null;
+        if (payrollType) {
+          // Find the legal project responsible (just created above if legal service exists)
+          const { data: legalProject } = await supabase
+            .from("projects")
+            .select("responsible_user_id")
+            .eq("client_id", data.id)
+            .eq("area", "legal")
+            .neq("status", "cancelado")
+            .maybeSingle();
+
+          const assignTo = legalProject?.responsible_user_id || client.responsible_user_id || user!.id;
+
+          await supabase.from("tasks").insert({
+            title: `Revisión de contratos y estructura legal - ${data.name}`,
+            description: "Revisión trimestral de contratos laborales y estructura legal de contrataciones para verificar cumplimiento legal vigente.",
+            client_id: data.id,
+            organization_id: orgId!,
+            created_by: user!.id,
+            assigned_to: assignTo,
+            area: "legal",
+            priority: "media",
+            status: "pendiente",
+            is_recurring: true,
+            recurrence_pattern: "trimestral",
+          } as any);
+        }
       }
 
       return data;
