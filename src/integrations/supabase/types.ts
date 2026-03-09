@@ -666,6 +666,173 @@ export type Database = {
           },
         ]
       }
+      extracted_documents: {
+        Row: {
+          ai_observations: Json | null
+          ai_summary: string | null
+          cfdi_type: string | null
+          client_id: string | null
+          confidence_score: number | null
+          created_at: string
+          currency: string | null
+          declaration_type: string | null
+          document_date: string | null
+          document_id: string
+          document_type: string
+          extracted_data: Json
+          extraction_error: string | null
+          extraction_model: string | null
+          extraction_status: string
+          fiscal_period: string | null
+          id: string
+          isr_amount: number | null
+          iva_amount: number | null
+          organization_id: string
+          processing_time_ms: number | null
+          project_id: string | null
+          retenciones_amount: number | null
+          rfc_emisor: string | null
+          rfc_receptor: string | null
+          tax_amount: number | null
+          total_amount: number | null
+          updated_at: string
+          uuid_fiscal: string | null
+        }
+        Insert: {
+          ai_observations?: Json | null
+          ai_summary?: string | null
+          cfdi_type?: string | null
+          client_id?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          currency?: string | null
+          declaration_type?: string | null
+          document_date?: string | null
+          document_id: string
+          document_type?: string
+          extracted_data?: Json
+          extraction_error?: string | null
+          extraction_model?: string | null
+          extraction_status?: string
+          fiscal_period?: string | null
+          id?: string
+          isr_amount?: number | null
+          iva_amount?: number | null
+          organization_id: string
+          processing_time_ms?: number | null
+          project_id?: string | null
+          retenciones_amount?: number | null
+          rfc_emisor?: string | null
+          rfc_receptor?: string | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string
+          uuid_fiscal?: string | null
+        }
+        Update: {
+          ai_observations?: Json | null
+          ai_summary?: string | null
+          cfdi_type?: string | null
+          client_id?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          currency?: string | null
+          declaration_type?: string | null
+          document_date?: string | null
+          document_id?: string
+          document_type?: string
+          extracted_data?: Json
+          extraction_error?: string | null
+          extraction_model?: string | null
+          extraction_status?: string
+          fiscal_period?: string | null
+          id?: string
+          isr_amount?: number | null
+          iva_amount?: number | null
+          organization_id?: string
+          processing_time_ms?: number | null
+          project_id?: string | null
+          retenciones_amount?: number | null
+          rfc_emisor?: string | null
+          rfc_receptor?: string | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string
+          uuid_fiscal?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extracted_documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extracted_documents_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extracted_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extracted_documents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extraction_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          extracted_document_id: string | null
+          id: string
+          organization_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          extracted_document_id?: string | null
+          id?: string
+          organization_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          extracted_document_id?: string | null
+          id?: string
+          organization_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extraction_logs_extracted_document_id_fkey"
+            columns: ["extracted_document_id"]
+            isOneToOne: false
+            referencedRelation: "extracted_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extraction_logs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integrations: {
         Row: {
           config: Json | null
