@@ -404,6 +404,9 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
               />
             </div>
 
+            {/* Comments with mentions & Dropbox */}
+            <StepComments projectId={projectId} stepKey={`compliance_${task.id}`} stepLabel={task.title} />
+
             {/* Files */}
             <StepFileManager
               documentIds={[]}
