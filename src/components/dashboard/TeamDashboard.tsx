@@ -261,7 +261,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="area-stats"
             ready={areaStats.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance por célula" para un despacho contable/legal. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% (${a.overdue} vencidas)`).join(", ")}. Tono profesional, sin emojis, sin saludo.`}
+            contextPrompt={`Eres el analista de un despacho contable/legal. Analiza estos datos de avance por célula y da UNA recomendación accionable en máximo 30 palabras. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% avance, ${a.overdue} vencidas, ${a.pending} pendientes`).join("; ")}. Identifica la célula con más riesgo o retraso y sugiere qué hacer. Sin emojis, sin saludo.`}
           />
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-3">
             {areaStats.map((a) => (
@@ -295,7 +295,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="team-workload"
             ready={teamWorkload.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Carga del equipo" para un despacho. Hay ${teamWorkload.length} miembros con tareas. El que más tiene: ${teamWorkload[0]?.pending || 0} pendientes. Tono profesional, sin emojis, sin saludo.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable en máximo 30 palabras. Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}. Identifica sobrecarga o riesgo y sugiere redistribución si aplica. Sin emojis, sin saludo.`}
           />
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-3">
             {teamWorkload.map((m) => (
@@ -389,7 +389,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="project-progress"
             ready={projectProgress.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance de proyectos". Hay ${projectProgress.length} proyectos activos, promedio ${Math.round(projectProgress.reduce((s, p) => s + p.pct, 0) / (projectProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance de proyectos y da UNA recomendación accionable en máximo 30 palabras. Datos: ${projectProgress.slice(0, 5).map(p => `${p.clientName} (${p.name}): ${p.pct}%`).join("; ")}. Identifica proyectos rezagados y sugiere prioridad. Sin emojis, sin saludo.`}
           />
           {projectProgress.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">Sin proyectos activos</p>
@@ -437,7 +437,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="client-progress"
             ready={clientProgress.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance por cliente". Hay ${clientProgress.length} clientes con tareas, promedio ${Math.round(clientProgress.reduce((s, c) => s + c.pct, 0) / (clientProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable en máximo 30 palabras. Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.total - c.completed} pendientes)`).join("; ")}. Identifica clientes con más riesgo y sugiere acción. Sin emojis, sin saludo.`}
           />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
             {clientProgress.map((c) => (
