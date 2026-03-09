@@ -308,7 +308,7 @@ function DropboxLiveBrowser() {
     breadcrumbs.push(...parts);
   }
 
-  const personalLabel = personalFolderPath
+  const personalLabel = personalFolderPath && !personalFolderPath.startsWith("id:")
     ? personalFolderPath.split("/").filter(Boolean).pop() || userName
     : userName;
 
