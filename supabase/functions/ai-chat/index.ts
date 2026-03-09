@@ -504,7 +504,7 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
 - Cuando listes tareas, incluye: nombre, prioridad, fecha límite, cliente (si aplica).`;
 
     // --- AI Provider abstraction: OpenAI primary, Lovable AI fallback ---
-    async function callAI(aiMessages: any[]): Promise<{ ok: boolean; status: number; data?: any; errorText?: string; provider: string }> {
+    async function callAI(aiMessages: any[], useTools = true): Promise<{ ok: boolean; status: number; data?: any; errorText?: string; provider: string }> {
       // Try OpenAI first
       if (OPENAI_API_KEY) {
         try {
