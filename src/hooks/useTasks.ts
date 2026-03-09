@@ -288,6 +288,9 @@ export function useUpdateTask() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project"] });
       logActivity({ entityType: "task", entityId: vars.id, action: "updated", details: { changes: Object.keys(vars).filter(k => k !== "id") } });
 
       if (vars.status) {
