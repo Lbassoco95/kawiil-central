@@ -2,10 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Sparkles, Loader2, RefreshCw, AlertTriangle, MessageSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
+import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { nowMX } from "@/lib/dateUtils";
 
@@ -20,13 +17,9 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
   const { user } = useAuth();
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showDelayForm, setShowDelayForm] = useState(false);
-  const [delayReason, setDelayReason] = useState("");
-  const [delayTaskTitle, setDelayTaskTitle] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const today = useMemo(() => nowMX(), []);
 
-  // Fetch detailed task data for the AI
   const { data: taskDetails } = useQuery({
     queryKey: ["briefing-tasks", user?.id],
     queryFn: async () => {
@@ -43,7 +36,6 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
     enabled: !!user,
   });
 
-  // Fetch upcoming deadlines for entire org (team visibility)
   const { data: teamDeadlines } = useQuery({
     queryKey: ["briefing-team-deadlines"],
     queryFn: async () => {
@@ -62,7 +54,6 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
     enabled: !!user,
   });
 
-  // Fetch profile for name
   const { data: profile } = useQuery({
     queryKey: ["briefing-profile", user?.id],
     queryFn: async () => {
@@ -79,43 +70,23 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
   const generateBriefing = async () => {
     if (!user || !taskDetails) return;
     setLoading(true);
-    setError(null);
 
     const firstName = profile?.full_name?.split(" ")[0] || "Kawiiler";
     const todayStr = today.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
 
     const contextPrompt = `Genera un briefing corto y motivador del día para ${firstName}. Hoy es ${todayStr}.
 
-DATOS DEL DÍA:
-- Tareas pendientes: ${tasksCount}
-- Completadas hoy: ${completedToday}
-- Tareas vencidas: ${overdueCount}
-- Recordatorios activos: ${remindersCount}
+DATOS: ${tasksCount} pendientes, ${completedToday} completadas hoy, ${overdueCount} vencidas, ${remindersCount} recordatorios.
 
-DETALLE DE TAREAS:
-${JSON.stringify(taskDetails?.map(t => ({
-  titulo: t.title,
-  prioridad: t.priority,
-  vence: t.due_date,
-  area: t.area,
-  cliente: (t as any).clients?.name || null,
-  estado: t.status,
-})) || [], null, 2)}
+TAREAS: ${JSON.stringify(taskDetails?.map(t => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date, area: t.area, cliente: (t as any).clients?.name || null, estado: t.status })) || [])}
 
-DEADLINES DEL EQUIPO (próximos 3 días):
-${JSON.stringify(teamDeadlines?.map(t => ({
-  titulo: t.title,
-  prioridad: t.priority,
-  vence: t.due_date,
-})) || [], null, 2)}
+DEADLINES EQUIPO (3 días): ${JSON.stringify(teamDeadlines?.map(t => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date })) || [])}
 
 INSTRUCCIONES:
-1. Saluda por nombre con calidez.
-2. Resume las prioridades del día en máximo 3-4 puntos con emojis.
-3. Si hay tareas vencidas, menciónalas con empatía y sugiere acción (no regañes).
-4. Si completó tareas, reconócelo.
-5. Da una frase motivadora corta al final.
-6. Máximo 150 palabras. Usa markdown. Sé conciso.`;
+1. Resume en máximo 3 puntos clave con emojis.
+2. Si hay vencidas, menciona con empatía.
+3. Si completó, reconoce.
+4. Máximo 80 palabras. Sé ultra-conciso. Markdown. Sin saludo largo.`;
 
     try {
       const session = await supabase.auth.getSession();
@@ -128,16 +99,10 @@ INSTRUCCIONES:
           Authorization: `Bearer ${token}`,
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: contextPrompt }],
-        }),
+        body: JSON.stringify({ messages: [{ role: "user", content: contextPrompt }] }),
       });
 
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error || `Error ${resp.status}`);
-      }
-
+      if (!resp.ok) throw new Error(`Error ${resp.status}`);
       if (!resp.body) throw new Error("No stream");
 
       const reader = resp.body.getReader();
@@ -171,7 +136,6 @@ INSTRUCCIONES:
 
       if (fullContent) {
         setBriefing(fullContent);
-        // Cache it for today
         try {
           localStorage.setItem(
             `kawiil-briefing-${user.id}`,
@@ -181,13 +145,11 @@ INSTRUCCIONES:
       }
     } catch (e: any) {
       console.error("Briefing error:", e);
-      setError(e.message || "Error al generar el briefing");
     } finally {
       setLoading(false);
     }
   };
 
-  // Load cached briefing or generate new one
   useEffect(() => {
     if (!user || !taskDetails) return;
     try {
@@ -200,102 +162,42 @@ INSTRUCCIONES:
         }
       }
     } catch {}
-    // Auto-generate on first load of the day
     generateBriefing();
   }, [user?.id, taskDetails !== undefined]);
 
-  const handleReportDelay = () => {
-    if (!delayReason.trim()) return;
-    toast.success(`Reporte registrado: ${delayTaskTitle || "tarea"} — ${delayReason}`);
-    // In the future this could log to activity_log or send a Slack notification
-    setShowDelayForm(false);
-    setDelayReason("");
-    setDelayTaskTitle("");
-  };
-
   return (
-    <section className="rounded-2xl bg-gradient-to-br from-primary/5 via-secondary/20 to-accent/5 border border-primary/10 p-6 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+    <section>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+      >
+        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        <Sparkles className="h-3.5 w-3.5 text-primary" />
+        <span>Briefing del día</span>
+        {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />}
+      </button>
 
-      <div className="flex items-center justify-between mb-4 relative">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Sparkles className="h-4 w-4 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Tu briefing del día</h2>
-            <p className="text-[11px] text-muted-foreground">Generado por Kawiil AI</p>
-          </div>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs gap-1"
-          onClick={generateBriefing}
-          disabled={loading}
-        >
-          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-          Actualizar
-        </Button>
-      </div>
+      {expanded && (
+        <div className="mt-3 pl-7">
+          {loading && !briefing && (
+            <p className="text-sm text-muted-foreground">Generando...</p>
+          )}
 
-      {loading && !briefing && (
-        <div className="flex items-center gap-3 py-8 justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          <span className="text-sm text-muted-foreground">Preparando tu resumen del día...</span>
-        </div>
-      )}
-
-      {error && !briefing && (
-        <div className="flex items-center gap-2 py-4 text-sm text-destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {briefing && (
-        <div className="prose prose-sm max-w-none text-foreground [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs text-[13px] leading-relaxed relative">
-          <ReactMarkdown>{briefing}</ReactMarkdown>
-        </div>
-      )}
-
-      {/* Overdue alert with delay reporting */}
-      {overdueCount > 0 && briefing && (
-        <div className="mt-4 pt-4 border-t border-border/30">
-          {!showDelayForm ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs gap-1.5 border-warning/30 text-warning hover:bg-warning/5"
-              onClick={() => setShowDelayForm(true)}
-            >
-              <MessageSquare className="h-3 w-3" />
-              Reportar un atraso
-            </Button>
-          ) : (
-            <div className="space-y-2 animate-in fade-in duration-200">
-              <p className="text-xs text-muted-foreground">¿Qué tarea se atrasó y por qué? Esto nos ayuda a mejorar como equipo.</p>
-              <input
-                placeholder="Nombre de la tarea..."
-                className="w-full h-8 px-3 text-xs bg-background border border-border/50 rounded-lg"
-                value={delayTaskTitle}
-                onChange={(e) => setDelayTaskTitle(e.target.value)}
-              />
-              <Textarea
-                placeholder="Motivo del atraso..."
-                className="text-xs min-h-[60px] bg-background border-border/50"
-                value={delayReason}
-                onChange={(e) => setDelayReason(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <Button size="sm" className="text-xs h-7" onClick={handleReportDelay} disabled={!delayReason.trim()}>
-                  Enviar reporte
-                </Button>
-                <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setShowDelayForm(false)}>
-                  Cancelar
-                </Button>
-              </div>
+          {briefing && (
+            <div className="text-[13px] text-foreground leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_strong]:font-medium">
+              <ReactMarkdown>{briefing}</ReactMarkdown>
             </div>
+          )}
+
+          {briefing && (
+            <button
+              onClick={generateBriefing}
+              disabled={loading}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground mt-2 transition-colors"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Regenerar
+            </button>
           )}
         </div>
       )}
