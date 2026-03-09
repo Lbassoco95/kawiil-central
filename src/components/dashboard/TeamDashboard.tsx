@@ -295,7 +295,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="team-workload"
             ready={teamWorkload.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Carga del equipo" para un despacho. Hay ${teamWorkload.length} miembros con tareas. El que más tiene: ${teamWorkload[0]?.pending || 0} pendientes. Tono profesional, sin emojis, sin saludo.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable en máximo 30 palabras. Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}. Identifica sobrecarga o riesgo y sugiere redistribución si aplica. Sin emojis, sin saludo.`}
           />
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-3">
             {teamWorkload.map((m) => (
