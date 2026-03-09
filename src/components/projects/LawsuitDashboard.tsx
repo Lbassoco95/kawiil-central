@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DropboxFilePicker } from "./DropboxFilePicker";
+import { StepComments } from "./StepComments";
 import { sendSlackNotification } from "@/lib/slackNotifications";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
