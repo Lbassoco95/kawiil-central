@@ -1,0 +1,1 @@
+ALTER TABLE public.project_comments ADD COLUMN attachments jsonb DEFAULT '[]'::jsonb;
