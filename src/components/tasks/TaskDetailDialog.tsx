@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { MentionTextarea } from "./MentionTextarea";
@@ -71,6 +72,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
   const [showBlockTime, setShowBlockTime] = useState(false);
+  const [showDropboxPicker, setShowDropboxPicker] = useState(false);
   const { data: orgProfiles } = useProfiles();
 
   if (!taskId) return null;
@@ -120,6 +122,14 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
     setNewLink("");
     toast.success("Enlace agregado");
+  };
+
+  const handleDropboxPickerSelect = (file: { name: string; url: string }) => {
+    if (!task) return;
+    const currentLinks = (task.dropbox_links as any[]) ?? [];
+    const updatedLinks = [...currentLinks, { url: file.url, name: file.name, added_at: new Date().toISOString() }];
+    updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
+    toast.success(`"${file.name}" vinculado desde Dropbox`);
   };
 
   const handleRemoveLink = (index: number) => {
@@ -395,6 +405,9 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <Button size="sm" variant="outline" onClick={handleAddDropboxLink}>
                     <Plus className="h-4 w-4 mr-1" />Agregar
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowDropboxPicker(true)} title="Seleccionar archivo de Dropbox">
+                    <FolderOpen className="h-4 w-4" />
+                  </Button>
                 </div>
               </TabsContent>
 
@@ -441,6 +454,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
           taskDueDate={task.due_date || undefined}
         />
       )}
+      <DropboxFilePicker
+        open={showDropboxPicker}
+        onClose={() => setShowDropboxPicker(false)}
+        initialPath="/Kawiil Mx"
+        onSelect={handleDropboxPickerSelect}
+      />
     </Dialog>
   );
 }

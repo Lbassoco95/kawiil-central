@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2 } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +11,7 @@ import { formatDateMX } from "@/lib/dateUtils";
 import { logActivity } from "@/lib/activityLog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
+import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { SendToSignDialog } from "@/components/documents/SendToSignDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
@@ -34,6 +35,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [signDoc, setSignDoc] = useState<{ name: string; url: string } | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showDropboxPicker, setShowDropboxPicker] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
 
@@ -198,6 +200,31 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     setDropboxUploadFile(null);
   };
 
+  const handleDropboxPickerSelect = async (file: { name: string; url: string }) => {
+    if (!user) return;
+    try {
+      const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+      const { data: doc, error } = await supabase
+        .from("documents")
+        .insert({
+          name: file.name,
+          external_path: file.url,
+          organization_id: orgId!,
+          project_id: projectId,
+          uploaded_by: user.id,
+          source: "dropbox" as const,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      onDocumentAdded([...documentIds, doc.id]);
+      logActivity({ entityType: "document", entityId: doc.id, action: "created", details: { name: file.name, source: "dropbox_picker" } });
+      toast.success(`"${file.name}" vinculado desde Dropbox`);
+    } catch (err: any) {
+      toast.error("Error: " + err.message);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -214,6 +241,16 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
           >
             <Upload className="h-3 w-3" />
             Subir a Dropbox
+          </Button>
+          {/* Browse Dropbox files */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            disabled={disabled}
+            onClick={() => setShowDropboxPicker(true)}
+          >
+            <FolderOpen className="h-3 w-3" />
           </Button>
           {/* Link Dropbox URL */}
           <Button
@@ -395,6 +432,13 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             setDeleteDoc(null);
           }
         }}
+      />
+
+      <DropboxFilePicker
+        open={showDropboxPicker}
+        onClose={() => setShowDropboxPicker(false)}
+        initialPath={clientDropboxPath || "/Kawiil Mx"}
+        onSelect={handleDropboxPickerSelect}
       />
     </div>
   );
