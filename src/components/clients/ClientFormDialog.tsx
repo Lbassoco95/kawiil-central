@@ -147,7 +147,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       service_package: "backoffice",
       extra_services: [],
       individual_services: [],
-      has_payroll: false,
+      payroll_type: "none",
       primary_area: null,
       responsible_user_id: "",
       status: "activo",
