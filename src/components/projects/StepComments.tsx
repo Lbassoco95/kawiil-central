@@ -332,7 +332,9 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             onClick={() => setShowDropbox(true)}
             title="Seleccionar de Dropbox"
           >
-            <Paperclip className="h-3 w-3" />
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" />
+            </svg>
           </Button>
 
           <Popover open={showLinkPopover} onOpenChange={setShowLinkPopover}>
