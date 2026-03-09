@@ -16,6 +16,7 @@ import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatMX } from "@/lib/dateUtils";
 

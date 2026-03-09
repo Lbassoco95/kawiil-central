@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, FolderKanban, Scale, Trash2 } from "lucide-react";
+import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
