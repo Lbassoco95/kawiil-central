@@ -36,7 +36,7 @@ export function PersonalDashboard() {
     return profile?.area ?? null;
   }, [orgUsers, user]);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  const currentTime = useMemo(() => nowMX(), []);
+  const currentTime = today;
   const [personalPhrase, setPersonalPhrase] = useState<string | null>(null);
   const [phraseLoading, setPhraseLoading] = useState(false);
 
@@ -87,7 +87,6 @@ export function PersonalDashboard() {
       if (error) throw error;
       if (data?.phrase) {
         setPersonalPhrase(data.phrase);
-        // Cache locally
         try {
           localStorage.setItem(`kawiil-phrase-${user.id}`, JSON.stringify({
             date: today.toISOString().split("T")[0],
@@ -155,11 +154,10 @@ export function PersonalDashboard() {
     enabled: !!user,
   });
 
-  // My clients — responsible directly on client OR responsible on any project for the client
+  // My clients
   const { data: myClients } = useQuery({
     queryKey: ["personal-clients", user?.id],
     queryFn: async () => {
-      // 1. Clients where user is direct responsible
       const { data: directClients, error: e1 } = await supabase
         .from("clients")
         .select("id, name, status, services, primary_area")
@@ -168,7 +166,6 @@ export function PersonalDashboard() {
         .order("name");
       if (e1) throw e1;
 
-      // 2. Clients via projects where user is responsible
       const { data: myProjects, error: e2 } = await supabase
         .from("projects")
         .select("client_id")
@@ -178,8 +175,6 @@ export function PersonalDashboard() {
       if (e2) throw e2;
 
       const projectClientIds = [...new Set((myProjects || []).map((p) => p.client_id).filter(Boolean))] as string[];
-
-      // Filter out IDs already in directClients
       const directIds = new Set((directClients || []).map((c) => c.id));
       const missingIds = projectClientIds.filter((id) => !directIds.has(id));
 
@@ -233,21 +228,11 @@ export function PersonalDashboard() {
 
   return (
     <div className="max-w-3xl space-y-6 min-w-0">
-      {/* Greeting + Date/Time */}
+      {/* Greeting (no date/time — now in AppLayout) */}
       <div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-          <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
-            {firstName ? `Hola, ${firstName}` : "Hola"} 👋
-          </h1>
-          <div className="sm:text-right">
-            <p className="text-xs sm:text-sm font-medium text-foreground capitalize">
-              {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {currentTime.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })} hrs
-            </p>
-          </div>
-        </div>
+        <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
+          {firstName ? `Hola, ${firstName}` : "Hola"} 👋
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
           {totalPending} pendiente{totalPending !== 1 ? "s" : ""}
           {overdueTasks > 0 && (
