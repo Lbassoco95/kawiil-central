@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Save, Pencil, X, AlertTriangle } from "lucide-react";
+import { Save, Pencil, X, AlertTriangle, Sparkles } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { formatDateMX } from "@/lib/dateUtils";
 import type { Database } from "@/integrations/supabase/types";
+import { MeetingMinutesDialog } from "./MeetingMinutesDialog";
 
 const CRITICALITY_OPTIONS = [
   { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
@@ -74,6 +75,7 @@ export function ProjectGeneralTab({ project }: Props) {
   const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
   const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
   const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
+  const [showMeetingDialog, setShowMeetingDialog] = useState(false);
 
   // Fetch project tasks for AI summary
   const { data: projectTasks } = useQuery({
@@ -352,6 +354,36 @@ INSTRUCCIONES:
           userId={user?.id}
         />
       </div>
+
+      {/* Meeting Minutes Button */}
+      <div className="md:col-span-2">
+        <Card className="border-dashed border-primary/20 hover:border-primary/40 transition-colors">
+          <CardContent className="py-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Minutas de reunión → Tareas
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Sube o pega una minuta y AI propondrá las tareas a crear automáticamente
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowMeetingDialog(true)}>
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              Analizar minuta
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <MeetingMinutesDialog
+        open={showMeetingDialog}
+        onOpenChange={setShowMeetingDialog}
+        projectId={project.id}
+        clientId={project.client_id}
+        area={project.area}
+        projectName={project.name}
+      />
     </div>
   );
 }
