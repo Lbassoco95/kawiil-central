@@ -646,14 +646,22 @@ serve(async (req) => {
     }
 
     if (action === 'create_folder') {
-      const folderPath = body.folder_path || path;
+      const scoped = parseScopedPath(body.folder_path || path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+      const folderPath = scoped.path;
+
       if (!folderPath) {
         throw new Error('folder_path or path is required for create_folder');
       }
 
       const response = await fetch('https://api.dropboxapi.com/2/files/create_folder_v2', {
         method: 'POST',
-        headers: dbxHeaders,
+        headers: scopedHeaders,
         body: JSON.stringify({ path: folderPath, autorename: false }),
       });
 
@@ -664,11 +672,14 @@ serve(async (req) => {
 
       const result = await response.json();
       const metadata = result.metadata || {};
+      const responsePath = scoped.namespaceId
+        ? buildScopedPath(scoped.namespaceId, metadata.path_display || folderPath)
+        : (metadata.path_display || folderPath);
 
       return new Response(JSON.stringify({
         success: true,
         name: metadata.name,
-        path: metadata.path_display || folderPath,
+        path: responsePath,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
