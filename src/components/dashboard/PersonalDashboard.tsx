@@ -552,7 +552,7 @@ export function PersonalDashboard() {
         onClose={() => setShowQuestionnaire(false)}
         onCompleted={() => {
           refetchPrefs();
-          fetchPhrase();
+          fetchPhrase(undefined, true);
         }}
       />
     </div>
