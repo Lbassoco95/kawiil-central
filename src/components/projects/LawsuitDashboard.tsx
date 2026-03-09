@@ -675,6 +675,9 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                             <Textarea className="text-xs min-h-[60px]" placeholder="Notas del término..." value={dl.notes || ""} onChange={(e) => updateDeadlineField(dl.id, "notes", e.target.value)} />
                           </div>
 
+                          {/* Step Comments */}
+                          <StepComments projectId={projectId} stepKey={`deadline_${dl.id}`} stepLabel={dl.title} />
+
                           {/* File management */}
                           <StepFileManager
                             documentIds={dl.document_ids || []}
