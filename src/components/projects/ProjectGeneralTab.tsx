@@ -11,7 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Save, Pencil, X, AlertTriangle } from "lucide-react";
+import { Save, Pencil, X, AlertTriangle, Sparkles } from "lucide-react";
+import { useUpdateProject, type Project } from "@/hooks/useProjects";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { formatDateMX } from "@/lib/dateUtils";
+import type { Database } from "@/integrations/supabase/types";
+import { MeetingMinutesDialog } from "./MeetingMinutesDialog";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
