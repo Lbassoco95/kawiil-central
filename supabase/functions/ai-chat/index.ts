@@ -431,7 +431,7 @@ serve(async (req) => {
       .single();
 
     const orgId = profile?.organization_id;
-    const { messages } = await req.json();
+    const { messages, simple } = await req.json();
 
     const systemPrompt = `Eres **Kawiil AI**, el asistente inteligente INTERNO de Kawiil — un despacho contable y legal en México que opera como un equipo unido de profesionales llamados "Kawiilers".
 
