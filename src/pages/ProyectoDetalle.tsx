@@ -109,7 +109,10 @@ const ProyectoDetalle = () => {
   const fallbackDropboxPath = normalizedClientName
     ? `/Kawiil Mx/CLIENTES/${normalizedClientName}`
     : "/Kawiil Mx/CLIENTES";
-  const effectiveDropboxPath = clientDropboxPath?.trim() || fallbackDropboxPath;
+  // For lawsuit projects, default to /Kawiil Mx/JUICIOS folder
+  const effectiveDropboxPath = isLawsuit
+    ? (clientDropboxPath?.trim() || "/Kawiil Mx/JUICIOS")
+    : (clientDropboxPath?.trim() || fallbackDropboxPath);
   const lockDropboxToInitialPath = Boolean(clientDropboxPath?.trim());
 
   // Build dynamic tabs
