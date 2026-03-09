@@ -124,6 +124,11 @@ export function useCreateClient() {
           projectsToCreate.push({ name: `Gestoría - ${data.name}`, area: "gestoria" });
         }
 
+        // Representación project
+        if (services.includes("representacion")) {
+          projectsToCreate.push({ name: `Representación - ${data.name}`, area: "representacion" });
+        }
+
         for (const proj of projectsToCreate) {
           const { error: projectError } = await supabase
             .from("projects")
@@ -288,6 +293,10 @@ export function useUpdateClient() {
 
         if (addedServices.includes("cumplimiento") && !existingAreas.includes("cumplimiento")) {
           projectsToCreate.push({ name: `Cumplimiento — ${data.name}`, area: "cumplimiento" });
+        }
+
+        if (addedServices.includes("representacion") && !existingAreas.includes("representacion")) {
+          projectsToCreate.push({ name: `Representación - ${data.name}`, area: "representacion" });
         }
 
         for (const proj of projectsToCreate) {

@@ -11,4 +11,5 @@ export const SERVICE_LABELS: Record<ServiceArea, string> = {
   gestoria: "Gestoría",
   constitucion_nacional: "Constitución Nacional",
   cumplimiento: "Cumplimiento",
+  representacion: "Representación",
 };

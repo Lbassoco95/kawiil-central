@@ -70,6 +70,7 @@ const EXTRA_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "gestoria", label: "Gestoría" },
   { value: "constitucion_nacional", label: "Constitución Nacional" },
   { value: "cumplimiento", label: "Cumplimiento" },
+  { value: "representacion" as ServiceArea, label: "Representación" },
 ];
 
 const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
@@ -80,9 +81,10 @@ const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "gestoria", label: "Gestoría" },
   { value: "constitucion_nacional", label: "Constitución Nacional" },
   { value: "cumplimiento", label: "Cumplimiento" },
+  { value: "representacion" as ServiceArea, label: "Representación" },
 ];
 
-const ALL_SERVICE_AREAS = ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento"] as const;
+const ALL_SERVICE_AREAS = ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento", "representacion"] as const;
 
 const clientSchema = z.object({
   name: z.string().trim().min(1, "El nombre es requerido").max(200),
@@ -93,10 +95,10 @@ const clientSchema = z.object({
   address: z.string().trim().max(500).optional().or(z.literal("")),
   notes: z.string().trim().max(2000).optional().or(z.literal("")),
   service_package: z.enum(["softlanding", "backoffice", "individual"] as const),
-  extra_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
-  individual_services: z.array(z.enum(ALL_SERVICE_AREAS)).default([]),
+  extra_services: z.array(z.string()).default([]) as any,
+  individual_services: z.array(z.string()).default([]) as any,
   payroll_type: z.enum(["none", "nomina", "asimilados", "ambos"] as const).default("none"),
-  primary_area: z.enum(ALL_SERVICE_AREAS).optional().nullable(),
+  primary_area: z.string().optional().nullable() as any,
   responsible_user_id: z.string().uuid().optional().nullable().or(z.literal("")),
   status: z.enum(["activo", "inactivo", "prospecto"] as const),
   contact_name: z.string().trim().max(200).optional().or(z.literal("")),

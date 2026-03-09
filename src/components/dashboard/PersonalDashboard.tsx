@@ -11,12 +11,15 @@ import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
 import { DailyBriefing } from "@/components/dashboard/DailyBriefing";
+import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { Badge } from "@/components/ui/badge";
 import {
   Plus,
   Trash2,
   ArrowRight,
   ChevronDown,
   ChevronRight,
+  Users,
 } from "lucide-react";
 import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { useNavigate } from "react-router-dom";
@@ -77,6 +80,43 @@ export function PersonalDashboard() {
         .gte("updated_at", todayStr);
       if (error) throw error;
       return count ?? 0;
+    },
+    enabled: !!user,
+  });
+
+  // My clients (where I'm responsible or have projects assigned)
+  const { data: myClients } = useQuery({
+    queryKey: ["personal-clients", user?.id],
+    queryFn: async () => {
+      // Get clients where user is responsible
+      const { data: directClients, error: e1 } = await supabase
+        .from("clients")
+        .select("id, name, status, services, primary_area")
+        .eq("responsible_user_id", user!.id)
+        .eq("status", "activo")
+        .order("name");
+      if (e1) throw e1;
+
+      // Get clients via projects where user is responsible
+      const { data: projectClients, error: e2 } = await supabase
+        .from("projects")
+        .select("client_id, clients!inner(id, name, status, services, primary_area)")
+        .eq("responsible_user_id", user!.id)
+        .eq("status", "activo")
+        .neq("client_id", null as any);
+      if (e2) throw e2;
+
+      // Merge and deduplicate
+      const clientMap = new Map<string, any>();
+      (directClients || []).forEach((c) => clientMap.set(c.id, c));
+      (projectClients || []).forEach((p: any) => {
+        const c = p.clients;
+        if (c && c.status === "activo") clientMap.set(c.id, c);
+      });
+
+      return Array.from(clientMap.values()).sort((a: any, b: any) =>
+        a.name.localeCompare(b.name)
+      );
     },
     enabled: !!user,
   });
@@ -174,6 +214,49 @@ export function PersonalDashboard() {
                     {formatDateMX(t.due_date)}
                   </span>
                 )}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* My Clients */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" />
+            Mis Clientes
+          </h2>
+          <button
+            onClick={() => navigate("/clientes")}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+          >
+            Ver todos <ArrowRight className="h-3 w-3" />
+          </button>
+        </div>
+        {!myClients?.length ? (
+          <p className="text-sm text-muted-foreground py-4">Sin clientes asignados</p>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {myClients.map((c: any) => (
+              <button
+                key={c.id}
+                className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                onClick={() => navigate(`/clientes/${c.id}`)}
+              >
+                <span className="text-sm text-foreground truncate flex-1">{c.name}</span>
+                <div className="flex gap-1 shrink-0">
+                  {(c.services || []).slice(0, 3).map((s: string) => (
+                    <Badge key={s} variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {(SERVICE_LABELS as any)[s] || s}
+                    </Badge>
+                  ))}
+                  {(c.services || []).length > 3 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      +{(c.services || []).length - 3}
+                    </Badge>
+                  )}
+                </div>
               </button>
             ))}
           </div>
