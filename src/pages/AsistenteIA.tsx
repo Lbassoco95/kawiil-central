@@ -20,9 +20,11 @@ import { toast } from "sonner";
 
 const SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
-  "Crea recordatorios para mis tareas que vencen esta semana",
+  "No sé cómo hacer una declaración anual, ¿me guías?",
+  "¿Qué comunicados internos recientes hay?",
   "¿Cómo está la carga de trabajo del equipo?",
-  "Redacta un correo profesional para un cliente sobre su declaración",
+  "Tengo miedo de equivocarme en un trámite, ¿me ayudas?",
+  "¿Dónde encuentro el procedimiento para alta en IMSS?",
 ];
 
 const FOLDER_PRESETS = [

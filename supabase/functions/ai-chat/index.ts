@@ -152,6 +152,34 @@ const tools = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_hub_procedures",
+      description: "Busca en los procedimientos y manuales internos del Hub. Útil cuando el usuario tiene dudas sobre cómo hacer algo, dónde encontrar información, procesos internos, o necesita orientación sobre la plataforma o los procedimientos del despacho.",
+      parameters: {
+        type: "object",
+        properties: {
+          search: { type: "string", description: "Texto de búsqueda para encontrar procedimientos relevantes (ej: 'declaración anual', 'alta IMSS', 'cómo facturar')" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_hub_comunicados",
+      description: "Obtiene los comunicados internos más recientes del equipo. Útil para saber qué novedades hay, anuncios importantes o avisos recientes.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "number", description: "Máximo de comunicados (default 5)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 async function executeTool(
@@ -337,6 +365,35 @@ async function executeTool(
         responsable: nameMap[c.responsible_user_id] || null,
       }));
     }
+    case "get_hub_procedures": {
+      let q = supabase.from("internal_procedures")
+        .select("title, description, file_path, current_version, updated_at")
+        .eq("organization_id", orgId)
+        .order("updated_at", { ascending: false });
+      if (args.search) {
+        q = q.or(`title.ilike.%${args.search}%,description.ilike.%${args.search}%`);
+      }
+      q = q.limit(10);
+      const { data, error } = await q;
+      if (error) return { error: error.message };
+      if (!data || data.length === 0) return { message: "No se encontraron procedimientos con ese criterio. Intenta con otros términos de búsqueda." };
+      return data.map((p: any) => ({
+        titulo: p.title,
+        descripcion: p.description,
+        version: p.current_version,
+        actualizado: p.updated_at,
+      }));
+    }
+    case "get_hub_comunicados": {
+      const { data, error } = await supabase.from("internal_comunicados")
+        .select("title, body, is_pinned, created_at")
+        .eq("organization_id", orgId)
+        .order("is_pinned", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(args.limit || 5);
+      if (error) return { error: error.message };
+      return data;
+    }
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
@@ -412,6 +469,20 @@ Ejemplos de tu estilo:
 ### 5. Resúmenes de proyectos
 - Cuando pregunten sobre un proyecto, da un resumen ejecutivo: cliente, área, estado general, últimos avances y qué falta.
 - "El proyecto de constitución de [Cliente] está al 60% — ya se completó el registro ante el SAT. Lo que sigue es la inscripción en el IMSS."
+
+### 6. Guía y orientación (Hub de conocimiento)
+- Cuando el usuario tenga CUALQUIER duda sobre cómo hacer algo, dónde encontrar información, o procesos internos, **busca en los procedimientos del Hub** usando la herramienta get_hub_procedures.
+- Si preguntan "¿cómo hago X?", "¿dónde encuentro Y?", "no sé cómo...", "me da miedo hacer...", "necesito ayuda con..." → SIEMPRE busca primero en el Hub.
+- Sé empático cuando el usuario exprese inseguridad o miedo: "¡No te preocupes! Aquí estoy para guiarte paso a paso. Según nuestro manual de [procedimiento]..."
+- Si el Hub tiene un procedimiento relevante, explica los pasos clave de forma clara y amigable.
+- Si no hay procedimiento en el Hub, responde con tu conocimiento general y sugiere que se documente el proceso.
+- También puedes consultar los comunicados internos recientes con get_hub_comunicados para mantener al usuario informado de novedades.
+
+### 7. Apoyo emocional y confianza
+- Si el usuario dice "no sé", "tengo miedo", "no entiendo", responde con calidez y paciencia.
+- "Tranquilo/a, es normal tener dudas. Vamos paso a paso 🙌"
+- Ofrece explicaciones claras del "por qué" detrás de cada proceso.
+- Celebra los logros: "¡Excelente! Ya tienes eso dominado 💪"
 
 ## REGLAS DE SEGURIDAD
 - Eres la IA INTERNA del despacho. Solo los Kawiilers tienen acceso.
