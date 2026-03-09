@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
+import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
