@@ -269,6 +269,7 @@ export function useOutlookEmails(folder = "inbox", search?: string) {
       return data?.value || [];
     },
     enabled: !!user,
+    refetchInterval: 60000, // sync read status every 60s
   });
 }
 
@@ -327,6 +328,9 @@ export function useMarkEmailRead() {
         return old.map((e: any) => (e.id === messageId ? { ...e, isRead: true } : e));
       });
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+    },
   });
 }
 
@@ -352,5 +356,24 @@ export function useForwardEmail() {
       toast.success("Correo reenviado");
     },
     onError: (err: Error) => toast.error("Error al reenviar: " + err.message),
+  });
+}
+
+export function useUnreadEmailCount() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["unread-email-count"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "emails", params: { folder: "inbox", top: 50 } },
+      });
+      if (error) return 0;
+      const emails = data?.value || [];
+      return emails.filter((e: any) => !e.isRead).length;
+    },
+    enabled: !!user,
+    refetchInterval: 60000, // poll every 60s
+    staleTime: 30000,
   });
 }
