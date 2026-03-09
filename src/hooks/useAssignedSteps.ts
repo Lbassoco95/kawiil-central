@@ -13,6 +13,7 @@ export interface AssignedStep {
   projectId: string;
   projectName: string;
   clientName: string | null;
+  isCollaborator?: boolean;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -23,6 +24,13 @@ const SOURCE_LABELS: Record<string, string> = {
   juicio: "Juicio",
 };
 
+/** Check if a step is assigned to or has the user as collaborator */
+function isUserInvolved(step: any, userId: string): "assigned" | "collaborator" | false {
+  if (step.assigned_to === userId) return "assigned";
+  if (Array.isArray(step.collaborators) && step.collaborators.includes(userId)) return "collaborator";
+  return false;
+}
+
 export function useAssignedSteps() {
   const { user } = useAuth();
 
@@ -30,6 +38,7 @@ export function useAssignedSteps() {
     queryKey: ["assigned-steps", user?.id],
     queryFn: async () => {
       const steps: AssignedStep[] = [];
+      const userId = user!.id;
 
       // Projects with constitution_details (gestoria + constitution)
       const { data: projects } = await supabase
@@ -42,7 +51,8 @@ export function useAssignedSteps() {
           const details = p.constitution_details as any;
           if (details?.steps) {
             for (const s of details.steps) {
-              if (s.assigned_to === user!.id) {
+              const role = isUserInvolved(s, userId);
+              if (role) {
                 const type = p.area === "gestoria" ? "gestoria" : "constitucion";
                 steps.push({
                   id: `${p.id}_${s.key}`,
@@ -55,6 +65,7 @@ export function useAssignedSteps() {
                   projectId: p.id,
                   projectName: p.name,
                   clientName: (p as any).clients?.name || null,
+                  isCollaborator: role === "collaborator",
                 });
               }
             }
@@ -73,7 +84,8 @@ export function useAssignedSteps() {
           const details = p.lawsuit_details as any;
           if (details?.stages) {
             for (const s of details.stages) {
-              if (s.assigned_to === user!.id) {
+              const role = isUserInvolved(s, userId);
+              if (role) {
                 steps.push({
                   id: `${p.id}_${s.key}`,
                   stepKey: s.key,
@@ -85,6 +97,7 @@ export function useAssignedSteps() {
                   projectId: p.id,
                   projectName: p.name,
                   clientName: (p as any).clients?.name || null,
+                  isCollaborator: role === "collaborator",
                 });
               }
             }
@@ -109,7 +122,8 @@ export function useAssignedSteps() {
           if (!stepsArr) continue;
           const proj = projMap.get(period.project_id);
           for (const s of stepsArr) {
-            if (s.assigned_to === user!.id) {
+            const role = isUserInvolved(s, userId);
+            if (role) {
               steps.push({
                 id: `ap_${period.id}_${s.key}`,
                 stepKey: s.key,
@@ -121,6 +135,7 @@ export function useAssignedSteps() {
                 projectId: period.project_id,
                 projectName: proj?.name || "Proyecto",
                 clientName: (proj as any)?.clients?.name || null,
+                isCollaborator: role === "collaborator",
               });
             }
           }
@@ -144,7 +159,8 @@ export function useAssignedSteps() {
           if (!stepsArr) continue;
           const proj = projMap.get(decl.project_id);
           for (const s of stepsArr) {
-            if (s.assigned_to === user!.id) {
+            const role = isUserInvolved(s, userId);
+            if (role) {
               steps.push({
                 id: `ad_${decl.id}_${s.key}`,
                 stepKey: s.key,
@@ -156,6 +172,7 @@ export function useAssignedSteps() {
                 projectId: decl.project_id,
                 projectName: proj?.name || "Proyecto",
                 clientName: (proj as any)?.clients?.name || null,
+                isCollaborator: role === "collaborator",
               });
             }
           }

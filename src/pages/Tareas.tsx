@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,29 +124,41 @@ INSTRUCCIONES:
               <span className="text-[10px] text-muted-foreground">{assignedSteps.length}</span>
             </div>
             <div className="space-y-px">
-              {assignedSteps.slice(0, 10).map((step) => (
-                <div
-                  key={step.id}
-                  className="flex items-center gap-3 text-sm cursor-pointer hover:bg-secondary/40 rounded-lg px-3 py-2.5 transition-colors"
-                  onClick={() => navigate(`/proyectos/${step.projectId}`)}
-                >
-                  <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">{step.sourceLabel}</span>
-                  <span className="flex-1 truncate text-[13px] font-medium text-foreground">{step.stepLabel}</span>
-                  {step.clientName && (
-                    <span className="text-[11px] text-muted-foreground shrink-0">{step.clientName}</span>
-                  )}
-                  {step.dueDate && (
-                    <span className="text-[11px] text-muted-foreground shrink-0 flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {formatMX(step.dueDate, "dd MMM")}
+              {assignedSteps.slice(0, 10).map((step) => {
+                const isOverdue = step.dueDate && new Date(step.dueDate) < new Date();
+                return (
+                  <div
+                    key={step.id}
+                    className={cn(
+                      "flex items-center gap-3 text-sm cursor-pointer hover:bg-secondary/40 rounded-lg px-3 py-2.5 transition-colors",
+                      isOverdue && "bg-destructive/5"
+                    )}
+                    onClick={() => navigate(`/proyectos/${step.projectId}`)}
+                  >
+                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">{step.sourceLabel}</span>
+                    <span className="flex-1 truncate text-[13px] font-medium text-foreground">{step.stepLabel}</span>
+                    {step.isCollaborator && (
+                      <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">Colaborador</span>
+                    )}
+                    {step.clientName && (
+                      <span className="text-[11px] text-muted-foreground shrink-0">{step.clientName}</span>
+                    )}
+                    {step.dueDate && (
+                      <span className={cn(
+                        "text-[11px] shrink-0 flex items-center gap-1",
+                        isOverdue ? "text-destructive font-medium" : "text-muted-foreground"
+                      )}>
+                        <Calendar className="h-3 w-3" />
+                        {formatMX(step.dueDate, "dd MMM")}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                      {stepStatusLabels[step.status] || step.status}
                     </span>
-                  )}
-                  <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
-                    {stepStatusLabels[step.status] || step.status}
-                  </span>
-                  <ArrowRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
-                </div>
-              ))}
+                    <ArrowRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+                  </div>
+                );
+              })}
               {assignedSteps.length > 10 && (
                 <p className="text-[11px] text-muted-foreground text-center py-1">
                   +{assignedSteps.length - 10} pasos más
