@@ -475,25 +475,33 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
               />
             )}
 
-            {/* Payroll toggle */}
+            {/* Payroll type selector */}
             {(servicePackage === "backoffice" || servicePackage === "softlanding" || allServices.includes("contabilidad")) && (
               <FormField
                 control={form.control}
-                name="has_payroll"
+                name="payroll_type"
                 render={({ field }) => (
-                  <FormItem className="flex items-center space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="cursor-pointer">Lleva nómina</FormLabel>
-                      <p className="text-xs text-muted-foreground">
-                        Agrega obligaciones de ISR Retenciones, IMSS e ISN al proyecto contable
-                      </p>
-                    </div>
+                  <FormItem className="rounded-md border p-4">
+                    <FormLabel>Tipo de nómina</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar tipo" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Sin nómina</SelectItem>
+                        <SelectItem value="nomina">Nómina</SelectItem>
+                        <SelectItem value="asimilados">Asimilados a salarios</SelectItem>
+                        <SelectItem value="ambos">Nómina + Asimilados</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {field.value === "nomina" && "Agrega ISR Retenciones (nómina), IMSS e ISN"}
+                      {field.value === "asimilados" && "Agrega únicamente ISR Retenciones (asimilados)"}
+                      {field.value === "ambos" && "Agrega ISR Retenciones (nómina), ISR Retenciones (asimilados), IMSS e ISN"}
+                    </p>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
