@@ -454,6 +454,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
           taskDueDate={task.due_date || undefined}
         />
       )}
+      <DropboxFilePicker
+        open={showDropboxPicker}
+        onClose={() => setShowDropboxPicker(false)}
+        initialPath="/Kawiil Mx"
+        onSelect={handleDropboxPickerSelect}
+      />
     </Dialog>
   );
 }
