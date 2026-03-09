@@ -156,15 +156,18 @@ ${upcomingDeadlines.slice(0, 6).map((d: any) => {
     // Constitution details (softlanding / constitucion_nacional)
     if ((project.area === "softlanding" || project.area === "constitucion_nacional") && (project as any).constitution_details) {
       const cd = (project as any).constitution_details;
-      const phases = Array.isArray(cd.phases) ? cd.phases : [];
-      const allSteps = phases.flatMap((p: any) => Array.isArray(p.steps) ? p.steps : []);
-      const completedSteps = allSteps.filter((s: any) => s.completed);
-      const pendingSteps = allSteps.filter((s: any) => !s.completed);
+      const allSteps = Array.isArray(cd.steps) ? cd.steps : [];
+      const completedSteps = allSteps.filter((s: any) => s.status === "completado" || s.completed);
+      const inProgressSteps = allSteps.filter((s: any) => s.step_status === "en_progreso" || s.status === "en_progreso");
+      const waitingSteps = allSteps.filter((s: any) => s.step_status === "en_espera_cliente");
+      const pendingSteps = allSteps.filter((s: any) => s.status !== "completado" && !s.completed && s.status !== "no_aplica");
       
       areaContext = `
 DATOS DE CONSTITUCIÓN:
 - Pasos completados: ${completedSteps.length}/${allSteps.length} (${allSteps.length > 0 ? Math.round((completedSteps.length / allSteps.length) * 100) : 0}%)
-- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => s.label || s.key).join(", ")}`;
+- En progreso: ${inProgressSteps.length > 0 ? inProgressSteps.map((s: any) => s.label || s.key).join(", ") : "ninguno"}
+- En espera de cliente: ${waitingSteps.length > 0 ? waitingSteps.map((s: any) => s.label || s.key).join(", ") : "ninguno"}
+- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => `${s.label || s.key} (${s.step_status || s.status || "pendiente"})`).join(", ") || "ninguno"}`;
     }
 
     // Gestoría details
