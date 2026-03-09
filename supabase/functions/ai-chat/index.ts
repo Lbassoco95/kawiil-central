@@ -547,7 +547,7 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
           body: JSON.stringify({
             model: "google/gemini-3-flash-preview",
             messages: aiMessages,
-            tools,
+            ...(useTools ? { tools } : {}),
             stream: false,
           }),
         });
