@@ -52,6 +52,7 @@ const ProyectoDetalle = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
+  const [showMinutesDialog, setShowMinutesDialog] = useState(false);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
