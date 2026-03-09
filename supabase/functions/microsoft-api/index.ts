@@ -308,10 +308,7 @@ Deno.serve(async (req) => {
       }
 
       case "check-connection": {
-        const res = await fetch(`${GRAPH_BASE}/me`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        result = await res.json();
+        result = await graphRequest(accessToken, "/me");
         break;
       }
 
