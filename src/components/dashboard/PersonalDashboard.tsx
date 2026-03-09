@@ -5,22 +5,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useReminders } from "@/hooks/useReminders";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { getWeeklyQuote } from "@/lib/weeklyQuotes";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Progress } from "@/components/ui/progress";
 import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
 import { DailyBriefing } from "@/components/dashboard/DailyBriefing";
 import {
-  Plus as PlusIcon,
+  Plus,
   Trash2,
-  Bell,
-  CheckSquare,
   ArrowRight,
-  Quote,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +32,20 @@ export function PersonalDashboard() {
     return profile?.area ?? null;
   }, [orgUsers, user]);
   const quote = useMemo(() => getWeeklyQuote(), []);
+  const [showCharts, setShowCharts] = useState(false);
+
+  const { data: profile } = useQuery({
+    queryKey: ["dashboard-profile", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("user_id", user!.id)
+        .single();
+      return data;
+    },
+    enabled: !!user,
+  });
 
   // My tasks
   const { data: myTasks } = useQuery({
@@ -74,42 +84,59 @@ export function PersonalDashboard() {
   // Reminders
   const { reminders, addReminder, toggleReminder, deleteReminder } = useReminders();
   const [newReminder, setNewReminder] = useState("");
-  const [reminderDate, setReminderDate] = useState("");
 
   const pendingReminders = reminders.filter((r) => !r.is_completed);
   const completedReminders = reminders.filter((r) => r.is_completed);
 
   const handleAddReminder = () => {
     if (!newReminder.trim()) return;
-    addReminder.mutate({
-      title: newReminder.trim(),
-      due_date: reminderDate || undefined,
-    });
+    addReminder.mutate({ title: newReminder.trim() });
     setNewReminder("");
-    setReminderDate("");
   };
 
   const overdueTasks = myTasks?.filter(
     (t) => t.due_date && new Date(t.due_date) < today
   ).length ?? 0;
 
-  const priorityColor = (p: string) => {
+  const totalPending = myTasks?.length ?? 0;
+  const firstName = profile?.full_name?.split(" ")[0] || "";
+
+  const priorityDot = (p: string) => {
     switch (p) {
-      case "urgente": return "bg-destructive/10 text-destructive border-destructive/20";
-      case "alta": return "bg-warning/10 text-warning border-warning/20";
-      case "media": return "bg-primary/10 text-primary border-primary/20";
-      default: return "bg-muted text-muted-foreground";
+      case "urgente": return "bg-destructive";
+      case "alta": return "bg-warning";
+      case "media": return "bg-primary";
+      default: return "bg-muted-foreground/30";
     }
   };
 
-  const totalPending = myTasks?.length ?? 0;
-  const progressPct = totalPending + (completedToday ?? 0) > 0
-    ? Math.round(((completedToday ?? 0) / (totalPending + (completedToday ?? 0))) * 100)
-    : 0;
-
   return (
-    <div className="space-y-8">
-      {/* AI Daily Briefing */}
+    <div className="max-w-3xl space-y-10">
+      {/* Greeting */}
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+          {firstName ? `Hola, ${firstName}` : "Hola"} 👋
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {totalPending} pendiente{totalPending !== 1 ? "s" : ""}
+          {overdueTasks > 0 && (
+            <span className="text-destructive"> · {overdueTasks} vencida{overdueTasks !== 1 ? "s" : ""}</span>
+          )}
+          {(completedToday ?? 0) > 0 && (
+            <span className="text-accent"> · {completedToday} completada{(completedToday ?? 0) !== 1 ? "s" : ""} hoy</span>
+          )}
+        </p>
+      </div>
+
+      {/* Quote — subtle, one line */}
+      <p className="text-[13px] text-muted-foreground italic border-l-2 border-border pl-3">
+        "{quote.text}" — {quote.author}
+      </p>
+
+      {/* Mood — inline */}
+      <MoodCheckin userCelula={userCelula} />
+
+      {/* AI Briefing — collapsible */}
       <DailyBriefing
         tasksCount={totalPending}
         completedToday={completedToday ?? 0}
@@ -117,162 +144,124 @@ export function PersonalDashboard() {
         remindersCount={pendingReminders.length}
       />
 
-      {/* Weekly Quote */}
-      <div className="rounded-2xl bg-primary/5 border border-primary/10 p-6 relative overflow-hidden">
-        <Quote className="absolute top-4 right-4 h-8 w-8 text-primary/10" />
-        <p className="text-[15px] text-foreground italic leading-relaxed max-w-2xl">
-          "{quote.text}"
-        </p>
-        <p className="text-xs text-muted-foreground mt-3">— {quote.author}</p>
-      </div>
-
-      {/* Mood Check-in */}
-      <MoodCheckin userCelula={userCelula} />
-
-      {/* Today's Summary */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
-          <div className="text-xl font-semibold text-foreground">{totalPending}</div>
-          <div className="text-[11px] text-muted-foreground mt-1">Tareas pendientes</div>
+      {/* Tasks */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">
+            Tareas
+          </h2>
+          <button
+            onClick={() => navigate("/tareas")}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+          >
+            Ver todas <ArrowRight className="h-3 w-3" />
+          </button>
         </div>
-        <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
-          <div className="text-xl font-semibold text-foreground">{completedToday ?? 0}</div>
-          <div className="text-[11px] text-muted-foreground mt-1">Completadas hoy</div>
-        </div>
-        <div className={`rounded-xl px-4 py-3.5 ${overdueTasks > 0 ? "bg-destructive/5" : "bg-secondary/50"}`}>
-          <div className={`text-xl font-semibold ${overdueTasks > 0 ? "text-destructive" : "text-foreground"}`}>{overdueTasks}</div>
-          <div className="text-[11px] text-muted-foreground mt-1">Vencidas</div>
-        </div>
-        <div className="rounded-xl bg-secondary/50 px-4 py-3.5">
-          <div className="text-xl font-semibold text-foreground">{pendingReminders.length}</div>
-          <div className="text-[11px] text-muted-foreground mt-1">Recordatorios</div>
-        </div>
-      </div>
+        {!myTasks?.length ? (
+          <p className="text-sm text-muted-foreground py-4">Sin tareas pendientes</p>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {myTasks.map((t) => (
+              <button
+                key={t.id}
+                className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                onClick={() => navigate("/tareas")}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
+                <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
+                {t.due_date && (
+                  <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                    {formatDateMX(t.due_date)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
 
-      {/* Progress bar */}
-      <div className="rounded-xl bg-secondary/30 p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[13px] font-medium text-foreground">Tu avance de hoy</span>
-          <span className="text-[13px] font-semibold text-primary">{progressPct}%</span>
-        </div>
-        <Progress value={progressPct} className="h-1.5" />
-      </div>
+      {/* Reminders */}
+      <section>
+        <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">
+          Recordatorios
+        </h2>
 
-      {/* Performance Chart */}
-      <PerformanceChart />
-
-      {/* Monthly Performance */}
-      <MonthlyPerformance />
-
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* Tasks */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CheckSquare className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Mis tareas</h2>
-            </div>
-            <button
-              onClick={() => navigate("/tareas")}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
-            >
-              Ver todas <ArrowRight className="h-3 w-3" />
+        <div className="flex items-center gap-2 mb-3">
+          <Input
+            placeholder="Agregar recordatorio..."
+            value={newReminder}
+            onChange={(e) => setNewReminder(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAddReminder()}
+            className="text-sm h-8 border-0 bg-transparent shadow-none px-0 placeholder:text-muted-foreground/50 focus-visible:ring-0"
+          />
+          {newReminder.trim() && (
+            <button onClick={handleAddReminder} className="text-muted-foreground hover:text-foreground">
+              <Plus className="h-4 w-4" />
             </button>
-          </div>
-          {!myTasks?.length ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Sin tareas pendientes 🎉</p>
-          ) : (
-            <div className="space-y-px">
-              {myTasks.map((t) => (
+          )}
+        </div>
+
+        {pendingReminders.length === 0 && completedReminders.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">Sin recordatorios</p>
+        ) : (
+          <div className="space-y-0.5">
+            {pendingReminders.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 py-1.5 group">
+                <Checkbox
+                  checked={false}
+                  onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
+                  className="h-3.5 w-3.5"
+                />
+                <span className="text-sm text-foreground flex-1 truncate">{r.title}</span>
+                {r.due_date && (
+                  <span className={`text-[11px] ${new Date(r.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                    {formatDateMX(r.due_date)}
+                  </span>
+                )}
                 <button
-                  key={t.id}
-                  className="flex items-center justify-between w-full rounded-lg px-3 py-2.5 text-sm hover:bg-secondary/60 transition-colors text-left"
-                  onClick={() => navigate("/tareas")}
+                  onClick={() => deleteReminder.mutate(r.id)}
+                  className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
                 >
-                  <span className="truncate flex-1 mr-3 text-foreground">{t.title}</span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {t.due_date && (
-                      <span className={`text-[11px] ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                        {formatDateMX(t.due_date)}
-                      </span>
-                    )}
-                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${priorityColor(t.priority)}`}>
-                      {t.priority}
-                    </Badge>
-                  </div>
+                  <Trash2 className="h-3 w-3" />
                 </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Reminders */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Bell className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Recordatorios</h2>
+              </div>
+            ))}
+            {completedReminders.slice(0, 2).map((r) => (
+              <div key={r.id} className="flex items-center gap-3 py-1.5 opacity-40 group">
+                <Checkbox
+                  checked={true}
+                  onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: false })}
+                  className="h-3.5 w-3.5"
+                />
+                <span className="text-sm text-muted-foreground line-through flex-1 truncate">{r.title}</span>
+                <button
+                  onClick={() => deleteReminder.mutate(r.id)}
+                  className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
           </div>
+        )}
+      </section>
 
-          {/* Add reminder */}
-          <div className="flex gap-2 mb-4">
-            <Input
-              placeholder="Nuevo recordatorio..."
-              value={newReminder}
-              onChange={(e) => setNewReminder(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddReminder()}
-              className="text-sm h-9 bg-secondary/30 border-0"
-            />
-            <Input
-              type="date"
-              value={reminderDate}
-              onChange={(e) => setReminderDate(e.target.value)}
-              className="text-sm h-9 w-36 bg-secondary/30 border-0"
-            />
-            <Button size="sm" variant="ghost" onClick={handleAddReminder} disabled={!newReminder.trim()}>
-              <PlusIcon className="h-4 w-4" />
-            </Button>
+      {/* Charts — collapsed by default */}
+      <section>
+        <button
+          onClick={() => setShowCharts(!showCharts)}
+          className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showCharts ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          <span className="uppercase tracking-wide">Rendimiento</span>
+        </button>
+        {showCharts && (
+          <div className="mt-6 space-y-8">
+            <PerformanceChart />
+            <MonthlyPerformance />
           </div>
-
-          {pendingReminders.length === 0 && completedReminders.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Sin recordatorios</p>
-          ) : (
-            <div className="space-y-px">
-              {pendingReminders.map((r) => (
-                <div key={r.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-secondary/60 transition-colors">
-                  <Checkbox
-                    checked={false}
-                    onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-foreground truncate block">{r.title}</span>
-                    {r.due_date && (
-                      <span className={`text-[11px] ${new Date(r.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
-                        {formatDateMX(r.due_date)}
-                      </span>
-                    )}
-                  </div>
-                  <button onClick={() => deleteReminder.mutate(r.id)} className="text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-              {completedReminders.slice(0, 3).map((r) => (
-                <div key={r.id} className="flex items-center gap-3 rounded-lg px-3 py-2 opacity-50">
-                  <Checkbox
-                    checked={true}
-                    onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: false })}
-                  />
-                  <span className="text-sm text-muted-foreground line-through truncate flex-1">{r.title}</span>
-                  <button onClick={() => deleteReminder.mutate(r.id)} className="text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
+        )}
+      </section>
     </div>
   );
 }
