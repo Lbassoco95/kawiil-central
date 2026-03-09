@@ -91,6 +91,7 @@ export function UnifiedStepRow({
 
   useEffect(() => {
     setLocalStatus((step.step_status as StepStatus) || "pendiente");
+    setLocalLabel(step.label);
     setLocalDueDate(step.due_date ? new Date(step.due_date) : undefined);
     setLocalNotes(step.notes || "");
     setLocalAssignee(step.assigned_to || null);
