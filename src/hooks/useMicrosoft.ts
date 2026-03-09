@@ -354,3 +354,22 @@ export function useForwardEmail() {
     onError: (err: Error) => toast.error("Error al reenviar: " + err.message),
   });
 }
+
+export function useUnreadEmailCount() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["unread-email-count"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "emails", params: { folder: "inbox", top: 50 } },
+      });
+      if (error) return 0;
+      const emails = data?.value || [];
+      return emails.filter((e: any) => !e.isRead).length;
+    },
+    enabled: !!user,
+    refetchInterval: 60000, // poll every 60s
+    staleTime: 30000,
+  });
+}
