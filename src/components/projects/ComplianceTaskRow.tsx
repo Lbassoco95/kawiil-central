@@ -286,7 +286,18 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 ml-7 space-y-3 pb-1">
-            {/* Timer */}
+            {/* Editable title */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Nombre de la tarea</label>
+              <Input
+                className="text-sm h-8"
+                value={localTitle}
+                onChange={(e) => { setLocalTitle(e.target.value); markChanged(); }}
+                placeholder="Nombre de la tarea..."
+              />
+            </div>
+
+
             <div className="flex items-center gap-3 rounded-md border border-border/50 bg-background px-3 py-2">
               <Timer className="h-4 w-4 text-muted-foreground" />
               <span className="font-mono text-sm font-medium flex-1">{formatTime(displaySeconds)}</span>
