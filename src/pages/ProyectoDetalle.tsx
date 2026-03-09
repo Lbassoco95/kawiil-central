@@ -178,6 +178,15 @@ const ProyectoDetalle = () => {
               <p className="text-sm text-muted-foreground mt-0.5">{project.description}</p>
             )}
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={() => setShowMinutesDialog(true)}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Subir minuta</span>
+          </Button>
         </div>
 
         {/* Tab pills */}
