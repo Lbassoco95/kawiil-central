@@ -337,6 +337,19 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             </svg>
           </Button>
 
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            onClick={() => {
+              window.open("https://www.dropbox.com/scan", "_blank");
+              toast.info("Escanea el documento con Dropbox y luego selecciónalo con el botón de Dropbox.");
+            }}
+            title="Escanear con Dropbox"
+          >
+            <ScanLine className="h-3 w-3" />
+          </Button>
+
           <Popover open={showLinkPopover} onOpenChange={setShowLinkPopover}>
             <PopoverTrigger asChild>
               <Button
