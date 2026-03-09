@@ -269,6 +269,7 @@ export function useOutlookEmails(folder = "inbox", search?: string) {
       return data?.value || [];
     },
     enabled: !!user,
+    refetchInterval: 60000, // sync read status every 60s
   });
 }
 
