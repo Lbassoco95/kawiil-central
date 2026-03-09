@@ -200,6 +200,31 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     setDropboxUploadFile(null);
   };
 
+  const handleDropboxPickerSelect = async (file: { name: string; url: string }) => {
+    if (!user) return;
+    try {
+      const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+      const { data: doc, error } = await supabase
+        .from("documents")
+        .insert({
+          name: file.name,
+          external_path: file.url,
+          organization_id: orgId!,
+          project_id: projectId,
+          uploaded_by: user.id,
+          source: "dropbox" as const,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      onDocumentAdded([...documentIds, doc.id]);
+      logActivity({ entityType: "document", entityId: doc.id, action: "created", details: { name: file.name, source: "dropbox_picker" } });
+      toast.success(`"${file.name}" vinculado desde Dropbox`);
+    } catch (err: any) {
+      toast.error("Error: " + err.message);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
