@@ -75,7 +75,10 @@ const ProyectoDetalle = () => {
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
 
+  const initialTab = searchParams.get("tab");
+
   const [tab, setTab] = useState<string>(() => {
+    if (initialTab) return initialTab;
     if (isCumplimiento) return "cumplimiento";
     if (isGestoria) return "gestoria";
     if (hasConstitution) return "constitucion";
@@ -83,6 +86,15 @@ const ProyectoDetalle = () => {
     if (hasAccounting) return "contabilidad";
     return "general";
   });
+
+  // Handle deep-link to specific task
+  useEffect(() => {
+    const taskId = searchParams.get("taskId");
+    if (taskId) {
+      setTab("tareas");
+      setSelectedTaskId(taskId);
+    }
+  }, [searchParams]);
 
   if (isLoading) {
     return (
