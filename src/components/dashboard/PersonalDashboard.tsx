@@ -35,7 +35,36 @@ export function PersonalDashboard() {
     const profile = orgUsers.find((u) => u.user_id === user.id);
     return profile?.area ?? null;
   }, [orgUsers, user]);
-  const quote = useMemo(() => getWeeklyQuote(), []);
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+  const [currentTime, setCurrentTime] = useState(() => nowMX());
+  const [personalPhrase, setPersonalPhrase] = useState<string | null>(null);
+  const [phraseLoading, setPhraseLoading] = useState(false);
+
+  // Live clock
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(nowMX()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Check if user has completed questionnaire
+  const { data: userPrefs, refetch: refetchPrefs } = useQuery({
+    queryKey: ["user-preferences", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_preferences")
+        .select("completed_at, answers")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const hasCompletedQuestionnaire = !!userPrefs?.completed_at;
+  const questionnaireDeadline = new Date("2026-03-24T23:59:59-06:00");
+  const showQuestionnaireReminder = !hasCompletedQuestionnaire && today < questionnaireDeadline;
+  const daysLeft = Math.max(0, Math.ceil((questionnaireDeadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 
   const { data: profile } = useQuery({
     queryKey: ["dashboard-profile", user?.id],
@@ -49,6 +78,54 @@ export function PersonalDashboard() {
     },
     enabled: !!user,
   });
+
+  // Fetch personalized phrase (max 2x/day)
+  const fetchPhrase = async (moodScore?: number) => {
+    if (!user) return;
+    setPhraseLoading(true);
+    try {
+      const hour = currentTime.getHours();
+      const timeOfDay = hour < 14 ? "morning" : "afternoon";
+
+      const { data, error } = await supabase.functions.invoke("generate-phrase", {
+        body: { mood_score: moodScore ?? null, time_of_day: timeOfDay },
+      });
+      if (error) throw error;
+      if (data?.phrase) {
+        setPersonalPhrase(data.phrase);
+        // Cache locally
+        try {
+          localStorage.setItem(`kawiil-phrase-${user.id}`, JSON.stringify({
+            date: today.toISOString().split("T")[0],
+            timeOfDay,
+            phrase: data.phrase,
+          }));
+        } catch {}
+      }
+    } catch (e: any) {
+      console.error("Phrase error:", e);
+    } finally {
+      setPhraseLoading(false);
+    }
+  };
+
+  // Load cached phrase or generate on first load
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const cached = localStorage.getItem(`kawiil-phrase-${user.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const hour = currentTime.getHours();
+        const currentTimeOfDay = hour < 14 ? "morning" : "afternoon";
+        if (parsed.date === today.toISOString().split("T")[0] && parsed.timeOfDay === currentTimeOfDay) {
+          setPersonalPhrase(parsed.phrase);
+          return;
+        }
+      }
+    } catch {}
+    fetchPhrase();
+  }, [user?.id]);
 
   // My tasks
   const { data: myTasks } = useQuery({
