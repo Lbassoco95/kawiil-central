@@ -94,6 +94,7 @@ const ALL_SERVICE_AREAS = [
   "gestoria",
   "constitucion_nacional",
   "cumplimiento",
+  "representacion",
 ] as const;
 
 const clientSchema = z.object({

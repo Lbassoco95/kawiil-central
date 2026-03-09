@@ -1783,6 +1783,7 @@ export type Database = {
         | "gestoria"
         | "constitucion_nacional"
         | "cumplimiento"
+        | "representacion"
       task_priority: "urgente" | "alta" | "media" | "baja"
       task_status:
         | "pendiente"
@@ -1931,6 +1932,7 @@ export const Constants = {
         "gestoria",
         "constitucion_nacional",
         "cumplimiento",
+        "representacion",
       ],
       task_priority: ["urgente", "alta", "media", "baja"],
       task_status: [
