@@ -129,6 +129,7 @@ export function UnifiedStepRow({
 
   const handleSave = () => {
     const updates: Partial<AccountingStep> = {
+      label: localLabel,
       step_status: localStatus,
       due_date: localDueDate ? localDueDate.toISOString() : null,
       notes: localNotes || null,
