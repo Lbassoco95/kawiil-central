@@ -405,6 +405,9 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <Button size="sm" variant="outline" onClick={handleAddDropboxLink}>
                     <Plus className="h-4 w-4 mr-1" />Agregar
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowDropboxPicker(true)} title="Seleccionar archivo de Dropbox">
+                    <FolderOpen className="h-4 w-4" />
+                  </Button>
                 </div>
               </TabsContent>
 
