@@ -11,9 +11,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AlertTriangle, Save, Pencil, X } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const CRITICALITY_OPTIONS = [
   { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
@@ -32,17 +33,54 @@ export const DELAY_CATEGORIES = [
 
 interface Props {
   projectId: string;
-  criticalityLevel: string;
-  delayCategory: string | null;
-  delayNotes: string | null;
 }
 
-export function CriticalityDelayCard({ projectId, criticalityLevel, delayCategory, delayNotes }: Props) {
+export function CriticalityDelayCard({ projectId }: Props) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  // Read from cached project query
+  const { data: project } = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, criticality_level, delay_category, delay_notes")
+        .eq("id", projectId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!projectId,
+  });
+
+  const criticalityLevel = (project as any)?.criticality_level || "normal";
+  const delayCategory = (project as any)?.delay_category || "";
+  const delayNotes = (project as any)?.delay_notes || "";
+
   const [editing, setEditing] = useState(false);
-  const [crit, setCrit] = useState(criticalityLevel || "normal");
-  const [delay, setDelay] = useState(delayCategory || "");
-  const [notes, setNotes] = useState(delayNotes || "");
+  const [crit, setCrit] = useState(criticalityLevel);
+  const [delay, setDelay] = useState(delayCategory);
+  const [notes, setNotes] = useState(delayNotes);
+
+  // Sync state when project data changes
+  const [lastProjectId, setLastProjectId] = useState(projectId);
+  if (projectId !== lastProjectId) {
+    setLastProjectId(projectId);
+    setCrit(criticalityLevel);
+    setDelay(delayCategory);
+    setNotes(delayNotes);
+  }
+
+  // Also sync when not editing and data updates
+  const projectKey = `${criticalityLevel}-${delayCategory}-${delayNotes}`;
+  const [lastKey, setLastKey] = useState(projectKey);
+  if (!editing && projectKey !== lastKey) {
+    setLastKey(projectKey);
+    setCrit(criticalityLevel);
+    setDelay(delayCategory);
+    setNotes(delayNotes);
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -65,14 +103,16 @@ export function CriticalityDelayCard({ projectId, criticalityLevel, delayCategor
   });
 
   const handleCancel = () => {
-    setCrit(criticalityLevel || "normal");
-    setDelay(delayCategory || "");
-    setNotes(delayNotes || "");
+    setCrit(criticalityLevel);
+    setDelay(delayCategory);
+    setNotes(delayNotes);
     setEditing(false);
   };
 
-  const currentCriticality = CRITICALITY_OPTIONS.find((c) => c.value === (criticalityLevel || "normal"));
-  const currentDelay = DELAY_CATEGORIES.find((d) => d.value === delayCategory);
+  const currentCriticality = CRITICALITY_OPTIONS.find((c) => c.value === crit);
+  const currentDelay = DELAY_CATEGORIES.find((d) => d.value === delay);
+
+  if (!project) return null;
 
   return (
     <Card className={criticalityLevel === "critico" ? "border-destructive/40" : criticalityLevel === "atencion" ? "border-yellow-400/40" : ""}>
@@ -129,12 +169,12 @@ export function CriticalityDelayCard({ projectId, criticalityLevel, delayCategor
               </SelectContent>
             </Select>
           ) : (
-            <span>{currentDelay?.label || "Sin atraso"}</span>
+            <span>{currentDelay && currentDelay.value !== "__none__" ? currentDelay.label : "Sin atraso"}</span>
           )}
         </div>
 
         {/* Delay notes */}
-        {(editing || delayCategory) && (
+        {(editing || delay) && (
           <div>
             <span className="text-muted-foreground text-xs">Notas de atraso</span>
             {editing ? (
@@ -146,7 +186,7 @@ export function CriticalityDelayCard({ projectId, criticalityLevel, delayCategor
               />
             ) : (
               <p className="text-sm text-muted-foreground whitespace-pre-wrap mt-1">
-                {delayNotes || "—"}
+                {notes || "—"}
               </p>
             )}
           </div>
