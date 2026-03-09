@@ -88,13 +88,16 @@ function DropboxLiveBrowser() {
     setShowFolderPicker(true);
     setPickerLoading(true);
     try {
+      // Use the special action that lists the TRUE root namespace
+      // to show personal member folders (not the Kawiil Mx shared folder contents)
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: { path: "", action: "list" },
+        body: { action: "list_personal_folders" },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const allEntries: DropboxEntry[] = data.entries || [];
-      // Show only folders, exclude "Kawiil Mx" since that's the team folder
+      // Show all folders at root level - these are the personal member folders + Kawiil Mx
+      // Exclude "Kawiil Mx" since that's the team shared folder, not a personal folder
       setPickerEntries(
         allEntries
           .filter((e) => e.type === "folder" && e.name !== "Kawiil Mx")
