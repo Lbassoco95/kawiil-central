@@ -82,6 +82,7 @@ export function ProjectGeneralTab({ project }: Props) {
   const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
   const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
   const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
+  const [showMeetingDialog, setShowMeetingDialog] = useState(false);
 
   // Fetch project tasks for AI summary
   const { data: projectTasks } = useQuery({
