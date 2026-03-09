@@ -109,6 +109,11 @@ export function AppSidebar() {
                     {unreadCount > 99 ? "99+" : unreadCount}
                   </span>
                 )}
+                {item.url === "/microsoft365/correo" && unreadEmailCount > 0 && (
+                  <span className="bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 py-0 font-bold leading-4">
+                    {unreadEmailCount > 99 ? "99+" : unreadEmailCount}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
