@@ -239,11 +239,21 @@ export function PersonalDashboard() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      {/* Greeting */}
+      {/* Greeting + Date/Time */}
       <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-          {firstName ? `Hola, ${firstName}` : "Hola"} 👋
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+            {firstName ? `Hola, ${firstName}` : "Hola"} 👋
+          </h1>
+          <div className="text-right">
+            <p className="text-sm font-medium text-foreground capitalize">
+              {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {currentTime.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })} hrs
+            </p>
+          </div>
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           {totalPending} pendiente{totalPending !== 1 ? "s" : ""}
           {overdueTasks > 0 && (
@@ -253,10 +263,38 @@ export function PersonalDashboard() {
             <span className="text-accent"> · {completedToday} completada{(completedToday ?? 0) !== 1 ? "s" : ""} hoy</span>
           )}
         </p>
-        <p className="text-[13px] text-muted-foreground italic border-l-2 border-border pl-3 mt-3">
-          "{quote.text}" — {quote.author}
-        </p>
+
+        {/* Personalized phrase */}
+        {personalPhrase ? (
+          <p className="text-[13px] text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-3">
+            {personalPhrase}
+          </p>
+        ) : phraseLoading ? (
+          <p className="text-[13px] text-muted-foreground italic border-l-2 border-border pl-3 mt-3 animate-pulse">
+            Preparando tu frase del día...
+          </p>
+        ) : null}
       </div>
+
+      {/* Questionnaire reminder */}
+      {showQuestionnaireReminder && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/5 border border-primary/15">
+          <Sparkles className="h-5 w-5 text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
+            <p className="text-xs text-muted-foreground">Responde un breve cuestionario para personalizar tu experiencia</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              {daysLeft}d
+            </span>
+            <Button size="sm" variant="default" className="text-xs" onClick={() => setShowQuestionnaire(true)}>
+              Responder
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Mood — inline */}
       <MoodCheckin userCelula={userCelula} />
