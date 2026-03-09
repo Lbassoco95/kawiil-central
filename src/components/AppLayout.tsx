@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
