@@ -182,16 +182,16 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl gap-4">
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">Cargando...</div>
         ) : task ? (
           <>
-            <DialogHeader>
-              <div className="flex items-start justify-between gap-4">
-                <DialogTitle className="text-xl">{task.title}</DialogTitle>
+            <DialogHeader className="pr-8">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <DialogTitle className="text-lg sm:text-xl leading-tight">{task.title}</DialogTitle>
                 <Select value={task.status} onValueChange={handleStatusChange}>
-                  <SelectTrigger className="w-[160px]">
+                  <SelectTrigger className="w-full sm:w-[160px] shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -234,7 +234,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
             )}
 
             {/* Criticality & Delay tracking */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg border bg-muted/20">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 rounded-lg border bg-muted/20">
               <div>
                 <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
                 <Select

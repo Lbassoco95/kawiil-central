@@ -167,24 +167,26 @@ export function UnifiedStepRow({
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className={cn("rounded-lg border px-3 py-2 transition-colors", step.completed ? "bg-muted/40 opacity-70" : "bg-background")}>
         <CollapsibleTrigger asChild>
-          <div className="flex items-center gap-3 cursor-pointer">
-            {showCheckbox && onToggle && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  checked={step.completed}
-                  onChange={(e) => onToggle(e.target.checked)}
-                  className="h-4 w-4 rounded border-border"
-                />
-              </div>
-            )}
-            <span className="text-muted-foreground text-xs font-mono w-5">{index + 1}.</span>
-            <span className={cn("flex-1 text-sm font-medium", step.completed && "line-through text-muted-foreground")}>
-              {step.label}
-            </span>
-            <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-              {/* Inline assignee selector */}
-              <div onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-start sm:items-center gap-2 sm:gap-3 cursor-pointer flex-wrap">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {showCheckbox && onToggle && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={step.completed}
+                    onChange={(e) => onToggle(e.target.checked)}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                </div>
+              )}
+              <span className="text-muted-foreground text-xs font-mono w-5 shrink-0">{index + 1}.</span>
+              <span className={cn("text-sm font-medium truncate", step.completed && "line-through text-muted-foreground")}>
+                {step.label}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end ml-auto">
+              {/* Inline assignee selector - hidden on mobile when collapsed */}
+              <div onClick={(e) => e.stopPropagation()} className="hidden sm:block">
                 <Select
                   value={localAssignee || "__none__"}
                   onValueChange={(v) => {
@@ -205,30 +207,34 @@ export function UnifiedStepRow({
                   </SelectContent>
                 </Select>
               </div>
+              {/* Mobile: show assignee name only */}
+              {assigneeName && (
+                <span className="text-[10px] text-muted-foreground sm:hidden">{assigneeName}</span>
+              )}
               {localCollaborators.length > 0 && (
-                <Badge variant="secondary" className="text-xs gap-1">
+                <Badge variant="secondary" className="text-xs gap-1 hidden sm:inline-flex">
                   <UserPlus className="h-3 w-3" />+{localCollaborators.length}
                 </Badge>
               )}
               {isOverdue && (
-                <Badge variant="destructive" className="text-xs gap-1">
+                <Badge variant="destructive" className="text-[10px] sm:text-xs gap-1 px-1.5">
                   <AlertTriangle className="h-3 w-3" />Vencida
                 </Badge>
               )}
               {(savedTime > 0 || timerRunning) && showTimer && (
-                <Badge variant="outline" className={cn("text-xs gap-1 font-mono", timerRunning && "border-primary text-primary animate-pulse")}>
+                <Badge variant="outline" className={cn("text-[10px] sm:text-xs gap-1 font-mono hidden sm:inline-flex", timerRunning && "border-primary text-primary animate-pulse")}>
                   <Timer className="h-3 w-3" />{timerRunning ? formatTime(displaySeconds) : formatTimeCompact(savedTime)}
                 </Badge>
               )}
               {localStatus !== "pendiente" && (
-                <Badge variant="outline" className={cn("text-xs", STEP_STATUS_STYLES[localStatus] || STEP_STATUS_STYLES.pendiente)}>
+                <Badge variant="outline" className={cn("text-[10px] sm:text-xs px-1.5", STEP_STATUS_STYLES[localStatus] || STEP_STATUS_STYLES.pendiente)}>
                   {STEP_STATUS_OPTIONS.find((o) => o.value === localStatus)?.label}
                 </Badge>
               )}
               {localDueDate && !isOverdue && (
-                <span className="text-xs text-muted-foreground">{format(localDueDate, "dd/MM/yy")}</span>
+                <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline">{format(localDueDate, "dd/MM/yy")}</span>
               )}
-              <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+              <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
             </div>
           </div>
         </CollapsibleTrigger>
