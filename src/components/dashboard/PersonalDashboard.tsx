@@ -7,6 +7,7 @@ import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { getWeeklyQuote } from "@/lib/weeklyQuotes";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
@@ -17,9 +18,6 @@ import {
   Plus,
   Trash2,
   ArrowRight,
-  ChevronDown,
-  ChevronRight,
-  Users,
 } from "lucide-react";
 import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { useNavigate } from "react-router-dom";
@@ -35,7 +33,6 @@ export function PersonalDashboard() {
     return profile?.area ?? null;
   }, [orgUsers, user]);
   const quote = useMemo(() => getWeeklyQuote(), []);
-  const [showCharts, setShowCharts] = useState(false);
 
   const { data: profile } = useQuery({
     queryKey: ["dashboard-profile", user?.id],
@@ -60,7 +57,7 @@ export function PersonalDashboard() {
         .eq("assigned_to", user!.id)
         .in("status", ["pendiente", "en_progreso", "en_revision"])
         .order("due_date", { ascending: true })
-        .limit(10);
+        .limit(15);
       if (error) throw error;
       return data;
     },
@@ -84,37 +81,47 @@ export function PersonalDashboard() {
     enabled: !!user,
   });
 
-  // My clients (where I'm responsible or have projects assigned)
+  // My clients — responsible directly on client OR responsible on any project for the client
   const { data: myClients } = useQuery({
     queryKey: ["personal-clients", user?.id],
     queryFn: async () => {
-      // Get clients where user is responsible
+      // 1. Clients where user is direct responsible
       const { data: directClients, error: e1 } = await supabase
         .from("clients")
         .select("id, name, status, services, primary_area")
         .eq("responsible_user_id", user!.id)
-        .eq("status", "activo")
+        .in("status", ["activo", "prospecto"])
         .order("name");
       if (e1) throw e1;
 
-      // Get clients via projects where user is responsible
-      const { data: projectClients, error: e2 } = await supabase
+      // 2. Clients via projects where user is responsible
+      const { data: myProjects, error: e2 } = await supabase
         .from("projects")
-        .select("client_id, clients!inner(id, name, status, services, primary_area)")
+        .select("client_id")
         .eq("responsible_user_id", user!.id)
-        .eq("status", "activo")
-        .neq("client_id", null as any);
+        .neq("status", "cancelado")
+        .not("client_id", "is", null);
       if (e2) throw e2;
 
-      // Merge and deduplicate
-      const clientMap = new Map<string, any>();
-      (directClients || []).forEach((c) => clientMap.set(c.id, c));
-      (projectClients || []).forEach((p: any) => {
-        const c = p.clients;
-        if (c && c.status === "activo") clientMap.set(c.id, c);
-      });
+      const projectClientIds = [...new Set((myProjects || []).map((p) => p.client_id).filter(Boolean))] as string[];
 
-      return Array.from(clientMap.values()).sort((a: any, b: any) =>
+      // Filter out IDs already in directClients
+      const directIds = new Set((directClients || []).map((c) => c.id));
+      const missingIds = projectClientIds.filter((id) => !directIds.has(id));
+
+      let projectClients: any[] = [];
+      if (missingIds.length > 0) {
+        const { data, error: e3 } = await supabase
+          .from("clients")
+          .select("id, name, status, services, primary_area")
+          .in("id", missingIds)
+          .in("status", ["activo", "prospecto"])
+          .order("name");
+        if (e3) throw e3;
+        projectClients = data || [];
+      }
+
+      return [...(directClients || []), ...projectClients].sort((a, b) =>
         a.name.localeCompare(b.name)
       );
     },
@@ -151,7 +158,7 @@ export function PersonalDashboard() {
   };
 
   return (
-    <div className="max-w-3xl space-y-10">
+    <div className="max-w-3xl space-y-6">
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">
@@ -166,185 +173,260 @@ export function PersonalDashboard() {
             <span className="text-accent"> · {completedToday} completada{(completedToday ?? 0) !== 1 ? "s" : ""} hoy</span>
           )}
         </p>
+        <p className="text-[13px] text-muted-foreground italic border-l-2 border-border pl-3 mt-3">
+          "{quote.text}" — {quote.author}
+        </p>
       </div>
-
-      {/* Quote — subtle, one line */}
-      <p className="text-[13px] text-muted-foreground italic border-l-2 border-border pl-3">
-        "{quote.text}" — {quote.author}
-      </p>
 
       {/* Mood — inline */}
       <MoodCheckin userCelula={userCelula} />
 
-      {/* AI Briefing — collapsible */}
-      <DailyBriefing
-        tasksCount={totalPending}
-        completedToday={completedToday ?? 0}
-        overdueCount={overdueTasks}
-        remindersCount={pendingReminders.length}
-      />
-
-      {/* Tasks */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">
-            Tareas
-          </h2>
-          <button
-            onClick={() => navigate("/tareas")}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+      {/* Tabs for sections */}
+      <Tabs defaultValue="resumen" className="w-full">
+        <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
+          <TabsTrigger
+            value="resumen"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
           >
-            Ver todas <ArrowRight className="h-3 w-3" />
-          </button>
-        </div>
-        {!myTasks?.length ? (
-          <p className="text-sm text-muted-foreground py-4">Sin tareas pendientes</p>
-        ) : (
-          <div className="divide-y divide-border/40">
-            {myTasks.map((t) => (
-              <button
-                key={t.id}
-                className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
-                onClick={() => navigate("/tareas")}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
-                <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
-                {t.due_date && (
-                  <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
-                    {formatDateMX(t.due_date)}
-                  </span>
+            Resumen
+          </TabsTrigger>
+          <TabsTrigger
+            value="tareas"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
+          >
+            Tareas ({totalPending})
+          </TabsTrigger>
+          <TabsTrigger
+            value="clientes"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
+          >
+            Mis Clientes ({myClients?.length ?? 0})
+          </TabsTrigger>
+          <TabsTrigger
+            value="recordatorios"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
+          >
+            Recordatorios ({pendingReminders.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="rendimiento"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
+          >
+            Rendimiento
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Resumen */}
+        <TabsContent value="resumen" className="mt-6 space-y-6">
+          <DailyBriefing
+            tasksCount={totalPending}
+            completedToday={completedToday ?? 0}
+            overdueCount={overdueTasks}
+            remindersCount={pendingReminders.length}
+          />
+
+          {/* Quick glance: top 5 tasks */}
+          {myTasks && myTasks.length > 0 && (
+            <div>
+              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Próximas tareas</h3>
+              <div className="divide-y divide-border/40">
+                {myTasks.slice(0, 5).map((t) => (
+                  <button
+                    key={t.id}
+                    className="flex items-center gap-3 w-full py-2 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                    onClick={() => navigate("/tareas")}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
+                    <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
+                    {t.due_date && (
+                      <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                        {formatDateMX(t.due_date)}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quick glance: clients */}
+          {myClients && myClients.length > 0 && (
+            <div>
+              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Mis clientes</h3>
+              <div className="flex flex-wrap gap-2">
+                {myClients.slice(0, 8).map((c: any) => (
+                  <button
+                    key={c.id}
+                    onClick={() => navigate(`/clientes/${c.id}`)}
+                    className="text-sm px-3 py-1.5 rounded-md bg-secondary/50 hover:bg-secondary text-foreground transition-colors"
+                  >
+                    {c.name}
+                  </button>
+                ))}
+                {myClients.length > 8 && (
+                  <button
+                    onClick={() => navigate("/clientes")}
+                    className="text-sm px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    +{myClients.length - 8} más
+                  </button>
                 )}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
+              </div>
+            </div>
+          )}
+        </TabsContent>
 
-      {/* My Clients */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-            <Users className="h-3.5 w-3.5" />
-            Mis Clientes
-          </h2>
-          <button
-            onClick={() => navigate("/clientes")}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-          >
-            Ver todos <ArrowRight className="h-3 w-3" />
-          </button>
-        </div>
-        {!myClients?.length ? (
-          <p className="text-sm text-muted-foreground py-4">Sin clientes asignados</p>
-        ) : (
-          <div className="divide-y divide-border/40">
-            {myClients.map((c: any) => (
-              <button
-                key={c.id}
-                className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
-                onClick={() => navigate(`/clientes/${c.id}`)}
-              >
-                <span className="text-sm text-foreground truncate flex-1">{c.name}</span>
-                <div className="flex gap-1 shrink-0">
-                  {(c.services || []).slice(0, 3).map((s: string) => (
-                    <Badge key={s} variant="secondary" className="text-[10px] px-1.5 py-0">
-                      {(SERVICE_LABELS as any)[s] || s}
-                    </Badge>
-                  ))}
-                  {(c.services || []).length > 3 && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      +{(c.services || []).length - 3}
+        {/* Tareas */}
+        <TabsContent value="tareas" className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">
+              Tareas pendientes
+            </h3>
+            <button
+              onClick={() => navigate("/tareas")}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+            >
+              Ver todas <ArrowRight className="h-3 w-3" />
+            </button>
+          </div>
+          {!myTasks?.length ? (
+            <p className="text-sm text-muted-foreground py-4">Sin tareas pendientes 🎉</p>
+          ) : (
+            <div className="divide-y divide-border/40">
+              {myTasks.map((t) => (
+                <button
+                  key={t.id}
+                  className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                  onClick={() => navigate("/tareas")}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
+                  <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
+                  {t.area && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                      {(SERVICE_LABELS as any)[t.area] || t.area}
                     </Badge>
                   )}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Reminders */}
-      <section>
-        <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">
-          Recordatorios
-        </h2>
-
-        <div className="flex items-center gap-2 mb-3">
-          <Input
-            placeholder="Agregar recordatorio..."
-            value={newReminder}
-            onChange={(e) => setNewReminder(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAddReminder()}
-            className="text-sm h-8 border-0 bg-transparent shadow-none px-0 placeholder:text-muted-foreground/50 focus-visible:ring-0"
-          />
-          {newReminder.trim() && (
-            <button onClick={handleAddReminder} className="text-muted-foreground hover:text-foreground">
-              <Plus className="h-4 w-4" />
-            </button>
+                  {t.due_date && (
+                    <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                      {formatDateMX(t.due_date)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           )}
-        </div>
+        </TabsContent>
 
-        {pendingReminders.length === 0 && completedReminders.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">Sin recordatorios</p>
-        ) : (
-          <div className="space-y-0.5">
-            {pendingReminders.map((r) => (
-              <div key={r.id} className="flex items-center gap-3 py-1.5 group">
-                <Checkbox
-                  checked={false}
-                  onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
-                  className="h-3.5 w-3.5"
-                />
-                <span className="text-sm text-foreground flex-1 truncate">{r.title}</span>
-                {r.due_date && (
-                  <span className={`text-[11px] ${new Date(r.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
-                    {formatDateMX(r.due_date)}
-                  </span>
-                )}
-                <button
-                  onClick={() => deleteReminder.mutate(r.id)}
-                  className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-            {completedReminders.slice(0, 2).map((r) => (
-              <div key={r.id} className="flex items-center gap-3 py-1.5 opacity-40 group">
-                <Checkbox
-                  checked={true}
-                  onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: false })}
-                  className="h-3.5 w-3.5"
-                />
-                <span className="text-sm text-muted-foreground line-through flex-1 truncate">{r.title}</span>
-                <button
-                  onClick={() => deleteReminder.mutate(r.id)}
-                  className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+        {/* Mis Clientes */}
+        <TabsContent value="clientes" className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">
+              Clientes asignados
+            </h3>
+            <button
+              onClick={() => navigate("/clientes")}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+            >
+              Ver todos <ArrowRight className="h-3 w-3" />
+            </button>
           </div>
-        )}
-      </section>
+          {!myClients?.length ? (
+            <p className="text-sm text-muted-foreground py-4">Sin clientes asignados</p>
+          ) : (
+            <div className="divide-y divide-border/40">
+              {myClients.map((c: any) => (
+                <button
+                  key={c.id}
+                  className="flex items-center gap-3 w-full py-3 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                  onClick={() => navigate(`/clientes/${c.id}`)}
+                >
+                  <span className="text-sm text-foreground truncate flex-1">{c.name}</span>
+                  <div className="flex gap-1 shrink-0 flex-wrap justify-end">
+                    {(c.services || []).map((s: string) => (
+                      <Badge key={s} variant="secondary" className="text-[10px] px-1.5 py-0">
+                        {(SERVICE_LABELS as any)[s] || s}
+                      </Badge>
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </TabsContent>
 
-      {/* Charts — collapsed by default */}
-      <section>
-        <button
-          onClick={() => setShowCharts(!showCharts)}
-          className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {showCharts ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          <span className="uppercase tracking-wide">Rendimiento</span>
-        </button>
-        {showCharts && (
-          <div className="mt-6 space-y-8">
-            <PerformanceChart />
-            <MonthlyPerformance />
+        {/* Recordatorios */}
+        <TabsContent value="recordatorios" className="mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Input
+              placeholder="Agregar recordatorio..."
+              value={newReminder}
+              onChange={(e) => setNewReminder(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddReminder()}
+              className="text-sm h-9"
+            />
+            {newReminder.trim() && (
+              <button onClick={handleAddReminder} className="text-muted-foreground hover:text-foreground">
+                <Plus className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        )}
-      </section>
+
+          {pendingReminders.length === 0 && completedReminders.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Sin recordatorios</p>
+          ) : (
+            <div className="space-y-0.5">
+              {pendingReminders.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 py-2 group">
+                  <Checkbox
+                    checked={false}
+                    onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm text-foreground flex-1 truncate">{r.title}</span>
+                  {r.due_date && (
+                    <span className={`text-[11px] ${new Date(r.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                      {formatDateMX(r.due_date)}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => deleteReminder.mutate(r.id)}
+                    className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              {completedReminders.length > 0 && (
+                <div className="pt-3 border-t border-border/40 mt-3">
+                  <p className="text-[11px] text-muted-foreground mb-2">Completados</p>
+                  {completedReminders.slice(0, 5).map((r) => (
+                    <div key={r.id} className="flex items-center gap-3 py-1.5 opacity-40 group">
+                      <Checkbox
+                        checked={true}
+                        onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: false })}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-sm text-muted-foreground line-through flex-1 truncate">{r.title}</span>
+                      <button
+                        onClick={() => deleteReminder.mutate(r.id)}
+                        className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Rendimiento */}
+        <TabsContent value="rendimiento" className="mt-6 space-y-8">
+          <PerformanceChart />
+          <MonthlyPerformance />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
