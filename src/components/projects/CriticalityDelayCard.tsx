@@ -95,6 +95,7 @@ export function CriticalityDelayCard({ projectId }: Props) {
       if (error) throw error;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-criticality", projectId] });
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       toast.success("Criticidad actualizada");
       setEditing(false);
