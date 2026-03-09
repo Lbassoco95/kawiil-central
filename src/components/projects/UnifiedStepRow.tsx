@@ -68,6 +68,7 @@ export function UnifiedStepRow({
   const [timerRunning, setTimerRunning] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(step.time_spent_seconds || 0);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
+  const [localLabel, setLocalLabel] = useState(step.label);
   const [localDueDate, setLocalDueDate] = useState<Date | undefined>(step.due_date ? new Date(step.due_date) : undefined);
   const [localNotes, setLocalNotes] = useState(step.notes || "");
   const [localAssignee, setLocalAssignee] = useState<string | null>(step.assigned_to || null);
