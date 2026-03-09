@@ -17,7 +17,7 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
   const { user } = useAuth();
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const today = useMemo(() => nowMX(), []);
 
   const { data: taskDetails } = useQuery({

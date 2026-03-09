@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
@@ -32,7 +32,7 @@ export function AISummaryCard({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   const generate = useCallback(async () => {
     if (!ready) return;
@@ -111,6 +111,13 @@ export function AISummaryCard({
       setLoading(false);
     }
   }, [contextPrompt, ready, cacheKey]);
+
+  // Auto-generate on mount if no cached content
+  useEffect(() => {
+    if (ready && !content && !loading) {
+      generate();
+    }
+  }, [ready, content]);
 
   return (
     <section>

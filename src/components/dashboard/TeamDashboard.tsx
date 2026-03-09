@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { TeamMonthlyPerformance } from "@/components/dashboard/TeamMonthlyPerformance";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { MetricInsight } from "@/components/dashboard/MetricInsight";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -253,11 +254,16 @@ INSTRUCCIONES:
       {/* Area Indicators */}
       {areaStats.length > 0 && (
         <section>
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-2">
             <TrendingUp className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Avance por célula</h2>
           </div>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          <MetricInsight
+            metricKey="area-stats"
+            ready={areaStats.length > 0}
+            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance por célula" para un despacho contable/legal. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% (${a.overdue} vencidas)`).join(", ")}. Tono profesional, sin emojis, sin saludo.`}
+          />
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-3">
             {areaStats.map((a) => (
               <div key={a.area} className="rounded-xl bg-secondary/30 p-4">
                 <div className="flex items-center justify-between mb-2.5">
@@ -282,11 +288,16 @@ INSTRUCCIONES:
       {/* Team Workload */}
       {isAdminOrManager && teamWorkload.length > 0 && (
         <section>
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-2">
             <UserCheck className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Carga del equipo</h2>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <MetricInsight
+            metricKey="team-workload"
+            ready={teamWorkload.length > 0}
+            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Carga del equipo" para un despacho. Hay ${teamWorkload.length} miembros con tareas. El que más tiene: ${teamWorkload[0]?.pending || 0} pendientes. Tono profesional, sin emojis, sin saludo.`}
+          />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-3">
             {teamWorkload.map((m) => (
               <div
                 key={m.userId}
@@ -363,7 +374,7 @@ INSTRUCCIONES:
 
         {/* Project Progress */}
         <section>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <FolderKanban className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Avance de proyectos</h2>
@@ -375,6 +386,11 @@ INSTRUCCIONES:
               Ver todos <ArrowRight className="h-3 w-3" />
             </button>
           </div>
+          <MetricInsight
+            metricKey="project-progress"
+            ready={projectProgress.length > 0}
+            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance de proyectos". Hay ${projectProgress.length} proyectos activos, promedio ${Math.round(projectProgress.reduce((s, p) => s + p.pct, 0) / (projectProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+          />
           {projectProgress.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">Sin proyectos activos</p>
           ) : (
@@ -406,7 +422,7 @@ INSTRUCCIONES:
       {/* Client Progress */}
       {clientProgress.length > 0 && (
         <section>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Avance por cliente</h2>
@@ -418,7 +434,12 @@ INSTRUCCIONES:
               Ver todos <ArrowRight className="h-3 w-3" />
             </button>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricInsight
+            metricKey="client-progress"
+            ready={clientProgress.length > 0}
+            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance por cliente". Hay ${clientProgress.length} clientes con tareas, promedio ${Math.round(clientProgress.reduce((s, c) => s + c.pct, 0) / (clientProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
             {clientProgress.map((c) => (
               <button
                 key={c.id}
