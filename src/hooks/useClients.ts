@@ -52,39 +52,73 @@ export function useCreateClient() {
 
       // Auto-create projects based on contracted services
       const services = client.services || [];
-      if (data) {
-        const projectsToCreate: Array<{ name: string; area: string }> = [];
+      const isSoftlanding = services.includes("softlanding");
+      const responsibleId = client.responsible_user_id || user!.id;
 
-        // Contabilidad project for backoffice/softlanding
-        if (services.includes("contabilidad") || services.includes("softlanding")) {
+      // Default constitution steps for auto-initialization
+      const DEFAULT_CONSTITUTION_STEPS = [
+        { key: "documentacion_socios", label: "Recopilación de documentación de socios", description: "Integrar documentos de identidad, poderes y datos de los socios/accionistas.", icon: "FileText", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "envio_notaria", label: "Envío de información a notaría", description: "Enviar la documentación completa de socios a la notaría.", icon: "Building2", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "proyecto_constitucion", label: "Proyecto de constitución", description: "La notaría prepara el proyecto de acta constitutiva para revisión.", icon: "Stamp", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "firma_socios", label: "Firma de socios", description: "Los socios firman el acta constitutiva ante notario.", icon: "PenLine", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "contratacion_linea", label: "Contratación de línea telefónica", description: "Contratar línea telefónica a nombre de la empresa para comprobante de domicilio.", icon: "Phone", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "recibo_comprobante", label: "Comprobante de domicilio generado", description: "Verificar que ya se generó el recibo de la línea contratada.", icon: "Home", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "cita_rfc", label: "Agendar cita ante el SAT (RFC)", description: "El gestor solicita cita en el SAT para la inscripción al RFC.", icon: "CalendarClock", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "obtencion_rfc", label: "Obtención del RFC", description: "Acudir a la cita y completar la inscripción al RFC.", icon: "Receipt", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "cita_efirma", label: "Agendar cita ante el SAT (e.firma)", description: "El gestor solicita cita para obtener la firma electrónica.", icon: "CalendarClock", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", appointment_date: null, assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "firma_electronica", label: "Obtención de e.firma (FIEL)", description: "Acudir a la cita y completar el trámite de firma electrónica avanzada.", icon: "KeyRound", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "cuenta_bancaria", label: "Alta de cuenta bancaria", description: "Apertura de cuenta bancaria corporativa.", icon: "Landmark", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "registro_rpc", label: "Registro ante el RPC (boleta)", description: "Inscripción en el Registro Público de Comercio.", icon: "BookOpen", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+        { key: "inscripcion_rnie", label: "Inscripción al RNIE", description: "Registro Nacional de Inversiones Extranjeras (socios extranjeros).", icon: "Globe", status: "pendiente", completed: false, completed_at: null, completed_by: null, notes: "", conditional: true, assigned_to: responsibleId, due_date: null, document_ids: [], collaborators: [] },
+      ];
+
+      if (data) {
+        const projectsToCreate: Array<{ name: string; area: string; constitution_details?: any }> = [];
+
+        // Contabilidad project for backoffice/softlanding (with constitution for softlanding)
+        if (services.includes("contabilidad") || isSoftlanding) {
           projectsToCreate.push({
             name: `Contabilidad - ${data.name}`,
-            area: services.includes("softlanding") ? "softlanding" : "contabilidad",
+            area: isSoftlanding ? "softlanding" : "contabilidad",
+            ...(isSoftlanding ? {
+              constitution_details: {
+                steps: DEFAULT_CONSTITUTION_STEPS,
+                has_foreign_partners: true,
+              },
+            } : {}),
           });
         }
 
-        // Legal project for backoffice/softlanding
+        // Legal project
         if (services.includes("legal")) {
-          projectsToCreate.push({
-            name: `Legal - ${data.name}`,
-            area: "legal",
-          });
+          projectsToCreate.push({ name: `Legal - ${data.name}`, area: "legal" });
         }
 
-        // Compliance project for PLD/FT
+        // PLD/FT project
         if (services.includes("pld_ft")) {
+          projectsToCreate.push({ name: `Cumplimiento PLD/FT - ${data.name}`, area: "pld_ft" });
+        }
+
+        // Cumplimiento project
+        if (services.includes("cumplimiento")) {
+          projectsToCreate.push({ name: `Cumplimiento — ${data.name}`, area: "cumplimiento" });
+        }
+
+        // Constitución Nacional project (standalone)
+        if (services.includes("constitucion_nacional") && !isSoftlanding) {
           projectsToCreate.push({
-            name: `Cumplimiento PLD/FT - ${data.name}`,
-            area: "pld_ft",
+            name: `Constitución - ${data.name}`,
+            area: "constitucion_nacional",
+            constitution_details: {
+              steps: DEFAULT_CONSTITUTION_STEPS,
+              has_foreign_partners: false,
+            },
           });
         }
 
-        // Compliance (cumplimiento) project
-        if (services.includes("cumplimiento")) {
-          projectsToCreate.push({
-            name: `Cumplimiento — ${data.name}`,
-            area: "cumplimiento",
-          });
+        // Gestoría project
+        if (services.includes("gestoria")) {
+          projectsToCreate.push({ name: `Gestoría - ${data.name}`, area: "gestoria" });
         }
 
         for (const proj of projectsToCreate) {
@@ -96,8 +130,9 @@ export function useCreateClient() {
               area: proj.area,
               organization_id: orgId!,
               created_by: user!.id,
-              responsible_user_id: client.responsible_user_id || user!.id,
+              responsible_user_id: responsibleId,
               tax_obligations: [],
+              ...(proj.constitution_details ? { constitution_details: proj.constitution_details } : {}),
             } as any);
           if (projectError) {
             console.error(`Error creating auto project (${proj.area}):`, projectError);

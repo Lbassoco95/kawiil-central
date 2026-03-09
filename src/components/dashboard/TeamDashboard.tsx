@@ -437,7 +437,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="client-progress"
             ready={clientProgress.length > 0}
-            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable en máximo 30 palabras. Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.overdue} vencidas)`).join("; ")}. Identifica clientes con más riesgo y sugiere acción. Sin emojis, sin saludo.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable en máximo 30 palabras. Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.total - c.completed} pendientes)`).join("; ")}. Identifica clientes con más riesgo y sugiere acción. Sin emojis, sin saludo.`}
           />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
             {clientProgress.map((c) => (
