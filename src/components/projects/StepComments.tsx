@@ -172,9 +172,9 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         const found = orgProfiles?.find(
           (p) => p.full_name.toLowerCase() === name.toLowerCase()
         );
-        if (found) {
+      if (found) {
           return (
-            <span key={i} className="text-primary font-medium">
+            <span key={i} className="text-foreground font-bold">
               {part}
             </span>
           );
