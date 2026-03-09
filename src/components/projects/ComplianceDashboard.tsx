@@ -333,6 +333,7 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath }: 
 
   return (
     <div className="space-y-4">
+      <CriticalityDelayCard projectId={projectId} />
       {/* Header summary */}
       <Card>
         <CardContent className="p-4">
