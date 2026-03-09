@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -6,9 +6,22 @@ import { useProfiles } from "@/hooks/useTasks";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/tasks/MentionTextarea";
-import { Send, MessageSquare } from "lucide-react";
+import {
+  Send, MessageSquare, Paperclip, Image as ImageIcon,
+  Link2, X, Loader2, ExternalLink,
+} from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
+import { DropboxFilePicker } from "./DropboxFilePicker";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+
+interface Attachment {
+  type: "image" | "dropbox" | "link";
+  name: string;
+  url: string;
+}
 
 interface Props {
   projectId: string;
@@ -22,6 +35,12 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
   const { data: orgProfiles } = useProfiles();
   const [text, setText] = useState("");
   const [mentions, setMentions] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [showDropbox, setShowDropbox] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [linkInput, setLinkInput] = useState("");
+  const [showLinkPopover, setShowLinkPopover] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: comments = [] } = useQuery({
     queryKey: ["step-comments", projectId, stepKey],
@@ -50,8 +69,50 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
     enabled: !!user,
   });
 
+  const handleImageUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith("image/")) {
+          toast.error(`${file.name} no es una imagen`);
+          continue;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error(`${file.name} excede 5MB`);
+          continue;
+        }
+        const path = `comment-attachments/${Date.now()}_${file.name}`;
+        const { error } = await supabase.storage.from("documents").upload(path, file);
+        if (error) throw error;
+        const { data: urlData } = supabase.storage.from("documents").getPublicUrl(path);
+        setAttachments((prev) => [
+          ...prev,
+          { type: "image", name: file.name, url: urlData.publicUrl },
+        ]);
+      }
+    } catch (e: any) {
+      toast.error("Error al subir imagen: " + e.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = (idx: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const addComment = useMutation({
-    mutationFn: async ({ content, mentionIds }: { content: string; mentionIds: string[] }) => {
+    mutationFn: async ({
+      content,
+      mentionIds,
+      commentAttachments,
+    }: {
+      content: string;
+      mentionIds: string[];
+      commentAttachments: Attachment[];
+    }) => {
       const { data: profile } = await supabase
         .from("profiles")
         .select("organization_id, full_name")
@@ -64,7 +125,8 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         content,
         mentions: mentionIds,
         step_key: stepKey,
-      });
+        attachments: commentAttachments,
+      } as any);
       if (error) throw error;
 
       if (mentionIds.length > 0 && profile) {
@@ -90,9 +152,19 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
       queryClient.invalidateQueries({ queryKey: ["step-comments", projectId, stepKey] });
       setText("");
       setMentions([]);
+      setAttachments([]);
     },
     onError: (err: Error) => toast.error("Error: " + err.message),
   });
+
+  const handleSubmit = () => {
+    if (!text.trim() && attachments.length === 0) return;
+    addComment.mutate({
+      content: text,
+      mentionIds: mentions,
+      commentAttachments: attachments,
+    });
+  };
 
   const renderContent = (content: string) => {
     const parts = content.split(/(@\w[\w\s]*\w)/g);
@@ -114,6 +186,44 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
     });
   };
 
+  const renderAttachments = (atts: Attachment[] | null | undefined) => {
+    if (!atts || atts.length === 0) return null;
+    return (
+      <div className="flex flex-wrap gap-1.5 mt-1">
+        {atts.map((att, i) => (
+          <div key={i}>
+            {att.type === "image" ? (
+              <a href={att.url} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={att.url}
+                  alt={att.name}
+                  className="h-16 w-auto rounded border border-border object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                />
+              </a>
+            ) : (
+              <a
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] bg-muted px-2 py-1 rounded hover:bg-muted/80 transition-colors"
+              >
+                {att.type === "dropbox" ? (
+                  <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" />
+                  </svg>
+                ) : (
+                  <Link2 className="h-3 w-3 shrink-0" />
+                )}
+                <span className="truncate max-w-[120px]">{att.name}</span>
+                <ExternalLink className="h-2.5 w-2.5 shrink-0 opacity-50" />
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-2">
       <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
@@ -121,7 +231,7 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
       </label>
 
       {comments.length > 0 && (
-        <div className="space-y-2 max-h-[200px] overflow-y-auto rounded-md border border-border/50 p-2">
+        <div className="space-y-2 max-h-[250px] overflow-y-auto rounded-md border border-border/50 p-2">
           {comments.map((c: any) => (
             <div key={c.id} className="flex gap-2">
               <Avatar className="h-6 w-6 shrink-0">
@@ -136,40 +246,177 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
                     {formatMX(c.created_at, "dd MMM HH:mm")}
                   </span>
                 </div>
-                <p className="text-xs text-foreground whitespace-pre-wrap">
-                  {renderContent(c.content)}
-                </p>
+                {c.content && (
+                  <p className="text-xs text-foreground whitespace-pre-wrap">
+                    {renderContent(c.content)}
+                  </p>
+                )}
+                {renderAttachments(c.attachments as Attachment[] | null)}
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Pending attachments preview */}
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 p-2 rounded-md border border-border/50 bg-muted/30">
+          {attachments.map((att, i) => (
+            <div key={i} className="relative group">
+              {att.type === "image" ? (
+                <img
+                  src={att.url}
+                  alt={att.name}
+                  className="h-12 w-auto rounded border border-border object-cover"
+                />
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[10px] bg-background px-2 py-1 rounded border">
+                  {att.type === "dropbox" ? "📦" : "🔗"} {att.name}
+                </span>
+              )}
+              <button
+                onClick={() => removeAttachment(i)}
+                className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex gap-1.5">
-        <MentionTextarea
-          value={text}
-          onChange={setText}
-          profiles={orgProfiles ?? []}
-          placeholder="Comentario... usa @ para mencionar"
-          rows={1}
-          className="text-xs min-h-[32px]"
-          onMentionsChange={setMentions}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              if (text.trim()) addComment.mutate({ content: text, mentionIds: mentions });
-            }
-          }}
-        />
+        <div className="flex-1 min-w-0">
+          <MentionTextarea
+            value={text}
+            onChange={setText}
+            profiles={orgProfiles ?? []}
+            placeholder="Comentario... usa @ para mencionar"
+            rows={1}
+            className="text-xs min-h-[32px]"
+            onMentionsChange={setMentions}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                handleSubmit();
+              }
+            }}
+          />
+        </div>
+
+        {/* Attachment buttons */}
+        <div className="flex flex-col gap-0.5 shrink-0">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            className="hidden"
+            onChange={(e) => handleImageUpload(e.target.files)}
+          />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title="Adjuntar imagen o foto"
+          >
+            {uploading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ImageIcon className="h-3 w-3" />
+            )}
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            onClick={() => setShowDropbox(true)}
+            title="Seleccionar de Dropbox"
+          >
+            <Paperclip className="h-3 w-3" />
+          </Button>
+
+          <Popover open={showLinkPopover} onOpenChange={setShowLinkPopover}>
+            <PopoverTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6"
+                title="Pegar enlace"
+              >
+                <Link2 className="h-3 w-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-2" align="end">
+              <div className="flex gap-1">
+                <input
+                  className="flex-1 text-xs border border-input rounded px-2 py-1 bg-background"
+                  placeholder="https://..."
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && linkInput.trim()) {
+                      setAttachments((prev) => [
+                        ...prev,
+                        {
+                          type: linkInput.includes("dropbox.com") ? "dropbox" : "link",
+                          name: linkInput.split("/").pop() || "Enlace",
+                          url: linkInput.trim(),
+                        },
+                      ]);
+                      setLinkInput("");
+                      setShowLinkPopover(false);
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={!linkInput.trim()}
+                  onClick={() => {
+                    setAttachments((prev) => [
+                      ...prev,
+                      {
+                        type: linkInput.includes("dropbox.com") ? "dropbox" : "link",
+                        name: linkInput.split("/").pop() || "Enlace",
+                        url: linkInput.trim(),
+                      },
+                    ]);
+                    setLinkInput("");
+                    setShowLinkPopover(false);
+                  }}
+                >
+                  Añadir
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8 shrink-0"
-          onClick={() => addComment.mutate({ content: text, mentionIds: mentions })}
-          disabled={addComment.isPending || !text.trim()}
+          className="h-8 w-8 shrink-0 self-end"
+          onClick={handleSubmit}
+          disabled={addComment.isPending || (!text.trim() && attachments.length === 0)}
         >
           <Send className="h-3.5 w-3.5" />
         </Button>
       </div>
+
+      <DropboxFilePicker
+        open={showDropbox}
+        onClose={() => setShowDropbox(false)}
+        onSelect={(file) => {
+          setAttachments((prev) => [
+            ...prev,
+            { type: "dropbox", name: file.name, url: file.url },
+          ]);
+        }}
+      />
     </div>
   );
 }
