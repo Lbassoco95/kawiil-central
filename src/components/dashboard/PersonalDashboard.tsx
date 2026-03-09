@@ -301,7 +301,7 @@ export function PersonalDashboard() {
 
       {/* Tabs for sections */}
       <Tabs defaultValue="resumen" className="w-full min-w-0">
-        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
           <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
             <TabsTrigger
               value="resumen"
