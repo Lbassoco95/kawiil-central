@@ -564,6 +564,20 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
       return { ok: false, status: 500, errorText: "No AI provider available", provider: "none" };
     }
 
+    // Simple mode: no tools, return JSON directly
+    if (simple) {
+      const result = await callAI([...messages], false);
+      if (!result.ok) {
+        return new Response(JSON.stringify({ error: "Error del servicio de IA" }), {
+          status: result.status || 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const content = result.data.choices?.[0]?.message?.content || "";
+      return new Response(JSON.stringify({ content }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Tool calling loop
     let aiMessages: any[] = [
       { role: "system", content: systemPrompt },
