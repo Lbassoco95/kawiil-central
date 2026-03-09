@@ -506,7 +506,16 @@ serve(async (req) => {
     }
 
     if (action === 'upload') {
-      if (!file_content || !path) {
+      const scoped = parseScopedPath(path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+      const uploadTargetPath = scoped.path;
+
+      if (!file_content || !uploadTargetPath) {
         throw new Error('file_content and path are required for upload');
       }
 
@@ -516,7 +525,7 @@ serve(async (req) => {
         'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
         'Content-Type': 'application/octet-stream',
         'Dropbox-API-Arg': JSON.stringify({
-          path,
+          path: uploadTargetPath,
           mode: 'add',
           autorename: true,
           mute: false,
@@ -527,7 +536,12 @@ serve(async (req) => {
         uploadHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
       }
 
-      if (rootNamespaceId) {
+      if (scoped.namespaceId) {
+        uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
+          '.tag': 'namespace_id',
+          namespace_id: scoped.namespaceId,
+        });
+      } else if (rootNamespaceId) {
         uploadHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
           '.tag': 'root',
           root: rootNamespaceId,
