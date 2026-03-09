@@ -195,8 +195,6 @@ export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { p
           <DeclarationCard key={decl.id} declaration={decl} projectId={projectId} clientDropboxPath={clientDropboxPath} />
         ))
       )}
-      {/* Comments */}
-      <ProjectCommentsTab projectId={projectId} />
     </div>
   );
 }

@@ -280,8 +280,6 @@ export function AccountingDashboard({ projectId, clientDropboxPath }: { projectI
           <PeriodCard key={period.id} period={period} projectId={projectId} clientDropboxPath={clientDropboxPath} />
         ))
       )}
-      {/* Comments */}
-      <ProjectCommentsTab projectId={projectId} />
     </div>
   );
 }

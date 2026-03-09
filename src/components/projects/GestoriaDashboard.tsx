@@ -191,8 +191,6 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
           </div>
         );
       })}
-      {/* Comments */}
-      <ProjectCommentsTab projectId={projectId} />
     </div>
   );
 }
