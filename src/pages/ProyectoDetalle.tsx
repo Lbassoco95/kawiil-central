@@ -365,6 +365,14 @@ const ProyectoDetalle = () => {
         )}
       </div>
       <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <MeetingMinutesDialog
+        open={showMinutesDialog}
+        onOpenChange={setShowMinutesDialog}
+        projectId={project.id}
+        clientId={project.client_id}
+        area={project.area}
+        projectName={project.name}
+      />
     </AppLayout>
   );
 };
