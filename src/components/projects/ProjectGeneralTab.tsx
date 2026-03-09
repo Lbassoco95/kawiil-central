@@ -20,13 +20,6 @@ import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { formatDateMX } from "@/lib/dateUtils";
 import type { Database } from "@/integrations/supabase/types";
 import { MeetingMinutesDialog } from "./MeetingMinutesDialog";
-import { useUpdateProject, type Project } from "@/hooks/useProjects";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { AISummaryCard } from "@/components/shared/AISummaryCard";
-import { formatDateMX } from "@/lib/dateUtils";
-import type { Database } from "@/integrations/supabase/types";
 
 const CRITICALITY_OPTIONS = [
   { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
