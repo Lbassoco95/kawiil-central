@@ -302,9 +302,17 @@ function DropboxLiveBrowser() {
 
   const isRoot = currentPath === null;
 
+  const displayPath = useMemo(() => {
+    if (!currentPath) return null;
+    if (!currentPath.startsWith("memberns:")) return currentPath;
+
+    const scopedPath = currentPath.split(":").slice(2).join(":");
+    return scopedPath || "/";
+  }, [currentPath]);
+
   const breadcrumbs: string[] = [];
-  if (currentPath) {
-    const parts = currentPath.split("/").filter(Boolean);
+  if (displayPath && displayPath !== "/") {
+    const parts = displayPath.split("/").filter(Boolean);
     breadcrumbs.push(...parts);
   }
 
