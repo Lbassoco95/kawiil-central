@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -82,6 +83,7 @@ export interface ComplianceTaskRowProps {
 
 export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate }: ComplianceTaskRowProps) {
   const [open, setOpen] = useState(false);
+  const [localTitle, setLocalTitle] = useState(task.title);
   const [localStatus, setLocalStatus] = useState(task.status);
   const [localDueDate, setLocalDueDate] = useState<Date | undefined>(task.due_date ? new Date(task.due_date) : undefined);
   const [localNotes, setLocalNotes] = useState(task.description || "");
@@ -103,6 +105,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
   const isOverdue = localDueDate && localStatus !== "completada" && isPast(localDueDate) && !isToday(localDueDate);
 
   useEffect(() => {
+    setLocalTitle(task.title);
     setLocalStatus(task.status);
     setLocalDueDate(task.due_date ? new Date(task.due_date) : undefined);
     setLocalNotes(task.description || "");
@@ -171,6 +174,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
       await supabase
         .from("tasks")
         .update({
+          title: localTitle,
           status: localStatus as any,
           due_date: localDueDate ? localDueDate.toISOString().split("T")[0] : null,
           description: localNotes || null,
@@ -282,7 +286,18 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 ml-7 space-y-3 pb-1">
-            {/* Timer */}
+            {/* Editable title */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Nombre de la tarea</label>
+              <Input
+                className="text-sm h-8"
+                value={localTitle}
+                onChange={(e) => { setLocalTitle(e.target.value); markChanged(); }}
+                placeholder="Nombre de la tarea..."
+              />
+            </div>
+
+
             <div className="flex items-center gap-3 rounded-md border border-border/50 bg-background px-3 py-2">
               <Timer className="h-4 w-4 text-muted-foreground" />
               <span className="font-mono text-sm font-medium flex-1">{formatTime(displaySeconds)}</span>
