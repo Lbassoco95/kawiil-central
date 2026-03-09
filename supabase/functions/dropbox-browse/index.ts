@@ -370,22 +370,64 @@ serve(async (req) => {
     const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
     if (action === 'list_personal_folders') {
-      // List the TRUE root of the team namespace to show personal member folders
-      const rootEntries = await listAllFolderEntries(dbxHeaders, '');
-      const entries = rootEntries
-        .filter((entry: any) => entry['.tag'] === 'folder')
-        .map((entry: any) => ({
-          id: entry.id,
-          name: entry.name,
-          path: entry.path_display,
-          type: 'folder',
-          size: null,
-          modified: null,
-        }));
+      // Use team members API to get all member folders
+      // This ensures we see ALL members' personal folders, not just admin's
+      try {
+        const membersRes = await fetch('https://api.dropboxapi.com/2/team/members/list_v2', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ limit: 300 }),
+        });
 
-      return new Response(JSON.stringify({ entries }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+        if (!membersRes.ok) {
+          throw new Error('Failed to list team members: ' + await membersRes.text());
+        }
+
+        const membersData = await membersRes.json();
+        const members = membersData?.members || [];
+
+        // Build entries from team members - each member has a personal folder at root
+        const entries = members
+          .filter((m: any) => m?.profile?.status?.['.tag'] === 'active')
+          .map((m: any) => {
+            const name = m.profile?.name?.display_name || m.profile?.email || 'Unknown';
+            const memberId = m.profile?.member_folder_id;
+            return {
+              id: memberId || m.profile?.team_member_id || name,
+              name,
+              path: `/${name}`,
+              type: 'folder',
+              size: null,
+              modified: null,
+            };
+          })
+          .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+        return new Response(JSON.stringify({ entries }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (e) {
+        // Fallback: list root namespace folders
+        console.error('Error listing team members, falling back to root listing:', e);
+        const rootEntries = await listAllFolderEntries(dbxHeaders, '');
+        const entries = rootEntries
+          .filter((entry: any) => entry['.tag'] === 'folder')
+          .map((entry: any) => ({
+            id: entry.id,
+            name: entry.name,
+            path: entry.path_display,
+            type: 'folder',
+            size: null,
+            modified: null,
+          }));
+
+        return new Response(JSON.stringify({ entries }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     if (action === 'list') {
