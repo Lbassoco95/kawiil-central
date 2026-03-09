@@ -218,7 +218,7 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
         contact_name: values.contact_name || null,
         contact_position: values.contact_position || null,
         dropbox_folder_path: values.dropbox_folder_path || null,
-        has_payroll: values.has_payroll,
+        payroll_type: values.payroll_type === "none" ? null : values.payroll_type,
       },
     });
     onOpenChange(false);
