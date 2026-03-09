@@ -28,6 +28,7 @@ import { ComplianceTaskGeneratorModal } from "@/components/compliance/Compliance
 import { ComplianceTaskRow } from "@/components/projects/ComplianceTaskRow";
 import { formatMX, nowMX } from "@/lib/dateUtils";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
+import { ProjectCommentsTab } from "./ProjectCommentsTab";
 
 const CATEGORY_LABELS: Record<string, string> = {
   reportes_uif: "Reportes al SAT/UIF",
@@ -418,6 +419,9 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath }: 
           );
         })}
       </div>
+
+      {/* Comments */}
+      <ProjectCommentsTab projectId={projectId} />
 
       {/* Generator modal for re-generation if needed */}
       <ComplianceTaskGeneratorModal
