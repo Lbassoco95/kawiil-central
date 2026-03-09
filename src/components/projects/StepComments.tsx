@@ -69,17 +69,13 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
     enabled: !!user,
   });
 
-  const handleImageUpload = async (files: FileList | null) => {
+  const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        if (!file.type.startsWith("image/")) {
-          toast.error(`${file.name} no es una imagen`);
-          continue;
-        }
-        if (file.size > 5 * 1024 * 1024) {
-          toast.error(`${file.name} excede 5MB`);
+        if (file.size > 25 * 1024 * 1024) {
+          toast.error(`${file.name} excede 25MB`);
           continue;
         }
         const path = `comment-attachments/${Date.now()}_${file.name}`;
@@ -87,13 +83,14 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         if (error) throw error;
         const { data: urlData } = await supabase.storage.from("documents").createSignedUrl(path, 60 * 60 * 24 * 365);
         if (!urlData?.signedUrl) throw new Error("No se pudo generar URL");
+        const isImage = file.type.startsWith("image/");
         setAttachments((prev) => [
           ...prev,
-          { type: "image", name: file.name, url: urlData.signedUrl, path },
+          { type: isImage ? "image" : "link", name: file.name, url: urlData.signedUrl },
         ]);
       }
     } catch (e: any) {
-      toast.error("Error al subir imagen: " + e.message);
+      toast.error("Error al subir archivo: " + e.message);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
