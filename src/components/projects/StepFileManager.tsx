@@ -242,6 +242,16 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             <Upload className="h-3 w-3" />
             Subir a Dropbox
           </Button>
+          {/* Browse Dropbox files */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            disabled={disabled}
+            onClick={() => setShowDropboxPicker(true)}
+          >
+            <FolderOpen className="h-3 w-3" />
+          </Button>
           {/* Link Dropbox URL */}
           <Button
             variant="ghost"
