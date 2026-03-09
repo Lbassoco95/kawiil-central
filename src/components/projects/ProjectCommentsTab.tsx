@@ -169,7 +169,7 @@ export function ProjectCommentsTab({ projectId, projectName }: Props) {
           />
           <Button
             size="icon"
-            onClick={() => addComment.mutate()}
+            onClick={() => addComment.mutate({ content: text, mentionIds: mentions })}
             disabled={addComment.isPending || !text.trim()}
           >
             <Send className="h-4 w-4" />
