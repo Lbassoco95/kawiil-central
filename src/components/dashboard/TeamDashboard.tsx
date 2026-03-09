@@ -437,7 +437,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="client-progress"
             ready={clientProgress.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance por cliente". Hay ${clientProgress.length} clientes con tareas, promedio ${Math.round(clientProgress.reduce((s, c) => s + c.pct, 0) / (clientProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable en máximo 30 palabras. Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.overdue} vencidas)`).join("; ")}. Identifica clientes con más riesgo y sugiere acción. Sin emojis, sin saludo.`}
           />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
             {clientProgress.map((c) => (
