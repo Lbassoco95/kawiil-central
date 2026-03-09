@@ -287,11 +287,10 @@ Deno.serve(async (req) => {
       }
 
       case "email-detail": {
-        const res = await fetch(
-          `${GRAPH_BASE}/me/messages/${params.messageId}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+        result = await graphRequest(
+          accessToken,
+          `/me/messages/${params.messageId}`
         );
-        result = await res.json();
         break;
       }
 
