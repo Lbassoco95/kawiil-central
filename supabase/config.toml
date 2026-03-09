@@ -17,3 +17,5 @@ project_id = "apfjafxiykkiydepmswk"
     verify_jwt = false
   [functions.backup-data]
     verify_jwt = false
+  [functions.process-document]
+    verify_jwt = false
