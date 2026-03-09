@@ -361,6 +361,36 @@ INSTRUCCIONES:
           userId={user?.id}
         />
       </div>
+
+      {/* Meeting Minutes Button */}
+      <div className="md:col-span-2">
+        <Card className="border-dashed border-primary/20 hover:border-primary/40 transition-colors">
+          <CardContent className="py-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Minutas de reunión → Tareas
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Sube o pega una minuta y AI propondrá las tareas a crear automáticamente
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowMeetingDialog(true)}>
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+              Analizar minuta
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <MeetingMinutesDialog
+        open={showMeetingDialog}
+        onOpenChange={setShowMeetingDialog}
+        projectId={project.id}
+        clientId={project.client_id}
+        area={project.area}
+        projectName={project.name}
+      />
     </div>
   );
 }
