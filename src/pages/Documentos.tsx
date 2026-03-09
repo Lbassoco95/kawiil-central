@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,10 +60,8 @@ function DropboxLiveBrowser() {
   const { user } = useAuth();
   const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Mi carpeta";
 
-  const personalFolderKey = `dropbox_personal_folder_${user?.id}`;
-  const [personalFolderPath, setPersonalFolderPath] = useState<string | null>(() => {
-    try { return localStorage.getItem(personalFolderKey); } catch { return null; }
-  });
+  const [personalFolderPath, setPersonalFolderPath] = useState<string | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [entries, setEntries] = useState<DropboxEntry[]>([]);
@@ -79,25 +77,40 @@ function DropboxLiveBrowser() {
   const [renaming, setRenaming] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Picker state for when personal folder is not found
+  // Picker state for when personal folder is not set yet
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [pickerEntries, setPickerEntries] = useState<DropboxEntry[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
+
+  // Load personal folder from profiles table on mount
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from("profiles")
+      .select("dropbox_personal_folder")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }: any) => {
+        const saved = (data as any)?.dropbox_personal_folder || null;
+        setPersonalFolderPath(saved);
+        setProfileLoaded(true);
+        // If no folder is saved, show the picker automatically
+        if (!saved) {
+          loadRootFoldersForPicker();
+        }
+      });
+  }, [user?.id]);
 
   const loadRootFoldersForPicker = async () => {
     setShowFolderPicker(true);
     setPickerLoading(true);
     try {
-      // Use the special action that lists the TRUE root namespace
-      // to show personal member folders (not the Kawiil Mx shared folder contents)
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { action: "list_personal_folders" },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const allEntries: DropboxEntry[] = data.entries || [];
-      // Show all folders at root level - these are the personal member folders + Kawiil Mx
-      // Exclude "Kawiil Mx" since that's the team shared folder, not a personal folder
       setPickerEntries(
         allEntries
           .filter((e) => e.type === "folder" && e.name !== "Kawiil Mx")
@@ -110,19 +123,19 @@ function DropboxLiveBrowser() {
     }
   };
 
-  const selectPersonalFolder = (entry: DropboxEntry) => {
-    try { localStorage.setItem(personalFolderKey, entry.path); } catch {}
+  const selectPersonalFolder = async (entry: DropboxEntry) => {
+    // Save to database permanently
+    if (user?.id) {
+      await supabase
+        .from("profiles")
+        .update({ dropbox_personal_folder: entry.path } as any)
+        .eq("user_id", user.id);
+    }
     setPersonalFolderPath(entry.path);
     setShowFolderPicker(false);
     setPickerEntries([]);
     toast.success(`Carpeta personal configurada: ${entry.name}`);
     openFolder(entry.path);
-  };
-
-  const resetPersonalFolder = () => {
-    try { localStorage.removeItem(personalFolderKey); } catch {}
-    setPersonalFolderPath(null);
-    goToRoot();
   };
 
   const browse = async (path: string) => {
@@ -387,28 +400,14 @@ function DropboxLiveBrowser() {
       <div className="border rounded-lg divide-y">
         {isRoot ? (
           <>
-            <div className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left">
-              <button
-                className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                onClick={() => openFolder(personalFolderPath || `/${userName}`)}
-              >
-                <Folder className="h-5 w-5 text-amber-500 shrink-0" />
-                <span className="text-sm font-medium truncate flex-1">{personalLabel}</span>
-                <Badge variant="secondary" className="text-xs">Personal</Badge>
-              </button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                title="Cambiar carpeta personal"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  loadRootFoldersForPicker();
-                }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            <button
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+              onClick={() => openFolder(personalFolderPath || `/${userName}`)}
+            >
+              <Folder className="h-5 w-5 text-amber-500 shrink-0" />
+              <span className="text-sm font-medium truncate flex-1">{personalLabel}</span>
+              <Badge variant="secondary" className="text-xs">Personal</Badge>
+            </button>
             <button
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
               onClick={() => openFolder("/Kawiil Mx")}

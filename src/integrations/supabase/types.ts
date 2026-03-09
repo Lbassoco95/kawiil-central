@@ -1197,6 +1197,7 @@ export type Database = {
           area: string | null
           avatar_url: string | null
           created_at: string
+          dropbox_personal_folder: string | null
           email: string
           full_name: string
           id: string
@@ -1214,6 +1215,7 @@ export type Database = {
           area?: string | null
           avatar_url?: string | null
           created_at?: string
+          dropbox_personal_folder?: string | null
           email: string
           full_name: string
           id?: string
@@ -1231,6 +1233,7 @@ export type Database = {
           area?: string | null
           avatar_url?: string | null
           created_at?: string
+          dropbox_personal_folder?: string | null
           email?: string
           full_name?: string
           id?: string
