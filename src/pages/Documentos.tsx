@@ -128,7 +128,7 @@ function DropboxLiveBrowser() {
     if (user?.id) {
       await supabase
         .from("profiles")
-        .update({ dropbox_personal_folder: entry.path })
+        .update({ dropbox_personal_folder: entry.path } as any)
         .eq("user_id", user.id);
     }
     setPersonalFolderPath(entry.path);
