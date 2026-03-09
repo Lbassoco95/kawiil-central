@@ -13,8 +13,8 @@ serve(async (req) => {
   }
 
   try {
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -63,7 +63,7 @@ serve(async (req) => {
 
     const systemPrompt = `Eres un asistente experto en gestión de proyectos para un despacho contable y legal en México llamado Kawiil.
 
-Tu tarea es analizar minutas o resúmenes de reuniones y extraer tareas accionables.
+Tu tarea es analizar minutas, documentos o resúmenes de reuniones y extraer tareas accionables.
 
 EQUIPO DISPONIBLE:
 ${teamList}
@@ -71,7 +71,7 @@ ${teamList}
 FECHA ACTUAL: ${today}
 
 INSTRUCCIONES:
-1. Lee cuidadosamente el contenido de la minuta/reunión.
+1. Lee cuidadosamente el contenido del documento/minuta/reunión.
 2. Identifica TODAS las tareas, compromisos, acuerdos y pendientes mencionados.
 3. Para cada tarea, determina:
    - Un título claro y conciso
@@ -79,49 +79,75 @@ INSTRUCCIONES:
    - Prioridad: "urgente", "alta", "media" o "baja"
    - Fecha de vencimiento tentativa (basada en lo mencionado o estimando razonablemente)
    - Si se menciona a una persona del equipo por nombre, asigna su user_id
-4. Responde EXCLUSIVAMENTE con el JSON solicitado, sin texto adicional.
+4. Usa la herramienta extract_tasks para devolver los resultados.`;
 
-RESPONDE con un JSON válido con esta estructura exacta:
-{
-  "summary": "Resumen breve de la reunión en 2-3 oraciones",
-  "tasks": [
-    {
-      "title": "Título de la tarea",
-      "description": "Descripción breve",
-      "priority": "media",
-      "due_date": "YYYY-MM-DD",
-      "assigned_to_name": "Nombre de la persona o null",
-      "assigned_to_id": "UUID del usuario o null"
-    }
-  ]
-}`;
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
+        model: "google/gemini-3-flash-preview",
         messages: [
+          { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Analiza la siguiente minuta de reunión y extrae las tareas:\n\n${content}`,
+            content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}`,
           },
         ],
-        system: systemPrompt,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "extract_tasks",
+              description: "Extrae el resumen y las tareas identificadas del documento.",
+              parameters: {
+                type: "object",
+                properties: {
+                  summary: {
+                    type: "string",
+                    description: "Resumen breve de la reunión/documento en 2-3 oraciones",
+                  },
+                  tasks: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string", description: "Título claro y conciso de la tarea" },
+                        description: { type: "string", description: "Descripción breve con contexto" },
+                        priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
+                        due_date: { type: "string", description: "Fecha en formato YYYY-MM-DD o null" },
+                        assigned_to_name: { type: "string", description: "Nombre de la persona asignada o null" },
+                        assigned_to_id: { type: "string", description: "UUID del usuario asignado o null" },
+                      },
+                      required: ["title", "description", "priority"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["summary", "tasks"],
+                additionalProperties: false,
+              },
+            },
+          },
+        ],
+        tool_choice: { type: "function", function: { name: "extract_tasks" } },
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Anthropic error:", response.status, errText);
+      console.error("AI gateway error:", response.status, errText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Límite de solicitudes excedido. Intenta de nuevo en unos minutos." }), {
           status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "Créditos insuficientes para AI. Contacta al administrador." }), {
+          status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -132,21 +158,28 @@ RESPONDE con un JSON válido con esta estructura exacta:
     }
 
     const aiResponse = await response.json();
-    const textContent = aiResponse.content?.[0]?.text || "";
-
-    // Extract JSON from the response
+    
+    // Extract from tool call response
     let parsed;
     try {
-      // Try to find JSON in the response
-      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[0]);
+      const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
+      if (toolCall?.function?.arguments) {
+        parsed = typeof toolCall.function.arguments === "string"
+          ? JSON.parse(toolCall.function.arguments)
+          : toolCall.function.arguments;
       } else {
-        throw new Error("No JSON found in response");
+        // Fallback: try to parse from content
+        const textContent = aiResponse.choices?.[0]?.message?.content || "";
+        const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error("No structured output found");
+        }
       }
     } catch (e) {
-      console.error("Failed to parse AI response:", textContent);
-      return new Response(JSON.stringify({ error: "Error al interpretar la respuesta de AI", raw: textContent }), {
+      console.error("Failed to parse AI response:", JSON.stringify(aiResponse));
+      return new Response(JSON.stringify({ error: "Error al interpretar la respuesta de AI" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
