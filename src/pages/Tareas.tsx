@@ -70,6 +70,15 @@ const Tareas = () => {
       if (t.area) byArea[areaLabelMap[t.area] || t.area] = (byArea[areaLabelMap[t.area] || t.area] || 0) + 1;
     });
 
+    // Build assigned steps context
+    const overdueSteps = assignedSteps.filter(s => s.dueDate && new Date(s.dueDate) < new Date());
+    const stepsContext = assignedSteps.length > 0 ? `
+PASOS DE PROYECTO ASIGNADOS A MÍ (${assignedSteps.length} total, ${overdueSteps.length} vencidos):
+${assignedSteps.slice(0, 8).map(s => {
+  const isOverdue = s.dueDate && new Date(s.dueDate) < new Date();
+  return `  ${isOverdue ? "⚠️" : "📋"} ${s.stepLabel} — Proyecto: ${s.projectName} [${s.sourceLabel}]${s.dueDate ? ` vence: ${s.dueDate}` : ""}${s.isCollaborator ? " (colaborador)" : ""}`;
+}).join("\n")}` : "";
+
     return `Genera un resumen breve del estado de las tareas del equipo. Español mexicano, tono profesional, emojis.
 
 DATOS:
@@ -77,20 +86,21 @@ DATOS:
 - Pendientes: ${pending.length}
 - Vencidas: ${overdue.length}
 - Críticas (semáforo rojo): ${critical.length}
-- Pasos de proyecto asignados a mí: ${assignedSteps.length}
 
 POR PRIORIDAD: ${Object.entries(byPriority).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
 POR CÉLULA: ${Object.entries(byArea).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
 
 TAREAS VENCIDAS MÁS ANTIGUAS:
 ${overdue.slice(0, 5).map((t: any) => `- ${t.title} (${t.priority}, vence: ${t.due_date})`).join("\n") || "Ninguna"}
+${stepsContext}
 
 INSTRUCCIONES:
 1. Resume en 3-4 puntos el panorama de tareas con emojis.
 2. Si hay vencidas, menciona las más urgentes.
-3. Si hay críticas, destácalas.
-4. Sugiere por dónde empezar hoy.
-5. Máximo 100 palabras. Usa markdown.`;
+3. Si hay pasos de proyecto asignados, menciona los más importantes y si alguno está vencido.
+4. Si hay críticas, destácalas.
+5. Sugiere por dónde empezar hoy.
+6. Máximo 120 palabras. Usa markdown.`;
   }, [tasks, assignedSteps, areaLabelMap]);
 
   return (
