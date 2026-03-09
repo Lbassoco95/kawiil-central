@@ -19,3 +19,5 @@ project_id = "apfjafxiykkiydepmswk"
     verify_jwt = false
   [functions.process-document]
     verify_jwt = false
+  [functions.generate-phrase]
+    verify_jwt = false
