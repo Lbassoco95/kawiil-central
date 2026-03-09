@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/tasks/MentionTextarea";
 import {
-  Send, MessageSquare, Paperclip, Image as ImageIcon,
+  Send, MessageSquare, Paperclip,
   Link2, X, Loader2, ExternalLink,
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
@@ -69,17 +69,13 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
     enabled: !!user,
   });
 
-  const handleImageUpload = async (files: FileList | null) => {
+  const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        if (!file.type.startsWith("image/")) {
-          toast.error(`${file.name} no es una imagen`);
-          continue;
-        }
-        if (file.size > 5 * 1024 * 1024) {
-          toast.error(`${file.name} excede 5MB`);
+        if (file.size > 25 * 1024 * 1024) {
+          toast.error(`${file.name} excede 25MB`);
           continue;
         }
         const path = `comment-attachments/${Date.now()}_${file.name}`;
@@ -87,13 +83,14 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         if (error) throw error;
         const { data: urlData } = await supabase.storage.from("documents").createSignedUrl(path, 60 * 60 * 24 * 365);
         if (!urlData?.signedUrl) throw new Error("No se pudo generar URL");
+        const isImage = file.type.startsWith("image/");
         setAttachments((prev) => [
           ...prev,
-          { type: "image", name: file.name, url: urlData.signedUrl, path },
+          { type: isImage ? "image" : "link", name: file.name, url: urlData.signedUrl },
         ]);
       }
     } catch (e: any) {
-      toast.error("Error al subir imagen: " + e.message);
+      toast.error("Error al subir archivo: " + e.message);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -175,9 +172,9 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         const found = orgProfiles?.find(
           (p) => p.full_name.toLowerCase() === name.toLowerCase()
         );
-        if (found) {
+      if (found) {
           return (
-            <span key={i} className="text-primary font-medium">
+            <span key={i} className="text-foreground font-bold">
               {part}
             </span>
           );
@@ -309,11 +306,9 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
-            capture="environment"
             multiple
             className="hidden"
-            onChange={(e) => handleImageUpload(e.target.files)}
+            onChange={(e) => handleFileUpload(e.target.files)}
           />
           <Button
             size="icon"
@@ -321,12 +316,12 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             className="h-6 w-6"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            title="Adjuntar imagen o foto"
+            title="Adjuntar archivo desde equipo"
           >
             {uploading ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              <ImageIcon className="h-3 w-3" />
+              <Paperclip className="h-3 w-3" />
             )}
           </Button>
 
@@ -337,7 +332,9 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             onClick={() => setShowDropbox(true)}
             title="Seleccionar de Dropbox"
           >
-            <Paperclip className="h-3 w-3" />
+            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" />
+            </svg>
           </Button>
 
           <Popover open={showLinkPopover} onOpenChange={setShowLinkPopover}>
