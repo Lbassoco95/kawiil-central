@@ -322,6 +322,7 @@ export function useMarkEmailRead() {
         body: { action: "mark-read", params: { messageId } },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     onMutate: async (messageId) => {
