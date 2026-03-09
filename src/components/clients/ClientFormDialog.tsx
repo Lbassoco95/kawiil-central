@@ -82,6 +82,7 @@ const INDIVIDUAL_SERVICES: { value: ServiceArea; label: string }[] = [
   { value: "gestoria", label: "Gestoría" },
   { value: "constitucion_nacional", label: "Constitución Nacional" },
   { value: "cumplimiento", label: "Cumplimiento" },
+  { value: "representacion", label: "Representación" },
 ];
 
 const ALL_SERVICE_AREAS = [
