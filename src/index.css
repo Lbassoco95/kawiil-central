@@ -118,3 +118,34 @@
     @apply bg-sidebar-accent text-sidebar-accent-foreground;
   }
 }
+
+/* Mobile responsive overrides */
+@media (max-width: 640px) {
+  /* Ensure tables and wide content scroll horizontally */
+  .overflow-x-auto,
+  table {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Make sure the main content doesn't overflow */
+  main {
+    min-width: 0;
+  }
+
+  /* Compact form elements on mobile */
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Dialog footer buttons stack on mobile with spacing */
+  [class*="DialogFooter"],
+  [class*="SheetFooter"] {
+    gap: 0.5rem;
+  }
+
+  /* Prevent tiny text on mobile */
+  body {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
