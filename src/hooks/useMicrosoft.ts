@@ -284,6 +284,7 @@ export function useEmailDetail(messageId: string | null) {
         body: { action: "email-detail", params: { messageId } },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     enabled: !!user && !!messageId,
