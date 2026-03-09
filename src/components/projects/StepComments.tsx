@@ -306,11 +306,9 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
-            capture="environment"
             multiple
             className="hidden"
-            onChange={(e) => handleImageUpload(e.target.files)}
+            onChange={(e) => handleFileUpload(e.target.files)}
           />
           <Button
             size="icon"
@@ -318,12 +316,12 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             className="h-6 w-6"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            title="Adjuntar imagen o foto"
+            title="Adjuntar archivo desde equipo"
           >
             {uploading ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              <ImageIcon className="h-3 w-3" />
+              <Paperclip className="h-3 w-3" />
             )}
           </Button>
 
