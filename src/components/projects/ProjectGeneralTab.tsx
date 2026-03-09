@@ -124,25 +124,33 @@ export function ProjectGeneralTab({ project }: Props) {
     // Lawsuit details (juicios)
     if (project.area === "juicios" && (project as any).lawsuit_details) {
       const ld = (project as any).lawsuit_details;
-      const phases = Array.isArray(ld.phases) ? ld.phases : [];
-      const completedPhases = phases.filter((p: any) => {
-        const steps = Array.isArray(p.steps) ? p.steps : [];
-        return steps.length > 0 && steps.every((s: any) => s.completed);
-      });
-      const allSteps = phases.flatMap((p: any) => Array.isArray(p.steps) ? p.steps : []);
-      const completedSteps = allSteps.filter((s: any) => s.completed);
-      const pendingSteps = allSteps.filter((s: any) => !s.completed);
+      const stages = Array.isArray(ld.stages) ? ld.stages : [];
+      const completedStages = stages.filter((s: any) => s.status === "completado");
+      const pendingStages = stages.filter((s: any) => s.status !== "completado" && s.status !== "no_aplica");
+      
+      const deadlines = Array.isArray(ld.deadlines) ? ld.deadlines : [];
+      const upcomingDeadlines = deadlines
+        .filter((d: any) => !d.completed && d.date)
+        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const overdueDeadlines = upcomingDeadlines.filter((d: any) => new Date(d.date) < new Date());
       
       areaContext = `
 DATOS DEL JUICIO:
 - Tipo: ${ld.lawsuit_type || "no especificado"}
 - Juzgado: ${ld.court || "no especificado"}
 - No. Expediente: ${ld.case_number || "no especificado"}
-- Contraparte: ${ld.counterparty || "no especificado"}
-- Abogado: ${ld.lawyer_name || "no especificado"}
-- Fases completadas: ${completedPhases.length}/${phases.length}
-- Pasos completados: ${completedSteps.length}/${allSteps.length}
-- Pasos pendientes: ${pendingSteps.slice(0, 5).map((s: any) => s.label || s.key).join(", ")}`;
+- Actor/Demandante: ${ld.plaintiff || "no especificado"}
+- Demandado: ${ld.defendant || "no especificado"}
+- Abogado Patrono: ${ld.lead_attorney || "no especificado"}
+- Abogado Sustituto: ${ld.substitute_attorney || "no especificado"}
+- Etapas procesales: ${completedStages.length} completadas / ${stages.length} total
+- Etapas pendientes: ${pendingStages.slice(0, 5).map((s: any) => `${s.label} (${s.status})`).join(", ") || "ninguna"}
+
+TÉRMINOS Y FECHAS CLAVE (${deadlines.length} total, ${overdueDeadlines.length} vencidos):
+${upcomingDeadlines.slice(0, 6).map((d: any) => {
+  const isOverdue = new Date(d.date) < new Date();
+  return `  ${isOverdue ? "⚠️" : "📅"} ${d.title} — ${d.date}${d.time ? ` ${d.time}` : ""} [${d.type || "término"}]${d.notes ? ` (${d.notes})` : ""}`;
+}).join("\n")}`;
     }
 
     // Constitution details (softlanding / constitucion_nacional)
