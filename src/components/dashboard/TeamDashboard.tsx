@@ -374,7 +374,7 @@ INSTRUCCIONES:
 
         {/* Project Progress */}
         <section>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <FolderKanban className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Avance de proyectos</h2>
@@ -386,6 +386,11 @@ INSTRUCCIONES:
               Ver todos <ArrowRight className="h-3 w-3" />
             </button>
           </div>
+          <MetricInsight
+            metricKey="project-progress"
+            ready={projectProgress.length > 0}
+            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance de proyectos". Hay ${projectProgress.length} proyectos activos, promedio ${Math.round(projectProgress.reduce((s, p) => s + p.pct, 0) / (projectProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+          />
           {projectProgress.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">Sin proyectos activos</p>
           ) : (
