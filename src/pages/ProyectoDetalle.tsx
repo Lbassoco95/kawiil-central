@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { GestoriaDashboard } from "@/components/projects/GestoriaDashboard";
 import { ComplianceDashboard } from "@/components/projects/ComplianceDashboard";
 import { ProjectGeneralTab } from "@/components/projects/ProjectGeneralTab";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,11 +42,13 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
 
 const ProyectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { data: project, isLoading } = useProjectDetail(id);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
 
@@ -73,7 +76,10 @@ const ProyectoDetalle = () => {
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
 
+  const initialTab = searchParams.get("tab");
+
   const [tab, setTab] = useState<string>(() => {
+    if (initialTab) return initialTab;
     if (isCumplimiento) return "cumplimiento";
     if (isGestoria) return "gestoria";
     if (hasConstitution) return "constitucion";
@@ -81,6 +87,15 @@ const ProyectoDetalle = () => {
     if (hasAccounting) return "contabilidad";
     return "general";
   });
+
+  // Handle deep-link to specific task
+  useEffect(() => {
+    const taskId = searchParams.get("taskId");
+    if (taskId) {
+      setTab("tareas");
+      setSelectedTaskId(taskId);
+    }
+  }, [searchParams]);
 
   if (isLoading) {
     return (
@@ -246,7 +261,11 @@ const ProyectoDetalle = () => {
             ) : (
               <div className="divide-y divide-border/40">
                 {tasks.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between gap-3 py-3 px-1 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                    onClick={() => setSelectedTaskId(t.id)}
+                  >
                     <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
                     <div className="flex gap-1.5 shrink-0">
                       <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.priority}</span>
@@ -334,6 +353,7 @@ const ProyectoDetalle = () => {
           </div>
         )}
       </div>
+      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </AppLayout>
   );
 };

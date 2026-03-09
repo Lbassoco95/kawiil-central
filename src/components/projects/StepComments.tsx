@@ -342,8 +342,18 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             variant="ghost"
             className="h-6 w-6"
             onClick={() => {
-              window.open("https://www.dropbox.com/scan", "_blank");
-              toast.info("Escanea el documento con Dropbox y luego selecciónalo con el botón de Dropbox.");
+              // Try Dropbox mobile app deep link first, fallback to web
+              const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+              if (isMobile) {
+                window.location.href = "dbapi-8://document_scanner";
+                // Fallback after a short delay if app didn't open
+                setTimeout(() => {
+                  window.open("https://www.dropbox.com/document-scanner", "_blank");
+                }, 1500);
+              } else {
+                window.open("https://www.dropbox.com/document-scanner", "_blank");
+              }
+              toast.info("Escanea el documento con Dropbox y luego selecciónalo con el botón de Dropbox para adjuntarlo.");
             }}
             title="Escanear con Dropbox"
           >

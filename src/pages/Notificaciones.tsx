@@ -36,7 +36,8 @@ export default function Notificaciones() {
     if (m.entity_type === "project" && m.entity_id) {
       navigate(`/proyectos/${m.entity_id}`);
     } else if (m.entity_type === "task" && m.entity_id) {
-      navigate("/tareas");
+      // Navigate to tareas page with task pre-selected via query param
+      navigate(`/tareas?taskId=${m.entity_id}`);
     }
   };
 

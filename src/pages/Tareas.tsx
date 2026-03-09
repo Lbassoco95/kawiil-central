@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,12 +43,13 @@ const stepStatusLabels: Record<string, string> = {
 
 const Tareas = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   useTasksRealtime();
   const [area, setArea] = useState("todas");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteTask = useDeleteTask();
   const { isAdminOrManager } = useUserRole();
@@ -145,7 +146,7 @@ INSTRUCCIONES:
                       "flex items-center gap-3 text-sm cursor-pointer hover:bg-secondary/40 rounded-lg px-3 py-2.5 transition-colors",
                       isOverdue && "bg-destructive/5"
                     )}
-                    onClick={() => navigate(`/proyectos/${step.projectId}`)}
+                    onClick={() => navigate(`/proyectos/${step.projectId}?tab=${step.sourceType === "contabilidad" ? "contabilidad" : step.sourceType === "declaracion_anual" ? "declaracion_anual" : step.sourceType === "juicio" ? "juicio" : step.sourceType === "gestoria" ? "gestoria" : "general"}&step=${step.stepKey}`)}
                   >
                     <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">{step.sourceLabel}</span>
                     <span className="flex-1 truncate text-[13px] font-medium text-foreground">{step.stepLabel}</span>
