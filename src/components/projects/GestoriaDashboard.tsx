@@ -11,6 +11,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { UnifiedStepRow } from "./UnifiedStepRow";
+import { CriticalityDelayCard } from "./CriticalityDelayCard";
 import type { AccountingStep } from "@/hooks/useAccountingPeriods";
 
 interface GestoriaStep extends AccountingStep {
@@ -121,6 +122,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
 
   return (
     <div className="space-y-4">
+      <CriticalityDelayCard projectId={projectId} />
       <Card>
         <CardContent className="pt-6 space-y-3">
           <div className="flex items-center justify-between">

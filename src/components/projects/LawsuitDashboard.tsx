@@ -48,6 +48,7 @@ import { isPast, isToday, addDays, isBefore } from "date-fns";
 import { formatMX } from "@/lib/dateUtils";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
+import { CriticalityDelayCard } from "./CriticalityDelayCard";
 import { useProfiles } from "@/hooks/useTasks";
 import { UserOrTextMulti } from "./UserOrTextInput";
 
@@ -332,6 +333,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
 
   return (
     <div className="space-y-6">
+      <CriticalityDelayCard projectId={projectId} />
       {/* Summary cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

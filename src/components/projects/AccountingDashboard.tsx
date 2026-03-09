@@ -27,6 +27,7 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StepDetailRow } from "./StepDetailRow";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { CriticalityDelayCard } from "./CriticalityDelayCard";
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; className: string }> = {
   pendiente: { label: "Pendiente", icon: Clock, className: "bg-muted text-muted-foreground" },
@@ -177,6 +178,7 @@ export function AccountingDashboard({ projectId, clientDropboxPath }: { projectI
 
   return (
     <div className="space-y-4">
+      <CriticalityDelayCard projectId={projectId} />
       {/* General AI Summary */}
       {periods && periods.length > 0 && (
         <AISummaryCard

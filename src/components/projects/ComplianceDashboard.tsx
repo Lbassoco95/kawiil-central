@@ -27,6 +27,7 @@ import { ComplianceEntitySelector } from "@/components/compliance/ComplianceEnti
 import { ComplianceTaskGeneratorModal } from "@/components/compliance/ComplianceTaskGeneratorModal";
 import { ComplianceTaskRow } from "@/components/projects/ComplianceTaskRow";
 import { formatMX, nowMX } from "@/lib/dateUtils";
+import { CriticalityDelayCard } from "./CriticalityDelayCard";
 
 const CATEGORY_LABELS: Record<string, string> = {
   reportes_uif: "Reportes al SAT/UIF",
@@ -332,6 +333,7 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath }: 
 
   return (
     <div className="space-y-4">
+      <CriticalityDelayCard projectId={projectId} />
       {/* Header summary */}
       <Card>
         <CardContent className="p-4">

@@ -25,6 +25,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnnualStepDetailRow } from "./AnnualStepDetailRow";
+import { CriticalityDelayCard } from "./CriticalityDelayCard";
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; className: string }> = {
   pendiente: { label: "Pendiente", icon: Clock, className: "bg-muted text-muted-foreground" },
@@ -120,6 +121,7 @@ export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { p
 
   return (
     <div className="space-y-4">
+      <CriticalityDelayCard projectId={projectId} />
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
