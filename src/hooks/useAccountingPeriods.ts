@@ -81,7 +81,7 @@ export function useCreateAccountingPeriod() {
     mutationFn: async ({ projectId, year, month }: { projectId: string; year: number; month: number }) => {
       const { data: project, error: projErr } = await supabase
         .from("projects")
-        .select("*, clients(has_payroll)")
+        .select("*, clients(payroll_type)")
         .eq("id", projectId)
         .single();
       if (projErr) throw projErr;
@@ -100,15 +100,21 @@ export function useCreateAccountingPeriod() {
         document_ids: [],
       }));
 
-      // Add payroll steps if client has payroll
-      const clientHasPayroll = (project as any).clients?.has_payroll || false;
-      const payrollSteps = clientHasPayroll
-        ? [
-            { key: "decl_isr_retenciones_nomina", label: "Declaración: ISR Retenciones (nómina)", completed: false, completed_at: null, completed_by: null, step_status: "pendiente" as StepStatus, date: null, notes: null, document_ids: [] },
-            { key: "decl_imss", label: "Declaración: IMSS", completed: false, completed_at: null, completed_by: null, step_status: "pendiente" as StepStatus, date: null, notes: null, document_ids: [] },
-            { key: "decl_isn", label: "Declaración: ISN", completed: false, completed_at: null, completed_by: null, step_status: "pendiente" as StepStatus, date: null, notes: null, document_ids: [] },
-          ]
-        : [];
+      // Add payroll steps based on payroll_type
+      const { getPayrollSteps } = await import("@/hooks/useClients");
+      const clientPayrollType = (project as any).clients?.payroll_type || null;
+      const payrollStepDefs = getPayrollSteps(clientPayrollType);
+      const payrollSteps = payrollStepDefs.map((ps) => ({
+        key: ps.key,
+        label: ps.label,
+        completed: false,
+        completed_at: null,
+        completed_by: null,
+        step_status: "pendiente" as StepStatus,
+        date: null,
+        notes: null,
+        document_ids: [],
+      }));
 
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
 
