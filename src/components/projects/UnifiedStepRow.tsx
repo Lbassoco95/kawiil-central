@@ -21,6 +21,7 @@ import { es } from "date-fns/locale";
 import { STEP_STATUS_OPTIONS, type AccountingStep, type StepStatus } from "@/hooks/useAccountingPeriods";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
+import { StepComments } from "./StepComments";
 import { useProfiles } from "@/hooks/useTasks";
 
 const STEP_STATUS_STYLES: Record<StepStatus, string> = {
