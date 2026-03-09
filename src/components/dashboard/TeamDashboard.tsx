@@ -288,11 +288,16 @@ INSTRUCCIONES:
       {/* Team Workload */}
       {isAdminOrManager && teamWorkload.length > 0 && (
         <section>
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-2">
             <UserCheck className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Carga del equipo</h2>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <MetricInsight
+            metricKey="team-workload"
+            ready={teamWorkload.length > 0}
+            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Carga del equipo" para un despacho. Hay ${teamWorkload.length} miembros con tareas. El que más tiene: ${teamWorkload[0]?.pending || 0} pendientes. Tono profesional, sin emojis, sin saludo.`}
+          />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-3">
             {teamWorkload.map((m) => (
               <div
                 key={m.userId}
