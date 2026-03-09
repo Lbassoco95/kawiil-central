@@ -493,7 +493,20 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("Microsoft API error:", error);
-    return new Response(JSON.stringify({ error: (error as Error).message }), {
+    const message = (error as Error).message || "Unknown error";
+
+    if (message.startsWith("MICROSOFT_PERMISSION_REQUIRED:")) {
+      return new Response(JSON.stringify({
+        error: "Tu conexión de Microsoft no tiene los permisos necesarios. Reconecta Microsoft para aplicar los permisos nuevos.",
+        code: "PERMISSION_REQUIRED",
+        details: message.replace("MICROSOFT_PERMISSION_REQUIRED:", ""),
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: corsHeaders,
     });
