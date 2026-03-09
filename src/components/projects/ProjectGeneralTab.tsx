@@ -126,6 +126,7 @@ export function ProjectGeneralTab({ project }: Props) {
       const ld = (project as any).lawsuit_details;
       const stages = Array.isArray(ld.stages) ? ld.stages : [];
       const completedStages = stages.filter((s: any) => s.status === "completado");
+      const inProgressStages = stages.filter((s: any) => s.status === "en_progreso" || s.step_status === "en_progreso");
       const pendingStages = stages.filter((s: any) => s.status !== "completado" && s.status !== "no_aplica");
       
       const deadlines = Array.isArray(ld.deadlines) ? ld.deadlines : [];
@@ -144,7 +145,8 @@ DATOS DEL JUICIO:
 - Abogado Patrono: ${ld.lead_attorney || "no especificado"}
 - Abogado Sustituto: ${ld.substitute_attorney || "no especificado"}
 - Etapas procesales: ${completedStages.length} completadas / ${stages.length} total
-- Etapas pendientes: ${pendingStages.slice(0, 5).map((s: any) => `${s.label} (${s.status})`).join(", ") || "ninguna"}
+- En progreso: ${inProgressStages.length > 0 ? inProgressStages.map((s: any) => s.label).join(", ") : "ninguna"}
+- Etapas pendientes: ${pendingStages.slice(0, 5).map((s: any) => `${s.label} (${s.step_status || s.status})`).join(", ") || "ninguna"}
 
 TÉRMINOS Y FECHAS CLAVE (${deadlines.length} total, ${overdueDeadlines.length} vencidos):
 ${upcomingDeadlines.slice(0, 6).map((d: any) => {
@@ -156,39 +158,56 @@ ${upcomingDeadlines.slice(0, 6).map((d: any) => {
     // Constitution details (softlanding / constitucion_nacional)
     if ((project.area === "softlanding" || project.area === "constitucion_nacional") && (project as any).constitution_details) {
       const cd = (project as any).constitution_details;
-      const phases = Array.isArray(cd.phases) ? cd.phases : [];
-      const allSteps = phases.flatMap((p: any) => Array.isArray(p.steps) ? p.steps : []);
-      const completedSteps = allSteps.filter((s: any) => s.completed);
-      const pendingSteps = allSteps.filter((s: any) => !s.completed);
+      const allSteps = Array.isArray(cd.steps) ? cd.steps : [];
+      const completedSteps = allSteps.filter((s: any) => s.status === "completado" || s.completed);
+      const inProgressSteps = allSteps.filter((s: any) => s.step_status === "en_progreso" || s.status === "en_progreso");
+      const waitingSteps = allSteps.filter((s: any) => s.step_status === "en_espera_cliente");
+      const pendingSteps = allSteps.filter((s: any) => s.status !== "completado" && !s.completed && s.status !== "no_aplica");
       
       areaContext = `
 DATOS DE CONSTITUCIÓN:
 - Pasos completados: ${completedSteps.length}/${allSteps.length} (${allSteps.length > 0 ? Math.round((completedSteps.length / allSteps.length) * 100) : 0}%)
-- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => s.label || s.key).join(", ")}`;
+- En progreso: ${inProgressSteps.length > 0 ? inProgressSteps.map((s: any) => s.label || s.key).join(", ") : "ninguno"}
+- En espera de cliente: ${waitingSteps.length > 0 ? waitingSteps.map((s: any) => s.label || s.key).join(", ") : "ninguno"}
+- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => `${s.label || s.key} (${s.step_status || s.status || "pendiente"})`).join(", ") || "ninguno"}`;
     }
 
     // Gestoría details
     if (project.area === "gestoria" && (project as any).constitution_details) {
       const cd = (project as any).constitution_details;
-      const phases = Array.isArray(cd.phases) ? cd.phases : [];
-      const allSteps = phases.flatMap((p: any) => Array.isArray(p.steps) ? p.steps : []);
-      const completedSteps = allSteps.filter((s: any) => s.completed);
-      const pendingSteps = allSteps.filter((s: any) => !s.completed);
+      const allSteps = Array.isArray(cd.steps) ? cd.steps : [];
+      const completedSteps = allSteps.filter((s: any) => s.status === "completado" || s.completed);
+      const inProgressSteps = allSteps.filter((s: any) => s.step_status === "en_progreso" || s.status === "en_progreso");
+      const waitingSteps = allSteps.filter((s: any) => s.step_status === "en_espera_cliente");
+      const pendingSteps = allSteps.filter((s: any) => s.status !== "completado" && !s.completed && s.status !== "no_aplica");
       
       areaContext = `
 DATOS DE GESTORÍA:
 - Pasos completados: ${completedSteps.length}/${allSteps.length} (${allSteps.length > 0 ? Math.round((completedSteps.length / allSteps.length) * 100) : 0}%)
-- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => s.label || s.key).join(", ")}`;
+- En progreso: ${inProgressSteps.length > 0 ? inProgressSteps.map((s: any) => s.label || s.key).join(", ") : "ninguno"}
+- En espera de cliente: ${waitingSteps.length > 0 ? waitingSteps.map((s: any) => s.label || s.key).join(", ") : "ninguno"}
+- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => `${s.label || s.key} (${s.step_status || s.status || "pendiente"})`).join(", ") || "ninguno"}`;
     }
 
     // Accounting periods
     if (project.area === "contabilidad" && accountingPeriods && accountingPeriods.length > 0) {
       const completedPeriods = accountingPeriods.filter(p => p.status === "completado");
       const pendingPeriods = accountingPeriods.filter(p => p.status !== "completado");
+      // Include step-level detail for pending periods
+      const periodDetails = pendingPeriods.slice(0, 3).map(p => {
+        const steps = Array.isArray(p.steps) ? p.steps : [];
+        const inProgress = steps.filter((s: any) => s.step_status === "en_progreso");
+        const waiting = steps.filter((s: any) => s.step_status === "en_espera_cliente");
+        const doneSteps = steps.filter((s: any) => s.completed || s.step_status === "completado");
+        let detail = `${p.month}/${p.year} (${p.status}) — ${doneSteps.length}/${steps.length} pasos`;
+        if (inProgress.length > 0) detail += ` | En progreso: ${inProgress.map((s: any) => s.label).join(", ")}`;
+        if (waiting.length > 0) detail += ` | Esperando cliente: ${waiting.map((s: any) => s.label).join(", ")}`;
+        return detail;
+      });
       areaContext += `
 PERÍODOS CONTABLES:
 - Total: ${accountingPeriods.length} | Completados: ${completedPeriods.length} | Pendientes: ${pendingPeriods.length}
-- Pendientes: ${pendingPeriods.slice(0, 4).map(p => `${p.month}/${p.year} (${p.status})`).join(", ")}`;
+${periodDetails.map(d => `- ${d}`).join("\n")}`;
     }
 
     // Annual declarations
@@ -197,8 +216,11 @@ PERÍODOS CONTABLES:
 DECLARACIONES ANUALES:
 ${annualDeclarations.slice(0, 3).map(d => {
   const steps = Array.isArray(d.steps) ? d.steps : [];
-  const done = steps.filter((s: any) => s.completed).length;
-  return `- Año ${d.year}: ${d.status} (${done}/${steps.length} pasos)`;
+  const done = steps.filter((s: any) => s.completed || s.step_status === "completado").length;
+  const inProgress = steps.filter((s: any) => s.step_status === "en_progreso");
+  let line = `- Año ${d.year}: ${d.status} (${done}/${steps.length} pasos)`;
+  if (inProgress.length > 0) line += ` | En progreso: ${inProgress.map((s: any) => s.label).join(", ")}`;
+  return line;
 }).join("\n")}`;
     }
 
