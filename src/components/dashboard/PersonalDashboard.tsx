@@ -18,9 +18,12 @@ import {
   Plus,
   Trash2,
   ArrowRight,
+  Sparkles,
+  Clock,
 } from "lucide-react";
 import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { useNavigate } from "react-router-dom";
+import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
 
 export function PersonalDashboard() {
   const { user } = useAuth();
