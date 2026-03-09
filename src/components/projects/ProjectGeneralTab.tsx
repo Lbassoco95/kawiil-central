@@ -78,6 +78,36 @@ export function ProjectGeneralTab({ project }: Props) {
     enabled: !!user,
   });
 
+  // Fetch accounting periods for this project
+  const { data: accountingPeriods } = useQuery({
+    queryKey: ["project-accounting-summary", project.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("accounting_periods")
+        .select("month, year, status, steps")
+        .eq("project_id", project.id)
+        .order("year", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && project.area === "contabilidad",
+  });
+
+  // Fetch annual declarations for this project
+  const { data: annualDeclarations } = useQuery({
+    queryKey: ["project-annual-summary", project.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("annual_declarations")
+        .select("year, status, steps")
+        .eq("project_id", project.id)
+        .order("year", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && project.area === "contabilidad",
+  });
+
   const clientName = (project as any).clients?.name || "Interno";
   const areaLabel = SERVICE_LABELS[project.area || ""] || project.area || "Sin área";
 
@@ -87,6 +117,94 @@ export function ProjectGeneralTab({ project }: Props) {
     const completed = tasks.filter(t => t.status === "completada");
     const overdue = pending.filter(t => t.due_date && new Date(t.due_date) < new Date());
     const totalPct = tasks.length > 0 ? Math.round((completed.length / tasks.length) * 100) : 0;
+
+    // Build area-specific context
+    let areaContext = "";
+
+    // Lawsuit details (juicios)
+    if (project.area === "juicios" && (project as any).lawsuit_details) {
+      const ld = (project as any).lawsuit_details;
+      const phases = Array.isArray(ld.phases) ? ld.phases : [];
+      const completedPhases = phases.filter((p: any) => {
+        const steps = Array.isArray(p.steps) ? p.steps : [];
+        return steps.length > 0 && steps.every((s: any) => s.completed);
+      });
+      const allSteps = phases.flatMap((p: any) => Array.isArray(p.steps) ? p.steps : []);
+      const completedSteps = allSteps.filter((s: any) => s.completed);
+      const pendingSteps = allSteps.filter((s: any) => !s.completed);
+      
+      areaContext = `
+DATOS DEL JUICIO:
+- Tipo: ${ld.lawsuit_type || "no especificado"}
+- Juzgado: ${ld.court || "no especificado"}
+- No. Expediente: ${ld.case_number || "no especificado"}
+- Contraparte: ${ld.counterparty || "no especificado"}
+- Abogado: ${ld.lawyer_name || "no especificado"}
+- Fases completadas: ${completedPhases.length}/${phases.length}
+- Pasos completados: ${completedSteps.length}/${allSteps.length}
+- Pasos pendientes: ${pendingSteps.slice(0, 5).map((s: any) => s.label || s.key).join(", ")}`;
+    }
+
+    // Constitution details (softlanding / constitucion_nacional)
+    if ((project.area === "softlanding" || project.area === "constitucion_nacional") && (project as any).constitution_details) {
+      const cd = (project as any).constitution_details;
+      const phases = Array.isArray(cd.phases) ? cd.phases : [];
+      const allSteps = phases.flatMap((p: any) => Array.isArray(p.steps) ? p.steps : []);
+      const completedSteps = allSteps.filter((s: any) => s.completed);
+      const pendingSteps = allSteps.filter((s: any) => !s.completed);
+      
+      areaContext = `
+DATOS DE CONSTITUCIÓN:
+- Pasos completados: ${completedSteps.length}/${allSteps.length} (${allSteps.length > 0 ? Math.round((completedSteps.length / allSteps.length) * 100) : 0}%)
+- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => s.label || s.key).join(", ")}`;
+    }
+
+    // Gestoría details
+    if (project.area === "gestoria" && (project as any).constitution_details) {
+      const cd = (project as any).constitution_details;
+      const phases = Array.isArray(cd.phases) ? cd.phases : [];
+      const allSteps = phases.flatMap((p: any) => Array.isArray(p.steps) ? p.steps : []);
+      const completedSteps = allSteps.filter((s: any) => s.completed);
+      const pendingSteps = allSteps.filter((s: any) => !s.completed);
+      
+      areaContext = `
+DATOS DE GESTORÍA:
+- Pasos completados: ${completedSteps.length}/${allSteps.length} (${allSteps.length > 0 ? Math.round((completedSteps.length / allSteps.length) * 100) : 0}%)
+- Pendientes: ${pendingSteps.slice(0, 5).map((s: any) => s.label || s.key).join(", ")}`;
+    }
+
+    // Accounting periods
+    if (project.area === "contabilidad" && accountingPeriods && accountingPeriods.length > 0) {
+      const completedPeriods = accountingPeriods.filter(p => p.status === "completado");
+      const pendingPeriods = accountingPeriods.filter(p => p.status !== "completado");
+      areaContext += `
+PERÍODOS CONTABLES:
+- Total: ${accountingPeriods.length} | Completados: ${completedPeriods.length} | Pendientes: ${pendingPeriods.length}
+- Pendientes: ${pendingPeriods.slice(0, 4).map(p => `${p.month}/${p.year} (${p.status})`).join(", ")}`;
+    }
+
+    // Annual declarations
+    if (project.area === "contabilidad" && annualDeclarations && annualDeclarations.length > 0) {
+      areaContext += `
+DECLARACIONES ANUALES:
+${annualDeclarations.slice(0, 3).map(d => {
+  const steps = Array.isArray(d.steps) ? d.steps : [];
+  const done = steps.filter((s: any) => s.completed).length;
+  return `- Año ${d.year}: ${d.status} (${done}/${steps.length} pasos)`;
+}).join("\n")}`;
+    }
+
+    // Compliance (cumplimiento) — tasks contain the compliance data
+    if (project.area === "cumplimiento") {
+      const complianceTasks = tasks.filter(t => t.area === "cumplimiento" || t.area === "pld_ft");
+      const compPending = complianceTasks.filter(t => ["pendiente", "en_progreso"].includes(t.status));
+      const compOverdue = compPending.filter(t => t.due_date && new Date(t.due_date) < new Date());
+      areaContext = `
+CUMPLIMIENTO:
+- Obligaciones totales: ${complianceTasks.length}
+- Pendientes: ${compPending.length}
+- Vencidas: ${compOverdue.length}`;
+    }
 
     return `Genera un resumen ejecutivo breve del proyecto. Español mexicano, tono profesional, emojis.
 
@@ -100,6 +218,7 @@ NOTAS DE ATRASO: ${(project as any).delay_notes || "sin notas"}
 INICIO: ${project.start_date || "no definido"}
 FIN ESTIMADO: ${project.end_date || "no definido"}
 DESCRIPCIÓN: ${project.description || "sin descripción"}
+${areaContext}
 
 TAREAS:
 - Total: ${tasks.length}
@@ -109,13 +228,13 @@ TAREAS:
 ${pending.slice(0, 8).map(t => `  • ${t.title} [${t.priority}] ${t.due_date ? `vence: ${t.due_date}` : ""}`).join("\n")}
 
 INSTRUCCIONES:
-1. Resume en 3-4 puntos el estado actual del proyecto con emojis.
+1. Resume en 3-4 puntos el estado actual del proyecto con emojis, incluyendo los datos específicos del área (juicio, constitución, contabilidad, etc.).
 2. Indica el porcentaje de avance y qué falta por hacer.
 3. Si hay tareas vencidas o semáforo en atención/crítico, destácalo.
 4. Si hay motivo de atraso, explícalo con contexto.
 5. Sugiere la siguiente acción prioritaria.
-6. Máximo 100 palabras. Usa markdown.`;
-  }, [project, projectTasks, clientName, areaLabel]);
+6. Máximo 120 palabras. Usa markdown.`;
+  }, [project, projectTasks, accountingPeriods, annualDeclarations, clientName, areaLabel]);
 
   const handleSave = () => {
     updateProject.mutate(
