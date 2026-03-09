@@ -259,7 +259,7 @@ INSTRUCCIONES:
 7. Máximo 150 palabras. Usa markdown.`;
   }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects, allTasks, today]);
 
-  const tabClass = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm";
+  const tabClass = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap";
 
   return (
     <div className="space-y-6">
@@ -283,20 +283,22 @@ INSTRUCCIONES:
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0 flex-wrap">
-          <TabsTrigger value="resumen" className={tabClass}>Resumen</TabsTrigger>
-          <TabsTrigger value="celulas" className={tabClass}>Células</TabsTrigger>
-          {isAdminOrManager && (
-            <TabsTrigger value="equipo" className={tabClass}>Equipo</TabsTrigger>
-          )}
-          <TabsTrigger value="proyectos" className={tabClass}>Proyectos</TabsTrigger>
-          <TabsTrigger value="clientes" className={tabClass}>Clientes</TabsTrigger>
-          <TabsTrigger value="tareas" className={tabClass}>Mis Tareas</TabsTrigger>
-          {isAdminOrManager && (
-            <TabsTrigger value="rendimiento" className={tabClass}>Rendimiento</TabsTrigger>
-          )}
-        </TabsList>
+      <Tabs defaultValue="resumen" className="w-full min-w-0">
+        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
+            <TabsTrigger value="resumen" className={tabClass}>Resumen</TabsTrigger>
+            <TabsTrigger value="celulas" className={tabClass}>Células</TabsTrigger>
+            {isAdminOrManager && (
+              <TabsTrigger value="equipo" className={tabClass}>Equipo</TabsTrigger>
+            )}
+            <TabsTrigger value="proyectos" className={tabClass}>Proyectos</TabsTrigger>
+            <TabsTrigger value="clientes" className={tabClass}>Clientes</TabsTrigger>
+            <TabsTrigger value="tareas" className={tabClass}>Mis Tareas</TabsTrigger>
+            {isAdminOrManager && (
+              <TabsTrigger value="rendimiento" className={tabClass}>Rendimiento</TabsTrigger>
+            )}
+          </TabsList>
+        </div>
 
         {/* Resumen */}
         <TabsContent value="resumen" className="mt-6 space-y-6">

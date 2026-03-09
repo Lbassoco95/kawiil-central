@@ -238,15 +238,15 @@ export function PersonalDashboard() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-6 min-w-0">
       {/* Greeting + Date/Time */}
       <div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
             {firstName ? `Hola, ${firstName}` : "Hola"} 👋
           </h1>
-          <div className="text-right">
-            <p className="text-sm font-medium text-foreground capitalize">
+          <div className="sm:text-right">
+            <p className="text-xs sm:text-sm font-medium text-foreground capitalize">
               {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -278,7 +278,7 @@ export function PersonalDashboard() {
 
       {/* Questionnaire reminder */}
       {showQuestionnaireReminder && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/5 border border-primary/15">
+        <div className="flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 rounded-lg bg-primary/5 border border-primary/15">
           <Sparkles className="h-5 w-5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
@@ -300,39 +300,41 @@ export function PersonalDashboard() {
       <MoodCheckin userCelula={userCelula} />
 
       {/* Tabs for sections */}
-      <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
-          <TabsTrigger
-            value="resumen"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
-          >
-            Resumen
-          </TabsTrigger>
-          <TabsTrigger
-            value="tareas"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
-          >
-            Tareas ({totalPending})
-          </TabsTrigger>
-          <TabsTrigger
-            value="clientes"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
-          >
-            Mis Clientes ({myClients?.length ?? 0})
-          </TabsTrigger>
-          <TabsTrigger
-            value="recordatorios"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
-          >
-            Recordatorios ({pendingReminders.length})
-          </TabsTrigger>
-          <TabsTrigger
-            value="rendimiento"
-            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm"
-          >
-            Rendimiento
-          </TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="resumen" className="w-full min-w-0">
+        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
+            <TabsTrigger
+              value="resumen"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+            >
+              Resumen
+            </TabsTrigger>
+            <TabsTrigger
+              value="tareas"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+            >
+              Tareas ({totalPending})
+            </TabsTrigger>
+            <TabsTrigger
+              value="clientes"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+            >
+              Clientes ({myClients?.length ?? 0})
+            </TabsTrigger>
+            <TabsTrigger
+              value="recordatorios"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+            >
+              Recordatorios ({pendingReminders.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="rendimiento"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+            >
+              Rendimiento
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Resumen */}
         <TabsContent value="resumen" className="mt-6 space-y-6">
