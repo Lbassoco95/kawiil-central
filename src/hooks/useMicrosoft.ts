@@ -266,6 +266,7 @@ export function useOutlookEmails(folder = "inbox", search?: string) {
         body: { action: "emails", params: { folder, search, top: 30 } },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data?.value || [];
     },
     enabled: !!user,
