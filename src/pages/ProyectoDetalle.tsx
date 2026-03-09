@@ -353,6 +353,7 @@ const ProyectoDetalle = () => {
           </div>
         )}
       </div>
+      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </AppLayout>
   );
 };
