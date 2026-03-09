@@ -76,17 +76,32 @@ function DropboxLiveBrowser() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const browse = async (path: string) => {
+    if (!path || path.trim() === "" || path === "/") {
+      toast.error("Ruta de carpeta inválida");
+      return;
+    }
+
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { path, action: "list" },
       });
       if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (data.error) {
+        // Check if it's a path not found error
+        if (data.error.includes("path/not_found") || data.error.includes("not_found")) {
+          toast.error("Carpeta no encontrada en Dropbox. Esta carpeta personal no ha sido configurada.");
+          goToRoot();
+          return;
+        }
+        throw new Error(data.error);
+      }
       setEntries(data.entries || []);
       setCurrentPath(data.resolved_path || path);
     } catch (e: any) {
       toast.error("Error al navegar Dropbox: " + (e.message || "Error desconocido"));
+      // Return to root on error
+      goToRoot();
     } finally {
       setLoading(false);
     }
