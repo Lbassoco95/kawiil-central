@@ -288,14 +288,20 @@ function DropboxLiveBrowser() {
       <div className="border rounded-lg divide-y">
         {isRoot ? (
           <>
-            <button
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-              onClick={() => openFolder(`/${userName}`)}
-            >
-              <Folder className="h-5 w-5 text-primary shrink-0" />
-              <span className="text-sm font-medium truncate flex-1">{userName}</span>
-              <Badge variant="secondary" className="text-xs">Personal</Badge>
-            </button>
+            <div className="flex flex-col">
+              <button
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left opacity-50 cursor-not-allowed"
+                disabled
+                title="La carpeta personal aún no está disponible. Usa la carpeta de equipo."
+              >
+                <Folder className="h-5 w-5 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium truncate flex-1">{userName}</span>
+                <Badge variant="secondary" className="text-xs">Personal (No disponible)</Badge>
+              </button>
+              <p className="text-xs text-muted-foreground px-4 py-2 bg-muted/30">
+                Tu carpeta personal de Dropbox no está configurada. Utiliza la carpeta de equipo para compartir archivos.
+              </p>
+            </div>
             <button
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
               onClick={() => openFolder("/Kawiil Mx")}
