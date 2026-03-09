@@ -43,12 +43,13 @@ const stepStatusLabels: Record<string, string> = {
 
 const Tareas = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   useTasksRealtime();
   const [area, setArea] = useState("todas");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteTask = useDeleteTask();
   const { isAdminOrManager } = useUserRole();
