@@ -328,6 +328,9 @@ export function useMarkEmailRead() {
         return old.map((e: any) => (e.id === messageId ? { ...e, isRead: true } : e));
       });
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+    },
   });
 }
 
