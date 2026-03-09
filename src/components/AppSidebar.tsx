@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useUnreadCount } from "@/hooks/useMentionNotifications";
+import { useUnreadEmailCount } from "@/hooks/useMicrosoft";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
