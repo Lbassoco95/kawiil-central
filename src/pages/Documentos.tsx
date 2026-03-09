@@ -86,11 +86,19 @@ function DropboxLiveBrowser() {
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { path, action: "list" },
       });
-      if (error) throw error;
-      if (data.error) {
-        // Check if it's a path not found error
+      // supabase.functions.invoke returns error for non-2xx, but data may still contain details
+      if (error) {
+        const errorMsg = data?.error || error.message || "";
+        if (errorMsg.includes("path/not_found") || errorMsg.includes("not_found") || error.message?.includes("non-2xx")) {
+          toast.error("Carpeta no encontrada en Dropbox. Verifica que la carpeta exista o contacta al administrador.");
+          goToRoot();
+          return;
+        }
+        throw error;
+      }
+      if (data?.error) {
         if (data.error.includes("path/not_found") || data.error.includes("not_found")) {
-          toast.error("Carpeta no encontrada en Dropbox. Esta carpeta personal no ha sido configurada.");
+          toast.error("Carpeta no encontrada en Dropbox. Verifica que la carpeta exista o contacta al administrador.");
           goToRoot();
           return;
         }
@@ -99,9 +107,10 @@ function DropboxLiveBrowser() {
       setEntries(data.entries || []);
       setCurrentPath(data.resolved_path || path);
     } catch (e: any) {
-      toast.error("Error al navegar Dropbox: " + (e.message || "Error desconocido"));
-      // Return to root on error
-      goToRoot();
+      if (!e._handled) {
+        toast.error("Error al navegar Dropbox: " + (e.message || "Error desconocido"));
+        goToRoot();
+      }
     } finally {
       setLoading(false);
     }
