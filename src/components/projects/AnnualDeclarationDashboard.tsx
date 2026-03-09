@@ -121,6 +121,7 @@ export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { p
 
   return (
     <div className="space-y-4">
+      <CriticalityDelayCard projectId={projectId} />
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
