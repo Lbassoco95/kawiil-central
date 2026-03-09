@@ -37,9 +37,9 @@ async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow
     return tokenRow.access_token;
   }
 
-  const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!;
-  const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!;
-  const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!;
+  const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
+  const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
+  const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
 
   const res = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,

@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 Deno.serve(async (req) => {
   try {
@@ -6,6 +6,8 @@ Deno.serve(async (req) => {
     const code = url.searchParams.get("code");
     const userId = url.searchParams.get("state");
     const error = url.searchParams.get("error");
+
+    console.log("Callback received:", { hasCode: !!code, hasState: !!userId, error });
 
     if (error) {
       return new Response(
@@ -18,10 +20,12 @@ Deno.serve(async (req) => {
       return new Response("Missing code or state", { status: 400 });
     }
 
-    const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!;
-    const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!;
-    const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!;
-    const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/microsoft-callback`;
+    const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
+    const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
+    const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
+    const redirectUri = `${Deno.env.get("SUPABASE_URL")!.trim()}/functions/v1/microsoft-callback`;
+
+    console.log("Exchanging code for tokens, redirectUri:", redirectUri);
 
     // Exchange code for tokens
     const tokenResponse = await fetch(
@@ -48,6 +52,8 @@ Deno.serve(async (req) => {
         { headers: { "Content-Type": "text/html" } }
       );
     }
+
+    console.log("Token exchange successful, scope:", tokenData.scope);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -77,6 +83,8 @@ Deno.serve(async (req) => {
         { headers: { "Content-Type": "text/html" } }
       );
     }
+
+    console.log("Token saved successfully for user:", userId);
 
     return new Response(
       `<html><body><script>window.opener?.postMessage({type:'microsoft-auth-success'},'*');window.close();</script><p>¡Conectado! Puedes cerrar esta ventana.</p></body></html>`,
