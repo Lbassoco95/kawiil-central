@@ -83,7 +83,7 @@ function DropboxLiveBrowser() {
   const [pickerLoading, setPickerLoading] = useState(false);
 
   // Load personal folder from profiles table on mount
-  useState(() => {
+  useEffect(() => {
     if (!user?.id) return;
     supabase
       .from("profiles")
@@ -99,7 +99,7 @@ function DropboxLiveBrowser() {
           loadRootFoldersForPicker();
         }
       });
-  });
+  }, [user?.id]);
 
   const loadRootFoldersForPicker = async () => {
     setShowFolderPicker(true);
