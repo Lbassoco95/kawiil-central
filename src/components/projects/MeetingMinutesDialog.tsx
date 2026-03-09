@@ -12,20 +12,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   Upload,
-  FileText,
   Sparkles,
   Calendar,
   User,
   AlertTriangle,
   Check,
-  X,
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
 } from "lucide-react";
 
 interface ProposedTask {
@@ -68,6 +79,7 @@ export function MeetingMinutesDialog({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const { data: orgUsers = [] } = useOrgUsers();
 
   const [step, setStep] = useState<"input" | "preview">("input");
   const [content, setContent] = useState("");
@@ -76,26 +88,25 @@ export function MeetingMinutesDialog({
   const [summary, setSummary] = useState("");
   const [proposedTasks, setProposedTasks] = useState<ProposedTask[]>([]);
   const [creating, setCreating] = useState(false);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
 
-    // Read text content from file
     if (file.type.startsWith("text/") || file.name.endsWith(".md") || file.name.endsWith(".txt")) {
       const text = await file.text();
       setContent(text);
     } else {
-      // For PDF/docx, we just note it - content needs to be pasted
-      toast.info("Para archivos PDF o Word, copia y pega el contenido de la minuta en el campo de texto.");
+      toast.info("Para archivos PDF o Word, copia y pega el contenido en el campo de texto.");
     }
     if (fileRef.current) fileRef.current.value = "";
   };
 
   const handleAnalyze = async () => {
     if (!content.trim()) {
-      toast.error("Ingresa el contenido de la minuta");
+      toast.error("Ingresa el contenido del documento");
       return;
     }
     setAnalyzing(true);
@@ -133,10 +144,52 @@ export function MeetingMinutesDialog({
     );
   };
 
+  const updateTask = (index: number, field: keyof ProposedTask, value: any) => {
+    setProposedTasks((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, [field]: value } : t))
+    );
+  };
+
+  const deleteTask = (index: number) => {
+    setProposedTasks((prev) => prev.filter((_, i) => i !== index));
+    if (expandedIndex === index) setExpandedIndex(null);
+    else if (expandedIndex !== null && expandedIndex > index) setExpandedIndex(expandedIndex - 1);
+  };
+
+  const addTask = () => {
+    const newTask: ProposedTask = {
+      title: "",
+      description: "",
+      priority: "media",
+      due_date: null,
+      assigned_to_name: null,
+      assigned_to_id: null,
+      project_id: projectId,
+      client_id: clientId || null,
+      area: area || null,
+      accepted: true,
+    };
+    setProposedTasks((prev) => [...prev, newTask]);
+    setExpandedIndex(proposedTasks.length);
+  };
+
+  const handleAssigneeChange = (index: number, userId: string) => {
+    if (userId === "none") {
+      updateTask(index, "assigned_to_id", null);
+      updateTask(index, "assigned_to_name", null);
+      return;
+    }
+    const member = orgUsers.find((u) => u.user_id === userId);
+    if (member) {
+      updateTask(index, "assigned_to_id", userId);
+      updateTask(index, "assigned_to_name", member.full_name);
+    }
+  };
+
   const handleCreateTasks = async () => {
-    const accepted = proposedTasks.filter((t) => t.accepted);
+    const accepted = proposedTasks.filter((t) => t.accepted && t.title.trim());
     if (accepted.length === 0) {
-      toast.error("Selecciona al menos una tarea");
+      toast.error("Selecciona al menos una tarea con título");
       return;
     }
     setCreating(true);
@@ -179,10 +232,11 @@ export function MeetingMinutesDialog({
     setFileName("");
     setSummary("");
     setProposedTasks([]);
+    setExpandedIndex(null);
     onOpenChange(false);
   };
 
-  const acceptedCount = proposedTasks.filter((t) => t.accepted).length;
+  const acceptedCount = proposedTasks.filter((t) => t.accepted && t.title.trim()).length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -190,18 +244,17 @@ export function MeetingMinutesDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            {step === "input" ? "Analizar minuta de reunión" : "Tareas propuestas por AI"}
+            {step === "input" ? "Analizar documento / minuta" : "Tareas propuestas por AI"}
           </DialogTitle>
           <DialogDescription>
             {step === "input"
-              ? `Sube o pega el contenido de la minuta para generar tareas automáticamente en "${projectName}".`
-              : `${summary}`}
+              ? `Sube o pega el contenido del documento para generar tareas automáticamente en "${projectName}".`
+              : summary}
           </DialogDescription>
         </DialogHeader>
 
         {step === "input" ? (
           <div className="space-y-4 flex-1 overflow-y-auto">
-            {/* File upload */}
             <div>
               <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.text" onChange={handleFileUpload} />
               <Button
@@ -216,18 +269,15 @@ export function MeetingMinutesDialog({
               </Button>
             </div>
 
-            {/* Text input */}
             <div className="space-y-1">
-              <label className="text-sm font-medium">O pega el contenido de la minuta:</label>
+              <label className="text-sm font-medium">O pega el contenido:</label>
               <Textarea
                 className="min-h-[200px] text-sm"
-                placeholder="Pega aquí el resumen, minuta o notas de la reunión...&#10;&#10;Ejemplo:&#10;- Se acordó preparar la declaración anual de Cliente X para el 15 de abril&#10;- María revisará los estados financieros&#10;- Urgente: entregar constancia de situación fiscal antes del viernes"
+                placeholder="Pega aquí el resumen, minuta, notas de la reunión o contenido del documento...&#10;&#10;Ejemplo:&#10;- Se acordó preparar la declaración anual de Cliente X para el 15 de abril&#10;- María revisará los estados financieros&#10;- Urgente: entregar constancia de situación fiscal antes del viernes"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                {content.length} caracteres
-              </p>
+              <p className="text-xs text-muted-foreground">{content.length} caracteres</p>
             </div>
           </div>
         ) : (
@@ -235,69 +285,176 @@ export function MeetingMinutesDialog({
             {proposedTasks.length === 0 ? (
               <div className="text-center py-8">
                 <AlertTriangle className="h-8 w-8 text-warning mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No se encontraron tareas en la minuta.</p>
+                <p className="text-sm text-muted-foreground">No se encontraron tareas.</p>
               </div>
             ) : (
-              proposedTasks.map((task, index) => (
-                <div
-                  key={index}
-                  className={`border rounded-lg p-3 space-y-2 transition-colors ${
-                    task.accepted
-                      ? "bg-background border-border"
-                      : "bg-muted/30 border-border/50 opacity-60"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={task.accepted}
-                      onCheckedChange={() => toggleTask(index)}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-medium">{task.title}</h4>
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] px-1.5 py-0 ${PRIORITY_STYLES[task.priority] || ""}`}
-                        >
-                          {task.priority}
-                        </Badge>
+              proposedTasks.map((task, index) => {
+                const isExpanded = expandedIndex === index;
+                return (
+                  <div
+                    key={index}
+                    className={`border rounded-lg transition-colors ${
+                      task.accepted
+                        ? "bg-background border-border"
+                        : "bg-muted/30 border-border/50 opacity-60"
+                    }`}
+                  >
+                    {/* Collapsed row */}
+                    <div className="flex items-center gap-3 p-3">
+                      <Checkbox
+                        checked={task.accepted}
+                        onCheckedChange={() => toggleTask(index)}
+                        className="shrink-0"
+                      />
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() => setExpandedIndex(isExpanded ? null : index)}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-medium truncate">
+                            {task.title || <span className="text-muted-foreground italic">Sin título</span>}
+                          </h4>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] px-1.5 py-0 shrink-0 ${PRIORITY_STYLES[task.priority] || ""}`}
+                          >
+                            {task.priority}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          {task.due_date && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {task.due_date}
+                            </span>
+                          )}
+                          {task.assigned_to_name && (
+                            <span className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {task.assigned_to_name}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {task.description && (
-                        <p className="text-xs text-muted-foreground">{task.description}</p>
-                      )}
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        {task.due_date && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {task.due_date}
-                          </span>
-                        )}
-                        {task.assigned_to_name && (
-                          <span className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {task.assigned_to_name}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setExpandedIndex(isExpanded ? null : index)}
+                        >
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => deleteTask(index)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </div>
+
+                    {/* Expanded edit form */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3 pt-1 border-t border-border/40 space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Título</label>
+                          <Input
+                            value={task.title}
+                            onChange={(e) => updateTask(index, "title", e.target.value)}
+                            placeholder="Título de la tarea"
+                            className="text-sm"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Descripción</label>
+                          <Textarea
+                            value={task.description}
+                            onChange={(e) => updateTask(index, "description", e.target.value)}
+                            placeholder="Descripción..."
+                            className="text-sm min-h-[60px]"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">Prioridad</label>
+                            <Select
+                              value={task.priority}
+                              onValueChange={(v) => updateTask(index, "priority", v)}
+                            >
+                              <SelectTrigger className="text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="urgente">🔴 Urgente</SelectItem>
+                                <SelectItem value="alta">🟠 Alta</SelectItem>
+                                <SelectItem value="media">🔵 Media</SelectItem>
+                                <SelectItem value="baja">⚪ Baja</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">Fecha límite</label>
+                            <Input
+                              type="date"
+                              value={task.due_date || ""}
+                              onChange={(e) => updateTask(index, "due_date", e.target.value || null)}
+                              className="text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-muted-foreground">Responsable</label>
+                          <Select
+                            value={task.assigned_to_id || "none"}
+                            onValueChange={(v) => handleAssigneeChange(index, v)}
+                          >
+                            <SelectTrigger className="text-sm">
+                              <SelectValue placeholder="Sin asignar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Sin asignar</SelectItem>
+                              {orgUsers
+                                .filter((u) => u.is_active)
+                                .map((u) => (
+                                  <SelectItem key={u.user_id} value={u.user_id}>
+                                    {u.full_name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
+
+            {/* Add task button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-dashed gap-1.5"
+              onClick={addTask}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Agregar tarea manualmente
+            </Button>
           </div>
         )}
 
         <DialogFooter className="gap-2">
           {step === "input" ? (
             <>
-              <Button variant="outline" onClick={handleClose}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleAnalyze}
-                disabled={analyzing || !content.trim()}
-              >
+              <Button variant="outline" onClick={handleClose}>Cancelar</Button>
+              <Button onClick={handleAnalyze} disabled={analyzing || !content.trim()}>
                 {analyzing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -316,10 +473,7 @@ export function MeetingMinutesDialog({
               <Button variant="outline" onClick={() => setStep("input")}>
                 Volver a editar
               </Button>
-              <Button
-                onClick={handleCreateTasks}
-                disabled={creating || acceptedCount === 0}
-              >
+              <Button onClick={handleCreateTasks} disabled={creating || acceptedCount === 0}>
                 {creating ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
