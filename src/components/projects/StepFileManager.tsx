@@ -433,6 +433,13 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
           }
         }}
       />
+
+      <DropboxFilePicker
+        open={showDropboxPicker}
+        onClose={() => setShowDropboxPicker(false)}
+        initialPath={clientDropboxPath || "/Kawiil Mx"}
+        onSelect={handleDropboxPickerSelect}
+      />
     </div>
   );
 }
