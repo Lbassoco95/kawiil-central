@@ -598,12 +598,20 @@ serve(async (req) => {
     }
 
     if (action === "get_link") {
+      const scoped = parseScopedPath(path);
+      const scopedHeaders = getScopedDropboxHeaders(
+        DROPBOX_ACCESS_TOKEN,
+        adminMemberId,
+        rootNamespaceId,
+        scoped.namespaceId,
+      );
+
       let shareUrl = "";
       try {
         const response = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
           method: 'POST',
-          headers: dbxHeaders,
-          body: JSON.stringify({ path }),
+          headers: scopedHeaders,
+          body: JSON.stringify({ path: scoped.path }),
         });
 
         if (response.ok) {
@@ -614,8 +622,8 @@ serve(async (req) => {
           if (errorBody?.error?.['.tag'] === 'shared_link_already_exists') {
             const listRes = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', {
               method: 'POST',
-              headers: dbxHeaders,
-              body: JSON.stringify({ path, direct_only: true }),
+              headers: scopedHeaders,
+              body: JSON.stringify({ path: scoped.path, direct_only: true }),
             });
             if (listRes.ok) {
               const listData = await listRes.json();
