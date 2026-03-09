@@ -80,7 +80,7 @@ export function PersonalDashboard() {
   });
 
   // Fetch personalized phrase (max 2x/day)
-  const fetchPhrase = async (moodScore?: number) => {
+  const fetchPhrase = async (moodScore?: number, forceRegenerate?: boolean) => {
     if (!user) return;
     setPhraseLoading(true);
     try {
