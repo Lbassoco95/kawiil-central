@@ -102,18 +102,20 @@ Por ejemplo, si le gusta Star Wars, podrías hacer una referencia a "la fuerza",
         ? `\nÁNIMO ACTUAL: ${mood_score}/5 (${mood_score <= 2 ? "bajo — necesita apoyo y empatía" : mood_score <= 3 ? "neutral — motivar suavemente" : "alto — reforzar energía positiva"})`
         : "";
 
-    const prompt = `Genera UNA frase motivacional personalizada y única para ${firstName}.
+    const prompt = `Selecciona UNA frase o cita REAL y EXISTENTE que motive a ${firstName}, basándote en sus gustos culturales.
 Momento del día: ${time_of_day === "afternoon" ? "tarde" : "mañana"}.
 ${moodContext}
 ${personalContext}
 
 INSTRUCCIONES:
-1. La frase debe ser original, NO una cita famosa conocida.
-2. Máximo 2 líneas.
-3. ${Object.keys(answers).length > 0 ? "Incluye una referencia sutil a los gustos culturales del usuario." : "Hazla reflexiva y motivadora."}
-4. Usa un tono cálido, como un amigo sabio.
-5. NO uses emojis.
-6. Responde SOLO con la frase, sin comillas, sin atribución.`;
+1. La frase DEBE SER una cita real de un personaje, autor, músico, película, serie, libro o figura pública que conecte con los gustos del usuario.
+2. ${Object.keys(answers).length > 0 ? "Elige citas de autores, personajes o figuras relacionadas con sus gustos (ej: si le gusta Star Wars, una cita de Yoda; si le gusta el rock, una de algún músico de rock; si le gusta la ciencia ficción, de un autor de sci-fi)." : "Elige una cita célebre motivacional de alguna figura reconocida."}
+3. Máximo 2 líneas la cita.
+4. Incluye la atribución: quién lo dijo y de dónde viene (libro, película, canción, etc.)
+5. NO inventes frases. Solo citas reales verificables.
+6. Formato de respuesta EXACTO (sin comillas extras):
+FRASE: [la cita textual]
+— [Autor/Personaje], [Fuente/Obra]`;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY)
