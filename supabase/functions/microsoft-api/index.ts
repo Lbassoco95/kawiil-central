@@ -347,15 +347,16 @@ Deno.serve(async (req) => {
       }
 
       case "mark-read": {
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ isRead: true }),
-        });
-        result = { success: res.ok };
+        await graphRequest(
+          accessToken,
+          `/me/messages/${params.messageId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isRead: true }),
+          }
+        );
+        result = { success: true };
         break;
       }
 
