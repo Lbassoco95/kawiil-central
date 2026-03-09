@@ -143,7 +143,7 @@ export function EmailView() {
       )}
 
       {/* Email detail dialog */}
-      <Dialog open={!!selectedEmailId} onOpenChange={(open) => { if (!open) { setSelectedEmailId(null); resetAction(); } }}>
+      <Dialog open={!!selectedEmailId} onOpenChange={(open) => { if (!open) handleCloseDetail(); }}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           {detailLoading ? (
             <div className="flex items-center justify-center py-8">
