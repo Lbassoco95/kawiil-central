@@ -545,6 +545,16 @@ export function PersonalDashboard() {
           <MonthlyPerformance />
         </TabsContent>
       </Tabs>
+
+      {/* Questionnaire Dialog */}
+      <PreferenceQuestionnaire
+        open={showQuestionnaire}
+        onClose={() => setShowQuestionnaire(false)}
+        onCompleted={() => {
+          refetchPrefs();
+          fetchPhrase();
+        }}
+      />
     </div>
   );
 }
