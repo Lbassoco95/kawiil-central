@@ -261,7 +261,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="area-stats"
             ready={areaStats.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance por célula" para un despacho contable/legal. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% (${a.overdue} vencidas)`).join(", ")}. Tono profesional, sin emojis, sin saludo.`}
+            contextPrompt={`Eres el analista de un despacho contable/legal. Analiza estos datos de avance por célula y da UNA recomendación accionable en máximo 30 palabras. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% avance, ${a.overdue} vencidas, ${a.pending} pendientes`).join("; ")}. Identifica la célula con más riesgo o retraso y sugiere qué hacer. Sin emojis, sin saludo.`}
           />
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-3">
             {areaStats.map((a) => (
