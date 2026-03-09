@@ -238,15 +238,15 @@ export function PersonalDashboard() {
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-6 min-w-0">
       {/* Greeting + Date/Time */}
       <div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
             {firstName ? `Hola, ${firstName}` : "Hola"} 👋
           </h1>
-          <div className="text-right">
-            <p className="text-sm font-medium text-foreground capitalize">
+          <div className="sm:text-right">
+            <p className="text-xs sm:text-sm font-medium text-foreground capitalize">
               {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
             </p>
             <p className="text-xs text-muted-foreground">
