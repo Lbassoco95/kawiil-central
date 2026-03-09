@@ -621,28 +621,35 @@ const Documentos = () => {
 
         {/* View toggle + filters */}
         <div className="flex items-center gap-3 flex-wrap">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "dropbox" | "organized")}>
-            <TabsList>
-              <TabsTrigger value="dropbox" className="gap-1.5">
-                <Cloud className="h-3.5 w-3.5" />
-                Dropbox
-              </TabsTrigger>
-              <TabsTrigger value="organized" className="gap-1.5">
-                <HardDrive className="h-3.5 w-3.5" />
-                Aplicación
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex gap-1.5">
+            {[
+              { key: "dropbox" as const, label: "Dropbox", icon: Cloud },
+              { key: "organized" as const, label: "Aplicación", icon: HardDrive },
+            ].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setViewMode(t.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  viewMode === t.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                <t.icon className="h-3 w-3" />
+                {t.label}
+              </button>
+            ))}
+          </div>
 
           {viewMode === "organized" && (
             <>
               <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Buscar documentos..." className="pl-9" value={search}
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input placeholder="Buscar documentos..." className="pl-9 h-9 text-sm bg-secondary/30 border-0 focus-visible:ring-1" value={search}
                   onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="supabase">Archivos subidos</SelectItem>

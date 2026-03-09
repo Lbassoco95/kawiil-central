@@ -1,21 +1,14 @@
 import { useState, useCallback } from "react";
-import { Sparkles, Loader2, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 
 interface Props {
-  /** Unique cache key suffix, e.g. "team-dashboard" or "project-abc123" */
   cacheKey: string;
-  /** The context prompt that describes the data for the AI */
   contextPrompt: string;
-  /** Title shown on the card */
   title?: string;
-  /** Whether required data is loaded */
   ready: boolean;
-  /** User id for caching */
   userId?: string;
-  /** Accent color class */
   accentClass?: string;
 }
 
@@ -25,7 +18,6 @@ export function AISummaryCard({
   title = "Resumen Kawiil AI",
   ready,
   userId,
-  accentClass = "text-primary",
 }: Props) {
   const [content, setContent] = useState<string | null>(() => {
     try {
@@ -40,11 +32,13 @@ export function AISummaryCard({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const generate = useCallback(async () => {
     if (!ready) return;
     setLoading(true);
     setError(null);
+    setExpanded(true);
 
     try {
       const session = await supabase.auth.getSession();
@@ -119,48 +113,57 @@ export function AISummaryCard({
   }, [contextPrompt, ready, cacheKey]);
 
   return (
-    <div className="rounded-xl bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/10 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className={`h-4 w-4 ${accentClass}`} />
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={generate}
-          disabled={loading || !ready}
+    <section>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => content ? setExpanded(!expanded) : generate()}
+          className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
-          {loading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <>
-              <RefreshCw className="h-3 w-3 mr-1" />
-              {content ? "Actualizar" : "Generar"}
-            </>
-          )}
-        </Button>
+          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <span>{title}</span>
+        </button>
+        {content && (
+          <button
+            onClick={generate}
+            disabled={loading || !ready}
+            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+          </button>
+        )}
       </div>
 
-      {error && (
-        <p className="text-xs text-destructive mb-2">{error}</p>
-      )}
+      {expanded && (
+        <div className="mt-3 pl-7">
+          {error && (
+            <p className="text-xs text-destructive mb-2">{error}</p>
+          )}
 
-      {content ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed">
-          <ReactMarkdown>{content}</ReactMarkdown>
-        </div>
-      ) : !loading ? (
-        <p className="text-xs text-muted-foreground">
-          Haz clic en "Generar" para obtener un resumen inteligente basado en los datos actuales.
-        </p>
-      ) : (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Kawiil AI está analizando los datos...
+          {content ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
+              <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
+          ) : loading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Analizando datos...
+            </div>
+          ) : (
+            <button
+              onClick={generate}
+              disabled={!ready}
+              className="text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+            >
+              Generar resumen
+            </button>
+          )}
         </div>
       )}
-    </div>
+    </section>
   );
 }

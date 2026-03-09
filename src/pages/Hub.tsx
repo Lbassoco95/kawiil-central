@@ -30,9 +30,6 @@ import {
   Trash2,
   Pin,
   Loader2,
-  Eye,
-  History,
-  MessageCircle,
 } from "lucide-react";
 
 export default function Hub() {
@@ -77,7 +74,7 @@ export default function Hub() {
       <div className="space-y-6">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Hub</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Centro de conocimiento: manuales, procedimientos y comunicados</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Manuales, procedimientos y comunicados</p>
         </div>
 
         {/* Tab pills */}
@@ -108,7 +105,7 @@ export default function Hub() {
               {isAdminOrManager && (
                 <Button size="sm" onClick={() => setProcedureDialogOpen(true)}>
                   <Upload className="mr-1.5 h-3.5 w-3.5" />
-                  Subir procedimiento
+                  Subir
                 </Button>
               )}
             </div>
@@ -120,47 +117,38 @@ export default function Hub() {
               <div className="text-center py-16">
                 <FileText className="mx-auto h-10 w-10 text-muted-foreground/40" />
                 <h3 className="mt-3 text-sm font-medium text-foreground">Sin procedimientos aún</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Los administradores pueden subir manuales y procedimientos aquí.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Los administradores pueden subir manuales aquí.</p>
               </div>
             ) : (
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="divide-y divide-border/40">
                 {procedures.map((proc: any) => (
                   <div
                     key={proc.id}
-                    className="group rounded-xl bg-secondary/20 hover:bg-secondary/40 border border-border/30 hover:border-border/60 p-4 cursor-pointer transition-all"
+                    className="flex items-center justify-between gap-3 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer group"
                     onClick={() => setSelectedProcedure(proc)}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <FileText className="h-5 w-5 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-[13px] font-medium text-foreground line-clamp-2">{proc.title}</h3>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <div className="min-w-0">
+                        <h3 className="text-[13px] font-medium text-foreground truncate">{proc.title}</h3>
                         {proc.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{proc.description}</p>
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">{proc.description}</p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/20">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
-                          v{proc.current_version || 1}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {formatMX(proc.updated_at || proc.created_at, "dd MMM yyyy")}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Eye className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        {isAdminOrManager && (
-                          <button
-                            className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100"
-                            onClick={(e) => { e.stopPropagation(); deleteProcedure.mutate({ id: proc.id, file_path: proc.file_path }); }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">v{proc.current_version || 1}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {formatMX(proc.updated_at || proc.created_at, "dd MMM yyyy")}
+                      </span>
+                      {isAdminOrManager && (
+                        <button
+                          className="p-1 rounded text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
+                          onClick={(e) => { e.stopPropagation(); deleteProcedure.mutate({ id: proc.id, file_path: proc.file_path }); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -176,7 +164,7 @@ export default function Hub() {
               {isAdminOrManager && (
                 <Button size="sm" onClick={() => setComunicadoDialogOpen(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Nuevo comunicado
+                  Nuevo
                 </Button>
               )}
             </div>
@@ -191,25 +179,25 @@ export default function Hub() {
                 <p className="mt-1 text-xs text-muted-foreground">Los administradores pueden publicar comunicados aquí.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="divide-y divide-border/40">
                 {comunicados.map((com: any) => (
-                  <div key={com.id} className={`rounded-xl p-4 ${com.is_pinned ? "bg-primary/5 ring-1 ring-primary/10" : "bg-secondary/30"}`}>
+                  <div key={com.id} className="py-3 px-2 -mx-2 group">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          {com.is_pinned && <Pin className="h-3.5 w-3.5 text-primary shrink-0" />}
+                          {com.is_pinned && <Pin className="h-3 w-3 text-primary shrink-0" />}
                           <h3 className="text-[13px] font-medium text-foreground">{com.title}</h3>
                         </div>
                         {com.body && (
-                          <p className="text-xs text-muted-foreground mt-1.5 whitespace-pre-wrap">{com.body}</p>
+                          <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{com.body}</p>
                         )}
-                        <p className="text-[11px] text-muted-foreground mt-2">
+                        <p className="text-[11px] text-muted-foreground mt-1.5">
                           {formatMX(com.created_at, "dd MMM yyyy, HH:mm")}
                         </p>
                       </div>
                       {isAdminOrManager && (
                         <button
-                          className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          className="p-1 rounded text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors shrink-0"
                           onClick={() => deleteComunicado.mutate(com.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -224,7 +212,6 @@ export default function Hub() {
         )}
       </div>
 
-      {/* Procedure Detail Dialog */}
       <ProcedureDetailDialog
         procedure={selectedProcedure}
         open={!!selectedProcedure}
@@ -235,27 +222,26 @@ export default function Hub() {
       <Dialog open={procedureDialogOpen} onOpenChange={setProcedureDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Subir procedimiento o manual</DialogTitle>
+            <DialogTitle>Subir procedimiento</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div>
-              <Label>Título *</Label>
-              <Input value={procedureTitle} onChange={(e) => setProcedureTitle(e.target.value)} placeholder="Ej: Manual de integración de clientes" />
+            <div className="space-y-1.5">
+              <Label className="text-xs">Título *</Label>
+              <Input value={procedureTitle} onChange={(e) => setProcedureTitle(e.target.value)} placeholder="Ej: Manual de integración" className="h-9 text-sm" />
             </div>
-            <div>
-              <Label>Descripción (opcional)</Label>
-              <Textarea value={procedureDescription} onChange={(e) => setProcedureDescription(e.target.value)} placeholder="Breve descripción del contenido" rows={2} />
+            <div className="space-y-1.5">
+              <Label className="text-xs">Descripción</Label>
+              <Textarea value={procedureDescription} onChange={(e) => setProcedureDescription(e.target.value)} placeholder="Breve descripción" rows={2} className="text-sm" />
             </div>
-            <div>
-              <Label>Archivo *</Label>
-              <Input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*" onChange={(e) => setProcedureFile(e.target.files?.[0] ?? null)} />
-              {procedureFile && <p className="text-xs text-muted-foreground mt-1">{procedureFile.name}</p>}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Archivo *</Label>
+              <Input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*" onChange={(e) => setProcedureFile(e.target.files?.[0] ?? null)} className="text-sm" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProcedureDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleUploadProcedure} disabled={createProcedure.isPending || !procedureTitle.trim() || !procedureFile}>
-              {createProcedure.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button variant="outline" size="sm" onClick={() => setProcedureDialogOpen(false)}>Cancelar</Button>
+            <Button size="sm" onClick={handleUploadProcedure} disabled={createProcedure.isPending || !procedureTitle.trim() || !procedureFile}>
+              {createProcedure.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               Subir
             </Button>
           </DialogFooter>
@@ -269,23 +255,23 @@ export default function Hub() {
             <DialogTitle>Nuevo comunicado</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div>
-              <Label>Título *</Label>
-              <Input value={comunicadoTitle} onChange={(e) => setComunicadoTitle(e.target.value)} placeholder="Asunto del comunicado" />
+            <div className="space-y-1.5">
+              <Label className="text-xs">Título *</Label>
+              <Input value={comunicadoTitle} onChange={(e) => setComunicadoTitle(e.target.value)} placeholder="Asunto" className="h-9 text-sm" />
             </div>
-            <div>
-              <Label>Contenido (opcional)</Label>
-              <Textarea value={comunicadoBody} onChange={(e) => setComunicadoBody(e.target.value)} placeholder="Texto del comunicado..." rows={4} />
+            <div className="space-y-1.5">
+              <Label className="text-xs">Contenido</Label>
+              <Textarea value={comunicadoBody} onChange={(e) => setComunicadoBody(e.target.value)} placeholder="Texto del comunicado..." rows={4} className="text-sm" />
             </div>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-center gap-2 cursor-pointer text-sm">
               <input type="checkbox" checked={comunicadoPinned} onChange={(e) => setComunicadoPinned(e.target.checked)} />
-              <span className="text-sm">Fijar al inicio</span>
+              Fijar al inicio
             </label>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setComunicadoDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handlePublishComunicado} disabled={createComunicado.isPending || !comunicadoTitle.trim()}>
-              {createComunicado.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button variant="outline" size="sm" onClick={() => setComunicadoDialogOpen(false)}>Cancelar</Button>
+            <Button size="sm" onClick={handlePublishComunicado} disabled={createComunicado.isPending || !comunicadoTitle.trim()}>
+              {createComunicado.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               Publicar
             </Button>
           </DialogFooter>

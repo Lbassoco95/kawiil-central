@@ -2,20 +2,11 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useClientDetail } from "@/hooks/useClientDetail";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft,
-  Mail,
-  Phone,
-  MapPin,
-  User,
-  FileText,
-  CheckSquare,
-  FolderOpen,
-  Pencil,
-  Shield,
+  ArrowLeft, Mail, Phone, MapPin, User, FileText,
+  CheckSquare, FolderOpen, Pencil, Shield,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
@@ -58,11 +49,20 @@ const TASK_PRIORITY_STYLES: Record<TaskPriority, string> = {
   baja: "bg-muted text-muted-foreground",
 };
 
+const tabs: { key: string; label: string; icon?: typeof Shield }[] = [
+  { key: "general", label: "General" },
+  { key: "cumplimiento", label: "Cumplimiento", icon: Shield },
+  { key: "proyectos", label: "Proyectos" },
+  { key: "tareas", label: "Tareas" },
+  { key: "documentos", label: "Documentos" },
+];
+
 const ClienteDetalle = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { client, isLoadingClient, projects, tasks, documents } = useClientDetail(id);
   const [editOpen, setEditOpen] = useState(false);
+  const [tab, setTab] = useState<string>("general");
 
   if (isLoadingClient) {
     return (
@@ -113,166 +113,166 @@ const ClienteDetalle = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="general" className="space-y-6">
-          <TabsList className="h-auto flex-wrap">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="cumplimiento">
-              <Shield className="h-3.5 w-3.5 mr-1" />
-              Cumplimiento
-            </TabsTrigger>
-            <TabsTrigger value="proyectos">Proyectos ({projects.length})</TabsTrigger>
-            <TabsTrigger value="tareas">Tareas ({activeTasks.length})</TabsTrigger>
-            <TabsTrigger value="documentos">Documentos ({documents.length})</TabsTrigger>
-          </TabsList>
+        {/* Tab pills */}
+        <div className="flex flex-wrap gap-1.5">
+          {tabs.map((t) => {
+            const count = t.key === "proyectos" ? projects.length
+              : t.key === "tareas" ? activeTasks.length
+              : t.key === "documentos" ? documents.length : null;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  tab === t.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                {t.icon && <t.icon className="h-3 w-3" />}
+                {t.label}
+                {count !== null && <span className={`text-[10px] ${tab === t.key ? "opacity-80" : "opacity-60"}`}>{count}</span>}
+              </button>
+            );
+          })}
+        </div>
 
-          {/* General Tab */}
-          <TabsContent value="general">
-            <div className="grid gap-6 md:grid-cols-2">
-              {/* Contact Info */}
-              <section>
-                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Información de contacto</h2>
-                <div className="space-y-2.5">
-                  {client.email && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <a href={`mailto:${client.email}`} className="text-primary hover:underline text-[13px]">{client.email}</a>
-                    </div>
-                  )}
-                  {client.phone && (
-                    <div className="flex items-center gap-2 text-[13px]">
-                      <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span>{client.phone}</span>
-                    </div>
-                  )}
-                  {client.address && (
-                    <div className="flex items-center gap-2 text-[13px]">
-                      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span>{client.address}</span>
-                    </div>
-                  )}
-                  {client.contact_name && (
-                    <div className="flex items-center gap-2 text-[13px]">
-                      <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span>{client.contact_name}{client.contact_position && ` — ${client.contact_position}`}</span>
-                    </div>
-                  )}
-                  {!client.email && !client.phone && !client.address && !client.contact_name && (
-                    <p className="text-sm text-muted-foreground">Sin información de contacto</p>
-                  )}
+        {/* General Tab */}
+        {tab === "general" && (
+          <div className="grid gap-6 md:grid-cols-2">
+            <section>
+              <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">Contacto</h2>
+              <div className="space-y-2.5">
+                {client.email && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <a href={`mailto:${client.email}`} className="text-primary hover:underline text-[13px]">{client.email}</a>
+                  </div>
+                )}
+                {client.phone && (
+                  <div className="flex items-center gap-2 text-[13px]">
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span>{client.phone}</span>
+                  </div>
+                )}
+                {client.address && (
+                  <div className="flex items-center gap-2 text-[13px]">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span>{client.address}</span>
+                  </div>
+                )}
+                {client.contact_name && (
+                  <div className="flex items-center gap-2 text-[13px]">
+                    <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span>{client.contact_name}{client.contact_position && ` — ${client.contact_position}`}</span>
+                  </div>
+                )}
+                {!client.email && !client.phone && !client.address && !client.contact_name && (
+                  <p className="text-sm text-muted-foreground">Sin información de contacto</p>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">Servicios</h2>
+              {client.services && client.services.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {client.services.map((s) => (
+                    <span key={s} className="text-xs bg-secondary/60 text-foreground px-2 py-1 rounded-full">
+                      {SERVICE_LABELS[s as ServiceArea] || s}
+                    </span>
+                  ))}
                 </div>
-              </section>
-
-              {/* Services */}
-              <section>
-                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Servicios contratados</h2>
-                {client.services && client.services.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {client.services.map((s) => (
-                      <span key={s} className="text-xs bg-secondary/60 text-foreground px-2 py-1 rounded-full">
-                        {SERVICE_LABELS[s as ServiceArea] || s}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Sin servicios asignados</p>
-                )}
-                {client.primary_area && (
-                  <p className="text-[11px] text-muted-foreground mt-2">
-                    Área principal: <strong>{SERVICE_LABELS[client.primary_area]}</strong>
-                  </p>
-                )}
-              </section>
-
-              {/* Dropbox */}
-              <section className="md:col-span-2">
-                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <FolderOpen className="h-3.5 w-3.5" />
-                  Carpeta Dropbox
-                </h2>
-                {client.dropbox_folder_path ? (
-                  <DropboxFolderBrowser folderPath={client.dropbox_folder_path} />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Sin carpeta de Dropbox vinculada. Edita el cliente para agregar la ruta.
-                  </p>
-                )}
-              </section>
-
-              {/* Notes */}
-              {client.notes && (
-                <section>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Notas</h2>
-                  <p className="text-[13px] whitespace-pre-wrap text-foreground">{client.notes}</p>
-                </section>
+              ) : (
+                <p className="text-sm text-muted-foreground">Sin servicios asignados</p>
               )}
-            </div>
-          </TabsContent>
+              {client.primary_area && (
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Área principal: <strong>{SERVICE_LABELS[client.primary_area]}</strong>
+                </p>
+              )}
+            </section>
 
-          <TabsContent value="cumplimiento">
-            <ComplianceClientSection clientId={client.id} />
-          </TabsContent>
+            <section className="md:col-span-2">
+              <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <FolderOpen className="h-3.5 w-3.5" />
+                Carpeta Dropbox
+              </h2>
+              {client.dropbox_folder_path ? (
+                <DropboxFolderBrowser folderPath={client.dropbox_folder_path} />
+              ) : (
+                <p className="text-sm text-muted-foreground">Sin carpeta vinculada.</p>
+              )}
+            </section>
 
-          <TabsContent value="proyectos">
-            <ClientProjectsTab client={client} projects={projects} />
-          </TabsContent>
-
-          {/* Tasks Tab */}
-          <TabsContent value="tareas">
-            {activeTasks.length === 0 ? (
-              <div className="text-center py-16">
-                <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                <p className="mt-3 text-sm text-muted-foreground">Sin tareas pendientes para este cliente.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border/40">
-                {activeTasks.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
-                    <div className="min-w-0">
-                      <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
-                      {t.due_date && (
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Vence: {formatDateMX(t.due_date)}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${TASK_PRIORITY_STYLES[t.priority]}`}>
-                        {t.priority}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
-                        {TASK_STATUS_LABELS[t.status]}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {client.notes && (
+              <section>
+                <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">Notas</h2>
+                <p className="text-[13px] whitespace-pre-wrap text-foreground">{client.notes}</p>
+              </section>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          {/* Documents Tab */}
-          <TabsContent value="documentos">
-            {documents.length === 0 ? (
-              <div className="text-center py-16">
-                <FileText className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                <p className="mt-3 text-sm text-muted-foreground">Sin documentos asociados a este cliente.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border/40">
-                {documents.map((d) => (
-                  <div key={d.id} className="flex items-center justify-between gap-3 py-3 px-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className="text-[13px] font-medium text-foreground truncate">{d.name}</span>
-                    </div>
-                    {d.document_type && (
-                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
-                        {d.document_type}
-                      </span>
+        {tab === "cumplimiento" && <ComplianceClientSection clientId={client.id} />}
+        {tab === "proyectos" && <ClientProjectsTab client={client} projects={projects} />}
+
+        {/* Tasks */}
+        {tab === "tareas" && (
+          activeTasks.length === 0 ? (
+            <div className="text-center py-16">
+              <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
+              <p className="mt-3 text-sm text-muted-foreground">Sin tareas pendientes.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/40">
+              {activeTasks.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                  <div className="min-w-0">
+                    <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
+                    {t.due_date && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Vence: {formatDateMX(t.due_date)}</p>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${TASK_PRIORITY_STYLES[t.priority]}`}>
+                      {t.priority}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                      {TASK_STATUS_LABELS[t.status]}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {/* Documents */}
+        {tab === "documentos" && (
+          documents.length === 0 ? (
+            <div className="text-center py-16">
+              <FileText className="mx-auto h-10 w-10 text-muted-foreground/40" />
+              <p className="mt-3 text-sm text-muted-foreground">Sin documentos asociados.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/40">
+              {documents.map((d) => (
+                <div key={d.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-[13px] font-medium text-foreground truncate">{d.name}</span>
+                  </div>
+                  {d.document_type && (
+                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                      {d.document_type}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        )}
       </div>
 
       <ClientEditDialog open={editOpen} onOpenChange={setEditOpen} client={client} />

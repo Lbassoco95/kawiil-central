@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 
 const Login = () => {
@@ -34,47 +33,41 @@ const Login = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-6">
+      <div className="w-full max-w-xs space-y-8">
         <div className="flex flex-col items-center gap-3">
-          <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-16 w-16" />
-          <img src="/images/kawiil-brand-blue.png" alt="Kawiil MX" className="h-10" />
-          <p className="text-sm text-muted-foreground">Plataforma de gestión interna</p>
+          <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-14 w-14" />
+          <img src="/images/kawiil-brand-blue.png" alt="Kawiil MX" className="h-8" />
+          <p className="text-xs text-muted-foreground">Plataforma de gestión interna</p>
         </div>
 
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Iniciar sesión</CardTitle>
-            <CardDescription>Ingresa tus credenciales para continuar</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Correo electrónico</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="tu@empresa.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Ingresando..." : "Ingresar"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        <form onSubmit={handleLogin} className="space-y-5">
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-xs text-muted-foreground">Correo electrónico</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="tu@empresa.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-9 text-sm border-border/60 bg-transparent"
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-xs text-muted-foreground">Contraseña</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="h-9 text-sm border-border/60 bg-transparent"
+              required
+            />
+          </div>
+          <Button type="submit" className="w-full h-9 text-sm" disabled={loading}>
+            {loading ? "Ingresando..." : "Ingresar"}
+          </Button>
+        </form>
       </div>
     </div>
   );

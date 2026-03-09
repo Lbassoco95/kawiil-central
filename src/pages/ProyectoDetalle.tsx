@@ -2,8 +2,6 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare } from "lucide-react";
@@ -21,9 +19,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
+import type { LucideIcon } from "lucide-react";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
-type ServiceArea = Database["public"]["Enums"]["service_area"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
@@ -65,7 +63,6 @@ const ProyectoDetalle = () => {
     enabled: !!user && !!id,
   });
 
-  // Determine if project has accounting service
   const hasAccounting = project?.area === "contabilidad" || project?.area === "softlanding";
   const isSoftlanding = project?.area === "softlanding";
   const isConstitutionNacional = project?.area === "constitucion_nacional";
@@ -75,6 +72,15 @@ const ProyectoDetalle = () => {
   const isCumplimiento = project?.area === "cumplimiento";
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
+
+  const [tab, setTab] = useState<string>(() => {
+    if (isCumplimiento) return "cumplimiento";
+    if (isGestoria) return "gestoria";
+    if (hasConstitution) return "constitucion";
+    if (isLawsuit) return "juicio";
+    if (hasAccounting) return "contabilidad";
+    return "general";
+  });
 
   if (isLoading) {
     return (
@@ -105,6 +111,20 @@ const ProyectoDetalle = () => {
     : "/Kawiil Mx/CLIENTES";
   const effectiveDropboxPath = clientDropboxPath?.trim() || fallbackDropboxPath;
   const lockDropboxToInitialPath = Boolean(clientDropboxPath?.trim());
+
+  // Build dynamic tabs
+  const projectTabs: { key: string; label: string; icon?: LucideIcon }[] = [
+    { key: "general", label: "General" },
+  ];
+  if (hasConstitution) projectTabs.push({ key: "constitucion", label: "Constitución", icon: Building2 });
+  if (isGestoria) projectTabs.push({ key: "gestoria", label: "Gestoría", icon: ClipboardList });
+  if (hasAccounting) projectTabs.push({ key: "contabilidad", label: "Contabilidad", icon: Calculator });
+  if (hasAccounting) projectTabs.push({ key: "declaracion_anual", label: "Declaración Anual", icon: FileSpreadsheet });
+  if (isLawsuit) projectTabs.push({ key: "juicio", label: "Juicio", icon: Scale });
+  if (isCumplimiento) projectTabs.push({ key: "cumplimiento", label: "Cumplimiento", icon: Shield });
+  projectTabs.push({ key: "tareas", label: `Tareas (${tasks.length})` });
+  projectTabs.push({ key: "comentarios", label: "Comentarios", icon: MessageSquare });
+  projectTabs.push({ key: "firmas", label: "Firmas", icon: PenTool });
 
   return (
     <AppLayout>
@@ -140,142 +160,99 @@ const ProyectoDetalle = () => {
           </div>
         </div>
 
-        <Tabs defaultValue={isCumplimiento ? "cumplimiento" : isGestoria ? "gestoria" : hasConstitution ? "constitucion" : isLawsuit ? "juicio" : hasAccounting ? "contabilidad" : "general"} className="space-y-4">
-          <TabsList className="flex-wrap h-auto gap-1">
-            <TabsTrigger value="general">General</TabsTrigger>
-            {hasConstitution && (
-              <TabsTrigger value="constitucion">
-                <Building2 className="h-4 w-4 mr-1" />
-                Constitución
-              </TabsTrigger>
-            )}
-            {isGestoria && (
-              <TabsTrigger value="gestoria">
-                <ClipboardList className="h-4 w-4 mr-1" />
-                Gestoría
-              </TabsTrigger>
-            )}
-            {hasAccounting && (
-              <TabsTrigger value="contabilidad">
-                <Calculator className="h-4 w-4 mr-1" />
-                Contabilidad
-              </TabsTrigger>
-            )}
-            {hasAccounting && (
-              <TabsTrigger value="declaracion_anual">
-                <FileSpreadsheet className="h-4 w-4 mr-1" />
-                Declaración Anual
-              </TabsTrigger>
-            )}
-            {isLawsuit && (
-              <TabsTrigger value="juicio">
-                <Scale className="h-4 w-4 mr-1" />
-                Juicio
-              </TabsTrigger>
-            )}
-            {isCumplimiento && (
-              <TabsTrigger value="cumplimiento">
-                <Shield className="h-4 w-4 mr-1" />
-                Cumplimiento
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="tareas">Tareas ({tasks.length})</TabsTrigger>
-            <TabsTrigger value="comentarios">
-              <MessageSquare className="h-4 w-4 mr-1" />
-              Comentarios
-            </TabsTrigger>
-            <TabsTrigger value="firmas">
-              <PenTool className="h-4 w-4 mr-1" />
-              Firmas
-            </TabsTrigger>
-          </TabsList>
+        {/* Tab pills */}
+        <div className="flex flex-wrap gap-1.5">
+          {projectTabs.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  tab === t.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                {Icon && <Icon className="h-3 w-3" />}
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
 
-          <TabsContent value="general">
-            <ProjectGeneralTab project={project} />
-          </TabsContent>
+        {/* Tab content */}
+        {tab === "general" && <ProjectGeneralTab project={project} />}
 
-          {hasConstitution && (
-            <TabsContent value="constitucion">
-              <ConstitutionDashboard
-                projectId={project.id}
-                constitutionDetails={constitutionDetails}
-                responsibleUserId={project.responsible_user_id}
-                clientDropboxPath={effectiveDropboxPath}
-              />
-            </TabsContent>
-          )}
+        {tab === "constitucion" && hasConstitution && (
+          <ConstitutionDashboard
+            projectId={project.id}
+            constitutionDetails={constitutionDetails}
+            responsibleUserId={project.responsible_user_id}
+            clientDropboxPath={effectiveDropboxPath}
+          />
+        )}
 
-          {isGestoria && (
-            <TabsContent value="gestoria">
-              <GestoriaDashboard
-                projectId={project.id}
-                gestoriaDetails={constitutionDetails}
-                responsibleUserId={project.responsible_user_id}
-                clientDropboxPath={effectiveDropboxPath}
-              />
-            </TabsContent>
-          )}
+        {tab === "gestoria" && isGestoria && (
+          <GestoriaDashboard
+            projectId={project.id}
+            gestoriaDetails={constitutionDetails}
+            responsibleUserId={project.responsible_user_id}
+            clientDropboxPath={effectiveDropboxPath}
+          />
+        )}
 
-          {hasAccounting && (
-            <TabsContent value="contabilidad">
-              <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
-            </TabsContent>
-          )}
+        {tab === "contabilidad" && hasAccounting && (
+          <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
+        )}
 
-          {hasAccounting && (
-            <TabsContent value="declaracion_anual">
-              <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
-            </TabsContent>
-          )}
+        {tab === "declaracion_anual" && hasAccounting && (
+          <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
+        )}
 
-          {isLawsuit && (
-            <TabsContent value="juicio">
-              <LawsuitDashboard
-                projectId={project.id}
-                lawsuitDetails={lawsuitDetails}
-                dropboxInitialPath={effectiveDropboxPath}
-                lockDropboxToInitialPath={lockDropboxToInitialPath}
-              />
-            </TabsContent>
-          )}
+        {tab === "juicio" && isLawsuit && (
+          <LawsuitDashboard
+            projectId={project.id}
+            lawsuitDetails={lawsuitDetails}
+            dropboxInitialPath={effectiveDropboxPath}
+            lockDropboxToInitialPath={lockDropboxToInitialPath}
+          />
+        )}
 
-          {isCumplimiento && (
-            <TabsContent value="cumplimiento">
-              <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} />
-            </TabsContent>
-          )}
+        {tab === "cumplimiento" && isCumplimiento && (
+          <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} />
+        )}
 
-          <TabsContent value="tareas">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-sm font-semibold text-foreground">Tareas del proyecto</h3>
-                <Button size="sm" onClick={() => setShowTaskForm(true)}>
-                  <Plus className="h-4 w-4 mr-1" />Crear tarea
+        {tab === "tareas" && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Tareas del proyecto</h3>
+              <Button size="sm" onClick={() => setShowTaskForm(true)}>
+                <Plus className="h-3.5 w-3.5 mr-1" />Crear tarea
+              </Button>
+            </div>
+
+            {tasks.length === 0 ? (
+              <div className="text-center py-16">
+                <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
+                <p className="mt-3 text-sm text-muted-foreground">Sin tareas en este proyecto.</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowTaskForm(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />Crear primera tarea
                 </Button>
               </div>
-
-              {tasks.length === 0 ? (
-                <div className="text-center py-16">
-                  <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                  <p className="mt-3 text-sm text-muted-foreground">Sin tareas en este proyecto.</p>
-                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowTaskForm(true)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />Crear primera tarea
-                  </Button>
-                </div>
-              ) : (
-                <div className="divide-y divide-border/40">
-                  {tasks.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
-                      <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
-                      <div className="flex gap-1.5 shrink-0">
-                        <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.priority}</span>
-                        <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.status}</span>
-                      </div>
+            ) : (
+              <div className="divide-y divide-border/40">
+                {tasks.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                    <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
+                    <div className="flex gap-1.5 shrink-0">
+                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.priority}</span>
+                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.status}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <TaskFormDialog
               open={showTaskForm}
@@ -287,82 +264,72 @@ const ProyectoDetalle = () => {
               defaultClientId={project.client_id || undefined}
               defaultArea={project.area || undefined}
             />
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="comentarios">
-            <ProjectCommentsTab projectId={project.id} projectName={project.name} />
-          </TabsContent>
+        {tab === "comentarios" && (
+          <ProjectCommentsTab projectId={project.id} projectName={project.name} />
+        )}
 
-          {/* Dropbox Sign tab */}
-          <TabsContent value="firmas">
-            <Card>
-              <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <PenTool className="h-5 w-5 text-primary" />
-                    <h3 className="font-semibold text-foreground">Solicitudes de firma</h3>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={loadingSign}
-                    onClick={async () => {
-                      setLoadingSign(true);
-                      try {
-                        const { data, error } = await supabase.functions.invoke("dropbox-sign", {
-                          body: { action: "list", page: 1, page_size: 50 },
-                        });
-                        if (error) throw error;
-                        setSignRequests(data.requests || []);
-                      } catch {
-                        setSignRequests([]);
-                      } finally {
-                        setLoadingSign(false);
-                      }
-                    }}
-                  >
-                    {loadingSign ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cargar firmas"}
-                  </Button>
-                </div>
+        {tab === "firmas" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Solicitudes de firma</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loadingSign}
+                onClick={async () => {
+                  setLoadingSign(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke("dropbox-sign", {
+                      body: { action: "list", page: 1, page_size: 50 },
+                    });
+                    if (error) throw error;
+                    setSignRequests(data.requests || []);
+                  } catch {
+                    setSignRequests([]);
+                  } finally {
+                    setLoadingSign(false);
+                  }
+                }}
+              >
+                {loadingSign ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Cargar firmas"}
+              </Button>
+            </div>
 
-                <p className="text-xs text-muted-foreground">
-                  Las solicitudes de firma se envían desde los archivos de cada paso. Haz clic en el ícono ✒️ junto a un archivo de Dropbox para enviarlo a firma.
-                </p>
+            <p className="text-xs text-muted-foreground">
+              Envía archivos a firma desde el ícono ✒️ junto a archivos Dropbox en cada paso.
+            </p>
 
-                {signRequests.length > 0 ? (
-                  <div className="space-y-2">
-                    {signRequests.map((sr: any) => (
-                      <div key={sr.signature_request_id} className="flex items-center gap-3 p-3 rounded-md border text-sm">
-                        <PenTool className={`h-4 w-4 shrink-0 ${sr.is_complete ? "text-green-600" : sr.is_declined ? "text-destructive" : "text-primary"}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{sr.title}</p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {sr.signatures?.map((sig: any, i: number) => (
-                              <Badge
-                                key={i}
-                                variant={sig.status === "signed" ? "default" : "secondary"}
-                                className="text-[10px]"
-                              >
-                                {sig.signer_name}: {sig.status === "signed" ? "Firmado" : sig.status === "declined" ? "Rechazado" : "Pendiente"}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <Badge variant={sr.is_complete ? "default" : "outline"} className="text-xs shrink-0">
-                          {sr.is_complete ? "Completada" : sr.is_declined ? "Rechazada" : "Pendiente"}
-                        </Badge>
+            {signRequests.length > 0 ? (
+              <div className="divide-y divide-border/40">
+                {signRequests.map((sr: any) => (
+                  <div key={sr.signature_request_id} className="flex items-center gap-3 py-3">
+                    <PenTool className={`h-4 w-4 shrink-0 ${sr.is_complete ? "text-success" : sr.is_declined ? "text-destructive" : "text-primary"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium truncate">{sr.title}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {sr.signatures?.map((sig: any, i: number) => (
+                          <span key={i} className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                            {sig.signer_name}: {sig.status === "signed" ? "Firmado" : sig.status === "declined" ? "Rechazado" : "Pendiente"}
+                          </span>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                      {sr.is_complete ? "Completada" : sr.is_declined ? "Rechazada" : "Pendiente"}
+                    </span>
                   </div>
-                ) : !loadingSign ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    Haz clic en "Cargar firmas" para ver las solicitudes de Dropbox Sign.
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                ))}
+              </div>
+            ) : !loadingSign ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                Haz clic en "Cargar firmas" para ver las solicitudes.
+              </p>
+            ) : null}
+          </div>
+        )}
       </div>
     </AppLayout>
   );
