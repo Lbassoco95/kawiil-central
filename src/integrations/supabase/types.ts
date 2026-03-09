@@ -1113,6 +1113,47 @@ export type Database = {
         }
         Relationships: []
       }
+      personalized_phrases: {
+        Row: {
+          created_at: string
+          id: string
+          mood_score: number | null
+          organization_id: string
+          phrase: string
+          phrase_date: string
+          time_of_day: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mood_score?: number | null
+          organization_id: string
+          phrase: string
+          phrase_date?: string
+          time_of_day?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mood_score?: number | null
+          organization_id?: string
+          phrase?: string
+          phrase_date?: string
+          time_of_day?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personalized_phrases_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       procedure_comments: {
         Row: {
           content: string
@@ -1717,6 +1758,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tax_obligation_types_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          answers: Json
+          completed_at: string | null
+          created_at: string
+          id: string
+          organization_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          organization_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          organization_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
