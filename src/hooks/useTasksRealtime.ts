@@ -37,6 +37,7 @@ export function useTasksRealtime() {
         { event: "*", schema: "public", table: "project_comments" },
         () => {
           queryClient.invalidateQueries({ queryKey: ["project-comments"] });
+          queryClient.invalidateQueries({ queryKey: ["step-comments"] });
         }
       )
       .on(

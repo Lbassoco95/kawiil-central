@@ -1305,6 +1305,7 @@ export type Database = {
           id: string
           mentions: string[] | null
           project_id: string
+          step_key: string | null
           updated_at: string
           user_id: string
         }
@@ -1314,6 +1315,7 @@ export type Database = {
           id?: string
           mentions?: string[] | null
           project_id: string
+          step_key?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1323,6 +1325,7 @@ export type Database = {
           id?: string
           mentions?: string[] | null
           project_id?: string
+          step_key?: string | null
           updated_at?: string
           user_id?: string
         }

@@ -21,6 +21,7 @@ import { es } from "date-fns/locale";
 import { STEP_STATUS_OPTIONS, type AccountingStep, type StepStatus } from "@/hooks/useAccountingPeriods";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
+import { StepComments } from "./StepComments";
 import { useProfiles } from "@/hooks/useTasks";
 
 const STEP_STATUS_STYLES: Record<StepStatus, string> = {
@@ -327,6 +328,9 @@ export function UnifiedStepRow({
               <label className="text-xs font-medium text-muted-foreground">Notas</label>
               <Textarea className="text-xs min-h-[60px] resize-none" placeholder="Observaciones..." value={localNotes} onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }} />
             </div>
+
+            {/* Step Comments */}
+            <StepComments projectId={projectId} stepKey={step.key} stepLabel={step.label} />
 
             {/* Files & Dropbox */}
             <StepFileManager

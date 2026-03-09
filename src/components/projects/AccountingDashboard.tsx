@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { StepDetailRow } from "./StepDetailRow";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
-import { ProjectCommentsTab } from "./ProjectCommentsTab";
+
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; className: string }> = {
   pendiente: { label: "Pendiente", icon: Clock, className: "bg-muted text-muted-foreground" },
@@ -280,8 +280,6 @@ export function AccountingDashboard({ projectId, clientDropboxPath }: { projectI
           <PeriodCard key={period.id} period={period} projectId={projectId} clientDropboxPath={clientDropboxPath} />
         ))
       )}
-      {/* Comments */}
-      <ProjectCommentsTab projectId={projectId} />
     </div>
   );
 }
