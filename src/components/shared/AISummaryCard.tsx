@@ -112,6 +112,13 @@ export function AISummaryCard({
     }
   }, [contextPrompt, ready, cacheKey]);
 
+  // Auto-generate on mount if no cached content
+  useEffect(() => {
+    if (ready && !content && !loading) {
+      generate();
+    }
+  }, [ready, content]);
+
   return (
     <section>
       <div className="flex items-center gap-2">
