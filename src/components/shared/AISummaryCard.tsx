@@ -32,7 +32,7 @@ export function AISummaryCard({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
 
   const generate = useCallback(async () => {
     if (!ready) return;
