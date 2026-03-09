@@ -517,7 +517,7 @@ Tienes acceso a herramientas para consultar datos reales del sistema. ÚSALAS si
             body: JSON.stringify({
               model: "gpt-4o-mini",
               messages: aiMessages,
-              tools,
+              ...(useTools ? { tools } : {}),
               stream: false,
             }),
           });
