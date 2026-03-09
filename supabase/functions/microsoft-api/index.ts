@@ -7,6 +7,29 @@ const corsHeaders = {
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
+async function graphRequest(accessToken: string, path: string, init?: RequestInit) {
+  const res = await fetch(`${GRAPH_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    const lower = errorBody.toLowerCase();
+    if (res.status === 403 || lower.includes("insufficient") || lower.includes("permission")) {
+      throw new Error(`MICROSOFT_PERMISSION_REQUIRED:${errorBody}`);
+    }
+    throw new Error(`Microsoft Graph error [${res.status}]: ${errorBody}`);
+  }
+
+  if (res.status === 204) return { success: true };
+  const text = await res.text();
+  return text ? JSON.parse(text) : { success: true };
+}
+
 async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow: any) {
   const expiresAt = new Date(tokenRow.expires_at);
   // Refresh 5 min before expiry
