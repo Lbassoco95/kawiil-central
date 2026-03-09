@@ -329,6 +329,9 @@ export function UnifiedStepRow({
               <Textarea className="text-xs min-h-[60px] resize-none" placeholder="Observaciones..." value={localNotes} onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }} />
             </div>
 
+            {/* Step Comments */}
+            <StepComments projectId={projectId} stepKey={step.key} stepLabel={step.label} />
+
             {/* Files & Dropbox */}
             <StepFileManager
               documentIds={step.document_ids || []}
