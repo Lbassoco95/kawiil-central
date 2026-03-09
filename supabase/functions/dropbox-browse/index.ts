@@ -370,8 +370,6 @@ serve(async (req) => {
     const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
     if (action === 'list_personal_folders') {
-      // Use team members API to get all member folders
-      // This ensures we see ALL members' personal folders, not just admin's
       try {
         const membersRes = await fetch('https://api.dropboxapi.com/2/team/members/list_v2', {
           method: 'POST',
@@ -389,16 +387,16 @@ serve(async (req) => {
         const membersData = await membersRes.json();
         const members = membersData?.members || [];
 
-        // Build entries from team members - each member has a personal folder at root
         const entries = members
-          .filter((m: any) => m?.profile?.status?.['.tag'] === 'active')
+          .filter((m: any) => m?.profile?.status?.['.tag'] === 'active' && m?.profile?.member_folder_id)
           .map((m: any) => {
             const name = m.profile?.name?.display_name || m.profile?.email || 'Unknown';
-            const memberId = m.profile?.member_folder_id;
+            const memberFolderId = m.profile?.member_folder_id;
             return {
-              id: memberId || m.profile?.team_member_id || name,
+              id: memberFolderId,
               name,
-              path: `/${name}`,
+              // Use folder ID (stable and resolvable) instead of inferred display-name path
+              path: `id:${memberFolderId}`,
               type: 'folder',
               size: null,
               modified: null,
@@ -431,14 +429,33 @@ serve(async (req) => {
     }
 
     if (action === 'list') {
+      const requestedPath = typeof path === 'string' ? path.trim() : '';
+      const isIdPath = requestedPath.startsWith('id:');
+
       // When browsing root, default to the shared team folder "Kawiil Mx"
       // to prevent users from seeing other members' personal folders
-      const browsePath = (!path || path === '' || path === '/') ? '/Kawiil Mx' : path;
-      const { data, resolvedPath } = await resolvePathAndList(dbxHeaders, browsePath);
+      const browsePath = (!requestedPath || requestedPath === '/') ? '/Kawiil Mx' : requestedPath;
+
+      let data: any;
+      let resolvedPath: string;
+
+      if (isIdPath) {
+        const byIdResult = await listFolderRequest(dbxHeaders, { path: requestedPath });
+        if (!byIdResult.ok) {
+          throw new Error(`Dropbox API error [${byIdResult.status}]: ${byIdResult.raw}`);
+        }
+        data = byIdResult.data;
+        resolvedPath = requestedPath;
+      } else {
+        const resolved = await resolvePathAndList(dbxHeaders, browsePath);
+        data = resolved.data;
+        resolvedPath = resolved.resolvedPath;
+      }
+
       const entries = (data.entries || []).map((entry: any) => ({
         id: entry.id,
         name: entry.name,
-        path: entry.path_display,
+        path: entry.path_display || `id:${entry.id}`,
         type: entry['.tag'],
         size: entry.size || null,
         modified: entry.client_modified || null,
