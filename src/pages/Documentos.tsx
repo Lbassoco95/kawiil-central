@@ -124,13 +124,18 @@ function DropboxLiveBrowser() {
   };
 
   const selectPersonalFolder = async (entry: DropboxEntry) => {
-    // Save to database permanently
     if (user?.id) {
-      await supabase
+      const { error } = await supabase
         .from("profiles")
         .update({ dropbox_personal_folder: entry.path } as any)
         .eq("user_id", user.id);
+
+      if (error) {
+        toast.error("No se pudo guardar tu carpeta personal");
+        return;
+      }
     }
+
     setPersonalFolderPath(entry.path);
     setShowFolderPicker(false);
     setPickerEntries([]);
