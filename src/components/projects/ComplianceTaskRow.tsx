@@ -105,6 +105,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
   const isOverdue = localDueDate && localStatus !== "completada" && isPast(localDueDate) && !isToday(localDueDate);
 
   useEffect(() => {
+    setLocalTitle(task.title);
     setLocalStatus(task.status);
     setLocalDueDate(task.due_date ? new Date(task.due_date) : undefined);
     setLocalNotes(task.description || "");
