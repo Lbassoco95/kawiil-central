@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/tasks/MentionTextarea";
 import {
-  Send, MessageSquare, Paperclip,
+  Send, MessageSquare, Paperclip, ScanLine,
   Link2, X, Loader2, ExternalLink,
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
@@ -335,6 +335,19 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor">
               <path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" />
             </svg>
+          </Button>
+
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6"
+            onClick={() => {
+              window.open("https://www.dropbox.com/scan", "_blank");
+              toast.info("Escanea el documento con Dropbox y luego selecciónalo con el botón de Dropbox.");
+            }}
+            title="Escanear con Dropbox"
+          >
+            <ScanLine className="h-3 w-3" />
           </Button>
 
           <Popover open={showLinkPopover} onOpenChange={setShowLinkPopover}>
