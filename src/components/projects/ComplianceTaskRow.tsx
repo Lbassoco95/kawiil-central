@@ -83,6 +83,7 @@ export interface ComplianceTaskRowProps {
 
 export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate }: ComplianceTaskRowProps) {
   const [open, setOpen] = useState(false);
+  const [localTitle, setLocalTitle] = useState(task.title);
   const [localStatus, setLocalStatus] = useState(task.status);
   const [localDueDate, setLocalDueDate] = useState<Date | undefined>(task.due_date ? new Date(task.due_date) : undefined);
   const [localNotes, setLocalNotes] = useState(task.description || "");
