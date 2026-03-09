@@ -4,8 +4,9 @@ import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
+import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
 import { AccountingDashboard } from "@/components/projects/AccountingDashboard";
 import { ConstitutionDashboard } from "@/components/projects/ConstitutionDashboard";
@@ -51,6 +52,7 @@ const ProyectoDetalle = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
+  const [showMinutesDialog, setShowMinutesDialog] = useState(false);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
@@ -176,6 +178,15 @@ const ProyectoDetalle = () => {
               <p className="text-sm text-muted-foreground mt-0.5">{project.description}</p>
             )}
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+            onClick={() => setShowMinutesDialog(true)}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Subir minuta</span>
+          </Button>
         </div>
 
         {/* Tab pills */}
@@ -354,6 +365,14 @@ const ProyectoDetalle = () => {
         )}
       </div>
       <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <MeetingMinutesDialog
+        open={showMinutesDialog}
+        onOpenChange={setShowMinutesDialog}
+        projectId={project.id}
+        clientId={project.client_id}
+        area={project.area}
+        projectName={project.name}
+      />
     </AppLayout>
   );
 };
