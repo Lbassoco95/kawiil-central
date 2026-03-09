@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DropboxFilePicker } from "./DropboxFilePicker";
+import { StepComments } from "./StepComments";
 import { sendSlackNotification } from "@/lib/slackNotifications";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -524,6 +525,9 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                     <Textarea className="text-xs min-h-[60px]" placeholder="Notas de esta etapa..." value={stage.notes || ""} onChange={(e) => updateStageField(stage.key, "notes", e.target.value)} />
                   </div>
 
+                  {/* Step Comments */}
+                  <StepComments projectId={projectId} stepKey={stage.key} stepLabel={stage.label} />
+
                   {/* File management (Dropbox + upload) */}
                   <StepFileManager
                     documentIds={stage.document_ids || []}
@@ -671,6 +675,9 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                             <Label className="text-xs">Notas</Label>
                             <Textarea className="text-xs min-h-[60px]" placeholder="Notas del término..." value={dl.notes || ""} onChange={(e) => updateDeadlineField(dl.id, "notes", e.target.value)} />
                           </div>
+
+                          {/* Step Comments */}
+                          <StepComments projectId={projectId} stepKey={`deadline_${dl.id}`} stepLabel={dl.title} />
 
                           {/* File management */}
                           <StepFileManager
