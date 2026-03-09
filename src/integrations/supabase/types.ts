@@ -383,11 +383,11 @@ export type Database = {
           created_by: string | null
           dropbox_folder_path: string | null
           email: string | null
-          has_payroll: boolean
           id: string
           name: string
           notes: string | null
           organization_id: string
+          payroll_type: string | null
           phone: string | null
           primary_area: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id: string | null
@@ -405,11 +405,11 @@ export type Database = {
           created_by?: string | null
           dropbox_folder_path?: string | null
           email?: string | null
-          has_payroll?: boolean
           id?: string
           name: string
           notes?: string | null
           organization_id: string
+          payroll_type?: string | null
           phone?: string | null
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
@@ -427,11 +427,11 @@ export type Database = {
           created_by?: string | null
           dropbox_folder_path?: string | null
           email?: string | null
-          has_payroll?: boolean
           id?: string
           name?: string
           notes?: string | null
           organization_id?: string
+          payroll_type?: string | null
           phone?: string | null
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
