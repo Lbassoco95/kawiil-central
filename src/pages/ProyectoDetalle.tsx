@@ -14,6 +14,7 @@ import { GestoriaDashboard } from "@/components/projects/GestoriaDashboard";
 import { ComplianceDashboard } from "@/components/projects/ComplianceDashboard";
 import { ProjectGeneralTab } from "@/components/projects/ProjectGeneralTab";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
