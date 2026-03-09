@@ -20,10 +20,10 @@ Deno.serve(async (req) => {
       return new Response("Missing code or state", { status: 400 });
     }
 
-    const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!;
-    const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!;
-    const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!;
-    const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/microsoft-callback`;
+    const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")!.trim();
+    const clientSecret = Deno.env.get("MICROSOFT_CLIENT_SECRET")!.trim();
+    const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")!.trim();
+    const redirectUri = `${Deno.env.get("SUPABASE_URL")!.trim()}/functions/v1/microsoft-callback`;
 
     console.log("Exchanging code for tokens, redirectUri:", redirectUri);
 

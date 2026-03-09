@@ -29,8 +29,8 @@ Deno.serve(async (req) => {
 
     const userId = user.id;
 
-    const clientId = Deno.env.get("MICROSOFT_CLIENT_ID");
-    const tenantId = Deno.env.get("MICROSOFT_TENANT_ID");
+    const clientId = Deno.env.get("MICROSOFT_CLIENT_ID")?.trim();
+    const tenantId = Deno.env.get("MICROSOFT_TENANT_ID")?.trim();
     const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/microsoft-callback`;
 
     if (!clientId || !tenantId) {
