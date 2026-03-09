@@ -266,6 +266,7 @@ export function useOutlookEmails(folder = "inbox", search?: string) {
         body: { action: "emails", params: { folder, search, top: 30 } },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data?.value || [];
     },
     enabled: !!user,
@@ -283,6 +284,7 @@ export function useEmailDetail(messageId: string | null) {
         body: { action: "email-detail", params: { messageId } },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     enabled: !!user && !!messageId,
@@ -320,6 +322,7 @@ export function useMarkEmailRead() {
         body: { action: "mark-read", params: { messageId } },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     onMutate: async (messageId) => {
@@ -345,10 +348,11 @@ export function useMarkEmailRead() {
         queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
       }, 2000);
     },
-    onError: () => {
+    onError: (err: Error) => {
       // Rollback on error
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      toast.error("Error al marcar correo como leído: " + err.message);
     },
   });
 }
@@ -387,7 +391,8 @@ export function useUnreadEmailCount() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "emails", params: { folder: "inbox", top: 50 } },
       });
-      if (error) return 0;
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       const emails = data?.value || [];
       return emails.filter((e: any) => !e.isRead).length;
     },

@@ -7,6 +7,29 @@ const corsHeaders = {
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
+async function graphRequest(accessToken: string, path: string, init?: RequestInit) {
+  const res = await fetch(`${GRAPH_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text();
+    const lower = errorBody.toLowerCase();
+    if (res.status === 403 || lower.includes("insufficient") || lower.includes("permission")) {
+      throw new Error(`MICROSOFT_PERMISSION_REQUIRED:${errorBody}`);
+    }
+    throw new Error(`Microsoft Graph error [${res.status}]: ${errorBody}`);
+  }
+
+  if (res.status === 204) return { success: true };
+  const text = await res.text();
+  return text ? JSON.parse(text) : { success: true };
+}
+
 async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow: any) {
   const expiresAt = new Date(tokenRow.expires_at);
   // Refresh 5 min before expiry
@@ -256,20 +279,18 @@ Deno.serve(async (req) => {
         const top = params?.top || 20;
         const folder = params?.folder || "inbox";
         const search = params?.search ? `&$search="${params.search}"` : "";
-        const res = await fetch(
-          `${GRAPH_BASE}/me/mailFolders/${folder}/messages?$top=${top}&$orderby=receivedDateTime desc${search}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+        result = await graphRequest(
+          accessToken,
+          `/me/mailFolders/${folder}/messages?$top=${top}&$orderby=receivedDateTime desc${search}`
         );
-        result = await res.json();
         break;
       }
 
       case "email-detail": {
-        const res = await fetch(
-          `${GRAPH_BASE}/me/messages/${params.messageId}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+        result = await graphRequest(
+          accessToken,
+          `/me/messages/${params.messageId}`
         );
-        result = await res.json();
         break;
       }
 
@@ -287,10 +308,7 @@ Deno.serve(async (req) => {
       }
 
       case "check-connection": {
-        const res = await fetch(`${GRAPH_BASE}/me`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        result = await res.json();
+        result = await graphRequest(accessToken, "/me");
         break;
       }
 
@@ -329,15 +347,16 @@ Deno.serve(async (req) => {
       }
 
       case "mark-read": {
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ isRead: true }),
-        });
-        result = { success: res.ok };
+        await graphRequest(
+          accessToken,
+          `/me/messages/${params.messageId}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isRead: true }),
+          }
+        );
+        result = { success: true };
         break;
       }
 
@@ -474,7 +493,20 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("Microsoft API error:", error);
-    return new Response(JSON.stringify({ error: (error as Error).message }), {
+    const message = (error as Error).message || "Unknown error";
+
+    if (message.startsWith("MICROSOFT_PERMISSION_REQUIRED:")) {
+      return new Response(JSON.stringify({
+        error: "Tu conexión de Microsoft no tiene los permisos necesarios. Reconecta Microsoft para aplicar los permisos nuevos.",
+        code: "PERMISSION_REQUIRED",
+        details: message.replace("MICROSOFT_PERMISSION_REQUIRED:", ""),
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: corsHeaders,
     });
