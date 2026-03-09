@@ -389,7 +389,7 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="project-progress"
             ready={projectProgress.length > 0}
-            contextPrompt={`En UNA sola oración corta (máximo 25 palabras), explica qué muestra esta métrica de "Avance de proyectos". Hay ${projectProgress.length} proyectos activos, promedio ${Math.round(projectProgress.reduce((s, p) => s + p.pct, 0) / (projectProgress.length || 1))}% avance. Tono profesional, sin emojis.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance de proyectos y da UNA recomendación accionable en máximo 30 palabras. Datos: ${projectProgress.slice(0, 5).map(p => `${p.clientName} (${p.name}): ${p.pct}%`).join("; ")}. Identifica proyectos rezagados y sugiere prioridad. Sin emojis, sin saludo.`}
           />
           {projectProgress.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">Sin proyectos activos</p>
