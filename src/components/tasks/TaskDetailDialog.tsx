@@ -124,6 +124,14 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     toast.success("Enlace agregado");
   };
 
+  const handleDropboxPickerSelect = (file: { name: string; url: string }) => {
+    if (!task) return;
+    const currentLinks = (task.dropbox_links as any[]) ?? [];
+    const updatedLinks = [...currentLinks, { url: file.url, name: file.name, added_at: new Date().toISOString() }];
+    updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
+    toast.success(`"${file.name}" vinculado desde Dropbox`);
+  };
+
   const handleRemoveLink = (index: number) => {
     if (!task) return;
     const currentLinks = (task.dropbox_links as any[]) ?? [];
