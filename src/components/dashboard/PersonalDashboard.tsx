@@ -36,15 +36,9 @@ export function PersonalDashboard() {
     return profile?.area ?? null;
   }, [orgUsers, user]);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  const [currentTime, setCurrentTime] = useState(() => nowMX());
+  const currentTime = useMemo(() => nowMX(), []);
   const [personalPhrase, setPersonalPhrase] = useState<string | null>(null);
   const [phraseLoading, setPhraseLoading] = useState(false);
-
-  // Live clock
-  useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(nowMX()), 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Check if user has completed questionnaire
   const { data: userPrefs, refetch: refetchPrefs } = useQuery({
