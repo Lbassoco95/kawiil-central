@@ -4,6 +4,7 @@ import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { MetricInsight } from "@/components/dashboard/MetricInsight";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   CheckSquare,
   Users,
@@ -211,7 +212,7 @@ AVANCE POR CÉLULA:
 ${areaStats.map(a => `- ${a.label}: ${a.pct}% completado (${a.pending} pendientes, ${a.overdue} vencidas)`).join("\n")}
 
 PROYECTOS CRÍTICOS O CON ATRASO:
-${criticalProjects.length > 0 ? criticalProjects.map((p: any) => `- ${p.name} (${(p as any).clients?.name || "interno"}): criticidad=${(p as any).criticality_level || "normal"}, motivo_atraso=${(p as any).delay_category || "ninguno"}`).join("\n") : "Ninguno"}
+${criticalProjects.length > 0 ? criticalProjects.map((p: any) => `- ${p.name}: criticidad=${(p as any).criticality_level || "normal"}, motivo_atraso=${(p as any).delay_category || "ninguno"}`).join("\n") : "Ninguno"}
 
 INSTRUCCIONES:
 1. Resume en 3-5 puntos con emojis el estado general del equipo.
@@ -222,17 +223,11 @@ INSTRUCCIONES:
 6. Máximo 120 palabras. Usa markdown.`;
   }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects]);
 
+  const tabClass = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm";
+
   return (
-    <div className="space-y-8">
-      {/* AI Team Summary */}
-      <AISummaryCard
-        cacheKey={`team-dashboard-${user?.id}`}
-        contextPrompt={teamSummaryPrompt}
-        title="Resumen del equipo — Kawiil AI"
-        ready={!!allTasks && !!projects}
-        userId={user?.id}
-      />
-      {/* Stats */}
+    <div className="space-y-6">
+      {/* Stats cards */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
           <button
@@ -251,102 +246,247 @@ INSTRUCCIONES:
         ))}
       </div>
 
-      {/* Area Indicators */}
-      {areaStats.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Avance por célula</h2>
-          </div>
-          <MetricInsight
-            metricKey="area-stats"
-            ready={areaStats.length > 0}
-            contextPrompt={`Eres el analista de un despacho contable/legal. Analiza estos datos de avance por célula y da UNA recomendación accionable en máximo 30 palabras. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% avance, ${a.overdue} vencidas, ${a.pending} pendientes`).join("; ")}. Identifica la célula con más riesgo o retraso y sugiere qué hacer. Sin emojis, sin saludo.`}
+      {/* Tabs */}
+      <Tabs defaultValue="resumen" className="w-full">
+        <TabsList className="w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0 flex-wrap">
+          <TabsTrigger value="resumen" className={tabClass}>Resumen</TabsTrigger>
+          <TabsTrigger value="celulas" className={tabClass}>Células</TabsTrigger>
+          {isAdminOrManager && (
+            <TabsTrigger value="equipo" className={tabClass}>Equipo</TabsTrigger>
+          )}
+          <TabsTrigger value="proyectos" className={tabClass}>Proyectos</TabsTrigger>
+          <TabsTrigger value="clientes" className={tabClass}>Clientes</TabsTrigger>
+          <TabsTrigger value="tareas" className={tabClass}>Mis Tareas</TabsTrigger>
+          {isAdminOrManager && (
+            <TabsTrigger value="rendimiento" className={tabClass}>Rendimiento</TabsTrigger>
+          )}
+        </TabsList>
+
+        {/* Resumen */}
+        <TabsContent value="resumen" className="mt-6 space-y-6">
+          <AISummaryCard
+            cacheKey={`team-dashboard-${user?.id}`}
+            contextPrompt={teamSummaryPrompt}
+            title="Resumen del equipo — Kawiil AI"
+            ready={!!allTasks && !!projects}
+            userId={user?.id}
           />
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-3">
-            {areaStats.map((a) => (
-              <div key={a.area} className="rounded-xl bg-secondary/30 p-4">
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex items-center gap-2">
+
+          {/* Quick area overview */}
+          {areaStats.length > 0 && (
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+              {areaStats.slice(0, 8).map((a) => (
+                <div key={a.area} className="rounded-xl bg-secondary/30 p-3">
+                  <div className="flex items-center gap-2 mb-2">
                     <div className={`h-2 w-2 rounded-full shrink-0 ${statusDot(a.status)}`} />
-                    <span className="text-[13px] font-medium text-foreground">{a.label}</span>
+                    <span className="text-[13px] font-medium text-foreground truncate">{a.label}</span>
+                    <span className={`text-[13px] font-semibold ml-auto ${progressColor(a.pct)}`}>{a.pct}%</span>
                   </div>
-                  <span className={`text-[13px] font-semibold ${progressColor(a.pct)}`}>{a.pct}%</span>
+                  <Progress value={a.pct} className="h-1" />
                 </div>
-                <Progress value={a.pct} className="h-1 mb-2.5" />
-                <div className="flex justify-between text-[11px] text-muted-foreground">
-                  <span>{a.completed} completadas</span>
-                  <span>{a.pending} pendientes</span>
-                  {a.overdue > 0 && <span className="text-destructive font-medium">{a.overdue} vencidas</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+              ))}
+            </div>
+          )}
 
-      {/* Team Workload */}
-      {isAdminOrManager && teamWorkload.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-2">
-            <UserCheck className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Carga del equipo</h2>
+          {/* Quick tasks */}
+          {myTasks.length > 0 && (
+            <div>
+              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Tus próximas tareas</h3>
+              <div className="divide-y divide-border/40">
+                {myTasks.slice(0, 4).map((t) => (
+                  <button
+                    key={t.id}
+                    className="flex items-center gap-3 w-full py-2 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                    onClick={() => navigate("/tareas")}
+                  >
+                    <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
+                    {t.due_date && (
+                      <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                        {formatDateMX(t.due_date)}
+                      </span>
+                    )}
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${priorityColor(t.priority)}`}>
+                      {t.priority}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Células */}
+        <TabsContent value="celulas" className="mt-6">
+          {areaStats.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6">Sin datos de células</p>
+          ) : (
+            <>
+              <MetricInsight
+                metricKey="area-stats"
+                ready={areaStats.length > 0}
+                contextPrompt={`Eres el analista de un despacho contable/legal. Analiza estos datos de avance por célula y da UNA recomendación accionable en máximo 30 palabras. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% avance, ${a.overdue} vencidas, ${a.pending} pendientes`).join("; ")}. Identifica la célula con más riesgo o retraso y sugiere qué hacer. Sin emojis, sin saludo.`}
+              />
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-4">
+                {areaStats.map((a) => (
+                  <div key={a.area} className="rounded-xl bg-secondary/30 p-4">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full shrink-0 ${statusDot(a.status)}`} />
+                        <span className="text-[13px] font-medium text-foreground">{a.label}</span>
+                      </div>
+                      <span className={`text-[13px] font-semibold ${progressColor(a.pct)}`}>{a.pct}%</span>
+                    </div>
+                    <Progress value={a.pct} className="h-1 mb-2.5" />
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>{a.completed} completadas</span>
+                      <span>{a.pending} pendientes</span>
+                      {a.overdue > 0 && <span className="text-destructive font-medium">{a.overdue} vencidas</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </TabsContent>
+
+        {/* Equipo (admin only) */}
+        {isAdminOrManager && (
+          <TabsContent value="equipo" className="mt-6">
+            {teamWorkload.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6">Sin datos del equipo</p>
+            ) : (
+              <>
+                <MetricInsight
+                  metricKey="team-workload"
+                  ready={teamWorkload.length > 0}
+                  contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable en máximo 30 palabras. Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}. Identifica sobrecarga o riesgo y sugiere redistribución si aplica. Sin emojis, sin saludo.`}
+                />
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-4">
+                  {teamWorkload.map((m) => (
+                    <div
+                      key={m.userId}
+                      className={`rounded-xl p-4 transition-colors ${
+                        m.overdue > 0 ? "bg-destructive/5" : m.pending > 8 ? "bg-warning/5" : "bg-secondary/30"
+                      } ${m.isMe ? "ring-1 ring-primary/20" : ""}`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="min-w-0 flex-1 mr-2">
+                          <span className="text-[13px] font-medium text-foreground block truncate">
+                            {m.name}
+                            {m.isMe && <span className="text-[10px] text-primary ml-1">(tú)</span>}
+                          </span>
+                          {m.area && <span className="text-[10px] text-muted-foreground">{m.area}</span>}
+                        </div>
+                        <span className={`text-[13px] font-semibold ${progressColor(m.pct)}`}>{m.pct}%</span>
+                      </div>
+                      <Progress value={m.pct} className="h-1 mb-2" />
+                      <div className="flex gap-3 text-[11px] text-muted-foreground">
+                        <span>{m.pending} pendientes</span>
+                        <span>{m.completed} hechas</span>
+                        {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </TabsContent>
+        )}
+
+        {/* Proyectos */}
+        <TabsContent value="proyectos" className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Avance de proyectos</h3>
+            <button
+              onClick={() => navigate("/proyectos")}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+            >
+              Ver todos <ArrowRight className="h-3 w-3" />
+            </button>
           </div>
           <MetricInsight
-            metricKey="team-workload"
-            ready={teamWorkload.length > 0}
-            contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable en máximo 30 palabras. Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}. Identifica sobrecarga o riesgo y sugiere redistribución si aplica. Sin emojis, sin saludo.`}
+            metricKey="project-progress"
+            ready={projectProgress.length > 0}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance de proyectos y da UNA recomendación accionable en máximo 30 palabras. Datos: ${projectProgress.slice(0, 5).map(p => `${p.clientName} (${p.name}): ${p.pct}%`).join("; ")}. Identifica proyectos rezagados y sugiere prioridad. Sin emojis, sin saludo.`}
           />
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-3">
-            {teamWorkload.map((m) => (
-              <div
-                key={m.userId}
-                className={`rounded-xl p-4 transition-colors ${
-                  m.overdue > 0 ? "bg-destructive/5" : m.pending > 8 ? "bg-warning/5" : "bg-secondary/30"
-                } ${m.isMe ? "ring-1 ring-primary/20" : ""}`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="min-w-0 flex-1 mr-2">
-                    <span className="text-[13px] font-medium text-foreground block truncate">
-                      {m.name}
-                      {m.isMe && <span className="text-[10px] text-primary ml-1">(tú)</span>}
-                    </span>
-                    {m.area && <span className="text-[10px] text-muted-foreground">{m.area}</span>}
+          {projectProgress.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6">Sin proyectos activos</p>
+          ) : (
+            <div className="space-y-px mt-4">
+              {projectProgress.map((p) => (
+                <button
+                  key={p.id}
+                  className="w-full text-left rounded-lg p-3 hover:bg-secondary/60 transition-colors"
+                  onClick={() => navigate(`/proyectos/${p.id}`)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="min-w-0 flex-1 mr-3">
+                      <span className="text-[13px] font-medium text-foreground truncate block">{p.clientName}</span>
+                      <span className="text-xs text-muted-foreground truncate block">{p.name}</span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className={`text-[13px] font-semibold ${progressColor(p.pct)}`}>{p.pct}%</span>
+                      <span className="text-[10px] text-muted-foreground block">{p.completed}/{p.total}</span>
+                    </div>
                   </div>
-                  <span className={`text-[13px] font-semibold ${progressColor(m.pct)}`}>{m.pct}%</span>
-                </div>
-                <Progress value={m.pct} className="h-1 mb-2" />
-                <div className="flex gap-3 text-[11px] text-muted-foreground">
-                  <span>{m.pending} pendientes</span>
-                  <span>{m.completed} hechas</span>
-                  {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Monthly Performance by Celula */}
-      {isAdminOrManager && <TeamMonthlyPerformance />}
-
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* My Tasks */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Mis tareas</h2>
+                  <Progress value={p.pct} className="h-1" />
+                </button>
+              ))}
             </div>
+          )}
+        </TabsContent>
+
+        {/* Clientes */}
+        <TabsContent value="clientes" className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Avance por cliente</h3>
+            <button
+              onClick={() => navigate("/clientes")}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+            >
+              Ver todos <ArrowRight className="h-3 w-3" />
+            </button>
+          </div>
+          <MetricInsight
+            metricKey="client-progress"
+            ready={clientProgress.length > 0}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable en máximo 30 palabras. Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.total - c.completed} pendientes)`).join("; ")}. Identifica clientes con más riesgo y sugiere acción. Sin emojis, sin saludo.`}
+          />
+          {clientProgress.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6">Sin datos de clientes</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-4">
+              {clientProgress.map((c) => (
+                <button
+                  key={c.id}
+                  className="text-left rounded-xl bg-secondary/30 p-4 hover:bg-secondary/50 transition-colors"
+                  onClick={() => navigate(`/clientes/${c.id}`)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[13px] font-medium text-foreground truncate flex-1 mr-2">{c.name}</span>
+                    <span className={`text-[13px] font-semibold ${progressColor(c.pct)}`}>{c.pct}%</span>
+                  </div>
+                  <Progress value={c.pct} className="h-1 mb-1.5" />
+                  <span className="text-[10px] text-muted-foreground">{c.completed} de {c.total} tareas</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Mis Tareas */}
+        <TabsContent value="tareas" className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Mis tareas pendientes</h3>
             <button
               onClick={() => navigate("/tareas")}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
             >
               Ver todas <ArrowRight className="h-3 w-3" />
             </button>
           </div>
           {myTasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Sin tareas pendientes asignadas 🎉</p>
+            <p className="text-sm text-muted-foreground py-6">Sin tareas pendientes 🎉</p>
           ) : (
             <div className="space-y-px">
               {myTasks.map((t) => (
@@ -370,93 +510,15 @@ INSTRUCCIONES:
               ))}
             </div>
           )}
-        </section>
+        </TabsContent>
 
-        {/* Project Progress */}
-        <section>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <FolderKanban className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Avance de proyectos</h2>
-            </div>
-            <button
-              onClick={() => navigate("/proyectos")}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
-            >
-              Ver todos <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-          <MetricInsight
-            metricKey="project-progress"
-            ready={projectProgress.length > 0}
-            contextPrompt={`Eres el analista de un despacho. Analiza el avance de proyectos y da UNA recomendación accionable en máximo 30 palabras. Datos: ${projectProgress.slice(0, 5).map(p => `${p.clientName} (${p.name}): ${p.pct}%`).join("; ")}. Identifica proyectos rezagados y sugiere prioridad. Sin emojis, sin saludo.`}
-          />
-          {projectProgress.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Sin proyectos activos</p>
-          ) : (
-            <div className="space-y-px">
-              {projectProgress.map((p) => (
-                <button
-                  key={p.id}
-                  className="w-full text-left rounded-lg p-3 hover:bg-secondary/60 transition-colors"
-                  onClick={() => navigate(`/proyectos/${p.id}`)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="min-w-0 flex-1 mr-3">
-                      <span className="text-[13px] font-medium text-foreground truncate block">{p.clientName}</span>
-                      <span className="text-xs text-muted-foreground truncate block">{p.name}</span>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className={`text-[13px] font-semibold ${progressColor(p.pct)}`}>{p.pct}%</span>
-                      <span className="text-[10px] text-muted-foreground block">{p.completed}/{p.total}</span>
-                    </div>
-                  </div>
-                  <Progress value={p.pct} className="h-1" />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Client Progress */}
-      {clientProgress.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Avance por cliente</h2>
-            </div>
-            <button
-              onClick={() => navigate("/clientes")}
-              className="text-xs text-primary hover:underline flex items-center gap-1"
-            >
-              Ver todos <ArrowRight className="h-3 w-3" />
-            </button>
-          </div>
-          <MetricInsight
-            metricKey="client-progress"
-            ready={clientProgress.length > 0}
-            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable en máximo 30 palabras. Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.total - c.completed} pendientes)`).join("; ")}. Identifica clientes con más riesgo y sugiere acción. Sin emojis, sin saludo.`}
-          />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mt-3">
-            {clientProgress.map((c) => (
-              <button
-                key={c.id}
-                className="text-left rounded-xl bg-secondary/30 p-4 hover:bg-secondary/50 transition-colors"
-                onClick={() => navigate(`/clientes/${c.id}`)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[13px] font-medium text-foreground truncate flex-1 mr-2">{c.name}</span>
-                  <span className={`text-[13px] font-semibold ${progressColor(c.pct)}`}>{c.pct}%</span>
-                </div>
-                <Progress value={c.pct} className="h-1 mb-1.5" />
-                <span className="text-[10px] text-muted-foreground">{c.completed} de {c.total} tareas</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+        {/* Rendimiento (admin only) */}
+        {isAdminOrManager && (
+          <TabsContent value="rendimiento" className="mt-6">
+            <TeamMonthlyPerformance />
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }
