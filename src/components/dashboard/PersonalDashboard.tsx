@@ -278,7 +278,7 @@ export function PersonalDashboard() {
 
       {/* Questionnaire reminder */}
       {showQuestionnaireReminder && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/5 border border-primary/15">
+        <div className="flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 rounded-lg bg-primary/5 border border-primary/15">
           <Sparkles className="h-5 w-5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
