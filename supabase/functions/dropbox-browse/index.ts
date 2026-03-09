@@ -369,6 +369,25 @@ serve(async (req) => {
     const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN, adminMemberId);
     const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
+    if (action === 'list_personal_folders') {
+      // List the TRUE root of the team namespace to show personal member folders
+      const rootEntries = await listAllFolderEntries(dbxHeaders, '');
+      const entries = rootEntries
+        .filter((entry: any) => entry['.tag'] === 'folder')
+        .map((entry: any) => ({
+          id: entry.id,
+          name: entry.name,
+          path: entry.path_display,
+          type: 'folder',
+          size: null,
+          modified: null,
+        }));
+
+      return new Response(JSON.stringify({ entries }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'list') {
       // When browsing root, default to the shared team folder "Kawiil Mx"
       // to prevent users from seeing other members' personal folders
