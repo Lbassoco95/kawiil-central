@@ -16,6 +16,7 @@ import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatMX } from "@/lib/dateUtils";
 
@@ -181,25 +182,11 @@ INSTRUCCIONES:
           </section>
         )}
 
-        {/* Area filter pills */}
-        <div className="flex flex-wrap gap-1.5">
-          {[{ value: "todas", label: "Todas" }, ...areaOptions].map((a) => {
-            const isActive = area === a.value;
-            return (
-              <button
-                key={a.value}
-                onClick={() => setArea(a.value)}
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
-                {a.label}
-              </button>
-            );
-          })}
-        </div>
+        <ScrollableFilterTabs
+          options={[{ value: "todas", label: "Todas" }, ...areaOptions]}
+          value={area}
+          onChange={setArea}
+        />
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

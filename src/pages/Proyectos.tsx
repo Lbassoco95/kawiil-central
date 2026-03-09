@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, FolderKanban, Scale, Trash2 } from "lucide-react";
+import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
@@ -97,29 +98,17 @@ const Proyectos = () => {
           <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
         </div>
 
-        {/* Area filter pills */}
-        <div className="flex flex-wrap gap-1.5">
-          {["all", ...availableAreas].map((area) => {
-            const count = area === "all"
+        <ScrollableFilterTabs
+          options={["all", ...availableAreas].map((area) => ({
+            value: area,
+            label: getAreaLabel(area),
+            count: area === "all"
               ? projects?.length || 0
-              : projects?.filter((p) => area === "sin_area" ? !p.area : p.area === area).length || 0;
-            const isActive = selectedArea === area;
-            return (
-              <button
-                key={area}
-                onClick={() => setSelectedArea(area)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
-                {getAreaLabel(area)}
-                <span className={`text-[10px] ${isActive ? "opacity-80" : "opacity-60"}`}>{count}</span>
-              </button>
-            );
-          })}
-        </div>
+              : projects?.filter((p) => area === "sin_area" ? !p.area : p.area === area).length || 0,
+          }))}
+          value={selectedArea}
+          onChange={setSelectedArea}
+        />
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
