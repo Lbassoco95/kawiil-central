@@ -425,8 +425,15 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
 
             {/* Files */}
             <StepFileManager
-              documentIds={[]}
-              onDocumentAdded={() => {}}
+              documentIds={taskDocumentIds}
+              onDocumentAdded={async (updatedIds) => {
+                setTaskDocumentIds(updatedIds);
+                // Link new documents to this task
+                const newIds = updatedIds.filter((id) => !taskDocumentIds.includes(id));
+                for (const docId of newIds) {
+                  await supabase.from("documents").update({ task_id: task.id }).eq("id", docId);
+                }
+              }}
               projectId={projectId}
               clientDropboxPath={clientDropboxPath}
               disabled={saving}
