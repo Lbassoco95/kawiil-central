@@ -12,8 +12,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+    if (!LOVABLE_API_KEY && !ANTHROPIC_API_KEY) throw new Error("No AI provider configured");
 
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -94,35 +95,94 @@ RESPONDE con un JSON válido con esta estructura exacta:
   ]
 }`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: [
-          { role: "user", content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}` },
-        ],
-        temperature: 0.3,
-      }),
-    });
+    // Try Gemini (Lovable AI) first — handles large contexts well
+    let textContent = "";
+    let aiError = "";
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Anthropic API error:", response.status, errText);
-      return new Response(JSON.stringify({ error: "Error al analizar con AI" }), {
-        status: 500,
+    if (LOVABLE_API_KEY) {
+      try {
+        console.log("Using Lovable AI (Gemini) for analysis...");
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}` },
+            ],
+            temperature: 0.3,
+            max_tokens: 8192,
+          }),
+        });
+
+        if (response.ok) {
+          const aiResponse = await response.json();
+          textContent = aiResponse.choices?.[0]?.message?.content || "";
+        } else {
+          const errText = await response.text();
+          console.warn("Lovable AI error:", response.status, errText.substring(0, 200));
+          if (response.status === 429) {
+            aiError = "Demasiadas solicitudes. Intenta en unos minutos.";
+          } else if (response.status === 402) {
+            aiError = "Créditos de IA agotados.";
+          }
+        }
+      } catch (e) {
+        console.warn("Lovable AI request failed:", e instanceof Error ? e.message : e);
+      }
+    }
+
+    // Fallback to Anthropic if Gemini didn't work
+    if (!textContent && ANTHROPIC_API_KEY && !aiError) {
+      try {
+        console.log("Falling back to Anthropic...");
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 8192,
+            system: systemPrompt,
+            messages: [
+              { role: "user", content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}` },
+            ],
+            temperature: 0.3,
+          }),
+        });
+
+        if (response.ok) {
+          const aiResponse = await response.json();
+          textContent = aiResponse.content?.[0]?.text || "";
+        } else {
+          const errText = await response.text();
+          console.error("Anthropic API error:", response.status, errText.substring(0, 200));
+        }
+      } catch (e) {
+        console.error("Anthropic request failed:", e instanceof Error ? e.message : e);
+      }
+    }
+
+    if (aiError) {
+      return new Response(JSON.stringify({ error: aiError }), {
+        status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const aiResponse = await response.json();
-    const textContent = aiResponse.content?.[0]?.text || "";
+    if (!textContent) {
+      return new Response(JSON.stringify({ error: "Error al analizar con AI. Intenta de nuevo en unos momentos." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     let parsed;
     try {
@@ -133,7 +193,7 @@ RESPONDE con un JSON válido con esta estructura exacta:
         throw new Error("No JSON found in response");
       }
     } catch (e) {
-      console.error("Failed to parse AI response:", textContent);
+      console.error("Failed to parse AI response:", textContent.substring(0, 500));
       return new Response(JSON.stringify({ error: "Error al interpretar la respuesta de AI", raw: textContent }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
