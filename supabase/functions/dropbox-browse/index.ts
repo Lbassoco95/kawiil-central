@@ -404,32 +404,7 @@ serve(async (req) => {
     let body: any;
     let fileBytes: Uint8Array | null = null;
 
-    // Clone the request before consuming so we can retry with a different parser
-    const clonedReq = req.clone();
-
-    // Try to parse as FormData first (handles file uploads)
-    let parsedAsForm = false;
-    try {
-      const formData = await clonedReq.formData();
-      const action = formData.get('action') as string || 'upload';
-      const path = formData.get('path') as string || '';
-      const fileField = formData.get('file') as File | null;
-      if (fileField) {
-        fileBytes = new Uint8Array(await fileField.arrayBuffer());
-      }
-      body = { action, path, file_name: fileField?.name || '' };
-      parsedAsForm = true;
-    } catch {
-      // Not FormData, try JSON
-    }
-
-    if (!parsedAsForm) {
-      try {
-        body = await req.json();
-      } catch {
-        throw new Error('Could not parse request body as JSON or FormData');
-      }
-    }
+    body = await req.json();
 
     const { path = '', action = 'list', file_content, file_name } = body;
 
