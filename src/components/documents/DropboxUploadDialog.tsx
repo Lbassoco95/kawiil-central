@@ -134,17 +134,14 @@ export function DropboxUploadDialog({
     if (!file) return;
     setUploading(true);
     try {
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const base64 = btoa(binary);
       const uploadPath = `${currentPath}/${file.name}`;
+      const formData = new FormData();
+      formData.append("action", "upload");
+      formData.append("path", uploadPath);
+      formData.append("file", file);
 
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: { action: "upload", path: uploadPath, file_content: base64 },
+        body: formData,
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
