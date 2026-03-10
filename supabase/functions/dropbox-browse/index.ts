@@ -401,8 +401,30 @@ serve(async (req) => {
   try {
     const DROPBOX_ACCESS_TOKEN = await getValidAccessToken();
 
-    const body = await req.json();
+    // Check if this is a binary upload (multipart/form-data or octet-stream)
+    const contentType = req.headers.get('content-type') || '';
+    let body: any;
+    let fileBytes: Uint8Array | null = null;
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const action = formData.get('action') as string || 'upload';
+      const path = formData.get('path') as string || '';
+      const fileField = formData.get('file') as File | null;
+      if (fileField) {
+        fileBytes = new Uint8Array(await fileField.arrayBuffer());
+      }
+      body = { action, path, file_name: fileField?.name || '' };
+    } else {
+      body = await req.json();
+    }
+
     const { path = '', action = 'list', file_content, file_name } = body;
+
+    // Decode base64 file_content only if provided (legacy support for small files)
+    if (!fileBytes && file_content) {
+      fileBytes = Uint8Array.from(atob(file_content), (c) => c.charCodeAt(0));
+    }
 
     const adminMemberId = await getTeamAdminMemberId(DROPBOX_ACCESS_TOKEN);
     const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN, adminMemberId);
