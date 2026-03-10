@@ -366,6 +366,28 @@ INSTRUCCIONES:
             )}
           </div>
 
+          {/* Client */}
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Cliente</span>
+            {editing ? (
+              <Select value={clientId || "__none__"} onValueChange={(v) => setClientId(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue placeholder="Sin cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sin cliente</SelectItem>
+                  {clients?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span>{clientName}</span>
+            )}
+          </div>
+
           {/* Area */}
           {project.area && (
             <div className="flex justify-between">
