@@ -135,21 +135,12 @@ export function DropboxUploadDialog({
     setUploading(true);
     try {
       const uploadPath = `${currentPath}/${file.name}`;
-      const formData = new FormData();
-      formData.append("action", "upload");
-      formData.append("path", uploadPath);
-      formData.append("file", file);
-
-      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: formData,
-      });
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      const result = await uploadFileToDropbox(file, uploadPath);
 
       onUploaded({
-        name: data.name || file.name,
-        path: data.path || uploadPath,
-        url: data.url || "",
+        name: result.name,
+        path: result.path,
+        url: result.url,
       });
       onClose();
       toast.success(`"${file.name}" subido a Dropbox`);

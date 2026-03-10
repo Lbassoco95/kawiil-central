@@ -50,20 +50,8 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
       const basePath = selectedClient?.dropbox_folder_path || "/Kawiil Mx/DOCUMENTOS";
       const uploadPath = `${basePath}/${file.name}`;
 
-      const formData = new FormData();
-      formData.append("action", "upload");
-      formData.append("path", uploadPath);
-      formData.append("file", file);
-
-      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: formData,
-      });
-
-      if (error || data?.error) {
-        throw new Error(data?.error || error?.message || "Error de Dropbox");
-      }
-
-      dropboxUrl = data?.url || "";
+      const result = await uploadFileToDropbox(file, uploadPath);
+      dropboxUrl = result.url;
       toast.success("Archivo subido a Dropbox", { duration: 2000 });
     } catch (err: any) {
       dropboxFailed = true;
