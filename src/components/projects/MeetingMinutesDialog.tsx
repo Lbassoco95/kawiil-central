@@ -148,42 +148,21 @@ export function MeetingMinutesDialog({
         });
 
         if (error) {
-          const msg = error.message ?? String(error);
-          if (msg.includes("Failed to send") || msg.includes("Edge Function")) {
-            const pdfjsLib = await import("pdfjs-dist");
-            const pdfjs = pdfjsLib.default ?? pdfjsLib;
-            try {
-              if (!pdfjs.GlobalWorkerOptions?.workerSrc) {
-                try {
-                  const workerMod = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
-                  pdfjs.GlobalWorkerOptions = pdfjs.GlobalWorkerOptions || {};
-                  pdfjs.GlobalWorkerOptions.workerSrc = workerMod.default ?? (workerMod as any).href;
-                } catch {
-                  pdfjs.GlobalWorkerOptions = pdfjs.GlobalWorkerOptions || {};
-                  pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs";
-                }
-              }
-              (pdfjs as any).disableWorker = true;
-              const loadingTask = pdfjs.getDocument({ data: arrayBuffer, useSystemFonts: true });
-              const doc = await loadingTask.promise;
-              let text = "";
-              for (let i = 1; i <= doc.numPages; i++) {
-                const page = await doc.getPage(i);
-                const textContent = await page.getTextContent();
-                text += textContent.items.map((item: any) => item.str ?? "").join(" ") + "\n";
-              }
-              const trimmed = text.trim();
-              if (!trimmed) throw new Error("PDF sin texto");
-              await runAnalysisWithText(trimmed);
-              return;
-            } catch (extractErr) {
-              setAnalyzing(false);
-              if (fileRef.current) fileRef.current.value = "";
-              toast.error("No se pudo analizar el PDF. Pega el contenido abajo en el cuadro de texto y pulsa «Analizar y proponer tareas».");
-              return;
-            }
+          try {
+            const { extractText, getDocumentProxy } = await import("unpdf");
+            const bytes = new Uint8Array(arrayBuffer);
+            const pdf = await getDocumentProxy(bytes);
+            const { text: pdfText } = await extractText(pdf, { mergePages: true });
+            const trimmed = (pdfText ?? "").trim();
+            if (!trimmed) throw new Error("PDF sin texto");
+            await runAnalysisWithText(trimmed);
+            return;
+          } catch (extractErr) {
+            setAnalyzing(false);
+            if (fileRef.current) fileRef.current.value = "";
+            toast.error("No se pudo analizar el PDF. Pega el contenido abajo en el cuadro de texto y pulsa «Analizar y proponer tareas».");
+            return;
           }
-          throw new Error(data?.error ?? msg);
         }
         if (data?.error) {
           throw new Error(data.error);
