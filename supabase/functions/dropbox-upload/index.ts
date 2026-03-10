@@ -100,7 +100,8 @@ serve(async (req) => {
   }
 
   try {
-    const uploadPath = req.headers.get('x-upload-path');
+    const rawUploadPath = req.headers.get('x-upload-path');
+    const uploadPath = rawUploadPath ? decodeURIComponent(rawUploadPath) : null;
     const namespaceId = req.headers.get('x-upload-namespace');
 
     if (!uploadPath) {

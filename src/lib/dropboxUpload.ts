@@ -36,7 +36,7 @@ export async function uploadFileToDropbox(
       "Content-Type": "application/octet-stream",
       "Authorization": `Bearer ${authToken}`,
       "apikey": anonKey,
-      "x-upload-path": actualPath,
+      "x-upload-path": encodeURIComponent(actualPath),
       "x-upload-namespace": namespaceId,
     },
     body: file, // Send raw File object - browser streams it efficiently
