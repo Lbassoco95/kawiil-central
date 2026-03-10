@@ -46,23 +46,17 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
 
     // 1) Try uploading to Dropbox first
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(",")[1]);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      // Determine Dropbox path based on client
       const selectedClient = clients?.find((c) => c.id === clientId);
       const basePath = selectedClient?.dropbox_folder_path || "/Kawiil Mx/DOCUMENTOS";
       const uploadPath = `${basePath}/${file.name}`;
 
+      const formData = new FormData();
+      formData.append("action", "upload");
+      formData.append("path", uploadPath);
+      formData.append("file", file);
+
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: { action: "upload", path: uploadPath, file_content: base64, file_name: file.name },
+        body: formData,
       });
 
       if (error || data?.error) {
