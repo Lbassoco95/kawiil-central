@@ -34,11 +34,23 @@ export default function Notificaciones() {
   const handleMentionClick = (m: typeof mentions[0]) => {
     if (!m.is_read) markAsRead.mutate(m.id);
     if (m.entity_type === "project" && m.entity_id) {
-      navigate(`/proyectos/${m.entity_id}`);
+      // Extract step_key from title if it's a step mention (format: "...te mencionó en "StepLabel"")
+      navigate(`/proyectos/${m.entity_id}?tab=comentarios`);
     } else if (m.entity_type === "task" && m.entity_id) {
-      // Navigate to tareas page with task pre-selected via query param
       navigate(`/tareas?taskId=${m.entity_id}`);
     }
+  };
+
+  const handleTaskAlertClick = (t: { id: string; project_id?: string | null }) => {
+    if (t.project_id) {
+      navigate(`/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}`);
+    } else {
+      navigate(`/tareas?taskId=${t.id}`);
+    }
+  };
+
+  const handleStepAlertClick = (s: { project_id: string; step_key: string }) => {
+    navigate(`/proyectos/${s.project_id}?tab=contabilidad&step=${s.step_key}`);
   };
 
   const isLoading = loadingAlerts || loadingMentions;
@@ -166,7 +178,11 @@ export default function Notificaciones() {
                   {hasOverdue ? (
                     <div className="divide-y divide-border/40">
                       {(alerts?.overdue ?? []).map((t) => (
-                        <div key={t.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={t.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleTaskAlertClick(t)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[13px] font-medium text-foreground">{t.title}</span>
                             <span className="text-[11px] text-destructive shrink-0">
@@ -181,7 +197,11 @@ export default function Notificaciones() {
                         </div>
                       ))}
                       {(alerts?.stepsOverdue ?? []).map((s) => (
-                        <div key={s.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={s.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleStepAlertClick(s)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[13px] font-medium text-foreground">{s.label}</span>
                             <span className="text-[11px] text-destructive shrink-0">
@@ -208,7 +228,11 @@ export default function Notificaciones() {
                   {hasDueSoon ? (
                     <div className="divide-y divide-border/40">
                       {(alerts?.dueSoon ?? []).map((t) => (
-                        <div key={t.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={t.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleTaskAlertClick(t)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-[13px] font-medium text-foreground">{t.title}</p>
@@ -225,7 +249,11 @@ export default function Notificaciones() {
                         </div>
                       ))}
                       {(alerts?.stepsDueSoon ?? []).map((s) => (
-                        <div key={s.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={s.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleStepAlertClick(s)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <div>
                               <p className="text-[13px] font-medium text-foreground">{s.label}</p>

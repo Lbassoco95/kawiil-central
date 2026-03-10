@@ -14,6 +14,7 @@ export type DueAlertTask = {
   assigned_to: string | null;
   client_name?: string;
   project_name?: string;
+  project_id?: string | null;
   is_overdue: boolean;
   assigned_to_me?: boolean;
 };
@@ -23,8 +24,10 @@ export type DueAlertStep = {
   type: "accounting_step";
   label: string;
   due_date: string;
+  project_id: string;
   project_name: string;
   period_label: string;
+  step_key: string;
   is_overdue: boolean;
 };
 
@@ -80,6 +83,7 @@ export function useDueDateAlerts() {
           assigned_to: t.assigned_to,
           client_name: t.clients?.name,
           project_name: t.projects?.name,
+          project_id: t.project_id,
           is_overdue: isOverdue,
           assigned_to_me: t.assigned_to === user!.id,
         };
@@ -108,8 +112,10 @@ export function useDueDateAlerts() {
             type: "accounting_step",
             label: s.label ?? s.key ?? "Paso",
             due_date: d,
+            project_id: p.project_id,
             project_name: projectName,
             period_label: periodLabel,
+            step_key: s.key ?? '',
             is_overdue: isOverdue,
           };
           if (isOverdue) stepsOverdue.push(item);

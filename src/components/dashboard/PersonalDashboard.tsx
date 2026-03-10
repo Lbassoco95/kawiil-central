@@ -126,7 +126,7 @@ export function PersonalDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
-        .select("id, title, status, priority, due_date, area")
+        .select("id, title, status, priority, due_date, area, project_id")
         .eq("assigned_to", user!.id)
         .in("status", ["pendiente", "en_progreso", "en_revision"])
         .order("due_date", { ascending: true })
@@ -333,7 +333,7 @@ export function PersonalDashboard() {
                   <button
                     key={t.id}
                     className="flex items-center gap-3 w-full py-2 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
-                    onClick={() => navigate("/tareas")}
+                    onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
                   >
                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
                     <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
@@ -396,7 +396,7 @@ export function PersonalDashboard() {
                 <button
                   key={t.id}
                   className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
-                  onClick={() => navigate("/tareas")}
+                  onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
                   <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
