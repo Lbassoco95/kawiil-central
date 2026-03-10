@@ -293,6 +293,7 @@ INSTRUCCIONES:
         criticality_level: criticalityLevel,
         delay_category: delayCategory || null,
         delay_notes: delayNotes || null,
+        client_id: clientId || null,
       } as any,
       {
         onSuccess: () => setEditing(false),
