@@ -126,7 +126,7 @@ export function PersonalDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
-        .select("id, title, status, priority, due_date, area")
+        .select("id, title, status, priority, due_date, area, project_id")
         .eq("assigned_to", user!.id)
         .in("status", ["pendiente", "en_progreso", "en_revision"])
         .order("due_date", { ascending: true })
