@@ -150,7 +150,6 @@ export function MeetingMinutesDialog({
         if (error) {
           const msg = error.message ?? String(error);
           if (msg.includes("Failed to send") || msg.includes("Edge Function")) {
-            toast.info("Servidor de análisis no disponible. Extrayendo texto aquí y analizando…");
             const pdfjsLib = await import("pdfjs-dist");
             const pdfjs = pdfjsLib.default ?? pdfjsLib;
             try {
@@ -164,7 +163,8 @@ export function MeetingMinutesDialog({
                   pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs";
                 }
               }
-              const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+              (pdfjs as any).disableWorker = true;
+              const loadingTask = pdfjs.getDocument({ data: arrayBuffer, useSystemFonts: true });
               const doc = await loadingTask.promise;
               let text = "";
               for (let i = 1; i <= doc.numPages; i++) {
@@ -179,7 +179,7 @@ export function MeetingMinutesDialog({
             } catch (extractErr) {
               setAnalyzing(false);
               if (fileRef.current) fileRef.current.value = "";
-              toast.error("No se pudo analizar el PDF. Pega el contenido en el cuadro de texto y pulsa «Analizar y proponer tareas».");
+              toast.error("No se pudo analizar el PDF. Pega el contenido abajo en el cuadro de texto y pulsa «Analizar y proponer tareas».");
               return;
             }
           }
@@ -198,12 +198,7 @@ export function MeetingMinutesDialog({
         console.error("PDF analysis error:", err);
         setAnalyzing(false);
         if (fileRef.current) fileRef.current.value = "";
-        const msg = err?.message ?? "No se pudo analizar el PDF.";
-        if (msg.includes("Failed to send") || msg.includes("Edge Function")) {
-          toast.error("No se pudo conectar con el servidor de análisis. Despliega la función «analyze-meeting-document» en Supabase o pega el contenido del PDF abajo y pulsa Analizar.");
-        } else {
-          toast.error(msg + " Pega el contenido en el cuadro de texto y pulsa «Analizar y proponer tareas».");
-        }
+        toast.error("No se pudo analizar el PDF. Pega el contenido abajo en el cuadro de texto y pulsa «Analizar y proponer tareas».");
         return;
       } finally {
         setAnalyzing(false);
