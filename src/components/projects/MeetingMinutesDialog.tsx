@@ -137,15 +137,23 @@ export function MeetingMinutesDialog({
         }
         const file_base64 = btoa(binary);
 
-        const { data, error } = await supabase.functions.invoke("analyze-meeting-document", {
-          body: {
-            file_base64,
-            filename: file.name,
-            project_id: projectId,
-            client_id: clientId ?? null,
-            area: area ?? null,
-          },
-        });
+        let data: any = null;
+        let error: any = null;
+        try {
+          const res = await supabase.functions.invoke("analyze-meeting-document", {
+            body: {
+              file_base64,
+              filename: file.name,
+              project_id: projectId,
+              client_id: clientId ?? null,
+              area: area ?? null,
+            },
+          });
+          data = res.data;
+          error = res.error;
+        } catch (invokeErr: any) {
+          error = invokeErr;
+        }
 
         if (error) {
           let extractedText = "";
