@@ -228,7 +228,11 @@ export default function Notificaciones() {
                   {hasDueSoon ? (
                     <div className="divide-y divide-border/40">
                       {(alerts?.dueSoon ?? []).map((t) => (
-                        <div key={t.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={t.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleTaskAlertClick(t)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-[13px] font-medium text-foreground">{t.title}</p>
@@ -245,7 +249,11 @@ export default function Notificaciones() {
                         </div>
                       ))}
                       {(alerts?.stepsDueSoon ?? []).map((s) => (
-                        <div key={s.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={s.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleStepAlertClick(s)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <div>
                               <p className="text-[13px] font-medium text-foreground">{s.label}</p>
