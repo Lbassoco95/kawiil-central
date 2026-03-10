@@ -99,6 +99,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Escape non-ASCII chars for HTTP header safety (Dropbox-API-Arg requirement)
+  function asciiSafeJson(obj: unknown): string {
+    return JSON.stringify(obj).replace(/[\u0080-\uffff]/g, (ch) => {
+      return '\\u' + ('0000' + ch.charCodeAt(0).toString(16)).slice(-4);
+    });
+  }
+
   try {
     const rawUploadPath = req.headers.get('x-upload-path');
     const uploadPath = rawUploadPath ? decodeURIComponent(rawUploadPath) : null;
@@ -122,7 +129,7 @@ serve(async (req) => {
     const uploadHeaders: Record<string, string> = {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/octet-stream',
-      'Dropbox-API-Arg': JSON.stringify({
+      'Dropbox-API-Arg': asciiSafeJson({
         path: uploadPath,
         mode: 'add',
         autorename: true,
