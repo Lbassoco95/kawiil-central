@@ -14,6 +14,7 @@ export type DueAlertTask = {
   assigned_to: string | null;
   client_name?: string;
   project_name?: string;
+  project_id?: string | null;
   is_overdue: boolean;
   assigned_to_me?: boolean;
 };
