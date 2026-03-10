@@ -162,7 +162,8 @@ export function MeetingMinutesDialog({
             const bytes = new Uint8Array(arrayBuffer);
             const pdf = await getDocumentProxy(bytes);
             const { text: pdfText } = await extractText(pdf, { mergePages: true });
-            extractedText = (pdfText ?? "").trim();
+            const textResult = Array.isArray(pdfText) ? pdfText.join("\n") : (pdfText ?? "");
+            extractedText = textResult.trim();
           } catch {
             try {
               const pdfjsLib = await import("pdfjs-dist");
