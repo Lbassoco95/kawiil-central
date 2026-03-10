@@ -112,8 +112,10 @@ export function useDueDateAlerts() {
             type: "accounting_step",
             label: s.label ?? s.key ?? "Paso",
             due_date: d,
+            project_id: p.project_id,
             project_name: projectName,
             period_label: periodLabel,
+            step_key: s.key ?? '',
             is_overdue: isOverdue,
           };
           if (isOverdue) stepsOverdue.push(item);
