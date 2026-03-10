@@ -1,26 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.10.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
-
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-async function extractPdfText(fileBase64: string): Promise<string> {
-  const bytes = base64ToUint8Array(fileBase64);
-  const pdf = await getDocumentProxy(bytes);
-  const { text } = await extractText(pdf, { mergePages: true });
-  return (text || "").trim();
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -58,27 +43,10 @@ serve(async (req) => {
     const body = await req.json();
     const { content, file_base64, filename, project_id, client_id, area } = body;
 
-    let textToAnalyze: string;
+    const isPdfUpload = !!(file_base64 && (filename || "").toLowerCase().endsWith(".pdf"));
+    const hasText = content && typeof content === "string" && (content as string).trim();
 
-    if (file_base64 && (filename || "").toLowerCase().endsWith(".pdf")) {
-      try {
-        textToAnalyze = await extractPdfText(file_base64);
-      } catch (e) {
-        console.error("PDF extraction error:", e);
-        return new Response(
-          JSON.stringify({ error: "No se pudo extraer el texto del PDF. Si es una imagen escaneada, pega el contenido en el cuadro de texto." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (!textToAnalyze) {
-        return new Response(
-          JSON.stringify({ error: "El PDF no contiene texto legible (por ejemplo, es una imagen escaneada). Pega el contenido en el cuadro de texto." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    } else if (content && typeof content === "string" && content.trim()) {
-      textToAnalyze = content.trim();
-    } else {
+    if (!isPdfUpload && !hasText) {
       return new Response(JSON.stringify({ error: "Envía contenido de texto o un PDF en file_base64 con filename .pdf" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -132,6 +100,23 @@ RESPONDE con un JSON válido con esta estructura exacta:
   ]
 }`;
 
+    const userMessage = isPdfUpload
+      ? [
+          {
+            type: "document" as const,
+            source: {
+              type: "base64" as const,
+              media_type: "application/pdf" as const,
+              data: file_base64,
+            },
+          },
+          {
+            type: "text" as const,
+            text: "Analiza este documento/minuta y extrae las tareas. Responde EXCLUSIVAMENTE con el JSON indicado en las instrucciones del sistema (summary y tasks).",
+          },
+        ]
+      : `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${(content as string).trim()}`;
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -142,12 +127,7 @@ RESPONDE con un JSON válido con esta estructura exacta:
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 4096,
-        messages: [
-          {
-            role: "user",
-            content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${textToAnalyze}`,
-          },
-        ],
+        messages: [{ role: "user", content: userMessage }],
         system: systemPrompt,
       }),
     });
@@ -197,7 +177,7 @@ RESPONDE con un JSON válido con esta estructura exacta:
       summary: parsed.summary,
       tasks,
     };
-    if (file_base64) result.text = textToAnalyze;
+    if (hasText) result.text = (content as string).trim();
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
