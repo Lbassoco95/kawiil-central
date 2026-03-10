@@ -145,7 +145,22 @@ RESPONDE con un JSON válido con esta estructura exacta:
     if (!response.ok) {
       const errText = await response.text();
       console.error("Anthropic API error:", response.status, errText);
-      return new Response(JSON.stringify({ error: "Error al analizar con AI" }), {
+      
+      // Check for specific errors and return user-friendly messages
+      if (errText.includes("100 PDF pages")) {
+        return new Response(JSON.stringify({ error: "El PDF tiene más de 100 páginas. Por favor, pega el contenido como texto o usa un PDF más corto." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (errText.includes("too large") || errText.includes("size")) {
+        return new Response(JSON.stringify({ error: "El archivo es demasiado grande. Intenta con un documento más pequeño o pega el texto directamente." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
+      return new Response(JSON.stringify({ error: "Error al analizar con AI: " + (response.status === 400 ? "documento no compatible" : "intenta de nuevo") }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
