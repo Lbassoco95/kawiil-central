@@ -178,7 +178,11 @@ export default function Notificaciones() {
                   {hasOverdue ? (
                     <div className="divide-y divide-border/40">
                       {(alerts?.overdue ?? []).map((t) => (
-                        <div key={t.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={t.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleTaskAlertClick(t)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[13px] font-medium text-foreground">{t.title}</span>
                             <span className="text-[11px] text-destructive shrink-0">
@@ -193,7 +197,11 @@ export default function Notificaciones() {
                         </div>
                       ))}
                       {(alerts?.stepsOverdue ?? []).map((s) => (
-                        <div key={s.id} className="py-3 px-2 -mx-2">
+                        <div
+                          key={s.id}
+                          className="py-3 px-2 -mx-2 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors"
+                          onClick={() => handleStepAlertClick(s)}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[13px] font-medium text-foreground">{s.label}</span>
                             <span className="text-[11px] text-destructive shrink-0">
