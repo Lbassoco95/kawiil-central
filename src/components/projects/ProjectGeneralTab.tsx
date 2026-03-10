@@ -283,22 +283,32 @@ INSTRUCCIONES:
   }, [project, projectTasks, accountingPeriods, annualDeclarations, clientName, areaLabel]);
 
   const handleSave = () => {
-    updateProject.mutate(
-      {
-        id: project.id,
-        description: description || null,
-        status,
-        start_date: startDate || null,
-        end_date: endDate || null,
-        criticality_level: criticalityLevel,
-        delay_category: delayCategory || null,
-        delay_notes: delayNotes || null,
-        client_id: clientId || null,
-      } as any,
-      {
-        onSuccess: () => setEditing(false),
+    const updates: any = {
+      id: project.id,
+      description: description || null,
+      status,
+      start_date: startDate || null,
+      end_date: endDate || null,
+      criticality_level: criticalityLevel,
+      delay_category: delayCategory || null,
+      delay_notes: delayNotes || null,
+      client_id: clientId || null,
+    };
+
+    // Auto-update project name when client changes
+    if (clientId !== (project.client_id || "") && clients) {
+      const oldClientName = (project as any).clients?.name || "";
+      const newClient = clients.find((c) => c.id === clientId);
+      const newClientName = newClient?.name || "";
+
+      if (oldClientName && project.name.includes(oldClientName) && newClientName) {
+        updates.name = project.name.replace(oldClientName, newClientName);
       }
-    );
+    }
+
+    updateProject.mutate(updates, {
+      onSuccess: () => setEditing(false),
+    });
   };
 
   const handleCancel = () => {
