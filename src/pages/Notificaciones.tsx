@@ -34,11 +34,23 @@ export default function Notificaciones() {
   const handleMentionClick = (m: typeof mentions[0]) => {
     if (!m.is_read) markAsRead.mutate(m.id);
     if (m.entity_type === "project" && m.entity_id) {
-      navigate(`/proyectos/${m.entity_id}`);
+      // Extract step_key from title if it's a step mention (format: "...te mencionó en "StepLabel"")
+      navigate(`/proyectos/${m.entity_id}?tab=comentarios`);
     } else if (m.entity_type === "task" && m.entity_id) {
-      // Navigate to tareas page with task pre-selected via query param
       navigate(`/tareas?taskId=${m.entity_id}`);
     }
+  };
+
+  const handleTaskAlertClick = (t: { id: string; project_id?: string | null }) => {
+    if (t.project_id) {
+      navigate(`/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}`);
+    } else {
+      navigate(`/tareas?taskId=${t.id}`);
+    }
+  };
+
+  const handleStepAlertClick = (s: { project_id: string; step_key: string }) => {
+    navigate(`/proyectos/${s.project_id}?tab=contabilidad&step=${s.step_key}`);
   };
 
   const isLoading = loadingAlerts || loadingMentions;
