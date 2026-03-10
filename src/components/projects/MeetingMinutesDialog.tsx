@@ -95,12 +95,59 @@ export function MeetingMinutesDialog({
     if (!file) return;
     setFileName(file.name);
 
-    if (file.type.startsWith("text/") || file.name.endsWith(".md") || file.name.endsWith(".txt")) {
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const isText = file.type.startsWith("text/") || [".md", ".txt", ".csv", ".log"].some((e) => file.name.toLowerCase().endsWith(e));
+
+    if (isText) {
       const text = await file.text();
       setContent(text);
-    } else {
-      toast.info("Para archivos PDF o Word, copia y pega el contenido en el campo de texto.");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
     }
+
+    if (ext === "pdf") {
+      try {
+        toast.info("Extrayendo texto del PDF…");
+        const pdfjs = await import("pdfjs-dist");
+        if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+          const ver = (pdfjs as any).version || "4.7.76";
+          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${ver}/pdf.worker.min.js`;
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+        let text = "";
+        for (let i = 1; i <= doc.numPages; i++) {
+          const page = await doc.getPage(i);
+          const items = await page.getTextContent();
+          text += items.items.map((item: any) => item.str).join(" ") + "\n";
+        }
+        setContent(text.trim() || "(No se pudo extraer texto del PDF)");
+        toast.success("Texto del PDF cargado");
+      } catch (err: any) {
+        console.error(err);
+        toast.error("No se pudo leer el PDF. Pega el contenido en el cuadro de texto.");
+      }
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
+    if (ext === "docx" || file.type.includes("wordprocessingml")) {
+      try {
+        toast.info("Extrayendo texto del Word…");
+        const mammoth = await import("mammoth");
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        setContent(result.value.trim() || "(No se pudo extraer texto del documento)");
+        toast.success("Texto del Word cargado");
+      } catch (err: any) {
+        console.error(err);
+        toast.error("No se pudo leer el Word. Pega el contenido en el cuadro de texto.");
+      }
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
+    toast.info("Para este tipo de archivo, copia y pega el contenido en el campo de texto.");
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -256,7 +303,7 @@ export function MeetingMinutesDialog({
         {step === "input" ? (
           <div className="space-y-4 flex-1 overflow-y-auto">
             <div>
-              <input ref={fileRef} type="file" className="hidden" accept=".txt,.md,.text" onChange={handleFileUpload} />
+              <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.md,.csv" onChange={handleFileUpload} />
               <Button
                 variant="outline"
                 className="w-full h-20 border-dashed flex flex-col gap-1"
@@ -264,7 +311,7 @@ export function MeetingMinutesDialog({
               >
                 <Upload className="h-5 w-5 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  {fileName || "Sube un archivo de texto (.txt, .md)"}
+                  {fileName || "Sube un archivo (PDF, Word, .txt, .md)"}
                 </span>
               </Button>
             </div>
