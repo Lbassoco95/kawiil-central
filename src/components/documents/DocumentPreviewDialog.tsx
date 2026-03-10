@@ -25,12 +25,13 @@ interface DocumentPreviewDialogProps {
   } | null;
 }
 
-function getFileType(name: string, mimeType?: string | null): "pdf" | "image" | "xml" | "office" | "unknown" {
+function getFileType(name: string, mimeType?: string | null): "pdf" | "image" | "xml" | "text" | "office" | "unknown" {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (mimeType?.includes("pdf") || ext === "pdf") return "pdf";
   if (mimeType?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext)) return "image";
   if (mimeType?.includes("xml") || ext === "xml") return "xml";
-  if (["xlsx", "xls", "docx", "doc", "pptx", "ppt", "csv"].includes(ext) ||
+  if (["txt", "csv", "md", "log"].includes(ext) || mimeType === "text/plain" || mimeType === "text/csv" || mimeType === "text/markdown") return "text";
+  if (["xlsx", "xls", "docx", "doc", "pptx", "ppt"].includes(ext) ||
       mimeType?.includes("spreadsheet") || mimeType?.includes("document") || mimeType?.includes("presentation")) return "office";
   return "unknown";
 }
@@ -40,6 +41,7 @@ function getFileIcon(type: string) {
     case "pdf": return <FileText className="h-5 w-5 text-red-500" />;
     case "image": return <Image className="h-5 w-5 text-green-500" />;
     case "xml": return <Code className="h-5 w-5 text-orange-500" />;
+    case "text": return <FileText className="h-5 w-5 text-amber-600" />;
     case "office": return <FileSpreadsheet className="h-5 w-5 text-blue-500" />;
     default: return <FileText className="h-5 w-5 text-muted-foreground" />;
   }
@@ -50,6 +52,7 @@ function getFileLabel(type: string) {
     case "pdf": return "PDF";
     case "image": return "Imagen";
     case "xml": return "XML";
+    case "text": return "Texto";
     case "office": return "Office";
     default: return "Archivo";
   }
@@ -63,7 +66,7 @@ function buildAbsoluteSignedUrl(signedUrl: string) {
 export function DocumentPreviewDialog({ open, onOpenChange, document }: DocumentPreviewDialogProps) {
   const [loading, setLoading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [xmlContent, setXmlContent] = useState<string | null>(null);
+  const [textContent, setTextContent] = useState<string | null>(null);
 
   const fileType = document ? getFileType(document.name, document.mime_type) : "unknown";
 
@@ -71,11 +74,10 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
     if (!document?.file_path || document.source !== "supabase") return;
     setLoading(true);
     setPreviewUrl(null);
-    setXmlContent(null);
+    setTextContent(null);
 
     try {
-      if (fileType === "xml") {
-        // For XML, use signed URL to fetch text content
+      if (fileType === "xml" || fileType === "text") {
         const { data, error } = await supabase.storage
           .from("documents")
           .createSignedUrl(document.file_path, 3600);
@@ -83,10 +85,9 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
         const signedUrl = buildAbsoluteSignedUrl(data.signedUrl);
         const resp = await fetch(signedUrl);
         const text = await resp.text();
-        setXmlContent(text);
-        setPreviewUrl(signedUrl);
+        setTextContent(text);
+        if (fileType === "xml") setPreviewUrl(signedUrl);
       } else {
-        // For PDF, images, etc. download as blob to avoid cross-origin blocking
         const { data, error } = await supabase.storage
           .from("documents")
           .download(document.file_path);
@@ -96,7 +97,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
       }
     } catch (err: any) {
       setPreviewUrl(null);
-      setXmlContent(null);
+      setTextContent(null);
       toast.error("Error al cargar preview: " + err.message);
     } finally {
       setLoading(false);
@@ -111,6 +112,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
     }
+    if (!open) setTextContent(null);
   }, [open, document?.id]);
 
   const handleDownload = async () => {
@@ -144,7 +146,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
   const handleOpenChange = (o: boolean) => {
     if (!o) {
       setPreviewUrl(null);
-      setXmlContent(null);
+      setTextContent(null);
     }
     onOpenChange(o);
   };
@@ -231,9 +233,9 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
             </div>
           )}
 
-          {!isDropbox && !loading && xmlContent && fileType === "xml" && (
+          {!isDropbox && !loading && textContent && (fileType === "xml" || fileType === "text") && (
             <pre className="p-4 text-xs font-mono overflow-auto max-h-[60vh] whitespace-pre-wrap break-all">
-              {xmlContent}
+              {textContent}
             </pre>
           )}
 
@@ -253,7 +255,7 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
             </div>
           )}
 
-          {!isDropbox && !loading && !previewUrl && !xmlContent && (
+          {!isDropbox && !loading && !previewUrl && !textContent && (
             <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
               <FileText className="h-12 w-12 text-muted-foreground/50" />
               <p className="text-sm text-muted-foreground">No se pudo generar la vista previa</p>

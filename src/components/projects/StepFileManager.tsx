@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDateMX } from "@/lib/dateUtils";
+import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { logActivity } from "@/lib/activityLog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
@@ -231,7 +232,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
         <label className="text-xs font-medium text-muted-foreground">Archivos</label>
         <div className="flex items-center gap-1">
           {/* Upload to Dropbox - primary action */}
-          <input ref={dropboxFileRef} type="file" className="hidden" onChange={handleDropboxFileSelect} />
+          <input ref={dropboxFileRef} type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleDropboxFileSelect} />
           <Button
             variant="outline"
             size="sm"
@@ -263,7 +264,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             <Link2 className="h-3 w-3" />
           </Button>
           {/* Upload to local storage */}
-          <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
+          <input ref={fileRef} type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleUpload} />
           <Button
             variant="ghost"
             size="sm"

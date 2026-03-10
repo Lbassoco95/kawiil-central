@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCreateDocument } from "@/hooks/useDocuments";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
+import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { toast } from "sonner";
@@ -120,9 +121,16 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
           {/* File picker */}
           <div>
             <Label>Archivo *</Label>
+            <p className="text-xs text-muted-foreground mb-1">
+              PDF, Word (.doc, .docx), texto (.txt, .csv, .md), Excel, PowerPoint o imágenes
+            </p>
             <label className="cursor-pointer block">
-              <input type="file" className="hidden" onChange={handleFileChange}
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.xml" />
+              <input
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+                accept={ACCEPTED_DOCUMENT_EXTENSIONS}
+              />
               <div className="flex items-center gap-3 p-4 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors">
                 {file ? (
                   <>

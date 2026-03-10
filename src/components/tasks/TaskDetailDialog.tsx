@@ -21,6 +21,7 @@ import {
   Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
+import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 
@@ -432,7 +433,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                 </div>
                 <div>
                   <label className="cursor-pointer">
-                    <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                    <input type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleFileUpload} disabled={uploading} />
                     <div className="flex items-center gap-2 p-3 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
                       <Upload className="h-4 w-4" />
                       {uploading ? "Subiendo..." : "Subir archivo"}
