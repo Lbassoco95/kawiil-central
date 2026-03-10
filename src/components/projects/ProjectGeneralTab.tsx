@@ -61,7 +61,23 @@ export function ProjectGeneralTab({ project }: Props) {
   const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
   const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
   const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
+  const [clientId, setClientId] = useState(project.client_id || "");
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
+
+  // Fetch clients for selector
+  const { data: clients } = useQuery({
+    queryKey: ["clients-for-project-edit"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("status", "activo")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && editing,
+  });
 
   // Fetch project tasks for AI summary
   const { data: projectTasks } = useQuery({
