@@ -241,10 +241,13 @@ export function useUpdateClient() {
       // Get previous payroll_type value
       const { data: prevClient } = await supabase
         .from("clients")
-        .select("payroll_type")
+        .select("payroll_type, name")
         .eq("id", id)
         .single();
       const previousPayrollType = (prevClient as any)?.payroll_type || null;
+
+      // Get previous client name for project rename logic
+      const previousName = prevClient ? (prevClient as any).name : null;
 
       const { data, error } = await supabase
         .from("clients")
@@ -253,6 +256,28 @@ export function useUpdateClient() {
         .select()
         .single();
       if (error) throw error;
+
+      // Auto-rename projects when client name changes
+      if (updates.name && previousName && updates.name !== previousName && data) {
+        const { data: clientProjects } = await supabase
+          .from("projects")
+          .select("id, name")
+          .eq("client_id", id);
+
+        if (clientProjects) {
+          for (const proj of clientProjects) {
+            if (proj.name.includes(previousName)) {
+              const newProjectName = proj.name.replace(previousName, updates.name);
+              await supabase
+                .from("projects")
+                .update({ name: newProjectName })
+                .eq("id", proj.id);
+            }
+          }
+          queryClient.invalidateQueries({ queryKey: ["projects"] });
+          queryClient.invalidateQueries({ queryKey: ["client-projects", id] });
+        }
+      }
 
       // Auto-create projects for newly added services
       const newServices = (updates.services || []) as string[];
