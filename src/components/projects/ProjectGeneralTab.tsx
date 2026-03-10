@@ -309,6 +309,7 @@ INSTRUCCIONES:
     setCriticalityLevel((project as any).criticality_level || "normal");
     setDelayCategory((project as any).delay_category || "");
     setDelayNotes((project as any).delay_notes || "");
+    setClientId(project.client_id || "");
     setEditing(false);
   };
 
