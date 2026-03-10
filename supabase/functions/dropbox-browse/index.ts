@@ -537,11 +537,9 @@ serve(async (req) => {
       );
       const uploadTargetPath = scoped.path;
 
-      if (!file_content || !uploadTargetPath) {
-        throw new Error('file_content and path are required for upload');
+      if (!fileBytes || !uploadTargetPath) {
+        throw new Error('file and path are required for upload');
       }
-
-      const fileBytes = Uint8Array.from(atob(file_content), (c) => c.charCodeAt(0));
 
       const uploadHeaders: Record<string, string> = {
         'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
