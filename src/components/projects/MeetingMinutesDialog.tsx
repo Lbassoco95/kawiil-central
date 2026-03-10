@@ -148,19 +148,48 @@ export function MeetingMinutesDialog({
         });
 
         if (error) {
+          let extractedText = "";
           try {
             const { extractText, getDocumentProxy } = await import("unpdf");
             const bytes = new Uint8Array(arrayBuffer);
             const pdf = await getDocumentProxy(bytes);
             const { text: pdfText } = await extractText(pdf, { mergePages: true });
-            const trimmed = (pdfText ?? "").trim();
-            if (!trimmed) throw new Error("PDF sin texto");
-            await runAnalysisWithText(trimmed);
-            return;
-          } catch (extractErr) {
+            extractedText = (pdfText ?? "").trim();
+          } catch {
+            try {
+              const pdfjsLib = await import("pdfjs-dist");
+              const pdfjs = pdfjsLib.default ?? pdfjsLib;
+              (pdfjs as any).disableWorker = true;
+              const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+              const doc = await loadingTask.promise;
+              let t = "";
+              for (let i = 1; i <= doc.numPages; i++) {
+                const page = await doc.getPage(i);
+                const textContent = await page.getTextContent();
+                t += textContent.items.map((item: any) => item.str ?? "").join(" ") + "\n";
+              }
+              extractedText = t.trim();
+            } catch {
+              setAnalyzing(false);
+              if (fileRef.current) fileRef.current.value = "";
+              toast.error("No se pudo leer el PDF. Pega el contenido abajo en el cuadro de texto y pulsa «Analizar y proponer tareas».");
+              return;
+            }
+          }
+          if (!extractedText) {
             setAnalyzing(false);
             if (fileRef.current) fileRef.current.value = "";
-            toast.error("No se pudo analizar el PDF. Pega el contenido abajo en el cuadro de texto y pulsa «Analizar y proponer tareas».");
+            toast.error("El PDF no tiene texto legible. Pega el contenido abajo.");
+            return;
+          }
+          try {
+            await runAnalysisWithText(extractedText);
+            return;
+          } catch {
+            setContent(extractedText);
+            setAnalyzing(false);
+            if (fileRef.current) fileRef.current.value = "";
+            toast.info("Texto del PDF cargado. Pulsa «Analizar y proponer tareas» para analizar.");
             return;
           }
         }
