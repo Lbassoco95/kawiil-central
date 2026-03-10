@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { toast } from "sonner";
-import {
   Folder,
   FileText,
   ChevronLeft,
