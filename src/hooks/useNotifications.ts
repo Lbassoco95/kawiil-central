@@ -24,8 +24,10 @@ export type DueAlertStep = {
   type: "accounting_step";
   label: string;
   due_date: string;
+  project_id: string;
   project_name: string;
   period_label: string;
+  step_key: string;
   is_overdue: boolean;
 };
 
