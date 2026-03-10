@@ -241,7 +241,7 @@ export function useUpdateClient() {
       // Get previous payroll_type value
       const { data: prevClient } = await supabase
         .from("clients")
-        .select("payroll_type")
+        .select("payroll_type, name")
         .eq("id", id)
         .single();
       const previousPayrollType = (prevClient as any)?.payroll_type || null;
