@@ -1,11 +1,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.10.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function extractPdfText(fileBase64: string): Promise<string> {
+  const bytes = base64ToUint8Array(fileBase64);
+  const pdf = await getDocumentProxy(bytes);
+  const { text } = await extractText(pdf, { mergePages: true });
+  return (text || "").trim();
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -40,15 +55,36 @@ serve(async (req) => {
 
     if (!profile) throw new Error("Profile not found");
 
-    const { content, project_id, client_id, area } = await req.json();
-    if (!content || !content.trim()) {
-      return new Response(JSON.stringify({ error: "No se proporcionó contenido" }), {
+    const body = await req.json();
+    const { content, file_base64, filename, project_id, client_id, area } = body;
+
+    let textToAnalyze: string;
+
+    if (file_base64 && (filename || "").toLowerCase().endsWith(".pdf")) {
+      try {
+        textToAnalyze = await extractPdfText(file_base64);
+      } catch (e) {
+        console.error("PDF extraction error:", e);
+        return new Response(
+          JSON.stringify({ error: "No se pudo extraer el texto del PDF. Si es una imagen escaneada, pega el contenido en el cuadro de texto." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (!textToAnalyze) {
+        return new Response(
+          JSON.stringify({ error: "El PDF no contiene texto legible (por ejemplo, es una imagen escaneada). Pega el contenido en el cuadro de texto." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else if (content && typeof content === "string" && content.trim()) {
+      textToAnalyze = content.trim();
+    } else {
+      return new Response(JSON.stringify({ error: "Envía contenido de texto o un PDF en file_base64 con filename .pdf" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Fetch team members for assignee matching
     const { data: teamMembers } = await supabase
       .from("profiles")
       .select("user_id, full_name, area")
@@ -109,7 +145,7 @@ RESPONDE con un JSON válido con esta estructura exacta:
         messages: [
           {
             role: "user",
-            content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}`,
+            content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${textToAnalyze}`,
           },
         ],
         system: systemPrompt,
@@ -134,7 +170,6 @@ RESPONDE con un JSON válido con esta estructura exacta:
     const aiResponse = await response.json();
     const textContent = aiResponse.content?.[0]?.text || "";
 
-    // Extract JSON from the response
     let parsed;
     try {
       const jsonMatch = textContent.match(/\{[\s\S]*\}/);
@@ -151,7 +186,6 @@ RESPONDE con un JSON válido con esta estructura exacta:
       });
     }
 
-    // Enrich tasks with project/client context
     const tasks = (parsed.tasks || []).map((t: any) => ({
       ...t,
       project_id: project_id || null,
@@ -159,11 +193,17 @@ RESPONDE con un JSON válido con esta estructura exacta:
       area: area || null,
     }));
 
-    return new Response(JSON.stringify({ summary: parsed.summary, tasks }), {
+    const result: { text?: string; summary: string; tasks: any[] } = {
+      summary: parsed.summary,
+      tasks,
+    };
+    if (file_base64) result.text = textToAnalyze;
+
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    console.error("analyze-meeting error:", e);
+    console.error("analyze-meeting-document error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Error desconocido" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

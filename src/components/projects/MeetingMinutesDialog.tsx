@@ -106,26 +106,45 @@ export function MeetingMinutesDialog({
     }
 
     if (ext === "pdf") {
+      setAnalyzing(true);
+      toast.info("Analizando PDF en el servidor…");
       try {
-        toast.info("Extrayendo texto del PDF…");
-        const pdfjs = await import("pdfjs-dist");
-        if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-          const ver = (pdfjs as any).version || "4.7.76";
-          pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${ver}/pdf.worker.min.js`;
-        }
         const arrayBuffer = await file.arrayBuffer();
-        const doc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-        let text = "";
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i);
-          const items = await page.getTextContent();
-          text += items.items.map((item: any) => item.str).join(" ") + "\n";
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = "";
+        const chunk = 8192;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
         }
-        setContent(text.trim() || "(No se pudo extraer texto del PDF)");
-        toast.success("Texto del PDF cargado");
+        const file_base64 = btoa(binary);
+
+        const { data, error } = await supabase.functions.invoke("analyze-meeting-document", {
+          body: {
+            file_base64,
+            filename: file.name,
+            project_id: projectId,
+            client_id: clientId ?? null,
+            area: area ?? null,
+          },
+        });
+
+        if (error) {
+          throw new Error(data?.error ?? error.message ?? "Error al analizar el PDF");
+        }
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+
+        setContent(data.text ?? "");
+        setSummary(data.summary ?? "");
+        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true })));
+        setStep("preview");
+        toast.success("PDF analizado correctamente");
       } catch (err: any) {
-        console.error(err);
-        toast.error("No se pudo leer el PDF. Pega el contenido en el cuadro de texto.");
+        console.error("analyze-meeting-document error:", err);
+        toast.error(err?.message ?? "No se pudo analizar el PDF. Prueba pegar el contenido en el cuadro de texto.");
+      } finally {
+        setAnalyzing(false);
       }
       if (fileRef.current) fileRef.current.value = "";
       return;
@@ -302,30 +321,40 @@ export function MeetingMinutesDialog({
 
         {step === "input" ? (
           <div className="space-y-4 flex-1 overflow-y-auto">
-            <div>
-              <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.md,.csv" onChange={handleFileUpload} />
-              <Button
-                variant="outline"
-                className="w-full h-20 border-dashed flex flex-col gap-1"
-                onClick={() => fileRef.current?.click()}
-              >
-                <Upload className="h-5 w-5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
-                  {fileName || "Sube un archivo (PDF, Word, .txt, .md)"}
-                </span>
-              </Button>
-            </div>
+            {analyzing ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+                <Loader2 className="h-10 w-10 animate-spin" />
+                <p className="text-sm font-medium">Analizando PDF en el servidor…</p>
+                <p className="text-xs">Extracción de texto y análisis con IA. No cierres el diálogo.</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.md,.csv" onChange={handleFileUpload} />
+                  <Button
+                    variant="outline"
+                    className="w-full h-20 border-dashed flex flex-col gap-1"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      {fileName || "Sube un archivo (PDF, Word, .txt, .md)"}
+                    </span>
+                  </Button>
+                </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium">O pega el contenido:</label>
-              <Textarea
-                className="min-h-[200px] text-sm"
-                placeholder="Pega aquí el resumen, minuta, notas de la reunión o contenido del documento...&#10;&#10;Ejemplo:&#10;- Se acordó preparar la declaración anual de Cliente X para el 15 de abril&#10;- María revisará los estados financieros&#10;- Urgente: entregar constancia de situación fiscal antes del viernes"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">{content.length} caracteres</p>
-            </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">O pega el contenido:</label>
+                  <Textarea
+                    className="min-h-[200px] text-sm"
+                    placeholder="Pega aquí el resumen, minuta, notas de la reunión o contenido del documento...&#10;&#10;Ejemplo:&#10;- Se acordó preparar la declaración anual de Cliente X para el 15 de abril&#10;- María revisará los estados financieros&#10;- Urgente: entregar constancia de situación fiscal antes del viernes"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">{content.length} caracteres</p>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-2">
