@@ -103,6 +103,22 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
   const { data: profiles = [] } = useProfiles();
   const queryClient = useQueryClient();
 
+  // Load documents linked to this task
+  const [taskDocumentIds, setTaskDocumentIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadDocuments = async () => {
+      const { data } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("task_id", task.id);
+      if (data) {
+        setTaskDocumentIds(data.map((d) => d.id));
+      }
+    };
+    loadDocuments();
+  }, [task.id]);
+
   const isOverdue = localDueDate && localStatus !== "completada" && isPast(localDueDate) && !isToday(localDueDate);
 
   useEffect(() => {
