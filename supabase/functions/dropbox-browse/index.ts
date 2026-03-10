@@ -406,17 +406,51 @@ serve(async (req) => {
     let body: any;
     let fileBytes: Uint8Array | null = null;
 
-    if (contentType.includes('multipart/form-data')) {
-      const formData = await req.formData();
-      const action = formData.get('action') as string || 'upload';
-      const path = formData.get('path') as string || '';
-      const fileField = formData.get('file') as File | null;
-      if (fileField) {
-        fileBytes = new Uint8Array(await fileField.arrayBuffer());
+    // Try FormData first for uploads, fall back to JSON
+    let parsedAsForm = false;
+    if (contentType.includes('multipart/form-data') || contentType.includes('form-data')) {
+      try {
+        const formData = await req.formData();
+        const action = formData.get('action') as string || 'upload';
+        const path = formData.get('path') as string || '';
+        const fileField = formData.get('file') as File | null;
+        if (fileField) {
+          fileBytes = new Uint8Array(await fileField.arrayBuffer());
+        }
+        body = { action, path, file_name: fileField?.name || '' };
+        parsedAsForm = true;
+      } catch (formErr) {
+        console.error('Failed to parse as FormData, trying JSON:', formErr);
       }
-      body = { action, path, file_name: fileField?.name || '' };
-    } else {
-      body = await req.json();
+    }
+
+    if (!parsedAsForm) {
+      // Clone request so we can inspect the body
+      const rawBody = await req.text();
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        // Might be FormData that wasn't detected by content-type
+        console.error('Failed to parse body as JSON, trying FormData clone. Content-Type:', contentType);
+        // Re-create request with original body to try formData
+        const retryReq = new Request(req.url, {
+          method: req.method,
+          headers: req.headers,
+          body: rawBody,
+        });
+        try {
+          const formData = await retryReq.formData();
+          const action = formData.get('action') as string || 'upload';
+          const path = formData.get('path') as string || '';
+          const fileField = formData.get('file') as File | null;
+          if (fileField) {
+            fileBytes = new Uint8Array(await fileField.arrayBuffer());
+          }
+          body = { action, path, file_name: fileField?.name || '' };
+        } catch {
+          throw new Error('Could not parse request body as JSON or FormData');
+        }
+      }
     }
 
     const { path = '', action = 'list', file_content, file_name } = body;
