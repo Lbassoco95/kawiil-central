@@ -13,8 +13,8 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
 
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -79,75 +79,49 @@ INSTRUCCIONES:
    - Prioridad: "urgente", "alta", "media" o "baja"
    - Fecha de vencimiento tentativa (basada en lo mencionado o estimando razonablemente)
    - Si se menciona a una persona del equipo por nombre, asigna su user_id
-4. Usa la herramienta extract_tasks para devolver los resultados.`;
+4. Responde EXCLUSIVAMENTE con el JSON solicitado, sin texto adicional.
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+RESPONDE con un JSON válido con esta estructura exacta:
+{
+  "summary": "Resumen breve de la reunión en 2-3 oraciones",
+  "tasks": [
+    {
+      "title": "Título de la tarea",
+      "description": "Descripción breve",
+      "priority": "media",
+      "due_date": "YYYY-MM-DD",
+      "assigned_to_name": "Nombre de la persona o null",
+      "assigned_to_id": "UUID del usuario o null"
+    }
+  ]
+}`;
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
         messages: [
-          { role: "system", content: systemPrompt },
           {
             role: "user",
             content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}`,
           },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "extract_tasks",
-              description: "Extrae el resumen y las tareas identificadas del documento.",
-              parameters: {
-                type: "object",
-                properties: {
-                  summary: {
-                    type: "string",
-                    description: "Resumen breve de la reunión/documento en 2-3 oraciones",
-                  },
-                  tasks: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string", description: "Título claro y conciso de la tarea" },
-                        description: { type: "string", description: "Descripción breve con contexto" },
-                        priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
-                        due_date: { type: "string", description: "Fecha en formato YYYY-MM-DD o null" },
-                        assigned_to_name: { type: "string", description: "Nombre de la persona asignada o null" },
-                        assigned_to_id: { type: "string", description: "UUID del usuario asignado o null" },
-                      },
-                      required: ["title", "description", "priority"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ["summary", "tasks"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "extract_tasks" } },
+        system: systemPrompt,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
+      console.error("Anthropic error:", response.status, errText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Límite de solicitudes excedido. Intenta de nuevo en unos minutos." }), {
           status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes para AI. Contacta al administrador." }), {
-          status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -158,28 +132,20 @@ INSTRUCCIONES:
     }
 
     const aiResponse = await response.json();
-    
-    // Extract from tool call response
+    const textContent = aiResponse.content?.[0]?.text || "";
+
+    // Extract JSON from the response
     let parsed;
     try {
-      const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
-      if (toolCall?.function?.arguments) {
-        parsed = typeof toolCall.function.arguments === "string"
-          ? JSON.parse(toolCall.function.arguments)
-          : toolCall.function.arguments;
+      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
       } else {
-        // Fallback: try to parse from content
-        const textContent = aiResponse.choices?.[0]?.message?.content || "";
-        const jsonMatch = textContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error("No structured output found");
-        }
+        throw new Error("No JSON found in response");
       }
     } catch (e) {
-      console.error("Failed to parse AI response:", JSON.stringify(aiResponse));
-      return new Response(JSON.stringify({ error: "Error al interpretar la respuesta de AI" }), {
+      console.error("Failed to parse AI response:", textContent);
+      return new Response(JSON.stringify({ error: "Error al interpretar la respuesta de AI", raw: textContent }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
