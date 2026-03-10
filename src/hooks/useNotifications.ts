@@ -83,6 +83,7 @@ export function useDueDateAlerts() {
           assigned_to: t.assigned_to,
           client_name: t.clients?.name,
           project_name: t.projects?.name,
+          project_id: t.project_id,
           is_overdue: isOverdue,
           assigned_to_me: t.assigned_to === user!.id,
         };
