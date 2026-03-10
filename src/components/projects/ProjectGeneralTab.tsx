@@ -61,7 +61,23 @@ export function ProjectGeneralTab({ project }: Props) {
   const [criticalityLevel, setCriticalityLevel] = useState((project as any).criticality_level || "normal");
   const [delayCategory, setDelayCategory] = useState((project as any).delay_category || "");
   const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
+  const [clientId, setClientId] = useState(project.client_id || "");
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
+
+  // Fetch clients for selector
+  const { data: clients } = useQuery({
+    queryKey: ["clients-for-project-edit"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name")
+        .eq("status", "activo")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && editing,
+  });
 
   // Fetch project tasks for AI summary
   const { data: projectTasks } = useQuery({
@@ -277,6 +293,7 @@ INSTRUCCIONES:
         criticality_level: criticalityLevel,
         delay_category: delayCategory || null,
         delay_notes: delayNotes || null,
+        client_id: clientId || null,
       } as any,
       {
         onSuccess: () => setEditing(false),
@@ -292,6 +309,7 @@ INSTRUCCIONES:
     setCriticalityLevel((project as any).criticality_level || "normal");
     setDelayCategory((project as any).delay_category || "");
     setDelayNotes((project as any).delay_notes || "");
+    setClientId(project.client_id || "");
     setEditing(false);
   };
 
@@ -345,6 +363,28 @@ INSTRUCCIONES:
               <Badge variant="outline" className={STATUS_STYLES[project.status]}>
                 {STATUS_LABELS[project.status]}
               </Badge>
+            )}
+          </div>
+
+          {/* Client */}
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Cliente</span>
+            {editing ? (
+              <Select value={clientId || "__none__"} onValueChange={(v) => setClientId(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="w-40 h-8 text-xs">
+                  <SelectValue placeholder="Sin cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sin cliente</SelectItem>
+                  {clients?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span>{clientName}</span>
             )}
           </div>
 
