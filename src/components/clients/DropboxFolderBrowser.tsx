@@ -104,24 +104,14 @@ export function DropboxFolderBrowser({ folderPath }: DropboxFolderBrowserProps) 
     if (!file) return;
     setUploading(true);
     try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(",")[1]);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
       const uploadPath = `${currentPath}/${file.name}`;
+      const formData = new FormData();
+      formData.append("action", "upload");
+      formData.append("path", uploadPath);
+      formData.append("file", file);
+
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: {
-          action: "upload",
-          path: uploadPath,
-          file_content: base64,
-          file_name: file.name,
-        },
+        body: formData,
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
