@@ -129,7 +129,7 @@ serve(async (req) => {
     const uploadHeaders: Record<string, string> = {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/octet-stream',
-      'Dropbox-API-Arg': JSON.stringify({
+      'Dropbox-API-Arg': asciiSafeJson({
         path: uploadPath,
         mode: 'add',
         autorename: true,
