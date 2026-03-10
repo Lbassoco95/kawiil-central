@@ -1,33 +1,53 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Reads a File as base64 and uploads via JSON body to avoid
- * FormData parsing issues in edge functions.
+ * Uploads a file to Dropbox via a dedicated edge function.
+ * Sends raw binary bytes (no base64) to avoid memory issues.
  */
 export async function uploadFileToDropbox(
   file: File,
   uploadPath: string,
 ): Promise<{ name: string; path: string; url: string }> {
-  const arrayBuffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  // Convert to base64
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  const base64 = btoa(binary);
+  // Parse scoped path for namespace support
+  let actualPath = uploadPath;
+  let namespaceId = "";
 
-  const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-    body: {
-      action: "upload",
-      path: uploadPath,
-      file_content: base64,
-      file_name: file.name,
+  if (uploadPath.startsWith("memberns:")) {
+    const payload = uploadPath.slice("memberns:".length);
+    const sepIdx = payload.indexOf(":");
+    if (sepIdx !== -1) {
+      namespaceId = payload.slice(0, sepIdx);
+      actualPath = payload.slice(sepIdx + 1);
+    }
+  }
+
+  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  // Get session token for auth
+  const { data: { session } } = await supabase.auth.getSession();
+  const authToken = session?.access_token || anonKey;
+
+  const url = `https://${projectId}.supabase.co/functions/v1/dropbox-upload`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/octet-stream",
+      "Authorization": `Bearer ${authToken}`,
+      "apikey": anonKey,
+      "x-upload-path": actualPath,
+      "x-upload-namespace": namespaceId,
     },
+    body: file, // Send raw File object - browser streams it efficiently
   });
 
-  if (error) throw error;
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    throw new Error(errData.error || `Upload failed: ${response.status}`);
+  }
+
+  const data = await response.json();
   if (data?.error) throw new Error(data.error);
 
   return {
