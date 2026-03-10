@@ -276,6 +276,10 @@ export function useUpdateClient() {
           }
           queryClient.invalidateQueries({ queryKey: ["projects"] });
           queryClient.invalidateQueries({ queryKey: ["client-projects", id] });
+          // Invalidate individual project detail queries
+          for (const proj of clientProjects) {
+            queryClient.invalidateQueries({ queryKey: ["project", proj.id] });
+          }
         }
       }
 
