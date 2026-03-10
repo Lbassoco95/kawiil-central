@@ -103,6 +103,22 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
   const { data: profiles = [] } = useProfiles();
   const queryClient = useQueryClient();
 
+  // Load documents linked to this task
+  const [taskDocumentIds, setTaskDocumentIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const loadDocuments = async () => {
+      const { data } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("task_id", task.id);
+      if (data) {
+        setTaskDocumentIds(data.map((d) => d.id));
+      }
+    };
+    loadDocuments();
+  }, [task.id]);
+
   const isOverdue = localDueDate && localStatus !== "completada" && isPast(localDueDate) && !isToday(localDueDate);
 
   useEffect(() => {
@@ -409,8 +425,15 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
 
             {/* Files */}
             <StepFileManager
-              documentIds={[]}
-              onDocumentAdded={() => {}}
+              documentIds={taskDocumentIds}
+              onDocumentAdded={async (updatedIds) => {
+                setTaskDocumentIds(updatedIds);
+                // Link new documents to this task
+                const newIds = updatedIds.filter((id) => !taskDocumentIds.includes(id));
+                for (const docId of newIds) {
+                  await supabase.from("documents").update({ task_id: task.id }).eq("id", docId);
+                }
+              }}
               projectId={projectId}
               clientDropboxPath={clientDropboxPath}
               disabled={saving}
