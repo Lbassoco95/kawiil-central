@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { toast } from "sonner";
 import {
   Folder,

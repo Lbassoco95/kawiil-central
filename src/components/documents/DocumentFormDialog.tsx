@@ -8,6 +8,7 @@ import { useCreateDocument } from "@/hooks/useDocuments";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { toast } from "sonner";
 import { Upload, FileText, Loader2, Cloud, HardDrive } from "lucide-react";
 
