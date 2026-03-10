@@ -107,9 +107,28 @@ export function MeetingMinutesDialog({
 
     if (ext === "pdf") {
       setAnalyzing(true);
-      toast.info("Analizando PDF en el servidor…");
+      toast.info("Analizando PDF…");
+      const arrayBuffer = await file.arrayBuffer();
+
+      const runAnalysisWithText = async (text: string) => {
+        const { data, error } = await supabase.functions.invoke("analyze-meeting", {
+          body: {
+            content: text,
+            project_id: projectId,
+            client_id: clientId ?? null,
+            area: area ?? null,
+          },
+        });
+        if (error) throw new Error(data?.error ?? error.message);
+        if (data?.error) throw new Error(data.error);
+        setContent(text);
+        setSummary(data.summary ?? "");
+        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true })));
+        setStep("preview");
+        toast.success("Análisis listo. Revisa las tareas propuestas y acepta las que quieras crear.");
+      };
+
       try {
-        const arrayBuffer = await file.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
         let binary = "";
         const chunk = 8192;
@@ -129,7 +148,42 @@ export function MeetingMinutesDialog({
         });
 
         if (error) {
-          throw new Error(data?.error ?? error.message ?? "Error al analizar el PDF");
+          const msg = error.message ?? String(error);
+          if (msg.includes("Failed to send") || msg.includes("Edge Function")) {
+            toast.info("Servidor de análisis no disponible. Extrayendo texto aquí y analizando…");
+            const pdfjsLib = await import("pdfjs-dist");
+            const pdfjs = pdfjsLib.default ?? pdfjsLib;
+            try {
+              if (!pdfjs.GlobalWorkerOptions?.workerSrc) {
+                try {
+                  const workerMod = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+                  pdfjs.GlobalWorkerOptions = pdfjs.GlobalWorkerOptions || {};
+                  pdfjs.GlobalWorkerOptions.workerSrc = workerMod.default ?? (workerMod as any).href;
+                } catch {
+                  pdfjs.GlobalWorkerOptions = pdfjs.GlobalWorkerOptions || {};
+                  pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs";
+                }
+              }
+              const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+              const doc = await loadingTask.promise;
+              let text = "";
+              for (let i = 1; i <= doc.numPages; i++) {
+                const page = await doc.getPage(i);
+                const textContent = await page.getTextContent();
+                text += textContent.items.map((item: any) => item.str ?? "").join(" ") + "\n";
+              }
+              const trimmed = text.trim();
+              if (!trimmed) throw new Error("PDF sin texto");
+              await runAnalysisWithText(trimmed);
+              return;
+            } catch (extractErr) {
+              setAnalyzing(false);
+              if (fileRef.current) fileRef.current.value = "";
+              toast.error("No se pudo analizar el PDF. Pega el contenido en el cuadro de texto y pulsa «Analizar y proponer tareas».");
+              return;
+            }
+          }
+          throw new Error(data?.error ?? msg);
         }
         if (data?.error) {
           throw new Error(data.error);
@@ -139,10 +193,18 @@ export function MeetingMinutesDialog({
         setSummary(data.summary ?? "");
         setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true })));
         setStep("preview");
-        toast.success("PDF analizado correctamente");
+        toast.success("Análisis listo. Revisa las tareas propuestas y acepta las que quieras crear.");
       } catch (err: any) {
-        console.error("analyze-meeting-document error:", err);
-        toast.error(err?.message ?? "No se pudo analizar el PDF. Prueba pegar el contenido en el cuadro de texto.");
+        console.error("PDF analysis error:", err);
+        setAnalyzing(false);
+        if (fileRef.current) fileRef.current.value = "";
+        const msg = err?.message ?? "No se pudo analizar el PDF.";
+        if (msg.includes("Failed to send") || msg.includes("Edge Function")) {
+          toast.error("No se pudo conectar con el servidor de análisis. Despliega la función «analyze-meeting-document» en Supabase o pega el contenido del PDF abajo y pulsa Analizar.");
+        } else {
+          toast.error(msg + " Pega el contenido en el cuadro de texto y pulsa «Analizar y proponer tareas».");
+        }
+        return;
       } finally {
         setAnalyzing(false);
       }
