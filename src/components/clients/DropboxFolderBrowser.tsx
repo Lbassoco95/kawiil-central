@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { toast } from "sonner";
 import {
   Folder,
@@ -105,16 +106,7 @@ export function DropboxFolderBrowser({ folderPath }: DropboxFolderBrowserProps) 
     setUploading(true);
     try {
       const uploadPath = `${currentPath}/${file.name}`;
-      const formData = new FormData();
-      formData.append("action", "upload");
-      formData.append("path", uploadPath);
-      formData.append("file", file);
-
-      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: formData,
-      });
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      await uploadFileToDropbox(file, uploadPath);
       toast.success(`"${file.name}" subido a Dropbox`);
       browse(currentPath);
     } catch (err: any) {

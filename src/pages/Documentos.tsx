@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { AppLayout } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -229,16 +230,7 @@ function DropboxLiveBrowser() {
     setUploading(true);
     try {
       const uploadPath = `${currentPath}/${file.name}`;
-      const formData = new FormData();
-      formData.append("action", "upload");
-      formData.append("path", uploadPath);
-      formData.append("file", file);
-
-      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
-        body: formData,
-      });
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      await uploadFileToDropbox(file, uploadPath);
       toast.success(`"${file.name}" subido a Dropbox`);
       browse(currentPath);
     } catch (err: any) {
