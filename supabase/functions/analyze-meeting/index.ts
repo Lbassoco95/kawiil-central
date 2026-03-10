@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -7,14 +6,14 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -48,7 +47,6 @@ serve(async (req) => {
       });
     }
 
-    // Fetch team members for assignee matching
     const { data: teamMembers } = await supabase
       .from("profiles")
       .select("user_id, full_name, area")
@@ -63,7 +61,7 @@ serve(async (req) => {
 
     const systemPrompt = `Eres un asistente experto en gestión de proyectos para un despacho contable y legal en México llamado Kawiil.
 
-Tu tarea es ANALIZAR A DETALLE el documento/minuta/reunión y proponer tareas listas para validar y crear directamente en el proyecto. El usuario revisará tu propuesta y creará las tareas en el sistema.
+Tu tarea es ANALIZAR A DETALLE el documento/minuta/reunión y proponer tareas listas para validar y crear directamente en el proyecto.
 
 EQUIPO DISPONIBLE:
 ${teamList}
@@ -78,7 +76,7 @@ INSTRUCCIONES:
    - priority: "urgente", "alta", "media" o "baja" según el documento y el impacto.
    - due_date: Fecha de vencimiento propuesta en YYYY-MM-DD (usa las fechas indicadas en el documento o estima una razonable).
    - assigned_to_name y assigned_to_id: Si en el documento se menciona a alguien del equipo por nombre, asigna su user_id de la lista; si no, null.
-3. Incluye TODAS las tareas, compromisos y pendientes que encuentres. Cada una debe tener título y fecha de vencimiento propuesta para que el usuario pueda validarlas y crearlas directamente.
+3. Incluye TODAS las tareas, compromisos y pendientes que encuentres.
 4. Responde EXCLUSIVAMENTE con el JSON solicitado, sin texto adicional antes ni después.
 
 RESPONDE con un JSON válido con esta estructura exacta:
@@ -96,35 +94,26 @@ RESPONDE con un JSON válido con esta estructura exacta:
   ]
 }`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
+        model: "google/gemini-2.5-flash",
         messages: [
-          {
-            role: "user",
-            content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}`,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Analiza el siguiente documento/minuta y extrae las tareas:\n\n${content}` },
         ],
-        system: systemPrompt,
+        temperature: 0.3,
+        max_tokens: 4096,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Anthropic error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Límite de solicitudes excedido. Intenta de nuevo en unos minutos." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+      console.error("AI Gateway error:", response.status, errText);
       return new Response(JSON.stringify({ error: "Error al analizar con AI" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -132,9 +121,8 @@ RESPONDE con un JSON válido con esta estructura exacta:
     }
 
     const aiResponse = await response.json();
-    const textContent = aiResponse.content?.[0]?.text || "";
+    const textContent = aiResponse.choices?.[0]?.message?.content || "";
 
-    // Extract JSON from the response
     let parsed;
     try {
       const jsonMatch = textContent.match(/\{[\s\S]*\}/);
@@ -151,7 +139,6 @@ RESPONDE con un JSON válido con esta estructura exacta:
       });
     }
 
-    // Enrich tasks with project/client context
     const tasks = (parsed.tasks || []).map((t: any) => ({
       ...t,
       project_id: project_id || null,
