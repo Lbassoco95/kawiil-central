@@ -36,7 +36,7 @@ export function PersonalDashboard() {
     return profile?.area ?? null;
   }, [orgUsers, user]);
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  const currentTime = today;
+  
   const [personalPhrase, setPersonalPhrase] = useState<string | null>(null);
   const [phraseLoading, setPhraseLoading] = useState(false);
 
