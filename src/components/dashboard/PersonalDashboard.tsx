@@ -73,52 +73,36 @@ export function PersonalDashboard() {
     enabled: !!user,
   });
 
-  // Fetch personalized phrase (max 2x/day)
-  const fetchPhrase = async (moodScore?: number, forceRegenerate?: boolean) => {
+  // Fetch personalized phrase (backend aplica reglas de actualización/caché)
+  const fetchPhrase = useCallback(async (moodScore?: number, forceRegenerate?: boolean) => {
     if (!user) return;
     setPhraseLoading(true);
     try {
-      const hour = currentTime.getHours();
-      const timeOfDay = hour < 14 ? "morning" : "afternoon";
-
       const { data, error } = await supabase.functions.invoke("generate-phrase", {
-        body: { mood_score: moodScore ?? null, time_of_day: timeOfDay, force_regenerate: forceRegenerate ?? false },
+        body: { mood_score: moodScore ?? null, time_of_day: "morning", force_regenerate: forceRegenerate ?? false },
       });
       if (error) throw error;
       if (data?.phrase) {
         setPersonalPhrase(data.phrase);
-        try {
-          localStorage.setItem(`kawiil-phrase-${user.id}`, JSON.stringify({
-            date: today.toISOString().split("T")[0],
-            timeOfDay,
-            phrase: data.phrase,
-          }));
-        } catch {}
       }
     } catch (e: any) {
       console.error("Phrase error:", e);
     } finally {
       setPhraseLoading(false);
     }
-  };
+  }, [user]);
 
-  // Load cached phrase or generate on first load
+  // Auto-refresh periódico para evitar frases pegadas cuando la sesión queda abierta
   useEffect(() => {
     if (!user) return;
-    try {
-      const cached = localStorage.getItem(`kawiil-phrase-${user.id}`);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const hour = currentTime.getHours();
-        const currentTimeOfDay = hour < 14 ? "morning" : "afternoon";
-        if (parsed.date === today.toISOString().split("T")[0] && parsed.timeOfDay === currentTimeOfDay) {
-          setPersonalPhrase(parsed.phrase);
-          return;
-        }
-      }
-    } catch {}
-    fetchPhrase();
-  }, [user?.id]);
+
+    void fetchPhrase();
+    const interval = setInterval(() => {
+      void fetchPhrase();
+    }, 30 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [user, fetchPhrase]);
 
   // My tasks
   const { data: myTasks } = useQuery({
