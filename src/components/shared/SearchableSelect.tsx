@@ -31,6 +31,7 @@ export function SearchableSelect({
   searchPlaceholder = "Buscar...",
   className,
   disabled,
+  emptyLabel,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
