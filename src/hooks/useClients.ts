@@ -281,6 +281,25 @@ export function useUpdateClient() {
             queryClient.invalidateQueries({ queryKey: ["project", proj.id] });
           }
         }
+
+        // Auto-rename tasks when client name changes
+        const { data: clientTasks } = await supabase
+          .from("tasks")
+          .select("id, title")
+          .eq("client_id", id);
+
+        if (clientTasks) {
+          for (const task of clientTasks) {
+            if (task.title.includes(previousName)) {
+              const newTaskTitle = task.title.replace(previousName, updates.name);
+              await supabase
+                .from("tasks")
+                .update({ title: newTaskTitle })
+                .eq("id", task.id);
+            }
+          }
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        }
       }
 
       // Auto-create projects for newly added services
