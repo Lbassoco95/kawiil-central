@@ -304,6 +304,16 @@ INSTRUCCIONES:
       if (oldClientName && project.name.includes(oldClientName) && newClientName) {
         updates.name = project.name.replace(oldClientName, newClientName);
       }
+    } else if (clientId && clients) {
+      // Handle desync: client_id already set but project name doesn't reflect client name
+      const currentClient = clients.find((c) => c.id === clientId);
+      if (currentClient?.name && !project.name.includes(currentClient.name)) {
+        // Extract prefix (e.g. "Juicio Administrativo - ") and replace the old suffix
+        const dashIndex = project.name.lastIndexOf(" - ");
+        if (dashIndex > 0) {
+          updates.name = project.name.substring(0, dashIndex) + " - " + currentClient.name;
+        }
+      }
     }
 
     updateProject.mutate(updates, {
