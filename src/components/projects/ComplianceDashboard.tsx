@@ -429,7 +429,7 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath, pr
         onOpenChange={setGeneratorOpen}
         projectId={projectId}
         entityTypeIds={complianceEntityTypeIds}
-        responsibleUserId={user!.id}
+        responsibleUserId={projectResponsibleUserId || user!.id}
         onGenerated={() => {
           queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
         }}
