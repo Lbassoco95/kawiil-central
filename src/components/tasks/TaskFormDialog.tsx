@@ -88,20 +88,26 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!assignedTo) {
+      toast.error("Debes asignar un responsable");
+      return;
+    }
+    if (!description.trim()) {
+      toast.error("La descripción es obligatoria");
+      return;
+    }
     createTask.mutate(
       {
         title,
-        description: description || undefined,
+        description,
         area: area || undefined,
         priority,
         due_date: dueDate || undefined,
-        assigned_to: assignedTo || undefined,
+        assigned_to: assignedTo,
         client_id: clientId || undefined,
         project_id: projectId || undefined,
         additional_assignees: additionalAssignees,
         dropbox_links: dropboxLinks,
-        criticality_level: criticalityLevel,
-        delay_category: delayCategory || undefined,
       },
       {
         onSuccess: () => {
