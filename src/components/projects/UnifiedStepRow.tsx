@@ -427,7 +427,12 @@ export function UnifiedStepRow({
             {/* Notes */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Notas</label>
-              <Textarea className="text-xs min-h-[60px] resize-none" placeholder="Observaciones..." value={localNotes} onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }} />
+              <Textarea
+                className="text-xs min-h-[60px]"
+                placeholder="Observaciones..."
+                value={localNotes}
+                onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }}
+              />
             </div>
 
             {/* Step Comments */}
