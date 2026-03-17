@@ -46,6 +46,8 @@ const Tareas = () => {
   const { isAdminOrManager } = useUserRole();
   const { areaOptions, areaLabelMap } = useAreaOptions();
   const { data: assignedSteps = [] } = useAssignedSteps();
+  const { data: profiles = [] } = useProfiles();
+  const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
 
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
