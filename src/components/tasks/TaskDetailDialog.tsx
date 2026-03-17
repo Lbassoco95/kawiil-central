@@ -578,6 +578,23 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
         initialPath="/Kawiil Mx"
         onSelect={handleDropboxPickerSelect}
       />
+      <DropboxUploadDialog
+        open={showDropboxUpload}
+        onClose={() => { setShowDropboxUpload(false); setScannedFile(null); }}
+        file={scannedFile}
+        initialPath={scanInitialPath}
+        onUploaded={(result) => {
+          if (!task) return;
+          const currentLinks = (task.dropbox_links as any[]) ?? [];
+          const updatedLinks = [...currentLinks, {
+            url: result.url,
+            name: result.name,
+            added_at: new Date().toISOString(),
+          }];
+          updateTask.mutate({ id: taskId!, dropbox_links: updatedLinks });
+          setScannedFile(null);
+        }}
+      />
     </Dialog>
   );
 }
