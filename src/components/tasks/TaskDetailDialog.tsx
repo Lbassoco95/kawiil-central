@@ -26,7 +26,7 @@ import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { uploadFileToDropbox } from "@/lib/dropboxUpload";
+
 
 interface Props {
   taskId: string | null;
