@@ -232,7 +232,7 @@ export function useUpdateStepDetails() {
       periodId: string;
       projectId: string;
       stepKey: string;
-      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds" | "assigned_to">>;
+      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds" | "assigned_to" | "collaborators" | "checklist" | "label" | "due_date" | "started_at">>;
     }) => {
       const { data: period, error: fetchErr } = await supabase
         .from("accounting_periods")
