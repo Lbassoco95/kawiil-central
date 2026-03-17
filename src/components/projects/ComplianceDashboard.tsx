@@ -53,6 +53,7 @@ interface ComplianceDashboardProps {
   projectId: string;
   clientId?: string | null;
   clientDropboxPath?: string;
+  projectResponsibleUserId?: string | null;
 }
 
 interface ComplianceTask {
