@@ -161,22 +161,13 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
             <div className="space-y-2">
               <Label>Cliente *</Label>
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {lawsuitClients.length > 0 ? (
-                    lawsuitClients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))
-                  ) : (
-                    clients?.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={(lawsuitClients.length > 0 ? lawsuitClients : clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                value={clientId}
+                onValueChange={setClientId}
+                placeholder="Seleccionar cliente"
+                searchPlaceholder="Buscar cliente..."
+              />
             </div>
 
             <div className="space-y-2">
