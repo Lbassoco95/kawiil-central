@@ -1,43 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  CalendarIcon, ChevronDown, Save, User, Play, Pause, Timer,
-  AlertTriangle,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { format, isPast, isToday } from "date-fns";
-import { es } from "date-fns/locale";
-import { UserOrTextSingle, UserOrTextMulti } from "@/components/projects/UserOrTextInput";
-import { StepFileManager } from "@/components/projects/StepFileManager";
-import { StepComments } from "@/components/projects/StepComments";
-import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-
-const STATUS_OPTIONS = [
-  { value: "pendiente", label: "Pendiente" },
-  { value: "en_progreso", label: "En progreso" },
-  { value: "en_revision", label: "En revisión" },
-  { value: "completada", label: "Completada" },
-];
-
-const STATUS_STYLES: Record<string, string> = {
-  pendiente: "bg-muted text-muted-foreground",
-  en_progreso: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  en_revision: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  completada: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-};
+import { useProfiles } from "@/hooks/useTasks";
+import { UnifiedStepRow } from "./UnifiedStepRow";
+import type { AccountingStep, StepStatus } from "@/hooks/useAccountingPeriods";
 
 const PERIODICITY_LABELS: Record<string, string> = {
   mensual: "Mensual",
@@ -47,20 +14,19 @@ const PERIODICITY_LABELS: Record<string, string> = {
   cuando_aplique: "Cuando aplique",
 };
 
-function formatTime(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
-function formatTimeCompact(totalSeconds: number): string {
-  if (totalSeconds === 0) return "";
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
+// Map compliance task status to step status
+const STATUS_MAP: Record<string, StepStatus> = {
+  pendiente: "pendiente",
+  en_progreso: "en_progreso",
+  en_revision: "en_espera_cliente",
+  completada: "completado",
+};
+const REVERSE_STATUS_MAP: Record<StepStatus, string> = {
+  pendiente: "pendiente",
+  en_progreso: "en_progreso",
+  en_espera_cliente: "en_revision",
+  completado: "completada",
+};
 
 export interface ComplianceTaskRowProps {
   task: {
@@ -75,6 +41,10 @@ export interface ComplianceTaskRowProps {
     compliance_period: string | null;
     checklist?: any;
     dropbox_links?: any;
+    time_spent_seconds?: number;
+    started_at?: string | null;
+    completed_at?: string | null;
+    created_by?: string | null;
   };
   projectId: string;
   clientDropboxPath?: string;
@@ -83,370 +53,126 @@ export interface ComplianceTaskRowProps {
 }
 
 export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate }: ComplianceTaskRowProps) {
-  const [open, setOpen] = useState(false);
-  const [localTitle, setLocalTitle] = useState(task.title);
-  const [localStatus, setLocalStatus] = useState(task.status);
-  const [localDueDate, setLocalDueDate] = useState<Date | undefined>(task.due_date ? new Date(task.due_date) : undefined);
-  const [localNotes, setLocalNotes] = useState(task.description || "");
-  const [localAssignee, setLocalAssignee] = useState(task.assigned_to || "");
-  const [localCollaborators, setLocalCollaborators] = useState<string[]>([]);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  // Timer state
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [displaySeconds, setDisplaySeconds] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const baseSecondsRef = useRef<number>(0);
-
-  const { data: profiles = [] } = useProfiles();
   const queryClient = useQueryClient();
+  const { data: profiles = [] } = useProfiles();
 
-  // Load documents linked to this task
-  const [taskDocumentIds, setTaskDocumentIds] = useState<string[]>([]);
+  // Load collaborators and document IDs
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
 
   useEffect(() => {
-    const loadDocuments = async () => {
-      const { data } = await supabase
-        .from("documents")
-        .select("id")
-        .eq("task_id", task.id);
-      if (data) {
-        setTaskDocumentIds(data.map((d) => d.id));
-      }
+    const load = async () => {
+      const [colRes, docRes] = await Promise.all([
+        supabase.from("task_assignees").select("user_id").eq("task_id", task.id),
+        supabase.from("documents").select("id").eq("task_id", task.id),
+      ]);
+      if (colRes.data) setCollaborators(colRes.data.map((d) => d.user_id));
+      if (docRes.data) setDocumentIds(docRes.data.map((d) => d.id));
     };
-    loadDocuments();
+    load();
   }, [task.id]);
 
-  const isOverdue = localDueDate && localStatus !== "completada" && isPast(localDueDate) && !isToday(localDueDate);
-
-  useEffect(() => {
-    setLocalTitle(task.title);
-    setLocalStatus(task.status);
-    setLocalDueDate(task.due_date ? new Date(task.due_date) : undefined);
-    setLocalNotes(task.description || "");
-    setLocalAssignee(task.assigned_to || "");
-    setHasChanges(false);
-  }, [task]);
-
-  // Load collaborators (task_assignees)
-  useEffect(() => {
-    const loadCollaborators = async () => {
-      const { data } = await supabase
-        .from("task_assignees")
-        .select("user_id")
-        .eq("task_id", task.id);
-      if (data) {
-        setLocalCollaborators(data.map((d) => d.user_id));
-      }
-    };
-    loadCollaborators();
-  }, [task.id]);
-
-  const markChanged = () => setHasChanges(true);
-
-  // Timer
-  const startTimer = useCallback(() => {
-    if (timerRunning) return;
-    baseSecondsRef.current = displaySeconds;
-    startTimeRef.current = Date.now();
-    setTimerRunning(true);
-    timerRef.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      setDisplaySeconds(baseSecondsRef.current + elapsed);
-    }, 1000);
-  }, [timerRunning, displaySeconds]);
-
-  const stopTimer = useCallback(() => {
-    if (!timerRunning) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-    setTimerRunning(false);
-    const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const total = baseSecondsRef.current + elapsed;
-    baseSecondsRef.current = total;
-    setDisplaySeconds(total);
-  }, [timerRunning]);
-
-  useEffect(() => { return () => { if (timerRef.current) clearInterval(timerRef.current); }; }, []);
-
-  // Resolve assignee name for display
-  const assigneeName = localAssignee
-    ? profiles.find((p) => p.user_id === localAssignee)?.full_name?.split(" ")[0] || localAssignee
+  // Get creator name
+  const creatorName = task.created_by
+    ? profiles.find((p) => p.user_id === task.created_by)?.full_name || null
     : null;
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      // Find user_id if assignee is a name
-      let assignedToId: string | null = null;
-      if (localAssignee) {
-        const matchedProfile = profiles.find(
-          (p) => p.user_id === localAssignee || p.full_name === localAssignee
-        );
-        assignedToId = matchedProfile?.user_id || null;
-      }
-
-      await supabase
-        .from("tasks")
-        .update({
-          title: localTitle,
-          status: localStatus as any,
-          due_date: localDueDate ? localDueDate.toISOString().split("T")[0] : null,
-          description: localNotes || null,
-          assigned_to: assignedToId,
-        })
-        .eq("id", task.id);
-
-      // Update collaborators
-      await supabase.from("task_assignees").delete().eq("task_id", task.id);
-      if (localCollaborators.length > 0) {
-        await supabase.from("task_assignees").insert(
-          localCollaborators.map((uid) => ({ task_id: task.id, user_id: uid }))
-        );
-      }
-
-      setHasChanges(false);
-      onUpdate();
-    } finally {
-      setSaving(false);
-    }
+  // Convert task to AccountingStep format
+  const step: AccountingStep = {
+    key: task.id,
+    label: task.title,
+    completed: task.status === "completada",
+    completed_at: task.completed_at || null,
+    completed_by: null,
+    step_status: STATUS_MAP[task.status] || "pendiente",
+    due_date: task.due_date || null,
+    started_at: task.started_at || null,
+    notes: task.description || null,
+    document_ids: documentIds,
+    time_spent_seconds: task.time_spent_seconds || 0,
+    assigned_to: task.assigned_to || null,
+    collaborators,
+    checklist: Array.isArray(task.checklist) ? task.checklist : [],
+    created_by_name: creatorName,
   };
 
+  const handleToggle = async (checked: boolean) => {
+    const newStatus = checked ? "completada" : "pendiente";
+    await supabase.from("tasks").update({
+      status: newStatus,
+      completed_at: checked ? new Date().toISOString() : null,
+    } as any).eq("id", task.id);
+    onUpdate();
+  };
+
+  const handleSave = async (updates: Partial<AccountingStep>) => {
+    const taskUpdates: Record<string, any> = {};
+
+    if (updates.label !== undefined) taskUpdates.title = updates.label;
+    if (updates.step_status !== undefined) taskUpdates.status = REVERSE_STATUS_MAP[updates.step_status!] || "pendiente";
+    if (updates.due_date !== undefined) taskUpdates.due_date = updates.due_date ? updates.due_date.split("T")[0] : null;
+    if (updates.notes !== undefined) taskUpdates.description = updates.notes;
+    if (updates.assigned_to !== undefined) taskUpdates.assigned_to = updates.assigned_to;
+    if (updates.time_spent_seconds !== undefined) taskUpdates.time_spent_seconds = updates.time_spent_seconds;
+    if (updates.started_at !== undefined) taskUpdates.started_at = updates.started_at;
+    if (updates.checklist !== undefined) taskUpdates.checklist = updates.checklist;
+
+    if (Object.keys(taskUpdates).length > 0) {
+      await supabase.from("tasks").update(taskUpdates as any).eq("id", task.id);
+    }
+
+    // Update collaborators if changed
+    if (updates.collaborators !== undefined) {
+      await supabase.from("task_assignees").delete().eq("task_id", task.id);
+      if (updates.collaborators.length > 0) {
+        await supabase.from("task_assignees").insert(
+          updates.collaborators.map((uid) => ({ task_id: task.id, user_id: uid }))
+        );
+      }
+    }
+
+    // Link new documents to this task
+    if (updates.document_ids !== undefined) {
+      const newIds = updates.document_ids.filter((id) => !documentIds.includes(id));
+      for (const docId of newIds) {
+        await supabase.from("documents").update({ task_id: task.id }).eq("id", docId);
+      }
+      setDocumentIds(updates.document_ids);
+    }
+
+    onUpdate();
+    queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+  };
+
+  // Extra badges for compliance-specific info
+  const extraFields = (
+    <div className="flex flex-wrap gap-1.5">
+      {task.compliance_periodicity && (
+        <Badge variant="outline" className="text-[10px]">
+          {PERIODICITY_LABELS[task.compliance_periodicity] || task.compliance_periodicity}
+        </Badge>
+      )}
+      {task.compliance_period && (
+        <Badge variant="secondary" className="text-[10px]">
+          {task.compliance_period}
+        </Badge>
+      )}
+      {urgencyBadge}
+    </div>
+  );
+
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <div className={cn(
-        "rounded-lg border px-3 py-2 transition-colors",
-        task.status === "completada" ? "bg-muted/40 opacity-70" : "bg-background"
-      )}>
-        <CollapsibleTrigger asChild>
-          <div className="flex items-center gap-3 cursor-pointer">
-            <div onClick={(e) => e.stopPropagation()}>
-              <input
-                type="checkbox"
-                checked={task.status === "completada"}
-                onChange={async () => {
-                  const newStatus = task.status === "completada" ? "pendiente" : "completada";
-                  await supabase.from("tasks").update({ status: newStatus } as any).eq("id", task.id);
-                  onUpdate();
-                }}
-                className="h-4 w-4 rounded border-border"
-              />
-            </div>
-            <span className={cn(
-              "flex-1 text-sm font-medium",
-              task.status === "completada" && "line-through text-muted-foreground"
-            )}>
-              {task.title}
-            </span>
-            <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-              {/* Inline assignee selector on header */}
-              <div onClick={(e) => e.stopPropagation()}>
-                <Select
-                  value={localAssignee || "__none__"}
-                  onValueChange={async (v) => {
-                    const newAssignee = v === "__none__" ? null : v;
-                    setLocalAssignee(newAssignee || "");
-                    await supabase.from("tasks").update({ assigned_to: newAssignee } as any).eq("id", task.id);
-                    onUpdate();
-                  }}
-                >
-                  <SelectTrigger className="h-6 text-[10px] w-auto min-w-[100px] border-dashed gap-1 px-2">
-                    <User className="h-3 w-3 shrink-0" />
-                    <SelectValue placeholder="Sin asignar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Sin asignar</SelectItem>
-                    {profiles.map((p) => (
-                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {localCollaborators.length > 0 && (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  +{localCollaborators.length}
-                </Badge>
-              )}
-              {isOverdue && (
-                <Badge variant="destructive" className="text-xs gap-1">
-                  <AlertTriangle className="h-3 w-3" />Vencida
-                </Badge>
-              )}
-              {(displaySeconds > 0 || timerRunning) && (
-                <Badge variant="outline" className={cn(
-                  "text-xs gap-1 font-mono",
-                  timerRunning && "border-primary text-primary animate-pulse"
-                )}>
-                  <Timer className="h-3 w-3" />
-                  {timerRunning ? formatTime(displaySeconds) : formatTimeCompact(displaySeconds)}
-                </Badge>
-              )}
-              {task.compliance_periodicity && (
-                <Badge variant="outline" className="text-[10px]">
-                  {PERIODICITY_LABELS[task.compliance_periodicity] || task.compliance_periodicity}
-                </Badge>
-              )}
-              {task.compliance_period && (
-                <span className="text-[10px] text-muted-foreground">{task.compliance_period}</span>
-              )}
-              {localStatus !== "pendiente" && localStatus !== "completada" && (
-                <Badge variant="outline" className={cn("text-xs", STATUS_STYLES[localStatus])}>
-                  {STATUS_OPTIONS.find((o) => o.value === localStatus)?.label}
-                </Badge>
-              )}
-              {urgencyBadge}
-              <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
-            </div>
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-3 ml-7 space-y-3 pb-1">
-            {/* Editable title */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Nombre de la tarea</label>
-              <Input
-                className="text-sm h-8"
-                value={localTitle}
-                onChange={(e) => { setLocalTitle(e.target.value); markChanged(); }}
-                placeholder="Nombre de la tarea..."
-              />
-            </div>
-
-
-            <div className="flex items-center gap-3 rounded-md border border-border/50 bg-background px-3 py-2">
-              <Timer className="h-4 w-4 text-muted-foreground" />
-              <span className="font-mono text-sm font-medium flex-1">{formatTime(displaySeconds)}</span>
-              <Button
-                variant={timerRunning ? "destructive" : "default"}
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={timerRunning ? stopTimer : startTimer}
-              >
-                {timerRunning ? <><Pause className="h-3 w-3" />Pausar</> : <><Play className="h-3 w-3" />Iniciar</>}
-              </Button>
-            </div>
-
-            {/* Responsable + Estatus + Fecha límite */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <User className="h-3 w-3" /> Responsable
-                </label>
-                <UserOrTextSingle
-                  value={
-                    localAssignee
-                      ? profiles.find((p) => p.user_id === localAssignee)?.full_name || localAssignee
-                      : ""
-                  }
-                  onChange={(val) => {
-                    const matched = profiles.find((p) => p.full_name === val);
-                    setLocalAssignee(matched ? matched.user_id : val);
-                    markChanged();
-                  }}
-                  profiles={profiles}
-                  placeholder="Escribir o seleccionar..."
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Estatus</label>
-                <Select value={localStatus} onValueChange={(v) => { setLocalStatus(v); markChanged(); }}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <CalendarIcon className="h-3 w-3" /> Fecha límite
-                </label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn(
-                      "h-8 w-full justify-start text-left text-xs font-normal",
-                      !localDueDate && "text-muted-foreground",
-                      isOverdue && "border-destructive text-destructive"
-                    )}>
-                      <CalendarIcon className="mr-2 h-3 w-3" />
-                      {localDueDate ? format(localDueDate, "PPP", { locale: es }) : "Seleccionar"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={localDueDate}
-                      onSelect={(d) => { setLocalDueDate(d); markChanged(); }}
-                      initialFocus
-                      className="p-3 pointer-events-auto"
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-
-            {/* Collaborators */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Colaboradores</label>
-              <UserOrTextMulti
-                values={localCollaborators.map((uid) => {
-                  const p = profiles.find((pr) => pr.user_id === uid);
-                  return p?.full_name || uid;
-                })}
-                onChange={(names) => {
-                  const ids = names.map((name) => {
-                    const p = profiles.find((pr) => pr.full_name === name);
-                    return p?.user_id || name;
-                  });
-                  setLocalCollaborators(ids);
-                  markChanged();
-                }}
-                profiles={profiles}
-                placeholder="Agregar colaborador..."
-              />
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Notas</label>
-              <Textarea
-                className="text-xs min-h-[60px] resize-none"
-                placeholder="Observaciones..."
-                value={localNotes}
-                onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }}
-              />
-            </div>
-
-            {/* Comments with mentions & Dropbox */}
-            <StepComments projectId={projectId} stepKey={`compliance_${task.id}`} stepLabel={task.title} />
-
-            {/* Files */}
-            <StepFileManager
-              documentIds={taskDocumentIds}
-              onDocumentAdded={async (updatedIds) => {
-                setTaskDocumentIds(updatedIds);
-                // Link new documents to this task
-                const newIds = updatedIds.filter((id) => !taskDocumentIds.includes(id));
-                for (const docId of newIds) {
-                  await supabase.from("documents").update({ task_id: task.id }).eq("id", docId);
-                }
-              }}
-              projectId={projectId}
-              clientDropboxPath={clientDropboxPath}
-              disabled={saving}
-            />
-
-            <div className="flex justify-end pt-3 mt-2 border-t border-border">
-              <Button size="sm" onClick={handleSave} disabled={!hasChanges || saving}>
-                <Save className="h-4 w-4 mr-1" />Guardar
-              </Button>
-            </div>
-          </div>
-        </CollapsibleContent>
-      </div>
-    </Collapsible>
+    <UnifiedStepRow
+      step={step}
+      index={0}
+      projectId={projectId}
+      clientDropboxPath={clientDropboxPath}
+      showTimer={true}
+      showCheckbox={true}
+      commentStepKey={`compliance_${task.id}`}
+      onToggle={handleToggle}
+      onSave={handleSave}
+      extraFields={extraFields}
+    />
   );
 }
