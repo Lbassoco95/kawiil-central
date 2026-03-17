@@ -34,6 +34,7 @@ export interface AccountingStep {
   assigned_to?: string | null;
   collaborators?: string[];
   checklist?: ChecklistItem[];
+  created_by_name?: string | null;
 }
 
 export interface AccountingPeriod {
