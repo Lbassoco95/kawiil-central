@@ -64,6 +64,7 @@ const ClienteDetalle = () => {
   const { client, isLoadingClient, projects, tasks, documents } = useClientDetail(id);
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState<string>("general");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   if (isLoadingClient) {
     return (
