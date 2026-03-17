@@ -83,6 +83,50 @@ export function useUpdateProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string } & Partial<Omit<Project, "id" | "created_at" | "organization_id">>) => {
+      // If client_id is changing, auto-rename project to reflect new client
+      if (updates.client_id) {
+        const { data: currentProject } = await supabase
+          .from("projects")
+          .select("name, client_id, clients(name)")
+          .eq("id", id)
+          .single();
+
+        if (currentProject) {
+          const oldClientName = (currentProject as any).clients?.name;
+          
+          // Fetch new client name
+          const { data: newClient } = await supabase
+            .from("clients")
+            .select("name")
+            .eq("id", updates.client_id)
+            .single();
+
+          if (oldClientName && newClient?.name && oldClientName !== newClient.name) {
+            // Replace old client name with new one in project name
+            if (currentProject.name.includes(oldClientName)) {
+              updates.name = currentProject.name.replace(oldClientName, newClient.name);
+            }
+
+            // Also rename related tasks
+            const { data: projectTasks } = await supabase
+              .from("tasks")
+              .select("id, title")
+              .eq("project_id", id);
+
+            if (projectTasks) {
+              for (const task of projectTasks) {
+                if (task.title.includes(oldClientName)) {
+                  await supabase
+                    .from("tasks")
+                    .update({ title: task.title.replace(oldClientName, newClient.name) })
+                    .eq("id", task.id);
+                }
+              }
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from("projects")
         .update(updates)
@@ -92,6 +136,7 @@ export function useUpdateProject() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["project", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
       toast.success("Proyecto actualizado");
     },
     onError: (error: Error) => toast.error("Error al actualizar: " + error.message),
