@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
   Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera,
-  Download, Eye, Link2, Loader2, ScanLine
+  Download, Eye, Link2, Loader2, ScanLine, Play, Pause, Timer, UserCheck
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
