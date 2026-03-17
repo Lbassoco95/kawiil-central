@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
 import { DropboxFolderBrowser } from "@/components/clients/DropboxFolderBrowser";
 import type { Database } from "@/integrations/supabase/types";
@@ -63,6 +64,7 @@ const ClienteDetalle = () => {
   const { client, isLoadingClient, projects, tasks, documents } = useClientDetail(id);
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState<string>("general");
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   if (isLoadingClient) {
     return (
@@ -227,7 +229,7 @@ const ClienteDetalle = () => {
           ) : (
             <div className="divide-y divide-border/40">
               {activeTasks.map((t) => (
-                <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                <div key={t.id} onClick={() => setSelectedTaskId(t.id)} className="flex items-center justify-between gap-3 py-3 px-1 cursor-pointer hover:bg-secondary/30 rounded-md transition-colors">
                   <div className="min-w-0">
                     <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
                     {t.due_date && (
@@ -276,6 +278,7 @@ const ClienteDetalle = () => {
       </div>
 
       <ClientEditDialog open={editOpen} onOpenChange={setEditOpen} client={client} />
+      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </AppLayout>
   );
 };
