@@ -11,6 +11,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, Link } from "lucide-react";
+import { toast } from "sonner";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 
@@ -34,8 +35,6 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [projectId, setProjectId] = useState(defaultProjectId || "");
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
-  const [criticalityLevel, setCriticalityLevel] = useState("normal");
-  const [delayCategory, setDelayCategory] = useState("");
 
   const createTask = useCreateTask();
   const { data: profiles } = useProfiles();
@@ -88,20 +87,26 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!assignedTo) {
+      toast.error("Debes asignar un responsable");
+      return;
+    }
+    if (!description.trim()) {
+      toast.error("La descripción es obligatoria");
+      return;
+    }
     createTask.mutate(
       {
         title,
-        description: description || undefined,
+        description,
         area: area || undefined,
         priority,
         due_date: dueDate || undefined,
-        assigned_to: assignedTo || undefined,
+        assigned_to: assignedTo,
         client_id: clientId || undefined,
         project_id: projectId || undefined,
         additional_assignees: additionalAssignees,
         dropbox_links: dropboxLinks,
-        criticality_level: criticalityLevel,
-        delay_category: delayCategory || undefined,
       },
       {
         onSuccess: () => {
@@ -116,7 +121,6 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     setTitle(""); setDescription(""); setArea(""); setPriority("media");
     setDueDate(""); setAssignedTo(""); setAdditionalAssignees([]);
     setClientId(""); setProjectId(""); setDropboxLinks([]); setNewLink("");
-    setCriticalityLevel("normal"); setDelayCategory("");
   };
 
   const addAssignee = (userId: string) => {
@@ -143,20 +147,6 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     { value: "baja", label: "🟢 Baja" },
   ];
 
-  const criticalityOptions = [
-    { value: "normal", label: "🟢 Normal" },
-    { value: "atencion", label: "🟡 Atención" },
-    { value: "critico", label: "🔴 Crítico" },
-  ];
-
-  const delayCategoryOptions = [
-    { value: "__none__", label: "Sin atraso" },
-    { value: "atraso_cliente", label: "Atraso del cliente" },
-    { value: "atraso_sat", label: "Atraso del SAT / autoridad" },
-    { value: "recurso_interno", label: "Recurso interno" },
-    { value: "dependencia_externa", label: "Dependencia externa" },
-    { value: "otro", label: "Otro" },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -172,10 +162,10 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
           <div>
             <div className="flex items-center justify-between">
-              <Label>Descripción</Label>
+              <Label>Descripción *</Label>
               <AIDescriptionButton title={title} onGenerated={setDescription} />
             </div>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalles adicionales..." rows={3} />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe de qué se trata esta tarea..." rows={3} required />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -202,31 +192,6 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
             </div>
           </div>
 
-          {/* Criticality & Delay */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Semáforo de criticidad</Label>
-              <Select value={criticalityLevel} onValueChange={setCriticalityLevel}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {criticalityOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Motivo de atraso</Label>
-              <Select value={delayCategory || "__none__"} onValueChange={(v) => setDelayCategory(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {delayCategoryOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -234,7 +199,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div>
-              <Label>Responsable principal</Label>
+              <Label>Responsable principal *</Label>
               <SearchableSelect
                 options={profileOptions}
                 value={assignedTo}
