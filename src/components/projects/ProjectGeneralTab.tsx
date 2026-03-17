@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { Save, Pencil, X, AlertTriangle, Sparkles } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
 import { useQuery } from "@tanstack/react-query";
