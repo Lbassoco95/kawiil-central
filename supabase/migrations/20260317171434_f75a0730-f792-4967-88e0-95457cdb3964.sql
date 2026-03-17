@@ -1,0 +1,1 @@
+ALTER TABLE public.tasks ALTER COLUMN area TYPE text USING area::text;

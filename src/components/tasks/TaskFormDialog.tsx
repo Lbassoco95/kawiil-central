@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus, Link } from "lucide-react";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 
 interface Props {
   open: boolean;
@@ -42,6 +43,49 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const { data: projects } = useProjects();
   const { areaOptions } = useAreaOptions();
 
+  const sortedAreaOptions = useMemo(
+    () => [...areaOptions].sort((a, b) => a.label.localeCompare(b.label, "es")),
+    [areaOptions]
+  );
+
+  const profileOptions = useMemo(
+    () =>
+      (profiles ?? [])
+        .map((p) => ({ value: p.user_id, label: p.full_name }))
+        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+    [profiles]
+  );
+
+  const clientOptions = useMemo(
+    () => [
+      { value: "__none__", label: "Sin cliente (interna)" },
+      ...(clients ?? [])
+        .map((c) => ({ value: c.id, label: c.name }))
+        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+    ],
+    [clients]
+  );
+
+  const projectOptions = useMemo(
+    () => {
+      const filtered = clientId
+        ? projects?.filter((p: any) => p.client_id === clientId)
+        : projects;
+      return [
+        { value: "__none__", label: "Sin proyecto" },
+        ...(filtered ?? [])
+          .map((p) => ({ value: p.id, label: p.name }))
+          .sort((a, b) => a.label.localeCompare(b.label, "es")),
+      ];
+    },
+    [projects, clientId]
+  );
+
+  const availableAssignees = useMemo(
+    () => profileOptions.filter((p) => p.value !== assignedTo && !additionalAssignees.includes(p.value)),
+    [profileOptions, assignedTo, additionalAssignees]
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createTask.mutate(
@@ -69,19 +113,10 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   };
 
   const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setArea("");
-    setPriority("media");
-    setDueDate("");
-    setAssignedTo("");
-    setAdditionalAssignees([]);
-    setClientId("");
-    setProjectId("");
-    setDropboxLinks([]);
-    setNewLink("");
-    setCriticalityLevel("normal");
-    setDelayCategory("");
+    setTitle(""); setDescription(""); setArea(""); setPriority("media");
+    setDueDate(""); setAssignedTo(""); setAdditionalAssignees([]);
+    setClientId(""); setProjectId(""); setDropboxLinks([]); setNewLink("");
+    setCriticalityLevel("normal"); setDelayCategory("");
   };
 
   const addAssignee = (userId: string) => {
@@ -146,14 +181,13 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Célula</Label>
-              <Select value={area} onValueChange={setArea}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar célula" /></SelectTrigger>
-                <SelectContent>
-                  {areaOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={sortedAreaOptions}
+                value={area}
+                onValueChange={setArea}
+                placeholder="Seleccionar célula"
+                searchPlaceholder="Buscar célula..."
+              />
             </div>
             <div>
               <Label>Prioridad</Label>
@@ -201,14 +235,13 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
             </div>
             <div>
               <Label>Responsable principal</Label>
-              <Select value={assignedTo} onValueChange={setAssignedTo}>
-                <SelectTrigger><SelectValue placeholder="Asignar a..." /></SelectTrigger>
-                <SelectContent>
-                  {profiles?.map((p) => (
-                    <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={profileOptions}
+                value={assignedTo}
+                onValueChange={setAssignedTo}
+                placeholder="Asignar a..."
+                searchPlaceholder="Buscar persona..."
+              />
             </div>
           </div>
 
@@ -226,45 +259,35 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
                 );
               })}
             </div>
-            <Select onValueChange={addAssignee} value="">
-              <SelectTrigger><SelectValue placeholder="Agregar colaborador..." /></SelectTrigger>
-              <SelectContent>
-                {profiles
-                  ?.filter((p) => p.user_id !== assignedTo && !additionalAssignees.includes(p.user_id))
-                  .map((p) => (
-                    <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={availableAssignees}
+              value=""
+              onValueChange={addAssignee}
+              placeholder="Agregar colaborador..."
+              searchPlaceholder="Buscar colaborador..."
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Cliente <span className="text-xs text-muted-foreground">(dejar vacío para tarea interna)</span></Label>
-              <Select value={clientId} onValueChange={(v) => { setClientId(v === "__none__" ? "" : v); }}>
-                <SelectTrigger><SelectValue placeholder="Tarea interna" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sin cliente (interna)</SelectItem>
-                  {clients?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={clientOptions}
+                value={clientId || "__none__"}
+                onValueChange={(v) => setClientId(v === "__none__" ? "" : v)}
+                placeholder="Tarea interna"
+                searchPlaceholder="Buscar cliente..."
+              />
             </div>
             <div>
               <Label>Proyecto</Label>
-              <Select value={projectId} onValueChange={(v) => { setProjectId(v === "__none__" ? "" : v); }}>
-                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sin proyecto</SelectItem>
-                  {(clientId
-                    ? projects?.filter((p: any) => p.client_id === clientId)
-                    : projects
-                  )?.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={projectOptions}
+                value={projectId || "__none__"}
+                onValueChange={(v) => setProjectId(v === "__none__" ? "" : v)}
+                placeholder="Opcional"
+                searchPlaceholder="Buscar proyecto..."
+              />
             </div>
           </div>
 
