@@ -294,6 +294,21 @@ export function useUpdateTask() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; [key: string]: any }) => {
+      // Auto-set started_at when moving away from pendiente
+      if (updates.status && updates.status !== "pendiente" && updates.status !== "cancelada") {
+        const { data: current } = await supabase.from("tasks").select("started_at").eq("id", id).single();
+        if (current && !current.started_at) {
+          updates.started_at = new Date().toISOString();
+        }
+      }
+      // Auto-set completed_at when completing
+      if (updates.status === "completada") {
+        updates.completed_at = new Date().toISOString();
+      }
+      // Clear completed_at if reopening
+      if (updates.status && updates.status !== "completada") {
+        updates.completed_at = null;
+      }
       const { error } = await supabase.from("tasks").update(updates).eq("id", id);
       if (error) throw error;
     },

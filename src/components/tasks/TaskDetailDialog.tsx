@@ -388,6 +388,11 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <User className="h-3.5 w-3.5" />{(task as any).clients.name}
                 </span>
               )}
+              {(task as any).creator_profile && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <UserCheck className="h-3.5 w-3.5" />Creada por: {(task as any).creator_profile.full_name}
+                </span>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -396,6 +401,32 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               >
                 <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
               </Button>
+            </div>
+
+            {/* Timer & Dates row */}
+            <div className="flex flex-wrap items-center gap-4 p-3 rounded-lg border bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Timer className="h-4 w-4 text-muted-foreground" />
+                <span className="font-mono text-sm font-medium tabular-nums">{formatTimer(displaySeconds)}</span>
+                <Button
+                  size="icon"
+                  variant={timerRunning ? "destructive" : "outline"}
+                  className="h-7 w-7"
+                  onClick={handleTimerToggle}
+                >
+                  {timerRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              {(task as any).started_at && (
+                <span className="text-xs text-muted-foreground">
+                  Inicio: {formatMX((task as any).started_at, "dd MMM yyyy HH:mm")}
+                </span>
+              )}
+              {(task as any).completed_at && (
+                <span className="text-xs text-muted-foreground">
+                  Completada: {formatMX((task as any).completed_at, "dd MMM yyyy HH:mm")}
+                </span>
+              )}
             </div>
 
             {/* Due date edit inline */}
