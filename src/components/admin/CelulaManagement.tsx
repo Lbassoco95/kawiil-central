@@ -12,9 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useCelulas, useUpsertCelula, useDeleteCelula, type Celula } from "@/hooks/useCatalogs";
 import { useOrgProfiles } from "@/hooks/useClients";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { formatMX } from "@/lib/dateUtils";
 
