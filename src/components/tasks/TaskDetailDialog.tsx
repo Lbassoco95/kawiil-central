@@ -8,21 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useTaskDetail, useAddComment, useUpdateTask } from "@/hooks/useTasks";
 import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssignees";
+import { useCelulaOptions } from "@/hooks/useCelulaOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera,
-  Download, Eye, Link2, Loader2, ScanLine, Play, Pause, Timer, UserCheck
+  Upload, ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
+  Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
@@ -36,6 +39,11 @@ interface CommentAttachment {
   url: string;
 }
 
+interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
 
 interface Props {
   taskId: string | null;
@@ -58,9 +66,9 @@ const priorityLabels: Record<string, string> = {
 };
 
 const CRITICALITY_OPTIONS = [
-  { value: "normal", label: "🟢 Normal", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-  { value: "atencion", label: "🟡 Atención", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
-  { value: "critico", label: "🔴 Crítico", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
+  { value: "normal", label: "🟢 Normal" },
+  { value: "atencion", label: "🟡 Atención" },
+  { value: "critico", label: "🔴 Crítico" },
 ];
 
 const DELAY_CATEGORIES = [
@@ -80,6 +88,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const removeAssignee = useRemoveTaskAssignee();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { celulaLabelMap } = useCelulaOptions();
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
@@ -97,25 +106,21 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
   const [previewDoc, setPreviewDoc] = useState<any>(null);
+  const [newSubtask, setNewSubtask] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Timer state
   const [timerRunning, setTimerRunning] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Sync timer from task data
   useEffect(() => {
-    if (task) {
-      setDisplaySeconds((task as any).time_spent_seconds || 0);
-    }
+    if (task) setDisplaySeconds((task as any).time_spent_seconds || 0);
   }, [task?.id, (task as any)?.time_spent_seconds]);
 
-  // Timer interval
   useEffect(() => {
     if (timerRunning) {
-      timerRef.current = setInterval(() => {
-        setDisplaySeconds((s) => s + 1);
-      }, 1000);
+      timerRef.current = setInterval(() => setDisplaySeconds((s) => s + 1), 1000);
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -125,7 +130,6 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
 
   const handleTimerToggle = useCallback(() => {
     if (timerRunning) {
-      // Pause — save
       setTimerRunning(false);
       updateTask.mutate({ id: taskId!, time_spent_seconds: displaySeconds } as any);
     } else {
@@ -133,11 +137,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     }
   }, [timerRunning, displaySeconds, taskId, updateTask]);
 
-  // Stop timer on close
   useEffect(() => {
-    if (!taskId && timerRunning) {
-      setTimerRunning(false);
-    }
+    if (!taskId && timerRunning) setTimerRunning(false);
   }, [taskId]);
 
   const formatTimer = (totalSec: number) => {
@@ -147,69 +148,70 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  // Due date editing state
+  // Due date editing
   const [editingDueDate, setEditingDueDate] = useState(false);
   const [newDueDate, setNewDueDate] = useState("");
   const [dueDateReason, setDueDateReason] = useState("");
 
   const sortedProfiles = useMemo(
-    () =>
-      (orgProfiles ?? [])
-        .map((p) => ({ value: p.user_id, label: p.full_name }))
-        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+    () => (orgProfiles ?? []).map((p) => ({ value: p.user_id, label: p.full_name })).sort((a, b) => a.label.localeCompare(b.label, "es")),
     [orgProfiles]
   );
 
   if (!taskId) return null;
 
-  const isAssignedUser =
-    user &&
-    (task?.assigned_to === user.id ||
-      assignees.some((a: any) => a.user_id === user.id));
+  const isAssignedUser = user && (task?.assigned_to === user.id || assignees.some((a: any) => a.user_id === user.id));
 
-  // Render @mentions as styled spans
+  // Checklist helpers
+  const checklist: ChecklistItem[] = ((task?.checklist as any[]) ?? []).map((item: any, i: number) => ({
+    id: item.id || `item-${i}`,
+    text: item.text || "",
+    completed: !!item.completed,
+  }));
+  const completedCount = checklist.filter((c) => c.completed).length;
+
+  const updateChecklist = (newChecklist: ChecklistItem[]) => {
+    updateTask.mutate({ id: taskId, checklist: newChecklist as any });
+  };
+
+  const toggleChecklistItem = (itemId: string) => {
+    updateChecklist(checklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
+  };
+
+  const addChecklistItem = () => {
+    if (!newSubtask.trim()) return;
+    updateChecklist([...checklist, { id: `item-${Date.now()}`, text: newSubtask.trim(), completed: false }]);
+    setNewSubtask("");
+  };
+
+  const removeChecklistItem = (itemId: string) => {
+    updateChecklist(checklist.filter((c) => c.id !== itemId));
+  };
+
   const renderCommentContent = (content: string) => {
     const parts = content.split(/(@\w[\w\s]*\w)/g);
     return parts.map((part, i) => {
       if (part.startsWith("@")) {
         const name = part.slice(1);
-        const isKnown = orgProfiles?.some(
-          (p) => p.full_name.toLowerCase() === name.toLowerCase()
-        );
-        if (isKnown) {
-          return (
-            <span key={i} className="text-primary font-bold">
-              {part}
-            </span>
-          );
-        }
+        const isKnown = orgProfiles?.some((p) => p.full_name.toLowerCase() === name.toLowerCase());
+        if (isKnown) return <span key={i} className="text-primary font-bold">{part}</span>;
       }
       return part;
     });
   };
 
-  const handleStatusChange = (status: string) => {
-    updateTask.mutate({ id: taskId, status });
-  };
+  const handleStatusChange = (status: string) => updateTask.mutate({ id: taskId, status });
 
   const handleSendComment = () => {
     if (!commentText.trim() && commentAttachments.length === 0) return;
-    // Build content with attachment info embedded
     let finalContent = commentText;
     if (commentAttachments.length > 0) {
       const attachmentLines = commentAttachments.map(a => `📎 [${a.name}](${a.url})`).join("\n");
       finalContent = finalContent ? `${finalContent}\n${attachmentLines}` : attachmentLines;
     }
-    addComment.mutate(
-      { taskId, content: finalContent, mentions: commentMentions },
-      {
-        onSuccess: () => {
-          setCommentText("");
-          setCommentMentions([]);
-          setCommentAttachments([]);
-        },
-      }
-    );
+    addComment.mutate({ taskId, content: finalContent, mentions: commentMentions }, {
+      onSuccess: () => { setCommentText(""); setCommentMentions([]); setCommentAttachments([]); },
+    });
   };
 
   const handleCommentFileUpload = async (files: FileList | null) => {
@@ -251,21 +253,11 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   };
 
   const handleDueDateSave = () => {
-    if (!dueDateReason.trim()) {
-      toast.error("Debes indicar el motivo del cambio de fecha");
-      return;
-    }
+    if (!dueDateReason.trim()) { toast.error("Debes indicar el motivo del cambio de fecha"); return; }
     const oldDate = task?.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha";
     const newDateFormatted = newDueDate ? formatMX(newDueDate, "dd MMM yyyy") : "Sin fecha";
-
     updateTask.mutate({ id: taskId, due_date: newDueDate || null });
-
-    // Auto-comment with reason
-    addComment.mutate({
-      taskId,
-      content: `📅 Fecha límite modificada: ${oldDate} → ${newDateFormatted}\nMotivo: ${dueDateReason}`,
-    });
-
+    addComment.mutate({ taskId, content: `📅 Fecha límite modificada: ${oldDate} → ${newDateFormatted}\nMotivo: ${dueDateReason}` });
     setEditingDueDate(false);
     setDueDateReason("");
     toast.success("Fecha límite actualizada");
@@ -274,8 +266,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const handleAddDropboxLink = () => {
     if (!newLink.trim() || !task) return;
     const currentLinks = (task.dropbox_links as any[]) ?? [];
-    const updatedLinks = [...currentLinks, { url: newLink.trim(), added_at: new Date().toISOString() }];
-    updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
+    updateTask.mutate({ id: taskId, dropbox_links: [...currentLinks, { url: newLink.trim(), added_at: new Date().toISOString() }] });
     setNewLink("");
     toast.success("Enlace agregado");
   };
@@ -283,48 +274,29 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const handleDropboxPickerSelect = (file: { name: string; url: string }) => {
     if (!task) return;
     const currentLinks = (task.dropbox_links as any[]) ?? [];
-    const updatedLinks = [...currentLinks, { url: file.url, name: file.name, added_at: new Date().toISOString() }];
-    updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
+    updateTask.mutate({ id: taskId, dropbox_links: [...currentLinks, { url: file.url, name: file.name, added_at: new Date().toISOString() }] });
     toast.success(`"${file.name}" vinculado desde Dropbox`);
   };
 
   const handleRemoveLink = (index: number) => {
     if (!task) return;
     const currentLinks = (task.dropbox_links as any[]) ?? [];
-    const updatedLinks = currentLinks.filter((_, i) => i !== index);
-    updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
+    updateTask.mutate({ id: taskId, dropbox_links: currentLinks.filter((_, i) => i !== index) });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-
     setUploading(true);
     try {
       const filePath = `tasks/${taskId}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("documents")
-        .upload(filePath, file);
-
+      const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
       if (uploadError) throw uploadError;
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("user_id", user.id)
-        .single();
-
+      const { data: profile } = await supabase.from("profiles").select("organization_id").eq("user_id", user.id).single();
       await supabase.from("documents").insert({
-        name: file.name,
-        file_path: filePath,
-        mime_type: file.type,
-        file_size: file.size,
-        task_id: taskId,
-        organization_id: profile!.organization_id,
-        uploaded_by: user.id,
-        source: "supabase" as const,
+        name: file.name, file_path: filePath, mime_type: file.type, file_size: file.size,
+        task_id: taskId, organization_id: profile!.organization_id, uploaded_by: user.id, source: "supabase" as const,
       });
-
       queryClient.invalidateQueries({ queryKey: ["task-documents", taskId] });
       toast.success("Archivo subido correctamente");
     } catch (err: any) {
@@ -335,463 +307,396 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   };
 
   const dropboxLinks = (task?.dropbox_links as any[]) ?? [];
+  const areaLabel = task?.area ? (celulaLabelMap[task.area] || task.area) : null;
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-3xl gap-4">
+      <DialogContent className="sm:max-w-3xl gap-0 p-0 overflow-hidden">
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">Cargando...</div>
         ) : task ? (
-          <>
-            <DialogHeader className="pr-8">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <DialogTitle className="text-lg sm:text-xl leading-tight">{task.title}</DialogTitle>
-                <Select value={task.status} onValueChange={handleStatusChange}>
-                  <SelectTrigger className="w-full sm:w-[160px] shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(statusLabels).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <div className="flex flex-col max-h-[85vh]">
+            {/* ── Header ── */}
+            <div className="px-6 pt-5 pb-3 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <DialogHeader className="flex-1 p-0">
+                  <DialogTitle className="text-base font-semibold leading-snug">{task.title}</DialogTitle>
+                </DialogHeader>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs">{priorityLabels[task.priority]}</span>
+                  <Select value={task.status} onValueChange={handleStatusChange}>
+                    <SelectTrigger className="h-7 w-[130px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(statusLabels).map(([key, { label }]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </DialogHeader>
 
-            {/* Meta info */}
-            <div className="flex flex-wrap gap-3 text-sm">
-              <Badge className={statusLabels[task.status]?.color}>{statusLabels[task.status]?.label}</Badge>
-              <span className="flex items-center gap-1"><Flag className="h-3.5 w-3.5" />{priorityLabels[task.priority]}</span>
-              {task.area && <Badge variant="outline">{task.area}</Badge>}
-              {/* Due date - editable */}
-              <span className="flex items-center gap-1 text-muted-foreground">
-                <Calendar className="h-3.5 w-3.5" />
-                {task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}
-                {isAssignedUser && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 ml-1"
-                    onClick={() => {
-                      setNewDueDate(task.due_date || "");
-                      setDueDateReason("");
-                      setEditingDueDate(true);
-                    }}
+              {/* Context bar */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {areaLabel && <span className="font-medium text-foreground/80">{areaLabel}</span>}
+                {(task as any).clients?.name && (
+                  <span className="flex items-center gap-1"><User className="h-3 w-3" />{(task as any).clients.name}</span>
+                )}
+                {(task as any).creator_profile && (
+                  <span className="flex items-center gap-1"><UserCheck className="h-3 w-3" />Creada por: {(task as any).creator_profile.full_name}</span>
+                )}
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  {task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}
+                  {isAssignedUser && (
+                    <button className="hover:text-foreground" onClick={() => { setNewDueDate(task.due_date || ""); setDueDateReason(""); setEditingDueDate(true); }}>
+                      <Pencil className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </span>
+                {/* Timer inline */}
+                <span className="flex items-center gap-1.5 font-mono tabular-nums">
+                  <Timer className="h-3 w-3" />
+                  {formatTimer(displaySeconds)}
+                  <button
+                    className={`h-5 w-5 inline-flex items-center justify-center rounded ${timerRunning ? "text-destructive" : "hover:text-foreground"}`}
+                    onClick={handleTimerToggle}
                   >
-                    <Pencil className="h-3 w-3" />
-                  </Button>
-                )}
-              </span>
-              {(task as any).clients?.name && (
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <User className="h-3.5 w-3.5" />{(task as any).clients.name}
+                    {timerRunning ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                  </button>
                 </span>
-              )}
-              {(task as any).creator_profile && (
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <UserCheck className="h-3.5 w-3.5" />Creada por: {(task as any).creator_profile.full_name}
-                </span>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowBlockTime(true)}
-                className="gap-1"
-              >
-                <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
-              </Button>
-            </div>
-
-            {/* Timer & Dates row */}
-            <div className="flex flex-wrap items-center gap-4 p-3 rounded-lg border bg-muted/20">
-              <div className="flex items-center gap-2">
-                <Timer className="h-4 w-4 text-muted-foreground" />
-                <span className="font-mono text-sm font-medium tabular-nums">{formatTimer(displaySeconds)}</span>
-                <Button
-                  size="icon"
-                  variant={timerRunning ? "destructive" : "outline"}
-                  className="h-7 w-7"
-                  onClick={handleTimerToggle}
-                >
-                  {timerRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                </Button>
+                {(task as any).started_at && <span>Inicio: {formatMX((task as any).started_at, "dd MMM HH:mm")}</span>}
+                {(task as any).completed_at && <span>Completada: {formatMX((task as any).completed_at, "dd MMM HH:mm")}</span>}
               </div>
-              {(task as any).started_at && (
-                <span className="text-xs text-muted-foreground">
-                  Inicio: {formatMX((task as any).started_at, "dd MMM yyyy HH:mm")}
-                </span>
-              )}
-              {(task as any).completed_at && (
-                <span className="text-xs text-muted-foreground">
-                  Completada: {formatMX((task as any).completed_at, "dd MMM yyyy HH:mm")}
-                </span>
-              )}
-            </div>
-
-            {/* Due date edit inline */}
-            {editingDueDate && (
-              <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
-                <p className="text-sm font-medium">Cambiar fecha límite</p>
-                <Input
-                  type="date"
-                  value={newDueDate}
-                  onChange={(e) => setNewDueDate(e.target.value)}
-                  className="w-full sm:w-[200px]"
-                />
-                <Textarea
-                  value={dueDateReason}
-                  onChange={(e) => setDueDateReason(e.target.value)}
-                  placeholder="Motivo del cambio de fecha (obligatorio)..."
-                  rows={2}
-                  className="text-sm"
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleDueDateSave} disabled={!dueDateReason.trim()}>
-                    Guardar
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setEditingDueDate(false)}>
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {task.description && (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.description}</p>
-            )}
-
-            {/* Criticality & Delay tracking */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-3 rounded-lg border bg-muted/20">
-              <div>
-                <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
-                <Select
-                  value={(task as any).criticality_level || "normal"}
-                  onValueChange={(v) => updateTask.mutate({ id: taskId, criticality_level: v } as any)}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CRITICALITY_OPTIONS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
-                <Select
-                  value={(task as any).delay_category || "__none__"}
-                  onValueChange={(v) => updateTask.mutate({ id: taskId, delay_category: v === "__none__" ? null : v } as any)}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DELAY_CATEGORIES.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {((task as any).delay_category) && (
-                <div className="col-span-2 sm:col-span-1">
-                  <span className="text-xs text-muted-foreground block mb-1">Notas</span>
-                  <Textarea
-                    className="text-xs min-h-[60px]"
-                    placeholder="Describe la situación..."
-                    defaultValue={(task as any).delay_notes || ""}
-                    onBlur={(e) => updateTask.mutate({ id: taskId, delay_notes: e.target.value || null } as any)}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Assignees - editable with search */}
-            <div>
-              <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-                <UserPlus className="h-4 w-4" /> Colaboradores
-              </h4>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {assignees.map((a: any) => (
-                  <Badge key={a.id} variant="secondary" className="gap-1">
-                    {a.profile?.full_name || a.user_id}
-                    <X
-                      className="h-3 w-3 cursor-pointer hover:text-destructive"
-                      onClick={() => removeAssignee.mutate({ taskId: taskId!, userId: a.user_id })}
-                    />
-                  </Badge>
-                ))}
-              </div>
-              <SearchableSelect
-                options={sortedProfiles.filter(
-                  (p) => !assignees.some((a: any) => a.user_id === p.value)
-                )}
-                value=""
-                onValueChange={(uid) => addAssignee.mutate({ taskId: taskId!, userId: uid })}
-                placeholder="Agregar colaborador..."
-                searchPlaceholder="Buscar colaborador..."
-                className="w-full sm:w-[250px]"
-              />
             </div>
 
             <Separator />
 
-            <Tabs defaultValue="comments" className="w-full">
-              <TabsList className="w-full">
-                <TabsTrigger value="comments" className="flex-1">
-                  <MessageSquare className="h-4 w-4 mr-1" />Comentarios ({comments.length})
-                </TabsTrigger>
-                <TabsTrigger value="links" className="flex-1">
-                  <Link className="h-4 w-4 mr-1" />Enlaces ({dropboxLinks.length})
-                </TabsTrigger>
-                <TabsTrigger value="files" className="flex-1">
-                  <Paperclip className="h-4 w-4 mr-1" />Archivos ({documents.length})
-                </TabsTrigger>
-              </TabsList>
+            {/* ── Scrollable body ── */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {/* Due date edit */}
+              {editingDueDate && (
+                <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                  <p className="text-sm font-medium">Cambiar fecha límite</p>
+                  <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="w-full sm:w-[200px]" />
+                  <Textarea value={dueDateReason} onChange={(e) => setDueDateReason(e.target.value)} placeholder="Motivo del cambio de fecha (obligatorio)..." rows={2} className="text-sm" />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleDueDateSave} disabled={!dueDateReason.trim()}>Guardar</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingDueDate(false)}>Cancelar</Button>
+                  </div>
+                </div>
+              )}
 
-              {/* Comments tab */}
-              <TabsContent value="comments" className="space-y-4 mt-4">
-                <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {comments.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">Sin comentarios aún</p>
-                  )}
-                  {comments.map((c) => (
-                    <div key={c.id} className="flex gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="text-xs">
-                          {c.profile?.full_name?.charAt(0) || "?"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{c.profile?.full_name || "Usuario"}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatMX(c.created_at, "dd MMM HH:mm")}
-                          </span>
-                        </div>
-                        <p className="text-sm text-foreground whitespace-pre-wrap">
-                          {renderCommentContent(c.content)}
-                        </p>
-                      </div>
+              {/* Description — always visible */}
+              {task.description && (
+                <div className="rounded-lg bg-muted/30 p-3">
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{task.description}</p>
+                </div>
+              )}
+
+              {/* ── Subtareas ── */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium flex items-center gap-1.5">
+                    <ListChecks className="h-4 w-4" />
+                    Subtareas
+                    {checklist.length > 0 && (
+                      <span className="text-xs text-muted-foreground font-normal ml-1">{completedCount}/{checklist.length}</span>
+                    )}
+                  </h4>
+                </div>
+                {checklist.length > 0 && (
+                  <div className="h-1 rounded-full bg-muted mb-2 overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all"
+                      style={{ width: `${checklist.length > 0 ? (completedCount / checklist.length) * 100 : 0}%` }}
+                    />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {checklist.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 group py-0.5">
+                      <Checkbox
+                        checked={item.completed}
+                        onCheckedChange={() => toggleChecklistItem(item.id)}
+                      />
+                      <span className={`text-sm flex-1 ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                        {item.text}
+                      </span>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                        onClick={() => removeChecklistItem(item.id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </div>
                   ))}
                 </div>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    value={newSubtask}
+                    onChange={(e) => setNewSubtask(e.target.value)}
+                    placeholder="Agregar subtarea..."
+                    className="h-8 text-sm"
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
+                  />
+                  <Button size="sm" variant="outline" className="h-8 px-2" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
 
-                {/* Pending attachments preview */}
-                {commentAttachments.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 p-2 rounded-md border border-border/50 bg-muted/30">
-                    {commentAttachments.map((att, i) => (
-                      <div key={i} className="relative group">
-                        {att.type === "image" ? (
-                          <img src={att.url} alt={att.name} className="h-12 w-auto rounded border border-border object-cover" />
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] bg-background px-2 py-1 rounded border">
-                            {att.type === "dropbox" ? "📦" : "🔗"} {att.name}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => setCommentAttachments(prev => prev.filter((_, idx) => idx !== i))}
-                          className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
+              {/* ── Collaborators ── */}
+              <div>
+                <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                  <UserPlus className="h-4 w-4" /> Colaboradores
+                </h4>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {assignees.map((a: any) => (
+                    <Badge key={a.id} variant="secondary" className="gap-1 text-xs">
+                      {a.profile?.full_name || a.user_id}
+                      <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() => removeAssignee.mutate({ taskId: taskId!, userId: a.user_id })} />
+                    </Badge>
+                  ))}
+                </div>
+                <SearchableSelect
+                  options={sortedProfiles.filter((p) => !assignees.some((a: any) => a.user_id === p.value))}
+                  value=""
+                  onValueChange={(uid) => addAssignee.mutate({ taskId: taskId!, userId: uid })}
+                  placeholder="Agregar colaborador..."
+                  searchPlaceholder="Buscar colaborador..."
+                  className="w-full sm:w-[250px]"
+                />
+              </div>
+
+              {/* ── Advanced: Criticality/Delay (collapsible) ── */}
+              <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    <Settings2 className="h-3.5 w-3.5" />
+                    Semáforo y atraso
+                    <ChevronDown className={`h-3 w-3 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/20">
+                    <div>
+                      <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
+                      <Select value={(task as any).criticality_level || "normal"} onValueChange={(v) => updateTask.mutate({ id: taskId, criticality_level: v } as any)}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CRITICALITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
+                      <Select value={(task as any).delay_category || "__none__"} onValueChange={(v) => updateTask.mutate({ id: taskId, delay_category: v === "__none__" ? null : v } as any)}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {DELAY_CATEGORIES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {(task as any).delay_category && (
+                      <div className="col-span-full">
+                        <span className="text-xs text-muted-foreground block mb-1">Notas</span>
+                        <Textarea
+                          className="text-xs min-h-[60px]"
+                          placeholder="Describe la situación..."
+                          defaultValue={(task as any).delay_notes || ""}
+                          onBlur={(e) => updateTask.mutate({ id: taskId, delay_notes: e.target.value || null } as any)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Separator />
+
+              {/* ── Tabs ── */}
+              <Tabs defaultValue="comments" className="w-full">
+                <TabsList className="w-full">
+                  <TabsTrigger value="comments" className="flex-1 text-xs">
+                    <MessageSquare className="h-3.5 w-3.5 mr-1" />Comentarios ({comments.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="links" className="flex-1 text-xs">
+                    <Link className="h-3.5 w-3.5 mr-1" />Enlaces ({dropboxLinks.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="files" className="flex-1 text-xs">
+                    <Paperclip className="h-3.5 w-3.5 mr-1" />Archivos ({documents.length})
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Comments tab */}
+                <TabsContent value="comments" className="space-y-3 mt-3">
+                  <div className="space-y-3 max-h-[250px] overflow-y-auto">
+                    {comments.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin comentarios aún</p>}
+                    {comments.map((c) => (
+                      <div key={c.id} className="flex gap-2.5">
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className="text-[10px]">{c.profile?.full_name?.charAt(0) || "?"}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium">{c.profile?.full_name || "Usuario"}</span>
+                            <span className="text-[10px] text-muted-foreground">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
+                          </div>
+                          <p className="text-sm text-foreground whitespace-pre-wrap">{renderCommentContent(c.content)}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
 
-                <div className="flex gap-1.5">
-                  <div className="flex-1 min-w-0">
-                    <MentionTextarea
-                      value={commentText}
-                      onChange={setCommentText}
-                      profiles={orgProfiles ?? []}
-                      placeholder="Escribe un comentario... usa @ para mencionar"
-                      rows={2}
-                      onMentionsChange={setCommentMentions}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                          handleSendComment();
-                        }
-                      }}
-                    />
-                  </div>
-
-                  {/* Attachment buttons */}
-                  <div className="flex flex-col gap-0.5 shrink-0">
-                    <input ref={commentFileInputRef} type="file" multiple className="hidden" onChange={(e) => handleCommentFileUpload(e.target.files)} />
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => commentFileInputRef.current?.click()} disabled={commentUploading} title="Adjuntar archivo">
-                      {commentUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowCommentDropbox(true)} title="Seleccionar de Dropbox">
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" /></svg>
-                    </Button>
-                    <Popover open={showCommentLinkPopover} onOpenChange={setShowCommentLinkPopover}>
-                      <PopoverTrigger asChild>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Pegar enlace">
-                          <Link2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-64 p-2" align="end">
-                        <div className="flex gap-1">
-                          <input
-                            className="flex-1 text-xs border border-input rounded px-2 py-1 bg-background"
-                            placeholder="https://..."
-                            value={commentLinkInput}
-                            onChange={(e) => setCommentLinkInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && commentLinkInput.trim()) {
-                                setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
-                                setCommentLinkInput("");
-                                setShowCommentLinkPopover(false);
-                              }
-                            }}
-                          />
-                          <Button size="sm" className="h-7 px-2 text-xs" disabled={!commentLinkInput.trim()} onClick={() => {
-                            setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
-                            setCommentLinkInput("");
-                            setShowCommentLinkPopover(false);
-                          }}>Añadir</Button>
+                  {commentAttachments.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 p-2 rounded-md border border-border/50 bg-muted/30">
+                      {commentAttachments.map((att, i) => (
+                        <div key={i} className="relative group">
+                          {att.type === "image" ? (
+                            <img src={att.url} alt={att.name} className="h-12 w-auto rounded border border-border object-cover" />
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] bg-background px-2 py-1 rounded border">
+                              {att.type === "dropbox" ? "📦" : "🔗"} {att.name}
+                            </span>
+                          )}
+                          <button onClick={() => setCommentAttachments(prev => prev.filter((_, idx) => idx !== i))} className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <X className="h-2.5 w-2.5" />
+                          </button>
                         </div>
-                      </PopoverContent>
-                    </Popover>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-1.5">
+                    <div className="flex-1 min-w-0">
+                      <MentionTextarea
+                        value={commentText} onChange={setCommentText} profiles={orgProfiles ?? []}
+                        placeholder="Escribe un comentario... usa @ para mencionar" rows={2}
+                        onMentionsChange={setCommentMentions}
+                        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSendComment(); }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                      <input ref={commentFileInputRef} type="file" multiple className="hidden" onChange={(e) => handleCommentFileUpload(e.target.files)} />
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => commentFileInputRef.current?.click()} disabled={commentUploading} title="Adjuntar archivo">
+                        {commentUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowCommentDropbox(true)} title="Seleccionar de Dropbox">
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" /></svg>
+                      </Button>
+                      <Popover open={showCommentLinkPopover} onOpenChange={setShowCommentLinkPopover}>
+                        <PopoverTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Pegar enlace"><Link2 className="h-3.5 w-3.5" /></Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-2" align="end">
+                          <div className="flex gap-1">
+                            <input className="flex-1 text-xs border border-input rounded px-2 py-1 bg-background" placeholder="https://..." value={commentLinkInput}
+                              onChange={(e) => setCommentLinkInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && commentLinkInput.trim()) {
+                                  setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                                  setCommentLinkInput(""); setShowCommentLinkPopover(false);
+                                }
+                              }}
+                            />
+                            <Button size="sm" className="h-7 px-2 text-xs" disabled={!commentLinkInput.trim()} onClick={() => {
+                              setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                              setCommentLinkInput(""); setShowCommentLinkPopover(false);
+                            }}>Añadir</Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <Button size="icon" className="h-8 w-8 shrink-0 self-end" onClick={handleSendComment} disabled={addComment.isPending || (!commentText.trim() && commentAttachments.length === 0)}>
+                      <Send className="h-4 w-4" />
+                    </Button>
                   </div>
+                </TabsContent>
 
-                  <Button size="icon" className="h-8 w-8 shrink-0 self-end" onClick={handleSendComment} disabled={addComment.isPending || (!commentText.trim() && commentAttachments.length === 0)}>
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TabsContent>
+                {/* Links tab */}
+                <TabsContent value="links" className="space-y-3 mt-3">
+                  <div className="space-y-1.5">
+                    {dropboxLinks.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin enlaces de Dropbox</p>}
+                    {dropboxLinks.map((link: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <a href={link.url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline truncate flex-1">{link.url}</a>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{link.added_at ? formatMX(link.added_at, "dd MMM") : ""}</span>
+                        <X className="h-3.5 w-3.5 cursor-pointer text-muted-foreground hover:text-destructive shrink-0" onClick={() => handleRemoveLink(i)} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} placeholder="https://www.dropbox.com/..." className="flex-1 h-8 text-sm"
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddDropboxLink(); } }}
+                    />
+                    <Button size="sm" variant="outline" className="h-8" onClick={handleAddDropboxLink}><Plus className="h-3.5 w-3.5 mr-1" />Agregar</Button>
+                    <Button size="sm" variant="outline" className="h-8" onClick={() => setShowDropboxPicker(true)} title="Seleccionar archivo de Dropbox"><FolderOpen className="h-3.5 w-3.5" /></Button>
+                  </div>
+                </TabsContent>
 
-              {/* Links tab */}
-              <TabsContent value="links" className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  {dropboxLinks.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">Sin enlaces de Dropbox</p>
-                  )}
-                  {dropboxLinks.map((link: any, i: number) => (
-                    <div key={i} className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
-                      <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <a href={link.url} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline truncate flex-1">
-                        {link.url}
-                      </a>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {link.added_at ? formatMX(link.added_at, "dd MMM") : ""}
-                      </span>
-                      <X className="h-4 w-4 cursor-pointer text-muted-foreground hover:text-destructive shrink-0" onClick={() => handleRemoveLink(i)} />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={newLink}
-                    onChange={(e) => setNewLink(e.target.value)}
-                    placeholder="https://www.dropbox.com/..."
-                    className="flex-1"
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddDropboxLink(); } }}
-                  />
-                  <Button size="sm" variant="outline" onClick={handleAddDropboxLink}>
-                    <Plus className="h-4 w-4 mr-1" />Agregar
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setShowDropboxPicker(true)} title="Seleccionar archivo de Dropbox">
-                    <FolderOpen className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TabsContent>
-
-              {/* Files tab */}
-              <TabsContent value="files" className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  {documents.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">Sin archivos adjuntos</p>
-                  )}
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
-                      <Paperclip className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm truncate flex-1">{doc.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {doc.file_size ? `${(doc.file_size / 1024).toFixed(0)} KB` : ""}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatMX(doc.created_at, "dd MMM")}
-                      </span>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPreviewDoc(doc)} title="Vista previa">
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDocDownload(doc)} title="Descargar">
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label className="cursor-pointer">
-                    <input type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleFileUpload} disabled={uploading} />
-                    <div className="flex items-center gap-2 p-3 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
-                      <Upload className="h-4 w-4" />
-                      {uploading ? "Subiendo..." : "Subir archivo"}
-                    </div>
-                  </label>
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={async (e) => {
+                {/* Files tab */}
+                <TabsContent value="files" className="space-y-3 mt-3">
+                  <div className="space-y-1.5">
+                    {documents.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin archivos adjuntos</p>}
+                    {documents.map((doc) => (
+                      <div key={doc.id} className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
+                        <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-xs truncate flex-1">{doc.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{doc.file_size ? `${(doc.file_size / 1024).toFixed(0)} KB` : ""}</span>
+                        <span className="text-[10px] text-muted-foreground">{formatMX(doc.created_at, "dd MMM")}</span>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setPreviewDoc(doc)} title="Vista previa"><Eye className="h-3 w-3" /></Button>
+                        <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleDocDownload(doc)} title="Descargar"><Download className="h-3 w-3" /></Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label className="cursor-pointer">
+                      <input type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleFileUpload} disabled={uploading} />
+                      <div className="flex items-center gap-2 p-2.5 border-2 border-dashed rounded-md text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
+                        <Upload className="h-3.5 w-3.5" />{uploading ? "Subiendo..." : "Subir archivo"}
+                      </div>
+                    </label>
+                    <label className="cursor-pointer">
+                      <input type="file" className="hidden" accept="image/*" capture="environment" onChange={async (e) => {
                         const capturedFile = e.target.files?.[0];
                         if (!capturedFile || !task) return;
                         e.target.value = "";
-                        // Determine initial path from client folder
                         let initPath = "/Kawiil Mx";
                         if (task.client_id) {
-                          const { data: client } = await supabase
-                            .from("clients")
-                            .select("dropbox_folder_path")
-                            .eq("id", task.client_id)
-                            .single();
-                          if (client?.dropbox_folder_path) {
-                            initPath = client.dropbox_folder_path;
-                          }
+                          const { data: client } = await supabase.from("clients").select("dropbox_folder_path").eq("id", task.client_id).single();
+                          if (client?.dropbox_folder_path) initPath = client.dropbox_folder_path;
                         }
-                        // Rename file to scan_timestamp
                         const ext = capturedFile.name.split('.').pop() || 'jpg';
                         const renamed = new File([capturedFile], `scan_${Date.now()}.${ext}`, { type: capturedFile.type });
                         setScanInitialPath(initPath);
                         setScannedFile(renamed);
                         setShowDropboxUpload(true);
-                      }}
-                      disabled={uploading}
-                    />
-                    <div className="flex items-center gap-2 p-3 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
-                      <Camera className="h-4 w-4" />
-                      Escanear a Dropbox
-                    </div>
-                  </label>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </>
+                      }} disabled={uploading} />
+                      <div className="flex items-center gap-2 p-2.5 border-2 border-dashed rounded-md text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
+                        <Camera className="h-3.5 w-3.5" />Escanear a Dropbox
+                      </div>
+                    </label>
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              {/* Block time button */}
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => setShowBlockTime(true)} className="gap-1 text-xs">
+                  <Clock className="h-3 w-3" /> Bloquear tiempo
+                </Button>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="py-12 text-center text-muted-foreground">Tarea no encontrada</div>
         )}
       </DialogContent>
-      {task && (
-        <BlockTimeDialog
-          open={showBlockTime}
-          onOpenChange={setShowBlockTime}
-          taskTitle={task.title}
-          taskDueDate={task.due_date || undefined}
-        />
-      )}
-      <DropboxFilePicker
-        open={showDropboxPicker}
-        onClose={() => setShowDropboxPicker(false)}
-        initialPath="/Kawiil Mx"
-        onSelect={handleDropboxPickerSelect}
-      />
+      {task && <BlockTimeDialog open={showBlockTime} onOpenChange={setShowBlockTime} taskTitle={task.title} taskDueDate={task.due_date || undefined} />}
+      <DropboxFilePicker open={showDropboxPicker} onClose={() => setShowDropboxPicker(false)} initialPath="/Kawiil Mx" onSelect={handleDropboxPickerSelect} />
       <DropboxUploadDialog
         open={showDropboxUpload}
         onClose={() => { setShowDropboxUpload(false); setScannedFile(null); }}
@@ -800,27 +705,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
         onUploaded={(result) => {
           if (!task) return;
           const currentLinks = (task.dropbox_links as any[]) ?? [];
-          const updatedLinks = [...currentLinks, {
-            url: result.url,
-            name: result.name,
-            added_at: new Date().toISOString(),
-          }];
-          updateTask.mutate({ id: taskId!, dropbox_links: updatedLinks });
+          updateTask.mutate({ id: taskId!, dropbox_links: [...currentLinks, { url: result.url, name: result.name, added_at: new Date().toISOString() }] });
           setScannedFile(null);
         }}
       />
-      <DropboxFilePicker
-        open={showCommentDropbox}
-        onClose={() => setShowCommentDropbox(false)}
-        onSelect={(file) => {
-          setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }]);
-        }}
-      />
-      <DocumentPreviewDialog
-        open={!!previewDoc}
-        onOpenChange={(o) => { if (!o) setPreviewDoc(null); }}
-        document={previewDoc}
-      />
+      <DropboxFilePicker open={showCommentDropbox} onClose={() => setShowCommentDropbox(false)} onSelect={(file) => setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }])} />
+      <DocumentPreviewDialog open={!!previewDoc} onOpenChange={(o) => { if (!o) setPreviewDoc(null); }} document={previewDoc} />
     </Dialog>
   );
 }
