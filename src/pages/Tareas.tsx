@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight } from "lucide-react";
-import { useTasks, useDeleteTask } from "@/hooks/useTasks";
+import { useTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
@@ -46,6 +46,8 @@ const Tareas = () => {
   const { isAdminOrManager } = useUserRole();
   const { areaOptions, areaLabelMap } = useAreaOptions();
   const { data: assignedSteps = [] } = useAssignedSteps();
+  const { data: profiles = [] } = useProfiles();
+  const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
 
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
@@ -209,8 +211,11 @@ INSTRUCCIONES:
                   </div>
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                     {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
+                    {task.assigned_to && profileMap.get(task.assigned_to) && (
+                      <span className="flex items-center gap-1"><User className="h-3 w-3" />{profileMap.get(task.assigned_to)}</span>
+                    )}
                     {(task as any).clients?.name && (
-                      <span className="flex items-center gap-1"><User className="h-3 w-3" />{(task as any).clients.name}</span>
+                      <span className="flex items-center gap-1 text-muted-foreground/70">{(task as any).clients.name}</span>
                     )}
                     {(task as any).projects?.name && <span>{(task as any).projects.name}</span>}
                     {task.due_date && (
