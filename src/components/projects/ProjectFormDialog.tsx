@@ -141,34 +141,24 @@ export function ProjectFormDialog() {
 
             <div className="space-y-2">
               <Label>Cliente</Label>
-              <Select value={clientId} onValueChange={setClientId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar cliente (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                value={clientId}
+                onValueChange={setClientId}
+                placeholder="Seleccionar cliente (opcional)"
+                searchPlaceholder="Buscar cliente..."
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Célula de servicio</Label>
-              <Select value={area} onValueChange={(v) => { setArea(v); setSelectedObligations([]); }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar célula" />
-                </SelectTrigger>
-                <SelectContent>
-                  {areaOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={areaOptions}
+                value={area}
+                onValueChange={(v) => { setArea(v); setSelectedObligations([]); }}
+                placeholder="Seleccionar célula"
+                searchPlaceholder="Buscar célula..."
+              />
             </div>
 
             {/* Compliance info */}

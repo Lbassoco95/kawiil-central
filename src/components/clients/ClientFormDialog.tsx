@@ -339,23 +339,13 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Responsable</FormLabel>
-                    <Select
+                    <SearchableSelect
+                      options={(profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }))}
+                      value={field.value || ""}
                       onValueChange={field.onChange}
-                      defaultValue={field.value || ""}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar responsable" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {profiles?.map((p) => (
-                          <SelectItem key={p.user_id} value={p.user_id}>
-                            {p.full_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Seleccionar responsable"
+                      searchPlaceholder="Buscar usuario..."
+                    />
                     <FormMessage />
                   </FormItem>
                 )}

@@ -208,16 +208,13 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
             <div className="space-y-2">
               <Label>Responsable</Label>
-              <Select value={responsibleUserId} onValueChange={setResponsibleUserId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar responsable" />
-                </SelectTrigger>
-                <SelectContent>
-                  {profiles?.map((p) => (
-                    <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={(profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }))}
+                value={responsibleUserId}
+                onValueChange={setResponsibleUserId}
+                placeholder="Seleccionar responsable"
+                searchPlaceholder="Buscar usuario..."
+              />
             </div>
 
             <div className="space-y-2">
