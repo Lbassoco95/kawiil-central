@@ -28,7 +28,7 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
         .order("created_at", { ascending: false });
 
       if (filters?.area && filters.area !== "todas") {
-        query = query.eq("area", filters.area as any);
+        query = query.eq("area", filters.area);
       }
       if (filters?.status) {
         query = query.eq("status", filters.status as any);
