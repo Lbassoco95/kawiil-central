@@ -78,6 +78,9 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [showBlockTime, setShowBlockTime] = useState(false);
   const [showDropboxPicker, setShowDropboxPicker] = useState(false);
   const { data: orgProfiles } = useProfiles();
+  const [scannedFile, setScannedFile] = useState<File | null>(null);
+  const [showDropboxUpload, setShowDropboxUpload] = useState(false);
+  const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
 
   // Due date editing state
   const [editingDueDate, setEditingDueDate] = useState(false);
