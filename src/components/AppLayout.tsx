@@ -24,14 +24,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 overflow-auto w-full">
         {/* Global date/time bar */}
         <div className={`sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border/50 ${isMobile ? "px-4 pt-12 pb-2" : "px-6 py-2"}`}>
-          <div className="max-w-7xl mx-auto flex items-center justify-end gap-3">
-            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-            <p className="text-xs sm:text-sm font-medium text-foreground capitalize">
-              {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
-            </p>
-            <span className="text-xs text-muted-foreground">
-              {currentTime.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false })} hrs
-            </span>
+          <div className="max-w-7xl mx-auto flex items-center gap-3">
+            {!isMobile && <GlobalAISearch />}
+            <div className="flex items-center gap-3 ml-auto">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              <p className="text-xs sm:text-sm font-medium text-foreground capitalize">
+                {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
+              </p>
+              <span className="text-xs text-muted-foreground">
+                {currentTime.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false })} hrs
+              </span>
+            </div>
           </div>
         </div>
         <div className={`max-w-7xl mx-auto animate-fade-in ${isMobile ? "p-4" : "p-6"}`}>
