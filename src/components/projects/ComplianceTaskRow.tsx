@@ -53,7 +53,7 @@ export interface ComplianceTaskRowProps {
   index?: number;
 }
 
-export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate }: ComplianceTaskRowProps) {
+export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate, index = 0 }: ComplianceTaskRowProps) {
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
