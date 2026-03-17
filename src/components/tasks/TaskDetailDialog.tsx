@@ -527,46 +527,33 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                       accept="image/*"
                       capture="environment"
                       onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file || !task) return;
-                        setUploading(true);
-                        try {
-                          // Determine Dropbox upload path from client folder
-                          let basePath = "/Kawiil Mx/ESCANEOS";
-                          if (task.client_id) {
-                            const { data: client } = await supabase
-                              .from("clients")
-                              .select("dropbox_folder_path, name")
-                              .eq("id", task.client_id)
-                              .single();
-                            if (client?.dropbox_folder_path) {
-                              basePath = `${client.dropbox_folder_path}/Escaneos`;
-                            }
+                        const capturedFile = e.target.files?.[0];
+                        if (!capturedFile || !task) return;
+                        e.target.value = "";
+                        // Determine initial path from client folder
+                        let initPath = "/Kawiil Mx";
+                        if (task.client_id) {
+                          const { data: client } = await supabase
+                            .from("clients")
+                            .select("dropbox_folder_path")
+                            .eq("id", task.client_id)
+                            .single();
+                          if (client?.dropbox_folder_path) {
+                            initPath = client.dropbox_folder_path;
                           }
-                          const fileName = `scan_${Date.now()}.${file.name.split('.').pop() || 'jpg'}`;
-                          const uploadPath = `${basePath}/${fileName}`;
-                          const result = await uploadFileToDropbox(file, uploadPath);
-                          // Save as dropbox link on the task
-                          const currentLinks = (task.dropbox_links as any[]) ?? [];
-                          const updatedLinks = [...currentLinks, {
-                            url: result.url,
-                            name: result.name || fileName,
-                            added_at: new Date().toISOString(),
-                          }];
-                          updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
-                          toast.success("Documento escaneado y subido a Dropbox");
-                        } catch (err: any) {
-                          toast.error("Error al escanear: " + err.message);
-                        } finally {
-                          setUploading(false);
-                          e.target.value = "";
                         }
+                        // Rename file to scan_timestamp
+                        const ext = capturedFile.name.split('.').pop() || 'jpg';
+                        const renamed = new File([capturedFile], `scan_${Date.now()}.${ext}`, { type: capturedFile.type });
+                        setScanInitialPath(initPath);
+                        setScannedFile(renamed);
+                        setShowDropboxUpload(true);
                       }}
                       disabled={uploading}
                     />
                     <div className="flex items-center gap-2 p-3 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
                       <Camera className="h-4 w-4" />
-                      {uploading ? "Subiendo..." : "Escanear a Dropbox"}
+                      Escanear a Dropbox
                     </div>
                   </label>
                 </div>
