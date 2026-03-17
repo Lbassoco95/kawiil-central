@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -13,12 +14,12 @@ import {
 } from "@/components/ui/collapsible";
 import {
   CalendarIcon, ChevronDown, Save, User, Play, Pause, Timer,
-  UserPlus, X, AlertTriangle,
+  UserPlus, X, AlertTriangle, ListChecks, Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isPast, isToday } from "date-fns";
 import { es } from "date-fns/locale";
-import { STEP_STATUS_OPTIONS, type AccountingStep, type StepStatus } from "@/hooks/useAccountingPeriods";
+import { STEP_STATUS_OPTIONS, type AccountingStep, type StepStatus, type ChecklistItem } from "@/hooks/useAccountingPeriods";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { StepComments } from "./StepComments";
