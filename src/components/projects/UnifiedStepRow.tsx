@@ -74,6 +74,8 @@ export function UnifiedStepRow({
   const [localNotes, setLocalNotes] = useState(step.notes || "");
   const [localAssignee, setLocalAssignee] = useState<string | null>(step.assigned_to || null);
   const [localCollaborators, setLocalCollaborators] = useState<string[]>(step.collaborators || []);
+  const [localChecklist, setLocalChecklist] = useState<ChecklistItem[]>(step.checklist || []);
+  const [newSubtask, setNewSubtask] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
