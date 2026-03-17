@@ -147,20 +147,6 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     { value: "baja", label: "🟢 Baja" },
   ];
 
-  const criticalityOptions = [
-    { value: "normal", label: "🟢 Normal" },
-    { value: "atencion", label: "🟡 Atención" },
-    { value: "critico", label: "🔴 Crítico" },
-  ];
-
-  const delayCategoryOptions = [
-    { value: "__none__", label: "Sin atraso" },
-    { value: "atraso_cliente", label: "Atraso del cliente" },
-    { value: "atraso_sat", label: "Atraso del SAT / autoridad" },
-    { value: "recurso_interno", label: "Recurso interno" },
-    { value: "dependencia_externa", label: "Dependencia externa" },
-    { value: "otro", label: "Otro" },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
