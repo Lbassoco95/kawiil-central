@@ -18,7 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
@@ -507,12 +507,19 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     </div>
                   ))}
                 </div>
-                <div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <label className="cursor-pointer">
                     <input type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleFileUpload} disabled={uploading} />
                     <div className="flex items-center gap-2 p-3 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
                       <Upload className="h-4 w-4" />
                       {uploading ? "Subiendo..." : "Subir archivo"}
+                    </div>
+                  </label>
+                  <label className="cursor-pointer">
+                    <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={uploading} />
+                    <div className="flex items-center gap-2 p-3 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
+                      <Camera className="h-4 w-4" />
+                      {uploading ? "Subiendo..." : "Escanear documento"}
                     </div>
                   </label>
                 </div>
