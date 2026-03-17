@@ -50,6 +50,7 @@ export interface ComplianceTaskRowProps {
   clientDropboxPath?: string;
   urgencyBadge: React.ReactNode;
   onUpdate: () => void;
+  index?: number;
 }
 
 export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate }: ComplianceTaskRowProps) {
