@@ -162,10 +162,10 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
           <div>
             <div className="flex items-center justify-between">
-              <Label>Descripción</Label>
+              <Label>Descripción *</Label>
               <AIDescriptionButton title={title} onGenerated={setDescription} />
             </div>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalles adicionales..." rows={3} />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe de qué se trata esta tarea..." rows={3} required />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
