@@ -339,6 +339,19 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                 {(task as any).creator_profile && (
                   <span className="flex items-center gap-1"><UserCheck className="h-3 w-3" />Creada por: {(task as any).creator_profile.full_name}</span>
                 )}
+                {/* Responsable */}
+                <span className="flex items-center gap-1">
+                  <User className="h-3 w-3" />
+                  Responsable:
+                  <SearchableSelect
+                    options={sortedProfiles}
+                    value={task.assigned_to || ""}
+                    onValueChange={(uid) => updateTask.mutate({ id: taskId, assigned_to: uid || null })}
+                    placeholder="Sin asignar"
+                    searchPlaceholder="Buscar responsable..."
+                    className="inline-flex h-6 w-[160px] text-xs border-dashed"
+                  />
+                </span>
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   {task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}

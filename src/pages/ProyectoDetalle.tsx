@@ -249,7 +249,7 @@ const ProyectoDetalle = () => {
         )}
 
         {tab === "cumplimiento" && isCumplimiento && (
-          <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} />
+          <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} projectResponsibleUserId={project.responsible_user_id} />
         )}
 
         {tab === "tareas" && (
@@ -291,8 +291,10 @@ const ProyectoDetalle = () => {
                         {t.delay_category && <Badge variant="outline" className="text-[9px] px-1 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>}
                       </div>
                       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                        {t.assigned_to && profileMap.get(t.assigned_to) && (
+                      {t.assigned_to && profileMap.get(t.assigned_to) ? (
                           <span className="flex items-center gap-1"><User className="h-3 w-3" />{profileMap.get(t.assigned_to)}</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-destructive/70 font-medium">⚠ Sin responsable</span>
                         )}
                         {t.due_date && (
                           <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(t.due_date, "dd MMM yyyy")}</span>
