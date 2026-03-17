@@ -20,27 +20,17 @@ import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatMX } from "@/lib/dateUtils";
 
-const priorityColors: Record<string, string> = {
-  urgente: "bg-destructive/10 text-destructive",
-  alta: "bg-warning/10 text-warning",
-  media: "bg-primary/10 text-primary",
-  baja: "bg-success/10 text-success",
-};
+import { TASK_STATUS_CONFIG, PRIORITY_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
-const statusLabels: Record<string, { label: string; color: string }> = {
-  pendiente: { label: "Pendiente", color: "bg-muted text-muted-foreground" },
-  en_progreso: { label: "En progreso", color: "bg-primary/10 text-primary" },
-  en_revision: { label: "En revisión", color: "bg-warning/10 text-warning" },
-  completada: { label: "Completada", color: "bg-success/10 text-success" },
-  cancelada: { label: "Cancelada", color: "bg-destructive/10 text-destructive" },
-};
+const priorityColors: Record<string, string> = Object.fromEntries(
+  Object.entries(PRIORITY_CONFIG).map(([k, v]) => [k, v.color])
+);
 
-const stepStatusLabels: Record<string, string> = {
-  pendiente: "Pendiente",
-  en_progreso: "En progreso",
-  en_espera_cliente: "Esperando cliente",
-  completado: "Completado",
-};
+const statusLabels = TASK_STATUS_CONFIG;
+
+const stepStatusLabels: Record<string, string> = Object.fromEntries(
+  Object.entries(STEP_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+);
 
 const Tareas = () => {
   const navigate = useNavigate();

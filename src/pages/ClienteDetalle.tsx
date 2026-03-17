@@ -23,32 +23,23 @@ type TaskPriority = Database["public"]["Enums"]["task_priority"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
-const STATUS_STYLES: Record<ClientStatus, string> = {
-  activo: "bg-success/10 text-success",
-  inactivo: "bg-muted text-muted-foreground",
-  prospecto: "bg-warning/10 text-warning",
-};
+import { CLIENT_STATUS_CONFIG, TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 
-const STATUS_LABELS: Record<ClientStatus, string> = {
-  activo: "Activo",
-  inactivo: "Inactivo",
-  prospecto: "Prospecto",
-};
+const STATUS_STYLES: Record<ClientStatus, string> = Object.fromEntries(
+  Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
+) as Record<ClientStatus, string>;
 
-const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  pendiente: "Pendiente",
-  en_progreso: "En progreso",
-  en_revision: "En revisión",
-  completada: "Completada",
-  cancelada: "Cancelada",
-};
+const STATUS_LABELS: Record<ClientStatus, string> = Object.fromEntries(
+  Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+) as Record<ClientStatus, string>;
 
-const TASK_PRIORITY_STYLES: Record<TaskPriority, string> = {
-  urgente: "bg-destructive/10 text-destructive",
-  alta: "bg-warning/10 text-warning",
-  media: "bg-primary/10 text-primary",
-  baja: "bg-muted text-muted-foreground",
-};
+const TASK_STATUS_LABELS: Record<TaskStatus, string> = Object.fromEntries(
+  Object.entries(TASK_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+) as Record<TaskStatus, string>;
+
+const TASK_PRIORITY_STYLES: Record<TaskPriority, string> = Object.fromEntries(
+  Object.entries(PRIORITY_CONFIG).map(([k, v]) => [k, v.color])
+) as Record<TaskPriority, string>;
 
 const tabs: { key: string; label: string; icon?: typeof Shield }[] = [
   { key: "general", label: "General" },

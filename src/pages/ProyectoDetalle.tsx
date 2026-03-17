@@ -26,20 +26,15 @@ import type { LucideIcon } from "lucide-react";
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { PROJECT_STATUS_CONFIG, TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 
-const STATUS_STYLES: Record<ProjectStatus, string> = {
-  activo: "bg-success/10 text-success",
-  pausado: "bg-warning/10 text-warning",
-  completado: "bg-primary/10 text-primary",
-  cancelado: "bg-muted text-muted-foreground",
-};
+const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
+) as Record<ProjectStatus, string>;
 
-const STATUS_LABELS: Record<ProjectStatus, string> = {
-  activo: "Activo",
-  pausado: "Pausado",
-  completado: "Completado",
-  cancelado: "Cancelado",
-};
+const STATUS_LABELS: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+) as Record<ProjectStatus, string>;
 
 const ProyectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
@@ -279,8 +274,12 @@ const ProyectoDetalle = () => {
                   >
                     <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
                     <div className="flex gap-1.5 shrink-0">
-                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.priority}</span>
-                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.status}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${PRIORITY_CONFIG[t.priority as keyof typeof PRIORITY_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`}>
+                        {PRIORITY_CONFIG[t.priority as keyof typeof PRIORITY_CONFIG]?.label || t.priority}
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${TASK_STATUS_CONFIG[t.status as keyof typeof TASK_STATUS_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`}>
+                        {TASK_STATUS_CONFIG[t.status as keyof typeof TASK_STATUS_CONFIG]?.label || t.status}
+                      </span>
                     </div>
                   </div>
                 ))}

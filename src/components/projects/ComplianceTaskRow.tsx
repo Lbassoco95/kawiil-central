@@ -6,13 +6,7 @@ import { useProfiles } from "@/hooks/useTasks";
 import { UnifiedStepRow } from "./UnifiedStepRow";
 import type { AccountingStep, StepStatus } from "@/hooks/useAccountingPeriods";
 
-const PERIODICITY_LABELS: Record<string, string> = {
-  mensual: "Mensual",
-  trimestral: "Trimestral",
-  semestral: "Semestral",
-  anual: "Anual",
-  cuando_aplique: "Cuando aplique",
-};
+import { PERIODICITY_LABELS } from "@/lib/statusStyles";
 
 // Map compliance task status to step status
 const STATUS_MAP: Record<string, StepStatus> = {

@@ -29,12 +29,7 @@ import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-const STEP_STATUS_STYLES: Record<StepStatus, string> = {
-  pendiente: "bg-muted text-muted-foreground",
-  en_progreso: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  en_espera_cliente: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  completado: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-};
+import { STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
 export interface UnifiedStepRowProps {
   step: AccountingStep;
@@ -262,7 +257,7 @@ export function UnifiedStepRow({
                   <StepTimerBadge savedSeconds={savedTime} timerRunning={false} displaySeconds={savedTime} />
                 )}
                 {localStatus !== "pendiente" && (
-                  <Badge variant="outline" className={cn("text-[10px] sm:text-xs px-1.5", STEP_STATUS_STYLES[localStatus] || STEP_STATUS_STYLES.pendiente)}>
+                  <Badge variant="outline" className={cn("text-[10px] sm:text-xs px-1.5", STEP_STATUS_CONFIG[localStatus]?.color || STEP_STATUS_CONFIG.pendiente.color)}>
                     {STEP_STATUS_OPTIONS.find((o) => o.value === localStatus)?.label}
                   </Badge>
                 )}

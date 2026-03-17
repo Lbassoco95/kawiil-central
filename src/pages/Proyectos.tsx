@@ -16,19 +16,15 @@ import type { Database } from "@/integrations/supabase/types";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
-const STATUS_STYLES: Record<ProjectStatus, string> = {
-  activo: "bg-success/10 text-success",
-  pausado: "bg-warning/10 text-warning",
-  completado: "bg-primary/10 text-primary",
-  cancelado: "bg-muted text-muted-foreground",
-};
+import { PROJECT_STATUS_CONFIG } from "@/lib/statusStyles";
 
-const STATUS_LABELS: Record<ProjectStatus, string> = {
-  activo: "Activo",
-  pausado: "Pausado",
-  completado: "Completado",
-  cancelado: "Cancelado",
-};
+const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
+) as Record<ProjectStatus, string>;
+
+const STATUS_LABELS: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+) as Record<ProjectStatus, string>;
 
 const AREA_ORDER: string[] = [
   "contabilidad", "legal", "softlanding", "pld_ft",
