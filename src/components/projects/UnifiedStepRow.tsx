@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -13,7 +12,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
-  CalendarIcon, ChevronDown, Save, User, Play, Pause, Timer,
+  CalendarIcon, ChevronDown, Save, User,
   UserPlus, X, AlertTriangle, ListChecks, Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +22,8 @@ import { STEP_STATUS_OPTIONS, type AccountingStep, type StepStatus, type Checkli
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { StepComments } from "./StepComments";
+import { StepTimerControl, StepTimerBadge } from "./StepTimer";
+import { DebouncedTextarea } from "@/components/shared/DebouncedTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 
 const STEP_STATUS_STYLES: Record<StepStatus, string> = {
@@ -31,21 +32,6 @@ const STEP_STATUS_STYLES: Record<StepStatus, string> = {
   en_espera_cliente: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
   completado: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
 };
-
-function formatTime(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
-function formatTimeCompact(totalSeconds: number): string {
-  if (totalSeconds === 0) return "";
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
 
 export interface UnifiedStepRowProps {
   step: AccountingStep;
@@ -66,8 +52,6 @@ export function UnifiedStepRow({
   showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [displaySeconds, setDisplaySeconds] = useState(step.time_spent_seconds || 0);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
   const [localLabel, setLocalLabel] = useState(step.label);
   const [localDueDate, setLocalDueDate] = useState<Date | undefined>(step.due_date ? new Date(step.due_date) : undefined);
@@ -77,20 +61,10 @@ export function UnifiedStepRow({
   const [localChecklist, setLocalChecklist] = useState<ChecklistItem[]>(step.checklist || []);
   const [newSubtask, setNewSubtask] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const baseSecondsRef = useRef<number>(step.time_spent_seconds || 0);
   const { data: profiles = [] } = useProfiles();
 
   const savedTime = step.time_spent_seconds || 0;
   const isOverdue = localDueDate && !step.completed && isPast(localDueDate) && !isToday(localDueDate);
-
-  useEffect(() => {
-    if (!timerRunning) {
-      baseSecondsRef.current = step.time_spent_seconds || 0;
-      setDisplaySeconds(step.time_spent_seconds || 0);
-    }
-  }, [step.time_spent_seconds, timerRunning]);
 
   // Only reset local state when step identity changes (not on every prop update)
   const stepKeyRef = useRef(step.key);
@@ -109,32 +83,6 @@ export function UnifiedStepRow({
   }, [step.key]);
 
   const markChanged = () => setHasChanges(true);
-
-  // Timer
-  const startTimer = useCallback(() => {
-    if (timerRunning) return;
-    baseSecondsRef.current = displaySeconds;
-    startTimeRef.current = Date.now();
-    setTimerRunning(true);
-    timerRef.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      setDisplaySeconds(baseSecondsRef.current + elapsed);
-    }, 1000);
-  }, [timerRunning, displaySeconds]);
-
-  const stopTimer = useCallback(() => {
-    if (!timerRunning) return;
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-    setTimerRunning(false);
-    const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const total = baseSecondsRef.current + elapsed;
-    baseSecondsRef.current = total;
-    setDisplaySeconds(total);
-    onSave({ time_spent_seconds: total });
-  }, [timerRunning, onSave]);
-
-  useEffect(() => { return () => { if (timerRef.current) clearInterval(timerRef.current); }; }, []);
 
   const handleSave = () => {
     const updates: Partial<AccountingStep> = {
@@ -254,10 +202,8 @@ export function UnifiedStepRow({
                   <AlertTriangle className="h-3 w-3" />Vencida
                 </Badge>
               )}
-              {(savedTime > 0 || timerRunning) && showTimer && (
-                <Badge variant="outline" className={cn("text-[10px] sm:text-xs gap-1 font-mono hidden sm:inline-flex", timerRunning && "border-primary text-primary animate-pulse")}>
-                  <Timer className="h-3 w-3" />{timerRunning ? formatTime(displaySeconds) : formatTimeCompact(savedTime)}
-                </Badge>
+              {showTimer && (
+                <StepTimerBadge savedSeconds={savedTime} timerRunning={false} displaySeconds={savedTime} />
               )}
               {localStatus !== "pendiente" && (
                 <Badge variant="outline" className={cn("text-[10px] sm:text-xs px-1.5", STEP_STATUS_STYLES[localStatus] || STEP_STATUS_STYLES.pendiente)}>
@@ -284,15 +230,11 @@ export function UnifiedStepRow({
               />
             </div>
 
-
             {showTimer && (
-              <div className="flex items-center gap-3 rounded-md border border-border/50 bg-background px-3 py-2">
-                <Timer className="h-4 w-4 text-muted-foreground" />
-                <span className="font-mono text-sm font-medium flex-1">{formatTime(displaySeconds)}</span>
-                <Button variant={timerRunning ? "destructive" : "default"} size="sm" className="h-7 text-xs gap-1" onClick={timerRunning ? stopTimer : startTimer}>
-                  {timerRunning ? <><Pause className="h-3 w-3" />Pausar</> : <><Play className="h-3 w-3" />Iniciar</>}
-                </Button>
-              </div>
+              <StepTimerControl
+                initialSeconds={savedTime}
+                onStop={(total) => onSave({ time_spent_seconds: total })}
+              />
             )}
 
             {/* Responsable + Estatus + Fecha límite */}
@@ -424,14 +366,14 @@ export function UnifiedStepRow({
               </p>
             )}
 
-            {/* Notes */}
+            {/* Notes — debounced to avoid lag */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Notas</label>
-              <Textarea
+              <DebouncedTextarea
                 className="text-xs min-h-[60px]"
                 placeholder="Observaciones..."
                 value={localNotes}
-                onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }}
+                onChange={(val) => { setLocalNotes(val); markChanged(); }}
               />
             </div>
 
