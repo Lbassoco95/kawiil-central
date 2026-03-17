@@ -129,7 +129,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
         );
         if (isKnown) {
           return (
-            <span key={i} className="text-primary font-medium">
+            <span key={i} className="text-primary font-bold">
               {part}
             </span>
           );
