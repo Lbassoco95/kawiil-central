@@ -35,8 +35,6 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [projectId, setProjectId] = useState(defaultProjectId || "");
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
-  const [criticalityLevel, setCriticalityLevel] = useState("normal");
-  const [delayCategory, setDelayCategory] = useState("");
 
   const createTask = useCreateTask();
   const { data: profiles } = useProfiles();
