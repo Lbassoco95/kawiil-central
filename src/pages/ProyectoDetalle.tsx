@@ -249,7 +249,7 @@ const ProyectoDetalle = () => {
         )}
 
         {tab === "cumplimiento" && isCumplimiento && (
-          <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} />
+          <ComplianceDashboard projectId={project.id} clientId={project.client_id} clientDropboxPath={effectiveDropboxPath} projectResponsibleUserId={project.responsible_user_id} />
         )}
 
         {tab === "tareas" && (

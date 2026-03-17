@@ -73,7 +73,7 @@ interface ComplianceTask {
   } | null;
 }
 
-export function ComplianceDashboard({ projectId, clientId, clientDropboxPath }: ComplianceDashboardProps) {
+export function ComplianceDashboard({ projectId, clientId, clientDropboxPath, projectResponsibleUserId }: ComplianceDashboardProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
