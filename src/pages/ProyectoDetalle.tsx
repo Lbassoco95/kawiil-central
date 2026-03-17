@@ -275,8 +275,12 @@ const ProyectoDetalle = () => {
                   >
                     <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
                     <div className="flex gap-1.5 shrink-0">
-                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.priority}</span>
-                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">{t.status}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${PRIORITY_CONFIG[t.priority as keyof typeof PRIORITY_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`}>
+                        {PRIORITY_CONFIG[t.priority as keyof typeof PRIORITY_CONFIG]?.label || t.priority}
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${TASK_STATUS_CONFIG[t.status as keyof typeof TASK_STATUS_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`}>
+                        {TASK_STATUS_CONFIG[t.status as keyof typeof TASK_STATUS_CONFIG]?.label || t.status}
+                      </span>
                     </div>
                   </div>
                 ))}
