@@ -229,7 +229,7 @@ const ClienteDetalle = () => {
           ) : (
             <div className="divide-y divide-border/40">
               {activeTasks.map((t) => (
-                <div key={t.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                <div key={t.id} onClick={() => setSelectedTaskId(t.id)} className="flex items-center justify-between gap-3 py-3 px-1 cursor-pointer hover:bg-secondary/30 rounded-md transition-colors">
                   <div className="min-w-0">
                     <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
                     {t.due_date && (
