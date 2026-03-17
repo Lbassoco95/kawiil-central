@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
+import { GlobalAISearch } from "@/components/shared/GlobalAISearch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { nowMX } from "@/lib/dateUtils";
