@@ -18,7 +18,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
