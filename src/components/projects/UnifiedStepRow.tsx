@@ -144,6 +144,7 @@ export function UnifiedStepRow({
       notes: localNotes || null,
       assigned_to: localAssignee,
       collaborators: localCollaborators,
+      checklist: localChecklist,
     };
     // Auto-set started_at when moving from pendiente
     if (localStatus !== "pendiente" && !step.started_at) {
@@ -154,6 +155,26 @@ export function UnifiedStepRow({
     }
     onSave(updates);
     setHasChanges(false);
+  };
+
+  // Checklist helpers
+  const completedCount = localChecklist.filter((c) => c.completed).length;
+
+  const toggleChecklistItem = (itemId: string) => {
+    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
+    markChanged();
+  };
+
+  const addChecklistItem = () => {
+    if (!newSubtask.trim()) return;
+    setLocalChecklist([...localChecklist, { id: `sub-${Date.now()}`, text: newSubtask.trim(), completed: false }]);
+    setNewSubtask("");
+    markChanged();
+  };
+
+  const removeChecklistItem = (itemId: string) => {
+    setLocalChecklist(localChecklist.filter((c) => c.id !== itemId));
+    markChanged();
   };
 
   const handleDocumentAdded = (newIds: string[]) => {
