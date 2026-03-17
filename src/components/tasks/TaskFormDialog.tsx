@@ -224,7 +224,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div>
-              <Label>Responsable principal</Label>
+              <Label>Responsable principal *</Label>
               <SearchableSelect
                 options={profileOptions}
                 value={assignedTo}
