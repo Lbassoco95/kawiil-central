@@ -50,20 +50,13 @@ interface Props {
   onClose: () => void;
 }
 
-const statusLabels: Record<string, { label: string; color: string }> = {
-  pendiente: { label: "Pendiente", color: "bg-muted text-muted-foreground" },
-  en_progreso: { label: "En progreso", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  en_revision: { label: "En revisión", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  completada: { label: "Completada", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  cancelada: { label: "Cancelada", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
-};
+import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 
-const priorityLabels: Record<string, string> = {
-  urgente: "🔴 Urgente",
-  alta: "🟠 Alta",
-  media: "🟡 Media",
-  baja: "🟢 Baja",
-};
+const statusLabels = TASK_STATUS_CONFIG;
+
+const priorityLabels: Record<string, string> = Object.fromEntries(
+  Object.entries(PRIORITY_CONFIG).map(([k, v]) => [k, `${v.emoji} ${v.label}`])
+);
 
 const CRITICALITY_OPTIONS = [
   { value: "normal", label: "🟢 Normal" },

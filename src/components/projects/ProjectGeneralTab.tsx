@@ -25,19 +25,15 @@ import { CRITICALITY_OPTIONS, DELAY_CATEGORIES } from "./CriticalityDelayCard";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
-const STATUS_STYLES: Record<ProjectStatus, string> = {
-  activo: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  pausado: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  completado: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  cancelado: "bg-muted text-muted-foreground",
-};
+import { PROJECT_STATUS_CONFIG } from "@/lib/statusStyles";
 
-const STATUS_LABELS: Record<ProjectStatus, string> = {
-  activo: "Activo",
-  pausado: "Pausado",
-  completado: "Completado",
-  cancelado: "Cancelado",
-};
+const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
+) as Record<ProjectStatus, string>;
+
+const STATUS_LABELS: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+) as Record<ProjectStatus, string>;
 
 const SERVICE_LABELS: Record<string, string> = {
   contabilidad: "Contabilidad",

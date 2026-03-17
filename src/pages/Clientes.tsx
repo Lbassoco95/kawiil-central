@@ -21,17 +21,15 @@ type ClientStatus = Database["public"]["Enums"]["client_status"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
-const STATUS_STYLES: Record<ClientStatus, string> = {
-  activo: "bg-success/10 text-success",
-  inactivo: "bg-muted text-muted-foreground",
-  prospecto: "bg-warning/10 text-warning",
-};
+import { CLIENT_STATUS_CONFIG } from "@/lib/statusStyles";
 
-const STATUS_LABELS: Record<ClientStatus, string> = {
-  activo: "Activo",
-  inactivo: "Inactivo",
-  prospecto: "Prospecto",
-};
+const STATUS_STYLES: Record<ClientStatus, string> = Object.fromEntries(
+  Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
+) as Record<ClientStatus, string>;
+
+const STATUS_LABELS: Record<ClientStatus, string> = Object.fromEntries(
+  Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+) as Record<ClientStatus, string>;
 
 const AREA_ORDER: ServiceArea[] = [
   "contabilidad", "legal", "softlanding", "pld_ft",

@@ -7,8 +7,8 @@ export type StepStatus = "pendiente" | "en_progreso" | "en_espera_cliente" | "co
 
 export const STEP_STATUS_OPTIONS: { value: StepStatus; label: string }[] = [
   { value: "pendiente", label: "Pendiente" },
-  { value: "en_progreso", label: "En progreso" },
-  { value: "en_espera_cliente", label: "En espera del cliente" },
+  { value: "en_progreso", label: "En Progreso" },
+  { value: "en_espera_cliente", label: "En Espera del Cliente" },
   { value: "completado", label: "Completado" },
 ];
 
