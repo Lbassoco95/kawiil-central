@@ -165,7 +165,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
   return (
     <UnifiedStepRow
       step={step}
-      index={0}
+      index={index}
       projectId={projectId}
       clientDropboxPath={clientDropboxPath}
       showTimer={true}
