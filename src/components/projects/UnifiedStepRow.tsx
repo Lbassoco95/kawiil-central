@@ -359,6 +359,57 @@ export function UnifiedStepRow({
               </Select>
             </div>
 
+            {/* Subtareas */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <ListChecks className="h-3 w-3" /> Subtareas
+                  {localChecklist.length > 0 && (
+                    <span className="text-xs font-normal ml-1">{completedCount}/{localChecklist.length}</span>
+                  )}
+                </label>
+              </div>
+              {localChecklist.length > 0 && (
+                <div className="h-1 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all"
+                    style={{ width: `${localChecklist.length > 0 ? (completedCount / localChecklist.length) * 100 : 0}%` }}
+                  />
+                </div>
+              )}
+              <div className="space-y-1">
+                {localChecklist.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 group py-0.5">
+                    <Checkbox
+                      checked={item.completed}
+                      onCheckedChange={() => toggleChecklistItem(item.id)}
+                    />
+                    <span className={cn("text-xs flex-1", item.completed && "line-through text-muted-foreground")}>
+                      {item.text}
+                    </span>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                      onClick={() => removeChecklistItem(item.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                  placeholder="Agregar subtarea..."
+                  className="h-7 text-xs"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
+                />
+                <Button size="sm" variant="outline" className="h-7 px-2" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+
             {extraFields}
 
             {/* Dates info */}
