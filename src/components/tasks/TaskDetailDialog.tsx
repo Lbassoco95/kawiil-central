@@ -637,6 +637,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                       <span className="text-xs text-muted-foreground">
                         {formatMX(doc.created_at, "dd MMM")}
                       </span>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPreviewDoc(doc)} title="Vista previa">
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDocDownload(doc)} title="Descargar">
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   ))}
                 </div>
