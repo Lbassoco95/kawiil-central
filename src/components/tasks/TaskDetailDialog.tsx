@@ -498,21 +498,88 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <MentionTextarea
-                    value={commentText}
-                    onChange={setCommentText}
-                    profiles={orgProfiles ?? []}
-                    placeholder="Escribe un comentario... usa @ para mencionar"
-                    rows={2}
-                    onMentionsChange={setCommentMentions}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        handleSendComment();
-                      }
-                    }}
-                  />
-                  <Button size="icon" onClick={handleSendComment} disabled={addComment.isPending || !commentText.trim()}>
+
+                {/* Pending attachments preview */}
+                {commentAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 rounded-md border border-border/50 bg-muted/30">
+                    {commentAttachments.map((att, i) => (
+                      <div key={i} className="relative group">
+                        {att.type === "image" ? (
+                          <img src={att.url} alt={att.name} className="h-12 w-auto rounded border border-border object-cover" />
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] bg-background px-2 py-1 rounded border">
+                            {att.type === "dropbox" ? "📦" : "🔗"} {att.name}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => setCommentAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <MentionTextarea
+                      value={commentText}
+                      onChange={setCommentText}
+                      profiles={orgProfiles ?? []}
+                      placeholder="Escribe un comentario... usa @ para mencionar"
+                      rows={2}
+                      onMentionsChange={setCommentMentions}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                          handleSendComment();
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Attachment buttons */}
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <input ref={commentFileInputRef} type="file" multiple className="hidden" onChange={(e) => handleCommentFileUpload(e.target.files)} />
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => commentFileInputRef.current?.click()} disabled={commentUploading} title="Adjuntar archivo">
+                      {commentUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowCommentDropbox(true)} title="Seleccionar de Dropbox">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" /></svg>
+                    </Button>
+                    <Popover open={showCommentLinkPopover} onOpenChange={setShowCommentLinkPopover}>
+                      <PopoverTrigger asChild>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Pegar enlace">
+                          <Link2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-2" align="end">
+                        <div className="flex gap-1">
+                          <input
+                            className="flex-1 text-xs border border-input rounded px-2 py-1 bg-background"
+                            placeholder="https://..."
+                            value={commentLinkInput}
+                            onChange={(e) => setCommentLinkInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && commentLinkInput.trim()) {
+                                setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                                setCommentLinkInput("");
+                                setShowCommentLinkPopover(false);
+                              }
+                            }}
+                          />
+                          <Button size="sm" className="h-7 px-2 text-xs" disabled={!commentLinkInput.trim()} onClick={() => {
+                            setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                            setCommentLinkInput("");
+                            setShowCommentLinkPopover(false);
+                          }}>Añadir</Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <Button size="icon" className="h-8 w-8 shrink-0 self-end" onClick={handleSendComment} disabled={addComment.isPending || (!commentText.trim() && commentAttachments.length === 0)}>
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
