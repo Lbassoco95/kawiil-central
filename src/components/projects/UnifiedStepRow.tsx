@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -13,12 +14,12 @@ import {
 } from "@/components/ui/collapsible";
 import {
   CalendarIcon, ChevronDown, Save, User, Play, Pause, Timer,
-  UserPlus, X, AlertTriangle,
+  UserPlus, X, AlertTriangle, ListChecks, Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isPast, isToday } from "date-fns";
 import { es } from "date-fns/locale";
-import { STEP_STATUS_OPTIONS, type AccountingStep, type StepStatus } from "@/hooks/useAccountingPeriods";
+import { STEP_STATUS_OPTIONS, type AccountingStep, type StepStatus, type ChecklistItem } from "@/hooks/useAccountingPeriods";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { StepComments } from "./StepComments";
@@ -73,6 +74,8 @@ export function UnifiedStepRow({
   const [localNotes, setLocalNotes] = useState(step.notes || "");
   const [localAssignee, setLocalAssignee] = useState<string | null>(step.assigned_to || null);
   const [localCollaborators, setLocalCollaborators] = useState<string[]>(step.collaborators || []);
+  const [localChecklist, setLocalChecklist] = useState<ChecklistItem[]>(step.checklist || []);
+  const [newSubtask, setNewSubtask] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -89,15 +92,21 @@ export function UnifiedStepRow({
     }
   }, [step.time_spent_seconds, timerRunning]);
 
+  // Only reset local state when step identity changes (not on every prop update)
+  const stepKeyRef = useRef(step.key);
   useEffect(() => {
-    setLocalStatus((step.step_status as StepStatus) || "pendiente");
-    setLocalLabel(step.label);
-    setLocalDueDate(step.due_date ? new Date(step.due_date) : undefined);
-    setLocalNotes(step.notes || "");
-    setLocalAssignee(step.assigned_to || null);
-    setLocalCollaborators(step.collaborators || []);
-    setHasChanges(false);
-  }, [step]);
+    if (stepKeyRef.current !== step.key) {
+      stepKeyRef.current = step.key;
+      setLocalStatus((step.step_status as StepStatus) || "pendiente");
+      setLocalLabel(step.label);
+      setLocalDueDate(step.due_date ? new Date(step.due_date) : undefined);
+      setLocalNotes(step.notes || "");
+      setLocalAssignee(step.assigned_to || null);
+      setLocalCollaborators(step.collaborators || []);
+      setLocalChecklist(step.checklist || []);
+      setHasChanges(false);
+    }
+  }, [step.key]);
 
   const markChanged = () => setHasChanges(true);
 
@@ -135,6 +144,7 @@ export function UnifiedStepRow({
       notes: localNotes || null,
       assigned_to: localAssignee,
       collaborators: localCollaborators,
+      checklist: localChecklist,
     };
     // Auto-set started_at when moving from pendiente
     if (localStatus !== "pendiente" && !step.started_at) {
@@ -145,6 +155,26 @@ export function UnifiedStepRow({
     }
     onSave(updates);
     setHasChanges(false);
+  };
+
+  // Checklist helpers
+  const completedCount = localChecklist.filter((c) => c.completed).length;
+
+  const toggleChecklistItem = (itemId: string) => {
+    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
+    markChanged();
+  };
+
+  const addChecklistItem = () => {
+    if (!newSubtask.trim()) return;
+    setLocalChecklist([...localChecklist, { id: `sub-${Date.now()}`, text: newSubtask.trim(), completed: false }]);
+    setNewSubtask("");
+    markChanged();
+  };
+
+  const removeChecklistItem = (itemId: string) => {
+    setLocalChecklist(localChecklist.filter((c) => c.id !== itemId));
+    markChanged();
   };
 
   const handleDocumentAdded = (newIds: string[]) => {
@@ -329,6 +359,57 @@ export function UnifiedStepRow({
               </Select>
             </div>
 
+            {/* Subtareas */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <ListChecks className="h-3 w-3" /> Subtareas
+                  {localChecklist.length > 0 && (
+                    <span className="text-xs font-normal ml-1">{completedCount}/{localChecklist.length}</span>
+                  )}
+                </label>
+              </div>
+              {localChecklist.length > 0 && (
+                <div className="h-1 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all"
+                    style={{ width: `${localChecklist.length > 0 ? (completedCount / localChecklist.length) * 100 : 0}%` }}
+                  />
+                </div>
+              )}
+              <div className="space-y-1">
+                {localChecklist.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 group py-0.5">
+                    <Checkbox
+                      checked={item.completed}
+                      onCheckedChange={() => toggleChecklistItem(item.id)}
+                    />
+                    <span className={cn("text-xs flex-1", item.completed && "line-through text-muted-foreground")}>
+                      {item.text}
+                    </span>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                      onClick={() => removeChecklistItem(item.id)}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                  placeholder="Agregar subtarea..."
+                  className="h-7 text-xs"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
+                />
+                <Button size="sm" variant="outline" className="h-7 px-2" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+
             {extraFields}
 
             {/* Dates info */}
@@ -346,7 +427,12 @@ export function UnifiedStepRow({
             {/* Notes */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Notas</label>
-              <Textarea className="text-xs min-h-[60px] resize-none" placeholder="Observaciones..." value={localNotes} onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }} />
+              <Textarea
+                className="text-xs min-h-[60px]"
+                placeholder="Observaciones..."
+                value={localNotes}
+                onChange={(e) => { setLocalNotes(e.target.value); markChanged(); }}
+              />
             </div>
 
             {/* Step Comments */}

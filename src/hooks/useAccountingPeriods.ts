@@ -12,6 +12,12 @@ export const STEP_STATUS_OPTIONS: { value: StepStatus; label: string }[] = [
   { value: "completado", label: "Completado" },
 ];
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export interface AccountingStep {
   key: string;
   label: string;
@@ -27,6 +33,7 @@ export interface AccountingStep {
   time_spent_seconds?: number;
   assigned_to?: string | null;
   collaborators?: string[];
+  checklist?: ChecklistItem[];
 }
 
 export interface AccountingPeriod {
@@ -225,7 +232,7 @@ export function useUpdateStepDetails() {
       periodId: string;
       projectId: string;
       stepKey: string;
-      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds" | "assigned_to">>;
+      updates: Partial<Pick<AccountingStep, "step_status" | "date" | "notes" | "document_ids" | "time_spent_seconds" | "assigned_to" | "collaborators" | "checklist" | "label" | "due_date" | "started_at">>;
     }) => {
       const { data: period, error: fetchErr } = await supabase
         .from("accounting_periods")
