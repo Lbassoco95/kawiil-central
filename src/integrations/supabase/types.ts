@@ -1612,7 +1612,7 @@ export type Database = {
       }
       tasks: {
         Row: {
-          area: Database["public"]["Enums"]["service_area"] | null
+          area: string | null
           assigned_to: string | null
           checklist: Json | null
           client_id: string | null
@@ -1640,7 +1640,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          area?: Database["public"]["Enums"]["service_area"] | null
+          area?: string | null
           assigned_to?: string | null
           checklist?: Json | null
           client_id?: string | null
@@ -1668,7 +1668,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          area?: Database["public"]["Enums"]["service_area"] | null
+          area?: string | null
           assigned_to?: string | null
           checklist?: Json | null
           client_id?: string | null
