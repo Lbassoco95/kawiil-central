@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { Save, Pencil, X, AlertTriangle, Sparkles } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
 import { useQuery } from "@tanstack/react-query";
@@ -390,19 +391,15 @@ INSTRUCCIONES:
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Cliente</span>
             {editing ? (
-              <Select value={clientId || "__none__"} onValueChange={(v) => setClientId(v === "__none__" ? "" : v)}>
-                <SelectTrigger className="w-40 h-8 text-xs">
-                  <SelectValue placeholder="Sin cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sin cliente</SelectItem>
-                  {clients?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                value={clientId}
+                onValueChange={setClientId}
+                placeholder="Sin cliente"
+                searchPlaceholder="Buscar cliente..."
+                emptyLabel="Sin cliente"
+                className="w-40 h-8 text-xs"
+              />
             ) : (
               <span>{clientName}</span>
             )}

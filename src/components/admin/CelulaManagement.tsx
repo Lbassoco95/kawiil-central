@@ -12,9 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useCelulas, useUpsertCelula, useDeleteCelula, type Celula } from "@/hooks/useCatalogs";
 import { useOrgProfiles } from "@/hooks/useClients";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { formatMX } from "@/lib/dateUtils";
 
@@ -196,14 +194,14 @@ export function CelulaManagement() {
               </div>
               <div>
                 <Label>Guía</Label>
-                <Select value={form.responsible_user_id} onValueChange={(v) => setForm({ ...form, responsible_user_id: v })}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>
-                    {profiles?.map((p) => (
-                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={(profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }))}
+                  value={form.responsible_user_id}
+                  onValueChange={(v) => setForm({ ...form, responsible_user_id: v })}
+                  placeholder="Seleccionar"
+                  searchPlaceholder="Buscar usuario..."
+                  className="mt-1"
+                />
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-2">

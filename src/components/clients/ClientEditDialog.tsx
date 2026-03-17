@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUpdateClient, useOrgProfiles } from "@/hooks/useClients";
 import { DropboxFolderPicker } from "@/components/clients/DropboxFolderPicker";
 import type { Database } from "@/integrations/supabase/types";
@@ -362,20 +363,13 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Responsable</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar responsable" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {profiles?.map((p) => (
-                          <SelectItem key={p.user_id} value={p.user_id}>
-                            {p.full_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      options={(profiles || []).map((p) => ({ value: p.user_id, label: p.full_name }))}
+                      value={field.value || ""}
+                      onValueChange={field.onChange}
+                      placeholder="Seleccionar responsable"
+                      searchPlaceholder="Buscar usuario..."
+                    />
                     <FormMessage />
                   </FormItem>
                 )}

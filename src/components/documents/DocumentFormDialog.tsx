@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useCreateDocument } from "@/hooks/useDocuments";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
@@ -165,27 +165,25 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Cliente</Label>
-              <Select value={clientId} onValueChange={(v) => setClientId(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sin cliente</SelectItem>
-                  {clients?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                value={clientId}
+                onValueChange={setClientId}
+                placeholder="Opcional"
+                searchPlaceholder="Buscar cliente..."
+                emptyLabel="Sin cliente"
+              />
             </div>
             <div>
               <Label>Proyecto</Label>
-              <Select value={projectId} onValueChange={(v) => setProjectId(v === "__none__" ? "" : v)}>
-                <SelectTrigger><SelectValue placeholder="Opcional" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sin proyecto</SelectItem>
-                  {filteredProjects?.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={(filteredProjects || []).map((p: any) => ({ value: p.id, label: p.name }))}
+                value={projectId}
+                onValueChange={setProjectId}
+                placeholder="Opcional"
+                searchPlaceholder="Buscar proyecto..."
+                emptyLabel="Sin proyecto"
+              />
             </div>
           </div>
 

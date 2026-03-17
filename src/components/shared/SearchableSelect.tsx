@@ -19,6 +19,8 @@ interface Props {
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
+  /** If provided, shows a clearable "none" option at top with this label */
+  emptyLabel?: string;
 }
 
 export function SearchableSelect({
@@ -29,6 +31,7 @@ export function SearchableSelect({
   searchPlaceholder = "Buscar...",
   className,
   disabled,
+  emptyLabel,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -74,6 +77,22 @@ export function SearchableSelect({
         </div>
         <ScrollArea className="max-h-[200px]">
           <div className="p-1">
+            {emptyLabel && !search && (
+              <button
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer text-muted-foreground",
+                  !value && "bg-accent"
+                )}
+                onClick={() => {
+                  onValueChange("");
+                  setOpen(false);
+                  setSearch("");
+                }}
+              >
+                <Check className={cn("h-4 w-4 shrink-0", !value ? "opacity-100" : "opacity-0")} />
+                {emptyLabel}
+              </button>
+            )}
             {filtered.length === 0 && (
               <p className="py-4 text-center text-sm text-muted-foreground">Sin resultados</p>
             )}
