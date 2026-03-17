@@ -144,16 +144,61 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   };
 
   const handleSendComment = () => {
-    if (!commentText.trim()) return;
+    if (!commentText.trim() && commentAttachments.length === 0) return;
+    // Build content with attachment info embedded
+    let finalContent = commentText;
+    if (commentAttachments.length > 0) {
+      const attachmentLines = commentAttachments.map(a => `📎 [${a.name}](${a.url})`).join("\n");
+      finalContent = finalContent ? `${finalContent}\n${attachmentLines}` : attachmentLines;
+    }
     addComment.mutate(
-      { taskId, content: commentText, mentions: commentMentions },
+      { taskId, content: finalContent, mentions: commentMentions },
       {
         onSuccess: () => {
           setCommentText("");
           setCommentMentions([]);
+          setCommentAttachments([]);
         },
       }
     );
+  };
+
+  const handleCommentFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setCommentUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > 25 * 1024 * 1024) { toast.error(`${file.name} excede 25MB`); continue; }
+        const path = `comment-attachments/${Date.now()}_${file.name}`;
+        const { error } = await supabase.storage.from("documents").upload(path, file);
+        if (error) throw error;
+        const { data: urlData } = await supabase.storage.from("documents").createSignedUrl(path, 60 * 60 * 24 * 365);
+        if (!urlData?.signedUrl) throw new Error("No se pudo generar URL");
+        const isImage = file.type.startsWith("image/");
+        setCommentAttachments(prev => [...prev, { type: isImage ? "image" : "link", name: file.name, url: urlData.signedUrl }]);
+      }
+    } catch (e: any) {
+      toast.error("Error al subir archivo: " + e.message);
+    } finally {
+      setCommentUploading(false);
+      if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+    }
+  };
+
+  const handleDocDownload = async (doc: any) => {
+    if (!doc.file_path) return;
+    try {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.file_path, 60, { download: true });
+      if (error) throw error;
+      const a = document.createElement("a");
+      a.href = data.signedUrl.startsWith("http") ? data.signedUrl : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1${data.signedUrl}`;
+      a.download = doc.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err: any) {
+      toast.error("Error al descargar: " + err.message);
+    }
   };
 
   const handleDueDateSave = () => {
