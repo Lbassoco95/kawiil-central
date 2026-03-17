@@ -674,7 +674,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
 
                           <div className="space-y-1">
                             <Label className="text-xs">Notas</Label>
-                            <Textarea className="text-xs min-h-[60px]" placeholder="Notas del término..." value={dl.notes || ""} onChange={(e) => updateDeadlineField(dl.id, "notes", e.target.value)} />
+                            <DebouncedTextarea className="text-xs min-h-[60px]" placeholder="Notas del término..." value={dl.notes || ""} onChange={(val) => updateDeadlineField(dl.id, "notes", val)} />
                           </div>
 
                           {/* Step Comments */}
