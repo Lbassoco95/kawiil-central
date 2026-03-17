@@ -121,7 +121,6 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     setTitle(""); setDescription(""); setArea(""); setPriority("media");
     setDueDate(""); setAssignedTo(""); setAdditionalAssignees([]);
     setClientId(""); setProjectId(""); setDropboxLinks([]); setNewLink("");
-    setCriticalityLevel("normal"); setDelayCategory("");
   };
 
   const addAssignee = (userId: string) => {
