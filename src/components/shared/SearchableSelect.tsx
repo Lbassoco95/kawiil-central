@@ -19,6 +19,8 @@ interface Props {
   searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
+  /** If provided, shows a clearable "none" option at top with this label */
+  emptyLabel?: string;
 }
 
 export function SearchableSelect({
