@@ -174,7 +174,7 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         );
       if (found) {
           return (
-            <span key={i} className="text-foreground font-bold">
+            <span key={i} className="text-primary font-bold">
               {part}
             </span>
           );
