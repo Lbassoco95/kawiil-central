@@ -25,9 +25,8 @@ import type { LucideIcon } from "lucide-react";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
+import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { PROJECT_STATUS_CONFIG, TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
-
-import { PROJECT_STATUS_CONFIG } from "@/lib/statusStyles";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
