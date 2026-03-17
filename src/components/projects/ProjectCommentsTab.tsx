@@ -106,7 +106,7 @@ export function ProjectCommentsTab({ projectId, projectName = "un proyecto" }: P
         );
         if (found) {
           return (
-            <span key={i} className="text-primary font-medium">
+            <span key={i} className="text-primary font-bold">
               {part}
             </span>
           );
