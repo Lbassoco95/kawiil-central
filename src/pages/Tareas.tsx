@@ -211,8 +211,10 @@ INSTRUCCIONES:
                   </div>
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                     {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
-                    {task.assigned_to && profileMap.get(task.assigned_to) && (
+                    {task.assigned_to && profileMap.get(task.assigned_to) ? (
                       <span className="flex items-center gap-1"><User className="h-3 w-3" />{profileMap.get(task.assigned_to)}</span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-destructive/70 font-medium">⚠ Sin responsable</span>
                     )}
                     {(task as any).clients?.name && (
                       <span className="flex items-center gap-1 text-muted-foreground/70">{(task as any).clients.name}</span>
