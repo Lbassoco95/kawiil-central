@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
+import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTaskDetail, useAddComment, useUpdateTask } from "@/hooks/useTasks";
 import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssignees";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,13 +21,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera,
+  Download, Eye, Link2, Loader2, ScanLine
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
+
+interface CommentAttachment {
+  type: "image" | "dropbox" | "link";
+  name: string;
+  url: string;
+}
 
 
 interface Props {
@@ -73,6 +82,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
+  const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
+  const [commentUploading, setCommentUploading] = useState(false);
+  const [showCommentDropbox, setShowCommentDropbox] = useState(false);
+  const [commentLinkInput, setCommentLinkInput] = useState("");
+  const [showCommentLinkPopover, setShowCommentLinkPopover] = useState(false);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
   const [showBlockTime, setShowBlockTime] = useState(false);
@@ -81,6 +96,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [scannedFile, setScannedFile] = useState<File | null>(null);
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
+  const [previewDoc, setPreviewDoc] = useState<any>(null);
 
   // Due date editing state
   const [editingDueDate, setEditingDueDate] = useState(false);
@@ -113,7 +129,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
         );
         if (isKnown) {
           return (
-            <span key={i} className="text-primary font-medium">
+            <span key={i} className="text-primary font-bold">
               {part}
             </span>
           );
@@ -128,16 +144,61 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   };
 
   const handleSendComment = () => {
-    if (!commentText.trim()) return;
+    if (!commentText.trim() && commentAttachments.length === 0) return;
+    // Build content with attachment info embedded
+    let finalContent = commentText;
+    if (commentAttachments.length > 0) {
+      const attachmentLines = commentAttachments.map(a => `📎 [${a.name}](${a.url})`).join("\n");
+      finalContent = finalContent ? `${finalContent}\n${attachmentLines}` : attachmentLines;
+    }
     addComment.mutate(
-      { taskId, content: commentText, mentions: commentMentions },
+      { taskId, content: finalContent, mentions: commentMentions },
       {
         onSuccess: () => {
           setCommentText("");
           setCommentMentions([]);
+          setCommentAttachments([]);
         },
       }
     );
+  };
+
+  const handleCommentFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setCommentUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > 25 * 1024 * 1024) { toast.error(`${file.name} excede 25MB`); continue; }
+        const path = `comment-attachments/${Date.now()}_${file.name}`;
+        const { error } = await supabase.storage.from("documents").upload(path, file);
+        if (error) throw error;
+        const { data: urlData } = await supabase.storage.from("documents").createSignedUrl(path, 60 * 60 * 24 * 365);
+        if (!urlData?.signedUrl) throw new Error("No se pudo generar URL");
+        const isImage = file.type.startsWith("image/");
+        setCommentAttachments(prev => [...prev, { type: isImage ? "image" : "link", name: file.name, url: urlData.signedUrl }]);
+      }
+    } catch (e: any) {
+      toast.error("Error al subir archivo: " + e.message);
+    } finally {
+      setCommentUploading(false);
+      if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+    }
+  };
+
+  const handleDocDownload = async (doc: any) => {
+    if (!doc.file_path) return;
+    try {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.file_path, 60, { download: true });
+      if (error) throw error;
+      const a = document.createElement("a");
+      a.href = data.signedUrl.startsWith("http") ? data.signedUrl : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1${data.signedUrl}`;
+      a.download = doc.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err: any) {
+      toast.error("Error al descargar: " + err.message);
+    }
   };
 
   const handleDueDateSave = () => {
@@ -437,21 +498,88 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2">
-                  <MentionTextarea
-                    value={commentText}
-                    onChange={setCommentText}
-                    profiles={orgProfiles ?? []}
-                    placeholder="Escribe un comentario... usa @ para mencionar"
-                    rows={2}
-                    onMentionsChange={setCommentMentions}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        handleSendComment();
-                      }
-                    }}
-                  />
-                  <Button size="icon" onClick={handleSendComment} disabled={addComment.isPending || !commentText.trim()}>
+
+                {/* Pending attachments preview */}
+                {commentAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 rounded-md border border-border/50 bg-muted/30">
+                    {commentAttachments.map((att, i) => (
+                      <div key={i} className="relative group">
+                        {att.type === "image" ? (
+                          <img src={att.url} alt={att.name} className="h-12 w-auto rounded border border-border object-cover" />
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] bg-background px-2 py-1 rounded border">
+                            {att.type === "dropbox" ? "📦" : "🔗"} {att.name}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => setCommentAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1 -right-1 h-4 w-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <MentionTextarea
+                      value={commentText}
+                      onChange={setCommentText}
+                      profiles={orgProfiles ?? []}
+                      placeholder="Escribe un comentario... usa @ para mencionar"
+                      rows={2}
+                      onMentionsChange={setCommentMentions}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                          handleSendComment();
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Attachment buttons */}
+                  <div className="flex flex-col gap-0.5 shrink-0">
+                    <input ref={commentFileInputRef} type="file" multiple className="hidden" onChange={(e) => handleCommentFileUpload(e.target.files)} />
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => commentFileInputRef.current?.click()} disabled={commentUploading} title="Adjuntar archivo">
+                      {commentUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowCommentDropbox(true)} title="Seleccionar de Dropbox">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" /></svg>
+                    </Button>
+                    <Popover open={showCommentLinkPopover} onOpenChange={setShowCommentLinkPopover}>
+                      <PopoverTrigger asChild>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Pegar enlace">
+                          <Link2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-2" align="end">
+                        <div className="flex gap-1">
+                          <input
+                            className="flex-1 text-xs border border-input rounded px-2 py-1 bg-background"
+                            placeholder="https://..."
+                            value={commentLinkInput}
+                            onChange={(e) => setCommentLinkInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && commentLinkInput.trim()) {
+                                setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                                setCommentLinkInput("");
+                                setShowCommentLinkPopover(false);
+                              }
+                            }}
+                          />
+                          <Button size="sm" className="h-7 px-2 text-xs" disabled={!commentLinkInput.trim()} onClick={() => {
+                            setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                            setCommentLinkInput("");
+                            setShowCommentLinkPopover(false);
+                          }}>Añadir</Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <Button size="icon" className="h-8 w-8 shrink-0 self-end" onClick={handleSendComment} disabled={addComment.isPending || (!commentText.trim() && commentAttachments.length === 0)}>
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
@@ -509,6 +637,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                       <span className="text-xs text-muted-foreground">
                         {formatMX(doc.created_at, "dd MMM")}
                       </span>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPreviewDoc(doc)} title="Vista previa">
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDocDownload(doc)} title="Descargar">
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -594,6 +728,18 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
           updateTask.mutate({ id: taskId!, dropbox_links: updatedLinks });
           setScannedFile(null);
         }}
+      />
+      <DropboxFilePicker
+        open={showCommentDropbox}
+        onClose={() => setShowCommentDropbox(false)}
+        onSelect={(file) => {
+          setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }]);
+        }}
+      />
+      <DocumentPreviewDialog
+        open={!!previewDoc}
+        onOpenChange={(o) => { if (!o) setPreviewDoc(null); }}
+        document={previewDoc}
       />
     </Dialog>
   );
