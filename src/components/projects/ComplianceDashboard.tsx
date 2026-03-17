@@ -401,7 +401,7 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath }: 
                 <CollapsibleContent>
                   <CardContent className="pt-0 pb-3 px-4">
                     <div className="space-y-2">
-                      {group.tasks.map((task) => (
+                      {group.tasks.map((task, idx) => (
                         <ComplianceTaskRow
                           key={task.id}
                           task={task}
@@ -409,6 +409,7 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath }: 
                           clientDropboxPath={clientDropboxPath}
                           urgencyBadge={getUrgencyBadge(task)}
                           onUpdate={refreshTasks}
+                          index={idx}
                         />
                       ))}
                     </div>

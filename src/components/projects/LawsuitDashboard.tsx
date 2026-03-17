@@ -40,8 +40,6 @@ import {
   Link2,
   ExternalLink,
   FolderOpen,
-  UserPlus,
-  X,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,6 +49,8 @@ import { formatMX } from "@/lib/dateUtils";
 import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
+import { UnifiedStepRow } from "./UnifiedStepRow";
+import type { AccountingStep, StepStatus } from "@/hooks/useAccountingPeriods";
 
 import { useProfiles } from "@/hooks/useTasks";
 import { UserOrTextMulti } from "./UserOrTextInput";
@@ -76,6 +76,7 @@ interface LawsuitStage {
   due_date?: string | null;
   started_at?: string | null;
   time_spent_seconds?: number;
+  checklist?: any[];
 }
 
 interface LawsuitDeadline {
@@ -110,13 +111,6 @@ interface LawsuitDashboardProps {
   dropboxInitialPath?: string | null;
   lockDropboxToInitialPath?: boolean;
 }
-
-const STAGE_STATUS_OPTIONS = [
-  { value: "pendiente", label: "Pendiente", color: "bg-muted text-muted-foreground" },
-  { value: "en_progreso", label: "En progreso", color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
-  { value: "completado", label: "Completado", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-  { value: "no_aplica", label: "No aplica", color: "bg-muted text-muted-foreground line-through" },
-];
 
 const STAGE_TEMPLATES = [
   { value: "demanda", label: "Demanda" },
@@ -154,8 +148,15 @@ const LAWSUIT_TYPE_LABELS: Record<string, string> = {
   familiar: "Familiar",
 };
 
+// Map lawsuit stage status to AccountingStep status
+const STAGE_STATUS_TO_STEP: Record<string, StepStatus> = {
+  pendiente: "pendiente",
+  en_progreso: "en_progreso",
+  completado: "completado",
+  no_aplica: "completado",
+};
+
 export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false }: LawsuitDashboardProps) {
-  const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [expandedDeadline, setExpandedDeadline] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
@@ -183,28 +184,6 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     onError: (e) => toast.error("Error: " + e.message),
   });
 
-  const updateStageStatus = (key: string, status: string) => {
-    const updated = {
-      ...lawsuitDetails,
-      stages: lawsuitDetails.stages.map((s) =>
-        s.key === key
-          ? { ...s, status, completed_at: status === "completado" ? new Date().toISOString() : null }
-          : s
-      ),
-    };
-    updateLawsuit.mutate(updated);
-  };
-
-  const updateStageField = (key: string, field: "date" | "notes", value: string) => {
-    const updated = {
-      ...lawsuitDetails,
-      stages: lawsuitDetails.stages.map((s) =>
-        s.key === key ? { ...s, [field]: value || null } : s
-      ),
-    };
-    updateLawsuit.mutate(updated);
-  };
-
   const addStage = () => {
     const template = STAGE_TEMPLATES.find((t) => t.value === newStageTemplate);
     const label = newStageTemplate === "custom" ? newStageCustomLabel : template?.label || newStageTemplate;
@@ -218,6 +197,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       notes: "",
       completed_at: null,
       attachments: [],
+      checklist: [],
     };
     const updated = { ...lawsuitDetails, stages: [...lawsuitDetails.stages, newStage] };
     updateLawsuit.mutate(updated);
@@ -280,7 +260,6 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     const updated = { ...lawsuitDetails, deadlines: [...(lawsuitDetails.deadlines || []), dl] };
     updateLawsuit.mutate(updated);
 
-    // Send Slack alert if there are attendees
     if (dl.attendees.length > 0 || dl.assigned_to) {
       sendSlackNotification("deadline_created" as any, {
         title: dl.title,
@@ -323,6 +302,66 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       ),
     };
     updateLawsuit.mutate(updated);
+  };
+
+  // Convert LawsuitStage to AccountingStep for UnifiedStepRow
+  const stageToStep = (stage: LawsuitStage): AccountingStep => ({
+    key: stage.key,
+    label: stage.label,
+    completed: stage.status === "completado",
+    completed_at: stage.completed_at || null,
+    completed_by: null,
+    step_status: STAGE_STATUS_TO_STEP[stage.status] || "pendiente",
+    due_date: stage.due_date || stage.date || null,
+    started_at: stage.started_at || null,
+    notes: stage.notes || null,
+    document_ids: stage.document_ids || [],
+    time_spent_seconds: stage.time_spent_seconds || 0,
+    assigned_to: stage.assigned_to || null,
+    collaborators: stage.collaborators || [],
+    checklist: stage.checklist || [],
+  });
+
+  const handleStageSave = (stageKey: string, updates: Partial<AccountingStep>) => {
+    const updatedStages = lawsuitDetails.stages.map((s) => {
+      if (s.key !== stageKey) return s;
+      const merged = { ...s } as any;
+      if (updates.label !== undefined) merged.label = updates.label;
+      if (updates.step_status !== undefined) {
+        // Map back to lawsuit status
+        const reverseMap: Record<string, string> = {
+          pendiente: "pendiente",
+          en_progreso: "en_progreso",
+          en_espera_cliente: "en_progreso",
+          completado: "completado",
+        };
+        merged.status = reverseMap[updates.step_status] || "pendiente";
+        if (updates.step_status === "completado") {
+          merged.completed_at = new Date().toISOString();
+        } else {
+          merged.completed_at = null;
+        }
+      }
+      if (updates.due_date !== undefined) merged.due_date = updates.due_date;
+      if (updates.notes !== undefined) merged.notes = updates.notes || "";
+      if (updates.assigned_to !== undefined) merged.assigned_to = updates.assigned_to;
+      if (updates.collaborators !== undefined) merged.collaborators = updates.collaborators;
+      if (updates.document_ids !== undefined) merged.document_ids = updates.document_ids;
+      if (updates.time_spent_seconds !== undefined) merged.time_spent_seconds = updates.time_spent_seconds;
+      if (updates.started_at !== undefined) merged.started_at = updates.started_at;
+      if (updates.checklist !== undefined) merged.checklist = updates.checklist;
+      return merged;
+    });
+    updateLawsuit.mutate({ ...lawsuitDetails, stages: updatedStages });
+  };
+
+  const handleStageToggle = (stageKey: string, completed: boolean) => {
+    const updatedStages = lawsuitDetails.stages.map((s) =>
+      s.key === stageKey
+        ? { ...s, status: completed ? "completado" : "pendiente", completed_at: completed ? new Date().toISOString() : null }
+        : s
+    );
+    updateLawsuit.mutate({ ...lawsuitDetails, stages: updatedStages });
   };
 
   const completedStages = lawsuitDetails.stages.filter((s) => s.status === "completado").length;
@@ -425,7 +464,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
         </CardContent>
       </Card>
 
-      {/* Procedural stages */}
+      {/* Procedural stages — now using UnifiedStepRow */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Etapas procesales</CardTitle>
@@ -434,140 +473,52 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           </Button>
         </CardHeader>
         <CardContent className="space-y-1">
-          {lawsuitDetails.stages.map((stage) => {
-            const statusOpt = STAGE_STATUS_OPTIONS.find((s) => s.value === stage.status);
-            const isExpanded = expandedStage === stage.key;
+          {lawsuitDetails.stages.map((stage, idx) => {
             const attachments = stage.attachments || [];
 
-            return (
-              <Collapsible
-                key={stage.key}
-                open={isExpanded}
-                onOpenChange={() => setExpandedStage(isExpanded ? null : stage.key)}
-              >
-                <CollapsibleTrigger className="flex items-center w-full gap-3 rounded-md px-3 py-2.5 hover:bg-muted/50 transition-colors text-left">
-                  {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
-                  <span className={`flex-1 text-sm font-medium ${stage.status === "no_aplica" ? "line-through text-muted-foreground" : ""}`}>
-                    {stage.label}
-                  </span>
-                  {attachments.length > 0 && (
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Link2 className="h-3 w-3" />
-                      {attachments.length}
-                    </span>
-                  )}
-                  {stage.date && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatMX(stage.date, "dd MMM yyyy")}
-                    </span>
-                  )}
-                  <Badge variant="outline" className={`text-xs ${statusOpt?.color}`}>
-                    {statusOpt?.label}
-                  </Badge>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pl-10 pr-3 pb-3 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <StepAssigneeSelect
-                      value={stage.assigned_to || null}
-                      onChange={(userId) => {
-                        const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, assigned_to: userId } : s) };
-                        updateLawsuit.mutate(updated);
-                      }}
-                    />
-                    <div className="space-y-1">
-                      <Label className="text-xs">Estado</Label>
-                      <Select value={stage.status} onValueChange={(v) => updateStageStatus(stage.key, v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {STAGE_STATUS_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Fecha límite</Label>
-                      <Input type="date" className="h-8 text-xs" value={stage.date || ""} onChange={(e) => updateStageField(stage.key, "date", e.target.value)} />
-                    </div>
-                  </div>
-
-                  {/* Collaborators */}
+            const stageExtraFields = (
+              <div className="space-y-3">
+                {/* Legacy attachments */}
+                {attachments.length > 0 && (
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                      <UserPlus className="h-3 w-3" /> Colaboradores
-                    </label>
-                    <div className="flex flex-wrap gap-1.5 mb-1">
-                      {(stage.collaborators || []).map((uid) => {
-                        const p = profiles.find((pr) => pr.user_id === uid);
-                        return (
-                          <Badge key={uid} variant="secondary" className="text-xs gap-1">
-                            {p?.full_name || uid}
-                            <X className="h-3 w-3 cursor-pointer hover:text-destructive" onClick={() => {
-                              const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, collaborators: (s.collaborators || []).filter((c) => c !== uid) } : s) };
-                              updateLawsuit.mutate(updated);
-                            }} />
-                          </Badge>
-                        );
-                      })}
+                    <Label className="text-xs flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Links vinculados</Label>
+                    <div className="space-y-1">
+                      {attachments.map((att) => (
+                        <div key={att.id} className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs bg-muted/30">
+                          {att.type === "dropbox" ? <FolderOpen className="h-3 w-3 text-blue-500 shrink-0" /> : <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
+                          <span className="flex-1 truncate">{att.name}</span>
+                          <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline shrink-0" onClick={(e) => e.stopPropagation()}><ExternalLink className="h-3 w-3" /></a>
+                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={(e) => { e.stopPropagation(); removeAttachment(stage.key, att.id); }}><Trash2 className="h-3 w-3" /></Button>
+                        </div>
+                      ))}
                     </div>
-                    <Select onValueChange={(uid) => {
-                      const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, collaborators: [...(s.collaborators || []), uid] } : s) };
-                      updateLawsuit.mutate(updated);
-                    }} value="">
-                      <SelectTrigger className="h-8 text-xs w-full sm:w-[250px]"><SelectValue placeholder="Agregar colaborador..." /></SelectTrigger>
-                      <SelectContent>
-                        {profiles.filter((p) => p.user_id !== stage.assigned_to && !(stage.collaborators || []).includes(p.user_id)).map((p) => (
-                          <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs">Notas</Label>
-                    <DebouncedTextarea className="text-xs min-h-[60px]" placeholder="Notas de esta etapa..." value={stage.notes || ""} onChange={(val) => updateStageField(stage.key, "notes", val)} />
-                  </div>
-
-                  {/* Step Comments */}
-                  <StepComments projectId={projectId} stepKey={stage.key} stepLabel={stage.label} />
-
-                  {/* File management (Dropbox + upload) */}
-                  <StepFileManager
-                    documentIds={stage.document_ids || []}
-                    onDocumentAdded={(newIds) => {
-                      const updated = { ...lawsuitDetails, stages: lawsuitDetails.stages.map((s) => s.key === stage.key ? { ...s, document_ids: newIds } : s) };
-                      updateLawsuit.mutate(updated);
-                    }}
-                    projectId={projectId}
-                    clientDropboxPath={dropboxInitialPath || undefined}
-                  />
-
-                  {/* Legacy attachments */}
-                  {attachments.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-xs flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Links vinculados</Label>
-                      <div className="space-y-1">
-                        {attachments.map((att) => (
-                          <div key={att.id} className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs bg-muted/30">
-                            {att.type === "dropbox" ? <FolderOpen className="h-3 w-3 text-blue-500 shrink-0" /> : <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
-                            <span className="flex-1 truncate">{att.name}</span>
-                            <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline shrink-0" onClick={(e) => e.stopPropagation()}><ExternalLink className="h-3 w-3" /></a>
-                            <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={(e) => { e.stopPropagation(); removeAttachment(stage.key, att.id); }}><Trash2 className="h-3 w-3" /></Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={(e) => { e.stopPropagation(); setAttachmentDialogOpen(stage.key); }}>
-                    <Plus className="h-3 w-3 mr-1" /> Agregar link externo
+                )}
+                <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={(e) => { e.stopPropagation(); setAttachmentDialogOpen(stage.key); }}>
+                  <Plus className="h-3 w-3 mr-1" /> Agregar link externo
+                </Button>
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => removeStage(stage.key)}>
+                    <Trash2 className="h-3 w-3 mr-1" /> Eliminar etapa
                   </Button>
+                </div>
+              </div>
+            );
 
-                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-border">
-                    {stage.completed_at && <p className="text-xs text-muted-foreground">Completado: {formatMX(stage.completed_at, "dd/MM/yyyy HH:mm")}</p>}
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive ml-auto" onClick={() => removeStage(stage.key)}>
-                      <Trash2 className="h-3 w-3 mr-1" /> Eliminar etapa
-                    </Button>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
+            return (
+              <UnifiedStepRow
+                key={stage.key}
+                step={stageToStep(stage)}
+                index={idx}
+                projectId={projectId}
+                clientDropboxPath={dropboxInitialPath || undefined}
+                showTimer={true}
+                showCheckbox={true}
+                onToggle={(checked) => handleStageToggle(stage.key, checked)}
+                onSave={(updates) => handleStageSave(stage.key, updates)}
+                saving={updateLawsuit.isPending}
+                extraFields={stageExtraFields}
+              />
             );
           })}
         </CardContent>
@@ -784,7 +735,6 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             Pega un enlace manualmente o busca directamente en Dropbox.
           </p>
           <div className="space-y-4 pt-2">
-            {/* Dropbox browse button */}
             <Button
               variant="outline"
               className="w-full justify-start gap-2"
