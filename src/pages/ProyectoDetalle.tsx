@@ -65,6 +65,9 @@ const ProyectoDetalle = () => {
     enabled: !!user && !!id,
   });
 
+  const { data: profiles = [] } = useProfiles();
+  const profileMap = new Map(profiles.map(p => [p.user_id, p.full_name]));
+
   const hasAccounting = project?.area === "contabilidad" || project?.area === "softlanding";
   const isSoftlanding = project?.area === "softlanding";
   const isConstitutionNacional = project?.area === "constitucion_nacional";
