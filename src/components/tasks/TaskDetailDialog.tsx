@@ -25,6 +25,7 @@ import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 
 interface Props {
   taskId: string | null;
@@ -516,10 +517,52 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     </div>
                   </label>
                   <label className="cursor-pointer">
-                    <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handleFileUpload} disabled={uploading} />
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file || !task) return;
+                        setUploading(true);
+                        try {
+                          // Determine Dropbox upload path from client folder
+                          let basePath = "/Kawiil Mx/ESCANEOS";
+                          if (task.client_id) {
+                            const { data: client } = await supabase
+                              .from("clients")
+                              .select("dropbox_folder_path, name")
+                              .eq("id", task.client_id)
+                              .single();
+                            if (client?.dropbox_folder_path) {
+                              basePath = `${client.dropbox_folder_path}/Escaneos`;
+                            }
+                          }
+                          const fileName = `scan_${Date.now()}.${file.name.split('.').pop() || 'jpg'}`;
+                          const uploadPath = `${basePath}/${fileName}`;
+                          const result = await uploadFileToDropbox(file, uploadPath);
+                          // Save as dropbox link on the task
+                          const currentLinks = (task.dropbox_links as any[]) ?? [];
+                          const updatedLinks = [...currentLinks, {
+                            url: result.url,
+                            name: result.name || fileName,
+                            added_at: new Date().toISOString(),
+                          }];
+                          updateTask.mutate({ id: taskId, dropbox_links: updatedLinks });
+                          toast.success("Documento escaneado y subido a Dropbox");
+                        } catch (err: any) {
+                          toast.error("Error al escanear: " + err.message);
+                        } finally {
+                          setUploading(false);
+                          e.target.value = "";
+                        }
+                      }}
+                      disabled={uploading}
+                    />
                     <div className="flex items-center gap-2 p-3 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
                       <Camera className="h-4 w-4" />
-                      {uploading ? "Subiendo..." : "Escanear documento"}
+                      {uploading ? "Subiendo..." : "Escanear a Dropbox"}
                     </div>
                   </label>
                 </div>
