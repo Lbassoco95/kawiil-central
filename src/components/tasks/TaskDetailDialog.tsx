@@ -98,6 +98,55 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
   const [previewDoc, setPreviewDoc] = useState<any>(null);
 
+  // Timer state
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [displaySeconds, setDisplaySeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Sync timer from task data
+  useEffect(() => {
+    if (task) {
+      setDisplaySeconds((task as any).time_spent_seconds || 0);
+    }
+  }, [task?.id, (task as any)?.time_spent_seconds]);
+
+  // Timer interval
+  useEffect(() => {
+    if (timerRunning) {
+      timerRef.current = setInterval(() => {
+        setDisplaySeconds((s) => s + 1);
+      }, 1000);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [timerRunning]);
+
+  const handleTimerToggle = useCallback(() => {
+    if (timerRunning) {
+      // Pause — save
+      setTimerRunning(false);
+      updateTask.mutate({ id: taskId!, time_spent_seconds: displaySeconds } as any);
+    } else {
+      setTimerRunning(true);
+    }
+  }, [timerRunning, displaySeconds, taskId, updateTask]);
+
+  // Stop timer on close
+  useEffect(() => {
+    if (!taskId && timerRunning) {
+      setTimerRunning(false);
+    }
+  }, [taskId]);
+
+  const formatTimer = (totalSec: number) => {
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
   // Due date editing state
   const [editingDueDate, setEditingDueDate] = useState(false);
   const [newDueDate, setNewDueDate] = useState("");
