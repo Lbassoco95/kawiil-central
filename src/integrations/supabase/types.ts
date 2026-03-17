@@ -1616,6 +1616,7 @@ export type Database = {
           assigned_to: string | null
           checklist: Json | null
           client_id: string | null
+          completed_at: string | null
           compliance_period: string | null
           compliance_periodicity: string | null
           compliance_template_id: string | null
@@ -1633,9 +1634,11 @@ export type Database = {
           priority: Database["public"]["Enums"]["task_priority"]
           project_id: string | null
           recurrence_pattern: string | null
+          started_at: string | null
           status: Database["public"]["Enums"]["task_status"]
           tags: string[] | null
           template_id: string | null
+          time_spent_seconds: number | null
           title: string
           updated_at: string
         }
@@ -1644,6 +1647,7 @@ export type Database = {
           assigned_to?: string | null
           checklist?: Json | null
           client_id?: string | null
+          completed_at?: string | null
           compliance_period?: string | null
           compliance_periodicity?: string | null
           compliance_template_id?: string | null
@@ -1661,9 +1665,11 @@ export type Database = {
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id?: string | null
           recurrence_pattern?: string | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           tags?: string[] | null
           template_id?: string | null
+          time_spent_seconds?: number | null
           title: string
           updated_at?: string
         }
@@ -1672,6 +1678,7 @@ export type Database = {
           assigned_to?: string | null
           checklist?: Json | null
           client_id?: string | null
+          completed_at?: string | null
           compliance_period?: string | null
           compliance_periodicity?: string | null
           compliance_template_id?: string | null
@@ -1689,9 +1696,11 @@ export type Database = {
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id?: string | null
           recurrence_pattern?: string | null
+          started_at?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           tags?: string[] | null
           template_id?: string | null
+          time_spent_seconds?: number | null
           title?: string
           updated_at?: string
         }

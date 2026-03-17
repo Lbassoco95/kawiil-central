@@ -57,7 +57,19 @@ export function useTaskDetail(taskId: string | undefined) {
         .eq("id", taskId!)
         .single();
       if (error) throw error;
-      return data as Task;
+
+      // Fetch creator profile
+      let creator_profile: { full_name: string; email: string } | null = null;
+      if (data.created_by) {
+        const { data: cp } = await supabase
+          .from("profiles")
+          .select("full_name, email")
+          .eq("user_id", data.created_by)
+          .single();
+        creator_profile = cp;
+      }
+
+      return { ...data, creator_profile } as Task & { creator_profile: { full_name: string; email: string } | null };
     },
     enabled: !!user && !!taskId,
   });
@@ -282,6 +294,21 @@ export function useUpdateTask() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; [key: string]: any }) => {
+      // Auto-set started_at when moving away from pendiente
+      if (updates.status && updates.status !== "pendiente" && updates.status !== "cancelada") {
+        const { data: current } = await supabase.from("tasks").select("started_at").eq("id", id).single();
+        if (current && !current.started_at) {
+          updates.started_at = new Date().toISOString();
+        }
+      }
+      // Auto-set completed_at when completing
+      if (updates.status === "completada") {
+        updates.completed_at = new Date().toISOString();
+      }
+      // Clear completed_at if reopening
+      if (updates.status && updates.status !== "completada") {
+        updates.completed_at = null;
+      }
       const { error } = await supabase.from("tasks").update(updates).eq("id", id);
       if (error) throw error;
     },

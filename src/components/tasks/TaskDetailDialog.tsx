@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
   Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera,
-  Download, Eye, Link2, Loader2, ScanLine
+  Download, Eye, Link2, Loader2, ScanLine, Play, Pause, Timer, UserCheck
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
@@ -97,6 +97,55 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
   const [previewDoc, setPreviewDoc] = useState<any>(null);
+
+  // Timer state
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [displaySeconds, setDisplaySeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Sync timer from task data
+  useEffect(() => {
+    if (task) {
+      setDisplaySeconds((task as any).time_spent_seconds || 0);
+    }
+  }, [task?.id, (task as any)?.time_spent_seconds]);
+
+  // Timer interval
+  useEffect(() => {
+    if (timerRunning) {
+      timerRef.current = setInterval(() => {
+        setDisplaySeconds((s) => s + 1);
+      }, 1000);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [timerRunning]);
+
+  const handleTimerToggle = useCallback(() => {
+    if (timerRunning) {
+      // Pause — save
+      setTimerRunning(false);
+      updateTask.mutate({ id: taskId!, time_spent_seconds: displaySeconds } as any);
+    } else {
+      setTimerRunning(true);
+    }
+  }, [timerRunning, displaySeconds, taskId, updateTask]);
+
+  // Stop timer on close
+  useEffect(() => {
+    if (!taskId && timerRunning) {
+      setTimerRunning(false);
+    }
+  }, [taskId]);
+
+  const formatTimer = (totalSec: number) => {
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
   // Due date editing state
   const [editingDueDate, setEditingDueDate] = useState(false);
@@ -339,6 +388,11 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <User className="h-3.5 w-3.5" />{(task as any).clients.name}
                 </span>
               )}
+              {(task as any).creator_profile && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <UserCheck className="h-3.5 w-3.5" />Creada por: {(task as any).creator_profile.full_name}
+                </span>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -347,6 +401,32 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               >
                 <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
               </Button>
+            </div>
+
+            {/* Timer & Dates row */}
+            <div className="flex flex-wrap items-center gap-4 p-3 rounded-lg border bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Timer className="h-4 w-4 text-muted-foreground" />
+                <span className="font-mono text-sm font-medium tabular-nums">{formatTimer(displaySeconds)}</span>
+                <Button
+                  size="icon"
+                  variant={timerRunning ? "destructive" : "outline"}
+                  className="h-7 w-7"
+                  onClick={handleTimerToggle}
+                >
+                  {timerRunning ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              {(task as any).started_at && (
+                <span className="text-xs text-muted-foreground">
+                  Inicio: {formatMX((task as any).started_at, "dd MMM yyyy HH:mm")}
+                </span>
+              )}
+              {(task as any).completed_at && (
+                <span className="text-xs text-muted-foreground">
+                  Completada: {formatMX((task as any).completed_at, "dd MMM yyyy HH:mm")}
+                </span>
+              )}
             </div>
 
             {/* Due date edit inline */}
