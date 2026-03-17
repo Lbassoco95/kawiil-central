@@ -33,7 +33,6 @@ async function getRefreshTokenFromDb(): Promise<string | null> {
 }
 
 async function getValidAccessToken(): Promise<string> {
-  // If we have a cached token that's still valid (with 5 min buffer), use it
   if (cachedAccessToken && Date.now() < cachedTokenExpiry - 300_000) {
     return cachedAccessToken;
   }
@@ -42,14 +41,9 @@ async function getValidAccessToken(): Promise<string> {
   const appKey = Deno.env.get('DROPBOX_APP_KEY');
   const appSecret = Deno.env.get('DROPBOX_APP_SECRET');
 
-  // If env refresh token looks wrong (too short, not the right format), try DB
   if (!refreshToken || refreshToken.length < 50) {
-    console.log('Env refresh token missing or too short, checking database...');
     const dbToken = await getRefreshTokenFromDb();
-    if (dbToken) {
-      refreshToken = dbToken;
-      console.log('Using refresh token from database');
-    }
+    if (dbToken) refreshToken = dbToken;
   }
 
   if (!refreshToken || !appKey || !appSecret) {
@@ -58,7 +52,6 @@ async function getValidAccessToken(): Promise<string> {
     return staticToken;
   }
 
-  console.log('Refreshing Dropbox access token...');
   const response = await fetch('https://api.dropboxapi.com/oauth2/token', {
     method: 'POST',
     headers: {
@@ -79,77 +72,48 @@ async function getValidAccessToken(): Promise<string> {
   const data = await response.json();
   cachedAccessToken = data.access_token;
   cachedTokenExpiry = Date.now() + (data.expires_in * 1000);
-  console.log('Dropbox access token refreshed successfully');
   return cachedAccessToken!;
 }
 
-async function getTeamAdminMemberId(token: string): Promise<string | null> {
-  if (cachedAdminMemberId) return cachedAdminMemberId;
-
-  try {
-    const response = await fetch('https://api.dropboxapi.com/2/team/members/list_v2', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ limit: 50 }),
-    });
-
-    if (!response.ok) {
-      console.error('Failed to list team members:', await response.text());
-      return null;
-    }
-
-    const data = await response.json();
-    const members = data?.members || [];
-    // Find a team admin
-    const admin = members.find((m: any) => m?.role?.['.tag'] === 'team_admin');
-    const memberId = admin?.profile?.team_member_id || members[0]?.profile?.team_member_id;
-    if (memberId) {
-      cachedAdminMemberId = memberId;
-      console.log('Using team admin member ID:', memberId);
-    }
-    return memberId || null;
-  } catch (e) {
-    console.error('Error getting team admin:', e);
-    return null;
+// Combined init: fetches admin member ID and root namespace in minimal calls
+async function initTeamContext(token: string): Promise<{ adminMemberId: string | null; rootNamespaceId: string | null }> {
+  if (cachedAdminMemberId && cachedRootNamespaceId) {
+    return { adminMemberId: cachedAdminMemberId, rootNamespaceId: cachedRootNamespaceId };
   }
-}
 
-async function getTeamRootNamespaceId(token: string, adminMemberId: string | null): Promise<string | null> {
-  if (cachedRootNamespaceId) return cachedRootNamespaceId;
-
-  try {
-    const headers: Record<string, string> = {
-      'Authorization': `Bearer ${token}`,
-    };
-    if (adminMemberId) {
-      headers['Dropbox-API-Select-Admin'] = adminMemberId;
-    }
-
-    const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
-      method: 'POST',
-      headers,
-    });
-
-    if (!response.ok) {
-      console.error('Failed to get account info:', await response.text());
-      return null;
-    }
-
-    const account = await response.json();
-    const rootNsId = account?.root_info?.root_namespace_id;
-    if (rootNsId) {
-      cachedRootNamespaceId = rootNsId;
-      console.log('Using team root namespace:', rootNsId);
-      return rootNsId;
-    }
-    return null;
-  } catch (e) {
-    console.error('Error getting team namespace:', e);
-    return null;
+  let adminMemberId = cachedAdminMemberId;
+  if (!adminMemberId) {
+    try {
+      const response = await fetch('https://api.dropboxapi.com/2/team/members/list_v2', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 50 }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const members = data?.members || [];
+        const admin = members.find((m: any) => m?.role?.['.tag'] === 'team_admin');
+        adminMemberId = admin?.profile?.team_member_id || members[0]?.profile?.team_member_id || null;
+        if (adminMemberId) cachedAdminMemberId = adminMemberId;
+      }
+    } catch (e) { console.error('Error getting team admin:', e); }
   }
+
+  let rootNamespaceId = cachedRootNamespaceId;
+  if (!rootNamespaceId) {
+    try {
+      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` };
+      if (adminMemberId) headers['Dropbox-API-Select-Admin'] = adminMemberId;
+      const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', { method: 'POST', headers });
+      if (response.ok) {
+        const account = await response.json();
+        rootNamespaceId = account?.root_info?.root_namespace_id || null;
+        if (rootNamespaceId) cachedRootNamespaceId = rootNamespaceId;
+      }
+    } catch (e) { console.error('Error getting team namespace:', e); }
+  }
+
+  return { adminMemberId, rootNamespaceId };
 }
 
 function getDropboxHeaders(token: string, rootNamespaceId: string | null, adminMemberId: string | null): Record<string, string> {
@@ -236,7 +200,7 @@ async function listFolderRequest(
             recursive: false,
             include_media_info: false,
             include_deleted: false,
-            limit: 2000,
+            limit: 500,
           },
     ),
   });
@@ -399,22 +363,20 @@ serve(async (req) => {
   }
 
   try {
-    const DROPBOX_ACCESS_TOKEN = await getValidAccessToken();
-
-    let body: any;
-    let fileBytes: Uint8Array | null = null;
-
-    body = await req.json();
+    // Parallelize token + body parsing
+    const [DROPBOX_ACCESS_TOKEN, body] = await Promise.all([
+      getValidAccessToken(),
+      req.json(),
+    ]);
 
     const { path = '', action = 'list', file_content, file_name } = body;
 
-    // Decode base64 file_content only if provided (legacy support for small files)
-    if (!fileBytes && file_content) {
+    let fileBytes: Uint8Array | null = null;
+    if (file_content) {
       fileBytes = Uint8Array.from(atob(file_content), (c) => c.charCodeAt(0));
     }
 
-    const adminMemberId = await getTeamAdminMemberId(DROPBOX_ACCESS_TOKEN);
-    const rootNamespaceId = await getTeamRootNamespaceId(DROPBOX_ACCESS_TOKEN, adminMemberId);
+    const { adminMemberId, rootNamespaceId } = await initTeamContext(DROPBOX_ACCESS_TOKEN);
     const dbxHeaders = getDropboxHeaders(DROPBOX_ACCESS_TOKEN, rootNamespaceId, adminMemberId);
 
     if (action === 'list_personal_folders') {
@@ -443,7 +405,6 @@ serve(async (req) => {
             return {
               id: memberFolderId,
               name,
-              // Use member namespace so subsequent list/get_link/upload calls can resolve correctly
               path: buildScopedPath(memberFolderId, ''),
               type: 'folder',
               size: null,
@@ -456,7 +417,6 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } catch (e) {
-        // Fallback: list root namespace folders
         console.error('Error listing team members, falling back to root listing:', e);
         const rootEntries = await listAllFolderEntries(dbxHeaders, '');
         const entries = rootEntries
@@ -486,8 +446,6 @@ serve(async (req) => {
         scoped.namespaceId,
       );
 
-      // When browsing root, default to the shared team folder "Kawiil Mx"
-      // to prevent users from seeing other members' personal folders
       const browsePath = (!scoped.path || scoped.path === '/')
         ? (scoped.namespaceId ? '' : '/Kawiil Mx')
         : scoped.path;
@@ -570,7 +528,6 @@ serve(async (req) => {
       const uploadedPath = result.path_display || uploadTargetPath;
       const responsePath = scoped.namespaceId ? buildScopedPath(scoped.namespaceId, uploadedPath) : uploadedPath;
 
-      // Get a shared link for the uploaded file
       let shareUrl = '';
       try {
         const linkRes = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
@@ -739,8 +696,7 @@ serve(async (req) => {
     }
 
     if (action === 'create_office_doc') {
-      // Create an empty Office document in Dropbox and return a share link
-      const docType = body.doc_type || 'docx'; // docx, xlsx, pptx
+      const docType = body.doc_type || 'docx';
       const docName = body.doc_name || `Documento.${docType}`;
       const scoped = parseScopedPath(body.folder_path || path);
       const scopedHeaders = getScopedDropboxHeaders(
@@ -757,7 +713,6 @@ serve(async (req) => {
 
       const fullPath = `${folderPath.replace(/\/$/, '')}/${docName}`;
 
-      // Upload an empty file (Dropbox will recognize the extension and allow editing in Office Online)
       const uploadHeaders: Record<string, string> = {
         'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
         'Content-Type': 'application/octet-stream',
@@ -799,7 +754,6 @@ serve(async (req) => {
       const uploadedPath = uploadResult.path_display || fullPath;
       const responsePath = scoped.namespaceId ? buildScopedPath(scoped.namespaceId, uploadedPath) : uploadedPath;
 
-      // Get a shared link for the file
       let shareUrl = '';
       try {
         const linkRes = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
