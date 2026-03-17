@@ -257,7 +257,7 @@ export function UnifiedStepRow({
                   <StepTimerBadge savedSeconds={savedTime} timerRunning={false} displaySeconds={savedTime} />
                 )}
                 {localStatus !== "pendiente" && (
-                  <Badge variant="outline" className={cn("text-[10px] sm:text-xs px-1.5", STEP_STATUS_STYLES[localStatus] || STEP_STATUS_STYLES.pendiente)}>
+                  <Badge variant="outline" className={cn("text-[10px] sm:text-xs px-1.5", STEP_STATUS_CONFIG[localStatus]?.color || STEP_STATUS_CONFIG.pendiente.color)}>
                     {STEP_STATUS_OPTIONS.find((o) => o.value === localStatus)?.label}
                   </Badge>
                 )}
