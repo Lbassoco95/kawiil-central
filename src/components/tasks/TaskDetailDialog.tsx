@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
+import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTaskDetail, useAddComment, useUpdateTask } from "@/hooks/useTasks";
 import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssignees";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,13 +21,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil, Camera,
+  Download, Eye, Link2, Loader2, ScanLine
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
+
+interface CommentAttachment {
+  type: "image" | "dropbox" | "link";
+  name: string;
+  url: string;
+}
 
 
 interface Props {
