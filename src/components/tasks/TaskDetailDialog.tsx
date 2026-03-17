@@ -82,6 +82,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
+  const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
+  const [commentUploading, setCommentUploading] = useState(false);
+  const [showCommentDropbox, setShowCommentDropbox] = useState(false);
+  const [commentLinkInput, setCommentLinkInput] = useState("");
+  const [showCommentLinkPopover, setShowCommentLinkPopover] = useState(false);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
   const [showBlockTime, setShowBlockTime] = useState(false);
@@ -90,6 +96,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [scannedFile, setScannedFile] = useState<File | null>(null);
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
+  const [previewDoc, setPreviewDoc] = useState<any>(null);
 
   // Due date editing state
   const [editingDueDate, setEditingDueDate] = useState(false);
