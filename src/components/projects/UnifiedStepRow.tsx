@@ -92,15 +92,21 @@ export function UnifiedStepRow({
     }
   }, [step.time_spent_seconds, timerRunning]);
 
+  // Only reset local state when step identity changes (not on every prop update)
+  const stepKeyRef = useRef(step.key);
   useEffect(() => {
-    setLocalStatus((step.step_status as StepStatus) || "pendiente");
-    setLocalLabel(step.label);
-    setLocalDueDate(step.due_date ? new Date(step.due_date) : undefined);
-    setLocalNotes(step.notes || "");
-    setLocalAssignee(step.assigned_to || null);
-    setLocalCollaborators(step.collaborators || []);
-    setHasChanges(false);
-  }, [step]);
+    if (stepKeyRef.current !== step.key) {
+      stepKeyRef.current = step.key;
+      setLocalStatus((step.step_status as StepStatus) || "pendiente");
+      setLocalLabel(step.label);
+      setLocalDueDate(step.due_date ? new Date(step.due_date) : undefined);
+      setLocalNotes(step.notes || "");
+      setLocalAssignee(step.assigned_to || null);
+      setLocalCollaborators(step.collaborators || []);
+      setLocalChecklist(step.checklist || []);
+      setHasChanges(false);
+    }
+  }, [step.key]);
 
   const markChanged = () => setHasChanges(true);
 
