@@ -278,6 +278,7 @@ const ClienteDetalle = () => {
       </div>
 
       <ClientEditDialog open={editOpen} onOpenChange={setEditOpen} client={client} />
+      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </AppLayout>
   );
 };
