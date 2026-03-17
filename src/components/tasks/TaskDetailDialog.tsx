@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { BlockTimeDialog } from "@/components/microsoft/BlockTimeDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,12 +18,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen
+  Upload, ExternalLink, Send, Plus, X, UserPlus, AlertTriangle, FolderOpen, Pencil
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 
 interface Props {
   taskId: string | null;
@@ -76,7 +77,25 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [showDropboxPicker, setShowDropboxPicker] = useState(false);
   const { data: orgProfiles } = useProfiles();
 
+  // Due date editing state
+  const [editingDueDate, setEditingDueDate] = useState(false);
+  const [newDueDate, setNewDueDate] = useState("");
+  const [dueDateReason, setDueDateReason] = useState("");
+
+  const sortedProfiles = useMemo(
+    () =>
+      (orgProfiles ?? [])
+        .map((p) => ({ value: p.user_id, label: p.full_name }))
+        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+    [orgProfiles]
+  );
+
   if (!taskId) return null;
+
+  const isAssignedUser =
+    user &&
+    (task?.assigned_to === user.id ||
+      assignees.some((a: any) => a.user_id === user.id));
 
   // Render @mentions as styled spans
   const renderCommentContent = (content: string) => {
@@ -114,6 +133,27 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
         },
       }
     );
+  };
+
+  const handleDueDateSave = () => {
+    if (!dueDateReason.trim()) {
+      toast.error("Debes indicar el motivo del cambio de fecha");
+      return;
+    }
+    const oldDate = task?.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha";
+    const newDateFormatted = newDueDate ? formatMX(newDueDate, "dd MMM yyyy") : "Sin fecha";
+
+    updateTask.mutate({ id: taskId, due_date: newDueDate || null });
+
+    // Auto-comment with reason
+    addComment.mutate({
+      taskId,
+      content: `📅 Fecha límite modificada: ${oldDate} → ${newDateFormatted}\nMotivo: ${dueDateReason}`,
+    });
+
+    setEditingDueDate(false);
+    setDueDateReason("");
+    toast.success("Fecha límite actualizada");
   };
 
   const handleAddDropboxLink = () => {
@@ -209,12 +249,25 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               <Badge className={statusLabels[task.status]?.color}>{statusLabels[task.status]?.label}</Badge>
               <span className="flex items-center gap-1"><Flag className="h-3.5 w-3.5" />{priorityLabels[task.priority]}</span>
               {task.area && <Badge variant="outline">{task.area}</Badge>}
-              {task.due_date && (
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {formatMX(task.due_date, "dd MMM yyyy")}
-                </span>
-              )}
+              {/* Due date - editable */}
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <Calendar className="h-3.5 w-3.5" />
+                {task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}
+                {isAssignedUser && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 ml-1"
+                    onClick={() => {
+                      setNewDueDate(task.due_date || "");
+                      setDueDateReason("");
+                      setEditingDueDate(true);
+                    }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                )}
+              </span>
               {(task as any).clients?.name && (
                 <span className="flex items-center gap-1 text-muted-foreground">
                   <User className="h-3.5 w-3.5" />{(task as any).clients.name}
@@ -229,6 +282,34 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                 <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
               </Button>
             </div>
+
+            {/* Due date edit inline */}
+            {editingDueDate && (
+              <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
+                <p className="text-sm font-medium">Cambiar fecha límite</p>
+                <Input
+                  type="date"
+                  value={newDueDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
+                  className="w-full sm:w-[200px]"
+                />
+                <Textarea
+                  value={dueDateReason}
+                  onChange={(e) => setDueDateReason(e.target.value)}
+                  placeholder="Motivo del cambio de fecha (obligatorio)..."
+                  rows={2}
+                  className="text-sm"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleDueDateSave} disabled={!dueDateReason.trim()}>
+                    Guardar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingDueDate(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {task.description && (
               <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.description}</p>
@@ -281,7 +362,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               )}
             </div>
 
-            {/* Assignees - editable */}
+            {/* Assignees - editable with search */}
             <div>
               <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                 <UserPlus className="h-4 w-4" /> Colaboradores
@@ -297,21 +378,16 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   </Badge>
                 ))}
               </div>
-              <Select
-                onValueChange={(uid) => addAssignee.mutate({ taskId: taskId!, userId: uid })}
+              <SearchableSelect
+                options={sortedProfiles.filter(
+                  (p) => !assignees.some((a: any) => a.user_id === p.value)
+                )}
                 value=""
-              >
-                <SelectTrigger className="w-full sm:w-[250px]">
-                  <SelectValue placeholder="Agregar colaborador..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {orgProfiles
-                    ?.filter((p) => !assignees.some((a: any) => a.user_id === p.user_id))
-                    .map((p) => (
-                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                onValueChange={(uid) => addAssignee.mutate({ taskId: taskId!, userId: uid })}
+                placeholder="Agregar colaborador..."
+                searchPlaceholder="Buscar colaborador..."
+                className="w-full sm:w-[250px]"
+              />
             </div>
 
             <Separator />
