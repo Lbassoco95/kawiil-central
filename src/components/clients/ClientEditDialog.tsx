@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUpdateClient, useOrgProfiles } from "@/hooks/useClients";
 import { DropboxFolderPicker } from "@/components/clients/DropboxFolderPicker";
 import type { Database } from "@/integrations/supabase/types";
