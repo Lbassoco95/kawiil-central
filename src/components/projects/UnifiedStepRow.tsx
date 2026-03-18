@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -338,7 +339,7 @@ export function UnifiedStepRow({
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="mt-3 ml-7 space-y-3 pb-1">
+            <div className="mt-4 ml-7 space-y-4 pb-2">
               {/* Editable name */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Nombre del paso</label>
@@ -391,6 +392,8 @@ export function UnifiedStepRow({
                 </div>
               </div>
 
+              <Separator className="my-1" />
+
               {/* Collaborators */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
@@ -420,6 +423,8 @@ export function UnifiedStepRow({
                   </SelectContent>
                 </Select>
               </div>
+
+              <Separator className="my-1" />
 
               {/* Subtareas */}
               <div className="space-y-2">
@@ -544,8 +549,10 @@ export function UnifiedStepRow({
               {step.completed_at && (
                 <p className="text-xs text-muted-foreground">
                   Completado: {format(new Date(step.completed_at), "dd MMM yyyy HH:mm", { locale: es })}
-                </p>
+              </p>
               )}
+
+              <Separator className="my-1" />
 
               {/* Notes — debounced to avoid lag */}
               <div className="space-y-1">
@@ -557,6 +564,8 @@ export function UnifiedStepRow({
                   onChange={(val) => { setLocalNotes(val); markChanged(); }}
                 />
               </div>
+
+              <Separator className="my-1" />
 
               {/* Step Comments */}
               <StepComments projectId={projectId} stepKey={resolvedStepKey} stepLabel={step.label} />
