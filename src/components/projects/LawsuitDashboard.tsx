@@ -283,7 +283,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       name: newAttachment.name,
       url: newAttachment.url,
     };
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       stages: current.stages.map((s) =>
