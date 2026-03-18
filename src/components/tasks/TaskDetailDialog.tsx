@@ -103,6 +103,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
   const [previewDoc, setPreviewDoc] = useState<any>(null);
   const [newSubtask, setNewSubtask] = useState("");
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null);
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Buffered editable fields
