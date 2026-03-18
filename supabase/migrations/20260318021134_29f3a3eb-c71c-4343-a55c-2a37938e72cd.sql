@@ -1,0 +1,5 @@
+UPDATE projects SET name = 'Juicio Civil - Viridiana García Tucott vs Luis Vicente Guzman Sanchez' WHERE id = '68a128c1-bff5-4b65-968e-3ff6b924ee77';
+UPDATE projects SET name = 'Juicio Administrativo - Vizum Technologies vs Comisión Nacional Bancaria de Valores' WHERE id = '996e4a15-4253-42b7-a8f9-5963089b714b';
+UPDATE projects SET name = 'Juicio Civil - Gustavo Ahedo Mendoza vs María Eugenia Chaparro Medina de Mondragón, Javier Chaparro Castillo, Maria de la Paz Chaparro Medina y Angel Andres Lopez de Mondragon' WHERE id = '24289b35-e445-40a8-8118-b17897808776';
+UPDATE projects SET name = 'Juicio Civil - Viridiana García Tucott vs IB BLOCKCHAIN S.A.P.I. DE C.V.' WHERE id = '5ab03d9d-3987-4af6-a7e5-19e7d7489e3d';
+UPDATE projects SET name = 'Juicio Civil - Fiatcoin Network S.A.P.I. de C.V. vs Sistemas de Transferencias y Pagos STP, S.A. DE C.V.' WHERE id = '60d6c65e-efd5-438f-a803-9eda94b739b1';
