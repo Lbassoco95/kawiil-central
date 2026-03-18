@@ -156,7 +156,7 @@ function PeriodCard({
   );
 }
 
-export function AccountingDashboard({ projectId, clientDropboxPath }: { projectId: string; clientDropboxPath?: string }) {
+export function AccountingDashboard({ projectId, clientDropboxPath, clientId }: { projectId: string; clientDropboxPath?: string; clientId?: string }) {
   const { data: periods, isLoading } = useAccountingPeriods(projectId);
   const createPeriod = useCreateAccountingPeriod();
   const now = nowMX();
