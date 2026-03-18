@@ -11,6 +11,7 @@ interface StepDetailRowProps {
   periodId: string;
   projectId: string;
   clientDropboxPath?: string;
+  clientId?: string;
 }
 
 export function StepDetailRow({ step, index, periodId, projectId, clientDropboxPath }: StepDetailRowProps) {
