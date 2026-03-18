@@ -565,6 +565,8 @@ export function UnifiedStepRow({
                 />
               </div>
 
+              <Separator className="my-1" />
+
               {/* Step Comments */}
               <StepComments projectId={projectId} stepKey={resolvedStepKey} stepLabel={step.label} />
 
