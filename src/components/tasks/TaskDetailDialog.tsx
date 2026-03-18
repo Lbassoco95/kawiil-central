@@ -211,10 +211,59 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     updateChecklist(checklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
   };
 
-  const addChecklistItem = () => {
+  const addChecklistItem = async () => {
     if (!newSubtask.trim()) return;
-    updateChecklist([...checklist, { id: `item-${Date.now()}`, text: newSubtask.trim(), completed: false }]);
+    const text = newSubtask.trim();
+    const assignee = newSubtaskAssignee;
+    const dueDate = newSubtaskDueDate || null;
+
+    // Create a real task in the database for traceability
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .single();
+
+      if (!profile) throw new Error("No profile");
+
+      const { data: newTask, error } = await supabase
+        .from("tasks")
+        .insert({
+          title: text,
+          organization_id: profile.organization_id,
+          created_by: user!.id,
+          assigned_to: assignee,
+          due_date: dueDate,
+          client_id: task?.client_id || null,
+          project_id: task?.project_id || null,
+          status: "pendiente" as const,
+          priority: "media" as const,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newItem: ChecklistItem = {
+        id: `item-${Date.now()}`,
+        text,
+        completed: false,
+        assigned_to: assignee,
+        due_date: dueDate,
+        task_id: newTask.id,
+      };
+
+      updateChecklist([...checklist, newItem]);
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    } catch (err: any) {
+      toast.error("Error al crear subtarea: " + err.message);
+      return;
+    }
+
     setNewSubtask("");
+    setNewSubtaskAssignee(null);
+    setNewSubtaskDueDate("");
   };
 
   const removeChecklistItem = (itemId: string) => {
