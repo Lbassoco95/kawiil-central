@@ -43,6 +43,9 @@ interface ChecklistItem {
   id: string;
   text: string;
   completed: boolean;
+  assigned_to?: string | null;
+  due_date?: string | null;
+  task_id?: string | null;
 }
 
 interface Props {
@@ -100,6 +103,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
   const [previewDoc, setPreviewDoc] = useState<any>(null);
   const [newSubtask, setNewSubtask] = useState("");
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null);
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Buffered editable fields
@@ -192,6 +197,9 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     id: item.id || `item-${i}`,
     text: item.text || "",
     completed: !!item.completed,
+    assigned_to: item.assigned_to || null,
+    due_date: item.due_date || null,
+    task_id: item.task_id || null,
   }));
   const completedCount = checklist.filter((c) => c.completed).length;
 
@@ -203,10 +211,59 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     updateChecklist(checklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
   };
 
-  const addChecklistItem = () => {
+  const addChecklistItem = async () => {
     if (!newSubtask.trim()) return;
-    updateChecklist([...checklist, { id: `item-${Date.now()}`, text: newSubtask.trim(), completed: false }]);
+    const text = newSubtask.trim();
+    const assignee = newSubtaskAssignee;
+    const dueDate = newSubtaskDueDate || null;
+
+    // Create a real task in the database for traceability
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .single();
+
+      if (!profile) throw new Error("No profile");
+
+      const { data: newTask, error } = await supabase
+        .from("tasks")
+        .insert({
+          title: text,
+          organization_id: profile.organization_id,
+          created_by: user!.id,
+          assigned_to: assignee,
+          due_date: dueDate,
+          client_id: task?.client_id || null,
+          project_id: task?.project_id || null,
+          status: "pendiente" as const,
+          priority: "media" as const,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newItem: ChecklistItem = {
+        id: `item-${Date.now()}`,
+        text,
+        completed: false,
+        assigned_to: assignee,
+        due_date: dueDate,
+        task_id: newTask.id,
+      };
+
+      updateChecklist([...checklist, newItem]);
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    } catch (err: any) {
+      toast.error("Error al crear subtarea: " + err.message);
+      return;
+    }
+
     setNewSubtask("");
+    setNewSubtaskAssignee(null);
+    setNewSubtaskDueDate("");
   };
 
   const removeChecklistItem = (itemId: string) => {
@@ -494,34 +551,74 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   </div>
                 )}
                 <div className="space-y-1">
-                  {checklist.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2 group py-0.5">
-                      <Checkbox
-                        checked={item.completed}
-                        onCheckedChange={() => toggleChecklistItem(item.id)}
-                      />
-                      <span className={`text-sm flex-1 ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                        {item.text}
-                      </span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                        onClick={() => removeChecklistItem(item.id)}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                  {checklist.map((item) => {
+                    const assigneeName = item.assigned_to ? orgProfiles?.find(p => p.user_id === item.assigned_to)?.full_name : null;
+                    return (
+                      <div key={item.id} className="flex items-start gap-2 group py-1">
+                        <Checkbox
+                          checked={item.completed}
+                          onCheckedChange={() => toggleChecklistItem(item.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                            {item.text}
+                          </span>
+                          <div className="flex flex-wrap gap-1.5 mt-0.5">
+                            {assigneeName && (
+                              <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
+                                <User className="h-2.5 w-2.5" />{assigneeName}
+                              </Badge>
+                            )}
+                            {item.due_date && (
+                              <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
+                                <Calendar className="h-2.5 w-2.5" />{formatMX(item.due_date, "dd MMM yyyy")}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity mt-0.5"
+                          onClick={() => removeChecklistItem(item.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex gap-2 mt-2">
+                <div className="mt-2 space-y-2 p-2 rounded-md border bg-muted/20">
                   <Input
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
-                    placeholder="Agregar subtarea..."
+                    placeholder="Nombre de la subtarea..."
                     className="h-8 text-sm"
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
                   />
-                  <Button size="sm" variant="outline" className="h-8 px-2" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
-                    <Plus className="h-3.5 w-3.5" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-0.5">
+                      <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-0.5"><User className="h-2.5 w-2.5" />Responsable</label>
+                      <SearchableSelect
+                        options={sortedProfiles}
+                        value={newSubtaskAssignee || ""}
+                        onValueChange={(uid) => setNewSubtaskAssignee(uid || null)}
+                        placeholder="Asignar..."
+                        searchPlaceholder="Buscar..."
+                        className="h-7 w-full text-xs"
+                      />
+                    </div>
+                    <div className="space-y-0.5">
+                      <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-0.5"><Calendar className="h-2.5 w-2.5" />Fecha límite</label>
+                      <Input
+                        type="date"
+                        value={newSubtaskDueDate}
+                        onChange={(e) => setNewSubtaskDueDate(e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 w-full" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
+                    <Plus className="h-3 w-3" /> Crear subtarea
                   </Button>
                 </div>
               </div>
