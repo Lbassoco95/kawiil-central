@@ -347,7 +347,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const removeDeadline = (id: string) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       deadlines: (current.deadlines || []).filter((d) => d.id !== id),
