@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { DropboxFilePicker } from "./DropboxFilePicker";
 import { StepComments } from "./StepComments";
 import { sendSlackNotification } from "@/lib/slackNotifications";
@@ -171,6 +171,19 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
+  // Local source of truth to prevent stale props from overwriting concurrent mutations
+  const detailsRef = useRef<LawsuitDetails>(lawsuitDetails);
+
+  // Sync ref from props only when props actually change (after refetch)
+  useEffect(() => {
+    detailsRef.current = lawsuitDetails;
+  }, [lawsuitDetails]);
+
+  const persistDetails = useCallback((updated: LawsuitDetails) => {
+    detailsRef.current = updated; // Update local ref immediately
+    updateLawsuit.mutate(updated);
+  }, []);
+
   const updateLawsuit = useMutation({
     mutationFn: async (updated: LawsuitDetails) => {
       const { error } = await supabase
@@ -200,19 +213,19 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       attachments: [],
       checklist: [],
     };
-    const updated = { ...lawsuitDetails, stages: [...lawsuitDetails.stages, newStage] };
-    updateLawsuit.mutate(updated);
+    const current = detailsRef.current;
+    persistDetails({ ...current, stages: [...current.stages, newStage] });
     setStageDialogOpen(false);
     setNewStageCustomLabel("");
     toast.success("Etapa agregada");
   };
 
   const removeStage = (key: string) => {
-    const updated = {
-      ...lawsuitDetails,
-      stages: lawsuitDetails.stages.filter((s) => s.key !== key),
-    };
-    updateLawsuit.mutate(updated);
+    const current = detailsRef.current;
+    persistDetails({
+      ...current,
+      stages: current.stages.filter((s) => s.key !== key),
+    });
     toast.success("Etapa eliminada");
   };
 
@@ -224,30 +237,30 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       name: newAttachment.name,
       url: newAttachment.url,
     };
-    const updated = {
-      ...lawsuitDetails,
-      stages: lawsuitDetails.stages.map((s) =>
+    const current = detailsRef.current;
+    persistDetails({
+      ...current,
+      stages: current.stages.map((s) =>
         s.key === stageKey
           ? { ...s, attachments: [...(s.attachments || []), attachment] }
           : s
       ),
-    };
-    updateLawsuit.mutate(updated);
+    });
     setNewAttachment({ name: "", url: "" });
     setAttachmentDialogOpen(null);
     toast.success("Archivo vinculado");
   };
 
   const removeAttachment = (stageKey: string, attachmentId: string) => {
-    const updated = {
-      ...lawsuitDetails,
-      stages: lawsuitDetails.stages.map((s) =>
+    const current = detailsRef.current;
+    persistDetails({
+      ...current,
+      stages: current.stages.map((s) =>
         s.key === stageKey
           ? { ...s, attachments: (s.attachments || []).filter((a) => a.id !== attachmentId) }
           : s
       ),
-    };
-    updateLawsuit.mutate(updated);
+    });
   };
 
   const addDeadline = () => {
@@ -258,8 +271,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       completed: false,
       document_ids: [],
     };
-    const updated = { ...lawsuitDetails, deadlines: [...(lawsuitDetails.deadlines || []), dl] };
-    updateLawsuit.mutate(updated);
+    const current = detailsRef.current;
+    persistDetails({ ...current, deadlines: [...(current.deadlines || []), dl] });
 
     if (dl.attendees.length > 0 || dl.assigned_to) {
       sendSlackNotification("deadline_created" as any, {
@@ -278,31 +291,31 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const toggleDeadline = (id: string) => {
-    const updated = {
-      ...lawsuitDetails,
-      deadlines: (lawsuitDetails.deadlines || []).map((d) =>
+    const current = detailsRef.current;
+    persistDetails({
+      ...current,
+      deadlines: (current.deadlines || []).map((d) =>
         d.id === id ? { ...d, completed: !d.completed } : d
       ),
-    };
-    updateLawsuit.mutate(updated);
+    });
   };
 
   const removeDeadline = (id: string) => {
-    const updated = {
-      ...lawsuitDetails,
-      deadlines: (lawsuitDetails.deadlines || []).filter((d) => d.id !== id),
-    };
-    updateLawsuit.mutate(updated);
+    const current = detailsRef.current;
+    persistDetails({
+      ...current,
+      deadlines: (current.deadlines || []).filter((d) => d.id !== id),
+    });
   };
 
   const updateDeadlineField = (id: string, field: string, value: any) => {
-    const updated = {
-      ...lawsuitDetails,
-      deadlines: (lawsuitDetails.deadlines || []).map((d) =>
+    const current = detailsRef.current;
+    persistDetails({
+      ...current,
+      deadlines: (current.deadlines || []).map((d) =>
         d.id === id ? { ...d, [field]: value } : d
       ),
-    };
-    updateLawsuit.mutate(updated);
+    });
   };
 
   // Convert LawsuitStage to AccountingStep for UnifiedStepRow
@@ -324,7 +337,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   });
 
   const handleStageSave = (stageKey: string, updates: Partial<AccountingStep>) => {
-    const updatedStages = lawsuitDetails.stages.map((s) => {
+    const current = detailsRef.current;
+    const updatedStages = current.stages.map((s) => {
       if (s.key !== stageKey) return s;
       const merged = { ...s } as any;
       if (updates.label !== undefined) merged.label = updates.label;
@@ -353,16 +367,17 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       if (updates.checklist !== undefined) merged.checklist = updates.checklist;
       return merged;
     });
-    updateLawsuit.mutate({ ...lawsuitDetails, stages: updatedStages });
+    persistDetails({ ...current, stages: updatedStages });
   };
 
   const handleStageToggle = (stageKey: string, completed: boolean) => {
-    const updatedStages = lawsuitDetails.stages.map((s) =>
+    const current = detailsRef.current;
+    const updatedStages = current.stages.map((s) =>
       s.key === stageKey
         ? { ...s, status: completed ? "completado" : "pendiente", completed_at: completed ? new Date().toISOString() : null }
         : s
     );
-    updateLawsuit.mutate({ ...lawsuitDetails, stages: updatedStages });
+    persistDetails({ ...current, stages: updatedStages });
   };
 
   const completedStages = lawsuitDetails.stages.filter((s) => s.status === "completado").length;

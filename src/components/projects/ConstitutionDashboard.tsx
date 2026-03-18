@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,12 @@ interface Props {
 export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
+  // Local source of truth to prevent stale props from overwriting concurrent mutations
+  const detailsRef = useRef(constitutionDetails);
+  useEffect(() => {
+    detailsRef.current = constitutionDetails;
+  }, [constitutionDetails]);
+
   const steps: ConstitutionStep[] = (constitutionDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
     ...s,
     completed: s.status === "completado",
@@ -65,9 +71,12 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
 
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: ConstitutionStep[]) => {
+      const currentDetails = detailsRef.current;
+      const payload = { steps: updatedSteps, has_foreign_partners: currentDetails?.has_foreign_partners ?? hasForeignPartners };
+      detailsRef.current = payload;
       const { error } = await supabase
         .from("projects")
-        .update({ constitution_details: { steps: updatedSteps, has_foreign_partners: hasForeignPartners } } as any)
+        .update({ constitution_details: payload } as any)
         .eq("id", projectId);
       if (error) throw error;
     },
@@ -80,15 +89,22 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   });
 
   const toggleForeignPartners = () => {
-    supabase.from("projects").update({ constitution_details: { steps, has_foreign_partners: !hasForeignPartners } } as any).eq("id", projectId)
+    const currentDetails = detailsRef.current;
+    const currentSteps = currentDetails?.steps ?? steps;
+    const newHasForeign = !hasForeignPartners;
+    const payload = { steps: currentSteps, has_foreign_partners: newHasForeign };
+    detailsRef.current = payload;
+    supabase.from("projects").update({ constitution_details: payload } as any).eq("id", projectId)
       .then(({ error }) => {
         if (error) toast.error(error.message);
-        else { queryClient.invalidateQueries({ queryKey: ["project", projectId] }); toast.success(!hasForeignPartners ? "RNIE habilitado" : "RNIE deshabilitado"); }
+        else { queryClient.invalidateQueries({ queryKey: ["project", projectId] }); toast.success(newHasForeign ? "RNIE habilitado" : "RNIE deshabilitado"); }
       });
   };
 
   const updateStep = (key: string, updates: Partial<ConstitutionStep>) => {
-    const updated = steps.map((s) => {
+    const currentDetails = detailsRef.current;
+    const currentSteps = currentDetails?.steps ?? steps;
+    const updated = currentSteps.map((s) => {
       if (s.key !== key) return s;
       const merged = { ...s, ...updates };
       const newStepStatus = updates.step_status || s.step_status;
