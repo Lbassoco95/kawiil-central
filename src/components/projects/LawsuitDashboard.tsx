@@ -426,9 +426,9 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     persistDetails({ ...current, stages: updatedStages });
   };
 
-  const completedStages = lawsuitDetails.stages.filter((s) => s.status === "completado").length;
-  const totalStages = lawsuitDetails.stages.filter((s) => s.status !== "no_aplica").length;
-  const upcomingDeadlines = (lawsuitDetails.deadlines || [])
+  const completedStages = localDetails.stages.filter((s) => s.status === "completado").length;
+  const totalStages = localDetails.stages.filter((s) => s.status !== "no_aplica").length;
+  const upcomingDeadlines = (localDetails.deadlines || [])
     .filter((d) => !d.completed)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const urgentDeadlines = upcomingDeadlines.filter(
