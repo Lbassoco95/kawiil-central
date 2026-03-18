@@ -549,8 +549,10 @@ export function UnifiedStepRow({
               {step.completed_at && (
                 <p className="text-xs text-muted-foreground">
                   Completado: {format(new Date(step.completed_at), "dd MMM yyyy HH:mm", { locale: es })}
-                </p>
+              </p>
               )}
+
+              <Separator className="my-1" />
 
               {/* Notes — debounced to avoid lag */}
               <div className="space-y-1">
