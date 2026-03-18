@@ -424,6 +424,8 @@ export function UnifiedStepRow({
                 </Select>
               </div>
 
+              <Separator className="my-1" />
+
               {/* Subtareas */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
