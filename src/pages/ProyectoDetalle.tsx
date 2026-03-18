@@ -238,7 +238,7 @@ const ProyectoDetalle = () => {
         )}
 
         {tab === "declaracion_anual" && hasAccounting && (
-          <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
+          <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} clientId={project.client_id || undefined} />
         )}
 
         {tab === "juicio" && isLawsuit && (
