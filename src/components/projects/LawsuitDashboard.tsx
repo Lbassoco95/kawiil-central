@@ -417,7 +417,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const handleStageToggle = (stageKey: string, completed: boolean) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     const updatedStages = current.stages.map((s) =>
       s.key === stageKey
         ? { ...s, status: completed ? "completado" : "pendiente", completed_at: completed ? new Date().toISOString() : null }
