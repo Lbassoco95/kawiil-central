@@ -82,7 +82,10 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
 
       const selectedClient = clients?.find((c) => c.id === clientId);
       const typeLabel = LAWSUIT_TYPES.find((t) => t.value === lawsuitType)?.label || lawsuitType;
-      const projectName = `Juicio ${typeLabel} - ${selectedClient?.name || "Sin cliente"}`;
+      const opponent = defendant || plaintiff || "";
+      const projectName = opponent
+        ? `Juicio ${typeLabel} - ${selectedClient?.name || "Sin cliente"} vs ${opponent}`
+        : `Juicio ${typeLabel} - ${selectedClient?.name || "Sin cliente"}`;
 
       const lawsuitDetails = {
         lawsuit_type: lawsuitType,

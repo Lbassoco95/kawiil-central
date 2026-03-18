@@ -179,9 +179,15 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     detailsRef.current = lawsuitDetails;
   }, [lawsuitDetails]);
 
-  const persistDetails = useCallback((updated: LawsuitDetails) => {
+  const persistDetails = useCallback((updated: LawsuitDetails, alsoUpdateName = false) => {
     detailsRef.current = updated; // Update local ref immediately
-    updateLawsuit.mutate(updated);
+    if (alsoUpdateName) {
+      const typeLabel = LAWSUIT_TYPE_LABELS[updated.lawsuit_type] || updated.lawsuit_type;
+      const opponent = updated.defendant || updated.plaintiff || "";
+      updateLawsuitWithName.mutate({ details: updated, opponent, typeLabel });
+    } else {
+      updateLawsuit.mutate(updated);
+    }
   }, []);
 
   const updateLawsuit = useMutation({
