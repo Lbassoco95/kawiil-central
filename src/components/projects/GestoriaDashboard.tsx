@@ -53,6 +53,12 @@ interface Props {
 export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
+  // Local source of truth to prevent stale props from overwriting concurrent mutations
+  const detailsRef = useRef(gestoriaDetails);
+  useEffect(() => {
+    detailsRef.current = gestoriaDetails;
+  }, [gestoriaDetails]);
+
   const steps: GestoriaStep[] = (gestoriaDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
     ...s,
     completed: s.status === "completado",
@@ -65,6 +71,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
 
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: GestoriaStep[]) => {
+      detailsRef.current = { steps: updatedSteps };
       const { error } = await supabase
         .from("projects")
         .update({ constitution_details: { steps: updatedSteps } } as any)
@@ -80,7 +87,8 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
   });
 
   const updateStep = (key: string, updates: Partial<GestoriaStep>) => {
-    const updated = steps.map((s) => {
+    const currentSteps = detailsRef.current?.steps ?? steps;
+    const updated = currentSteps.map((s) => {
       if (s.key !== key) return s;
       const merged = { ...s, ...updates };
       const newStepStatus = updates.step_status || s.step_status;
