@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import { DueDateReasonDialog } from "./DueDateReasonDialog";
 import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 
 import { STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
@@ -45,12 +47,14 @@ export interface UnifiedStepRowProps {
   extraFields?: React.ReactNode;
   /** Comment step key override (e.g. for compliance tasks using `compliance_${id}`) */
   commentStepKey?: string;
+  /** Client ID for linking subtasks to a client */
+  clientId?: string;
 }
 
 export function UnifiedStepRow({
   step, index, projectId, onSave, onToggle, saving,
   showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
-  commentStepKey,
+  commentStepKey, clientId,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
@@ -61,9 +65,13 @@ export function UnifiedStepRow({
   const [localCollaborators, setLocalCollaborators] = useState<string[]>(step.collaborators || []);
   const [localChecklist, setLocalChecklist] = useState<ChecklistItem[]>(step.checklist || []);
   const [newSubtask, setNewSubtask] = useState("");
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null);
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState<Date | undefined>(undefined);
   const [hasChanges, setHasChanges] = useState(false);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
   const { data: profiles = [] } = useProfiles();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Due date reason dialog
   const [dueDateReasonOpen, setDueDateReasonOpen] = useState(false);
@@ -156,21 +164,79 @@ export function UnifiedStepRow({
   // Checklist helpers
   const completedCount = localChecklist.filter((c) => c.completed).length;
 
-  const toggleChecklistItem = (itemId: string) => {
-    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
+  const toggleChecklistItem = async (itemId: string) => {
+    const item = localChecklist.find((c) => c.id === itemId);
+    if (!item) return;
+    const newCompleted = !item.completed;
+    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: newCompleted } : c));
     markChanged();
+    // Sync linked task status
+    if (item.task_id) {
+      try {
+        await supabase.from("tasks").update({
+          status: newCompleted ? "completada" : "pendiente",
+          completed_at: newCompleted ? new Date().toISOString() : null,
+        } as any).eq("id", item.task_id);
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      } catch { /* silent */ }
+    }
   };
 
-  const addChecklistItem = () => {
+  const addChecklistItem = async () => {
     if (!newSubtask.trim()) return;
-    setLocalChecklist([...localChecklist, { id: `sub-${Date.now()}`, text: newSubtask.trim(), completed: false }]);
+    const itemId = `sub-${Date.now()}`;
+    let taskId: string | null = null;
+
+    // Create linked task in the tasks table
+    try {
+      const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
+      const { data: taskData, error: taskError } = await supabase.from("tasks").insert({
+        title: newSubtask.trim(),
+        organization_id: orgId!,
+        project_id: projectId,
+        client_id: clientId || null,
+        assigned_to: newSubtaskAssignee || localAssignee || null,
+        due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString().split("T")[0] : null,
+        created_by: user!.id,
+        area: step.key,
+      } as any).select("id").single();
+      if (!taskError && taskData) {
+        taskId = taskData.id;
+      }
+    } catch { /* continue without linked task */ }
+
+    const newItem: ChecklistItem = {
+      id: itemId,
+      text: newSubtask.trim(),
+      completed: false,
+      assigned_to: newSubtaskAssignee || localAssignee || null,
+      due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString() : null,
+      task_id: taskId,
+    };
+    setLocalChecklist([...localChecklist, newItem]);
     setNewSubtask("");
+    setNewSubtaskAssignee(null);
+    setNewSubtaskDueDate(undefined);
     markChanged();
+    if (taskId) {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+    }
   };
 
-  const removeChecklistItem = (itemId: string) => {
+  const removeChecklistItem = async (itemId: string) => {
+    const item = localChecklist.find((c) => c.id === itemId);
     setLocalChecklist(localChecklist.filter((c) => c.id !== itemId));
     markChanged();
+    // Optionally mark linked task as cancelled/deleted - just update status
+    if (item?.task_id) {
+      try {
+        await supabase.from("tasks").update({ status: "cancelada" } as any).eq("id", item.task_id);
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      } catch { /* silent */ }
+    }
   };
 
   const handleDocumentAdded = (newIds: string[]) => {
@@ -371,35 +437,88 @@ export function UnifiedStepRow({
                   </div>
                 )}
                 <div className="space-y-1">
-                  {localChecklist.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2 group py-0.5">
-                      <Checkbox
-                        checked={item.completed}
-                        onCheckedChange={() => toggleChecklistItem(item.id)}
-                      />
-                      <span className={cn("text-xs flex-1", item.completed && "line-through text-muted-foreground")}>
-                        {item.text}
-                      </span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                        onClick={() => removeChecklistItem(item.id)}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                  {localChecklist.map((item) => {
+                    const itemAssigneeName = item.assigned_to
+                      ? profiles.find((p) => p.user_id === item.assigned_to)?.full_name?.split(" ")[0]
+                      : null;
+                    return (
+                      <div key={item.id} className="flex items-center gap-2 group py-0.5">
+                        <Checkbox
+                          checked={item.completed}
+                          onCheckedChange={() => toggleChecklistItem(item.id)}
+                        />
+                        <span
+                          className={cn(
+                            "text-xs flex-1 cursor-pointer hover:underline",
+                            item.completed && "line-through text-muted-foreground"
+                          )}
+                          onClick={() => item.task_id && setSelectedSubtaskId(item.task_id)}
+                          title={item.task_id ? "Ver detalle de tarea" : undefined}
+                        >
+                          {item.text}
+                        </span>
+                        {itemAssigneeName && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <User className="h-2.5 w-2.5" />{itemAssigneeName}
+                          </span>
+                        )}
+                        {item.due_date && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {format(new Date(item.due_date), "dd MMM", { locale: es })}
+                          </span>
+                        )}
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                          onClick={() => removeChecklistItem(item.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex gap-2">
+                {/* Add subtask form */}
+                <div className="space-y-2 rounded-md border border-dashed border-border p-2">
                   <Input
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
-                    placeholder="Agregar subtarea..."
+                    placeholder="Nueva subtarea..."
                     className="h-7 text-xs"
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
                   />
-                  <Button size="sm" variant="outline" className="h-7 px-2" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
+                  {newSubtask.trim() && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Select
+                        value={newSubtaskAssignee || "__none__"}
+                        onValueChange={(v) => setNewSubtaskAssignee(v === "__none__" ? null : v)}
+                      >
+                        <SelectTrigger className="h-6 text-[10px] w-auto min-w-[120px] border-dashed gap-1 px-2">
+                          <User className="h-3 w-3 shrink-0" />
+                          <SelectValue placeholder="Responsable" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sin asignar</SelectItem>
+                          {profiles.map((p) => (
+                            <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("h-6 text-[10px] px-2 font-normal", !newSubtaskDueDate && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-1 h-3 w-3" />
+                            {newSubtaskDueDate ? format(newSubtaskDueDate, "dd MMM", { locale: es }) : "Fecha"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={newSubtaskDueDate} onSelect={setNewSubtaskDueDate} initialFocus className="p-3 pointer-events-auto" />
+                        </PopoverContent>
+                      </Popover>
+                      <Button size="sm" variant="default" className="h-6 px-2 text-[10px]" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
+                        <Plus className="h-3 w-3 mr-0.5" /> Crear
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -463,6 +582,13 @@ export function UnifiedStepRow({
         onConfirm={handleDueDateReasonConfirm}
         onCancel={handleDueDateReasonCancel}
       />
+
+      {selectedSubtaskId && (
+        <TaskDetailDialog
+          taskId={selectedSubtaskId}
+          onClose={() => setSelectedSubtaskId(null)}
+        />
+      )}
     </>
   );
 }

@@ -42,12 +42,13 @@ export interface ComplianceTaskRowProps {
   };
   projectId: string;
   clientDropboxPath?: string;
+  clientId?: string;
   urgencyBadge: React.ReactNode;
   onUpdate: () => void;
   index?: number;
 }
 
-export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyBadge, onUpdate, index = 0 }: ComplianceTaskRowProps) {
+export function ComplianceTaskRow({ task, projectId, clientDropboxPath, clientId, urgencyBadge, onUpdate, index = 0 }: ComplianceTaskRowProps) {
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
@@ -162,6 +163,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, urgencyB
       index={index}
       projectId={projectId}
       clientDropboxPath={clientDropboxPath}
+      clientId={clientId}
       showTimer={true}
       showCheckbox={true}
       commentStepKey={`compliance_${task.id}`}

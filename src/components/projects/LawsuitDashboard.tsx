@@ -110,6 +110,7 @@ interface LawsuitDashboardProps {
   lawsuitDetails: LawsuitDetails;
   dropboxInitialPath?: string | null;
   lockDropboxToInitialPath?: boolean;
+  clientId?: string;
 }
 
 const STAGE_TEMPLATES = [
@@ -156,7 +157,7 @@ const STAGE_STATUS_TO_STEP: Record<string, StepStatus> = {
   no_aplica: "completado",
 };
 
-export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false }: LawsuitDashboardProps) {
+export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false, clientId }: LawsuitDashboardProps) {
   const [expandedDeadline, setExpandedDeadline] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
@@ -512,6 +513,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                 index={idx}
                 projectId={projectId}
                 clientDropboxPath={dropboxInitialPath || undefined}
+                clientId={clientId}
                 showTimer={true}
                 showCheckbox={true}
                 onToggle={(checked) => handleStageToggle(stage.key, checked)}

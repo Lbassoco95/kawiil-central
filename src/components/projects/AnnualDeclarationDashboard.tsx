@@ -38,10 +38,12 @@ function DeclarationCard({
   declaration,
   projectId,
   clientDropboxPath,
+  clientId,
 }: {
   declaration: AnnualDeclaration;
   projectId: string;
   clientDropboxPath?: string;
+  clientId?: string;
 }) {
   const [open, setOpen] = useState(declaration.status !== "completado");
   const completed = declaration.steps.filter((s) => s.completed).length;
@@ -92,6 +94,7 @@ function DeclarationCard({
                   declarationId={declaration.id}
                   projectId={projectId}
                   clientDropboxPath={clientDropboxPath}
+                  clientId={clientId}
                 />
               ))}
             </div>
@@ -102,7 +105,7 @@ function DeclarationCard({
   );
 }
 
-export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { projectId: string; clientDropboxPath?: string }) {
+export function AnnualDeclarationDashboard({ projectId, clientDropboxPath, clientId }: { projectId: string; clientDropboxPath?: string; clientId?: string }) {
   const { data: declarations, isLoading } = useAnnualDeclarations(projectId);
   const createDeclaration = useCreateAnnualDeclaration();
   const now = nowMX();
@@ -192,7 +195,7 @@ export function AnnualDeclarationDashboard({ projectId, clientDropboxPath }: { p
         </Card>
       ) : (
         declarations.map((decl) => (
-          <DeclarationCard key={decl.id} declaration={decl} projectId={projectId} clientDropboxPath={clientDropboxPath} />
+          <DeclarationCard key={decl.id} declaration={decl} projectId={projectId} clientDropboxPath={clientDropboxPath} clientId={clientId} />
         ))
       )}
     </div>

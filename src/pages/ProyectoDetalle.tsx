@@ -219,6 +219,7 @@ const ProyectoDetalle = () => {
             constitutionDetails={constitutionDetails}
             responsibleUserId={project.responsible_user_id}
             clientDropboxPath={effectiveDropboxPath}
+            clientId={project.client_id || undefined}
           />
         )}
 
@@ -228,15 +229,16 @@ const ProyectoDetalle = () => {
             gestoriaDetails={constitutionDetails}
             responsibleUserId={project.responsible_user_id}
             clientDropboxPath={effectiveDropboxPath}
+            clientId={project.client_id || undefined}
           />
         )}
 
         {tab === "contabilidad" && hasAccounting && (
-          <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
+          <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} clientId={project.client_id || undefined} />
         )}
 
         {tab === "declaracion_anual" && hasAccounting && (
-          <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
+          <AnnualDeclarationDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} clientId={project.client_id || undefined} />
         )}
 
         {tab === "juicio" && isLawsuit && (
@@ -245,6 +247,7 @@ const ProyectoDetalle = () => {
             lawsuitDetails={lawsuitDetails}
             dropboxInitialPath={effectiveDropboxPath}
             lockDropboxToInitialPath={lockDropboxToInitialPath}
+            clientId={project.client_id || undefined}
           />
         )}
 

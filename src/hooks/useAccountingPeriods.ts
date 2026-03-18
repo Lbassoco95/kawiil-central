@@ -16,6 +16,9 @@ export interface ChecklistItem {
   id: string;
   text: string;
   completed: boolean;
+  assigned_to?: string | null;
+  due_date?: string | null;
+  task_id?: string | null;
 }
 
 export interface AccountingStep {

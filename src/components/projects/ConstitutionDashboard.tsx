@@ -46,9 +46,10 @@ interface Props {
   constitutionDetails: { steps: ConstitutionStep[]; has_foreign_partners: boolean } | null;
   responsibleUserId?: string | null;
   clientDropboxPath?: string;
+  clientId?: string;
 }
 
-export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath }: Props) {
+export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
   const steps: ConstitutionStep[] = (constitutionDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
@@ -157,6 +158,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
               index={idx}
               projectId={projectId}
               clientDropboxPath={clientDropboxPath}
+              clientId={clientId}
               showTimer={false}
               showCheckbox={false}
               onSave={(updates) => updateStep(step.key, updates as Partial<ConstitutionStep>)}
