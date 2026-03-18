@@ -204,6 +204,31 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     onError: (e) => toast.error("Error: " + e.message),
   });
 
+  const updateLawsuitWithName = useMutation({
+    mutationFn: async ({ details, opponent, typeLabel }: { details: LawsuitDetails; opponent: string; typeLabel: string }) => {
+      // Fetch current project to rebuild name with client
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("name, clients(name)")
+        .eq("id", projectId)
+        .single();
+      const clientName = (proj as any)?.clients?.name || "Sin cliente";
+      const newName = opponent
+        ? `Juicio ${typeLabel} - ${clientName} vs ${opponent}`
+        : `Juicio ${typeLabel} - ${clientName}`;
+      const { error } = await supabase
+        .from("projects")
+        .update({ lawsuit_details: details, name: newName } as any)
+        .eq("id", projectId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (e) => toast.error("Error: " + e.message),
+  });
+
   const addStage = () => {
     const template = STAGE_TEMPLATES.find((t) => t.value === newStageTemplate);
     const label = newStageTemplate === "custom" ? newStageCustomLabel : template?.label || newStageTemplate;
