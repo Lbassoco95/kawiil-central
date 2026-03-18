@@ -102,6 +102,38 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [newSubtask, setNewSubtask] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Buffered editable fields
+  const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
+  const hasPendingChanges = Object.keys(pendingChanges).length > 0;
+
+  const setPending = (field: string, value: any) => {
+    setPendingChanges((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveChanges = () => {
+    if (!hasPendingChanges) return;
+    updateTask.mutate({ id: taskId, ...pendingChanges }, {
+      onSuccess: () => {
+        setPendingChanges({});
+        toast.success("Cambios guardados");
+      },
+    });
+  };
+
+  // Reset pending changes when task changes
+  useEffect(() => {
+    setPendingChanges({});
+  }, [taskId]);
+
+  // Computed current values (pending override or task value)
+  const currentTitle = pendingChanges.title ?? task?.title ?? "";
+  const currentStatus = pendingChanges.status ?? task?.status ?? "pendiente";
+  const currentPriority = pendingChanges.priority ?? task?.priority ?? "media";
+  const currentAssignedTo = pendingChanges.assigned_to !== undefined ? pendingChanges.assigned_to : task?.assigned_to;
+  const currentCriticality = pendingChanges.criticality_level ?? (task as any)?.criticality_level ?? "normal";
+  const currentDelayCategory = pendingChanges.delay_category !== undefined ? pendingChanges.delay_category : (task as any)?.delay_category;
+  const currentDelayNotes = pendingChanges.delay_notes !== undefined ? pendingChanges.delay_notes : (task as any)?.delay_notes;
+
   // Timer state
   const [timerRunning, setTimerRunning] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(0);
