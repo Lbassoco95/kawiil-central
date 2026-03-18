@@ -139,6 +139,7 @@ function PeriodCard({
                   periodId={period.id}
                   projectId={projectId}
                   clientDropboxPath={clientDropboxPath}
+                  clientId={clientId}
                 />
               ))}
             </div>
