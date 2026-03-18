@@ -579,7 +579,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           </Button>
         </CardHeader>
         <CardContent className="space-y-1">
-          {lawsuitDetails.stages.map((stage, idx) => {
+          {localDetails.stages.map((stage, idx) => {
             const attachments = stage.attachments || [];
 
             const stageExtraFields = (
