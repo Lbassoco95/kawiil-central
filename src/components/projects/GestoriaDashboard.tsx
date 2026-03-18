@@ -53,10 +53,14 @@ interface Props {
 export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
-  // Local source of truth to prevent stale props from overwriting concurrent mutations
-  const detailsRef = useRef(gestoriaDetails);
+  // Local source of truth — useState so UI re-renders from it
+  const [localGestoria, setLocalGestoria] = useState(gestoriaDetails);
+
+  // Sync from props only when no mutation is in flight
   useEffect(() => {
-    detailsRef.current = gestoriaDetails;
+    if (!saveMutation.isPending) {
+      setLocalGestoria(gestoriaDetails);
+    }
   }, [gestoriaDetails]);
 
   const steps: GestoriaStep[] = (gestoriaDetails?.steps ?? DEFAULT_STEPS).map((s) => ({

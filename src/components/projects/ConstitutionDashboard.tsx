@@ -52,10 +52,14 @@ interface Props {
 export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
-  // Local source of truth to prevent stale props from overwriting concurrent mutations
-  const detailsRef = useRef(constitutionDetails);
+  // Local source of truth — useState so UI re-renders from it
+  const [localConstitution, setLocalConstitution] = useState(constitutionDetails);
+
+  // Sync from props only when no mutation is in flight
   useEffect(() => {
-    detailsRef.current = constitutionDetails;
+    if (!saveMutation.isPending) {
+      setLocalConstitution(constitutionDetails);
+    }
   }, [constitutionDetails]);
 
   const steps: ConstitutionStep[] = (constitutionDetails?.steps ?? DEFAULT_STEPS).map((s) => ({

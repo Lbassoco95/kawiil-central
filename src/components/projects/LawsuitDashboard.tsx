@@ -184,16 +184,18 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
-  // Local source of truth to prevent stale props from overwriting concurrent mutations
-  const detailsRef = useRef<LawsuitDetails>(lawsuitDetails);
+  // Local source of truth — useState so UI re-renders from it
+  const [localDetails, setLocalDetails] = useState<LawsuitDetails>(lawsuitDetails);
 
-  // Sync ref from props only when props actually change (after refetch)
+  // Sync from props only when no mutation is in flight (prevents stale overwrites)
   useEffect(() => {
-    detailsRef.current = lawsuitDetails;
+    if (!updateLawsuit.isPending && !updateLawsuitWithName.isPending) {
+      setLocalDetails(lawsuitDetails);
+    }
   }, [lawsuitDetails]);
 
   const persistDetails = useCallback((updated: LawsuitDetails, alsoUpdateName = false) => {
-    detailsRef.current = updated; // Update local ref immediately
+    setLocalDetails(updated); // Optimistic update
     if (alsoUpdateName) {
       const typeLabel = LAWSUIT_TYPE_LABELS[updated.lawsuit_type] || updated.lawsuit_type;
       const opponent = updated.defendant || updated.plaintiff || "";
