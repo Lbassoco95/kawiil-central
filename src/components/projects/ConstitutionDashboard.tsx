@@ -75,9 +75,8 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
 
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: ConstitutionStep[]) => {
-      const currentDetails = detailsRef.current;
-      const payload = { steps: updatedSteps, has_foreign_partners: currentDetails?.has_foreign_partners ?? hasForeignPartners };
-      detailsRef.current = payload;
+      const payload = { steps: updatedSteps, has_foreign_partners: localConstitution?.has_foreign_partners ?? hasForeignPartners };
+      setLocalConstitution(payload);
       const { error } = await supabase
         .from("projects")
         .update({ constitution_details: payload } as any)
