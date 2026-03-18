@@ -345,6 +345,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
             <div className="px-6 pt-5 pb-3 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <DialogHeader className="flex-1 p-0">
+                  <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
                   <Input
                     value={currentTitle}
                     onChange={(e) => setPending("title", e.target.value)}
