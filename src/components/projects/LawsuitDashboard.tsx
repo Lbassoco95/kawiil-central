@@ -355,7 +355,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const updateDeadlineField = (id: string, field: string, value: any) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       deadlines: (current.deadlines || []).map((d) =>
