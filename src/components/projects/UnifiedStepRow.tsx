@@ -582,6 +582,14 @@ export function UnifiedStepRow({
         onConfirm={handleDueDateReasonConfirm}
         onCancel={handleDueDateReasonCancel}
       />
+
+      {selectedSubtaskId && (
+        <TaskDetailDialog
+          taskId={selectedSubtaskId}
+          open={!!selectedSubtaskId}
+          onOpenChange={(o) => { if (!o) setSelectedSubtaskId(null); }}
+        />
+      )}
     </>
   );
 }
