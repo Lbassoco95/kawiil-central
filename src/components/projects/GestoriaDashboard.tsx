@@ -47,6 +47,7 @@ interface Props {
   gestoriaDetails: { steps: GestoriaStep[] } | null;
   responsibleUserId?: string | null;
   clientDropboxPath?: string;
+  clientId?: string;
 }
 
 export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath }: Props) {
