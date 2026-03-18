@@ -62,7 +62,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
     }
   }, [constitutionDetails]);
 
-  const steps: ConstitutionStep[] = (constitutionDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
+  const steps: ConstitutionStep[] = (localConstitution?.steps ?? DEFAULT_STEPS).map((s) => ({
     ...s,
     completed: s.status === "completado",
     completed_by: s.completed_by ?? null,
