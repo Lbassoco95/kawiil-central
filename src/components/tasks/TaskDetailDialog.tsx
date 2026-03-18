@@ -342,30 +342,24 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
         ) : task ? (
           <div className="flex flex-col max-h-[85vh]">
             {/* ── Header ── */}
-            <div className="px-6 pt-5 pb-3 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <DialogHeader className="flex-1 p-0">
-                  <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
-                  <Input
-                    value={currentTitle}
-                    onChange={(e) => setPending("title", e.target.value)}
-                    className="text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
-                    placeholder="Nombre de la tarea"
-                  />
-                </DialogHeader>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Select value={currentPriority} onValueChange={(v) => setPending("priority", v)}>
-                    <SelectTrigger className="h-7 w-[100px] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(priorityLabels).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <div className="px-6 pt-5 pb-3 space-y-4">
+              {/* Row 1: Editable title */}
+              <DialogHeader className="p-0">
+                <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
+                <Input
+                  value={currentTitle}
+                  onChange={(e) => setPending("title", e.target.value)}
+                  className="text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
+                  placeholder="Nombre de la tarea"
+                />
+              </DialogHeader>
+
+              {/* Row 2: Main controls — Status, Priority, Assignee */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Estado</label>
                   <Select value={currentStatus} onValueChange={handleStatusChange}>
-                    <SelectTrigger className="h-7 w-[130px] text-xs">
+                    <SelectTrigger className="h-8 text-xs w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -375,9 +369,76 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Prioridad</label>
+                  <Select value={currentPriority} onValueChange={(v) => setPending("priority", v)}>
+                    <SelectTrigger className="h-8 text-xs w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(priorityLabels).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Responsable</label>
+                  <SearchableSelect
+                    options={sortedProfiles}
+                    value={currentAssignedTo || ""}
+                    onValueChange={(uid) => setPending("assigned_to", uid || null)}
+                    placeholder="Sin asignar"
+                    searchPlaceholder="Buscar..."
+                    className="h-8 w-full text-xs"
+                  />
+                </div>
               </div>
+
+              {/* Row 3: Context info */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {areaLabel && <span className="font-medium text-foreground/80">{areaLabel}</span>}
+                {(task as any).clients?.name && (
+                  <span className="flex items-center gap-1"><User className="h-3 w-3" />{(task as any).clients.name}</span>
+                )}
+                {(task as any).creator_profile && (
+                  <span className="flex items-center gap-1"><UserCheck className="h-3 w-3" />Creada por: {(task as any).creator_profile.full_name}</span>
+                )}
+                {(task as any).started_at && <span>Inicio: {formatMX((task as any).started_at, "dd MMM HH:mm")}</span>}
+                {(task as any).completed_at && <span>Completada: {formatMX((task as any).completed_at, "dd MMM HH:mm")}</span>}
+              </div>
+
+              {/* Row 4: Secondary actions — Date, Timer, Block time */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs">{task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}</span>
+                  </div>
+                  {isAssignedUser && (
+                    <button className="hover:text-foreground text-muted-foreground" onClick={() => { setNewDueDate(task.due_date || ""); setDueDateReason(""); setEditingDueDate(true); }}>
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
+                  <Timer className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-mono tabular-nums flex-1">{formatTimer(displaySeconds)}</span>
+                  <button
+                    className={`h-5 w-5 inline-flex items-center justify-center rounded ${timerRunning ? "text-destructive" : "hover:text-foreground text-muted-foreground"}`}
+                    onClick={handleTimerToggle}
+                  >
+                    {timerRunning ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                  </button>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowBlockTime(true)} className="gap-1.5 text-xs h-auto py-2">
+                  <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
+                </Button>
+              </div>
+
+              {/* Save bar */}
               {hasPendingChanges && (
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/20">
                   <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-7 text-xs gap-1">
                     {updateTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                     Guardar cambios
@@ -387,52 +448,6 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   </Button>
                 </div>
               )}
-
-              {/* Context bar */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                {areaLabel && <span className="font-medium text-foreground/80">{areaLabel}</span>}
-                {(task as any).clients?.name && (
-                  <span className="flex items-center gap-1"><User className="h-3 w-3" />{(task as any).clients.name}</span>
-                )}
-                {(task as any).creator_profile && (
-                  <span className="flex items-center gap-1"><UserCheck className="h-3 w-3" />Creada por: {(task as any).creator_profile.full_name}</span>
-                )}
-                {/* Responsable */}
-                <span className="flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  Responsable:
-                  <SearchableSelect
-                    options={sortedProfiles}
-                    value={currentAssignedTo || ""}
-                    onValueChange={(uid) => setPending("assigned_to", uid || null)}
-                    placeholder="Sin asignar"
-                    searchPlaceholder="Buscar responsable..."
-                    className="inline-flex h-6 w-[160px] text-xs border-dashed"
-                  />
-                </span>
-                <span className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  {task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}
-                  {isAssignedUser && (
-                    <button className="hover:text-foreground" onClick={() => { setNewDueDate(task.due_date || ""); setDueDateReason(""); setEditingDueDate(true); }}>
-                      <Pencil className="h-2.5 w-2.5" />
-                    </button>
-                  )}
-                </span>
-                {/* Timer inline */}
-                <span className="flex items-center gap-1.5 font-mono tabular-nums">
-                  <Timer className="h-3 w-3" />
-                  {formatTimer(displaySeconds)}
-                  <button
-                    className={`h-5 w-5 inline-flex items-center justify-center rounded ${timerRunning ? "text-destructive" : "hover:text-foreground"}`}
-                    onClick={handleTimerToggle}
-                  >
-                    {timerRunning ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                  </button>
-                </span>
-                {(task as any).started_at && <span>Inicio: {formatMX((task as any).started_at, "dd MMM HH:mm")}</span>}
-                {(task as any).completed_at && <span>Completada: {formatMX((task as any).completed_at, "dd MMM HH:mm")}</span>}
-              </div>
             </div>
 
             <Separator />
