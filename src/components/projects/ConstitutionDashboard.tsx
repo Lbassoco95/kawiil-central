@@ -68,7 +68,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
     completed_by: s.completed_by ?? null,
     step_status: s.step_status || (s.status === "en_progreso" ? "en_progreso" : s.status === "completado" ? "completado" : "pendiente"),
   }));
-  const hasForeignPartners = constitutionDetails?.has_foreign_partners ?? true;
+  const hasForeignPartners = localConstitution?.has_foreign_partners ?? true;
   const visibleSteps = steps.filter((s) => !s.conditional || hasForeignPartners);
   const completedCount = visibleSteps.filter((s) => s.status === "completado").length;
   const progressPct = visibleSteps.length > 0 ? Math.round((completedCount / visibleSteps.length) * 100) : 0;

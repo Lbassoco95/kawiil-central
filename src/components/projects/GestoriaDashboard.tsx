@@ -63,7 +63,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
     }
   }, [gestoriaDetails]);
 
-  const steps: GestoriaStep[] = (gestoriaDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
+  const steps: GestoriaStep[] = (localGestoria?.steps ?? DEFAULT_STEPS).map((s) => ({
     ...s,
     completed: s.status === "completado",
     completed_by: s.completed_by ?? null,
