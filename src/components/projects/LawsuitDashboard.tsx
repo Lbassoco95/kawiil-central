@@ -500,7 +500,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               value={localCourt}
               onChange={(e) => setLocalCourt(e.target.value)}
               onBlur={() => {
-                const current = detailsRef.current;
+                const current = localDetails;
                 if (localCourt !== (current.court || "")) {
                   persistDetails({ ...current, court: localCourt || null });
                 }
