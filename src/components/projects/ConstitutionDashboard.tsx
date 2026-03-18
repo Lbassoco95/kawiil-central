@@ -92,11 +92,10 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   });
 
   const toggleForeignPartners = () => {
-    const currentDetails = detailsRef.current;
-    const currentSteps = currentDetails?.steps ?? steps;
+    const currentSteps = localConstitution?.steps ?? steps;
     const newHasForeign = !hasForeignPartners;
     const payload = { steps: currentSteps, has_foreign_partners: newHasForeign };
-    detailsRef.current = payload;
+    setLocalConstitution(payload);
     supabase.from("projects").update({ constitution_details: payload } as any).eq("id", projectId)
       .then(({ error }) => {
         if (error) toast.error(error.message);
