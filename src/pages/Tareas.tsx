@@ -198,9 +198,9 @@ INSTRUCCIONES:
 
         {isLoading ? (
           <p className="text-center text-muted-foreground py-12 text-sm">Cargando tareas...</p>
-        ) : tasks && tasks.length > 0 ? (
+        ) : activeTasks.length > 0 ? (
           <div className="divide-y divide-border/40">
-            {tasks.map((task) => (
+            {activeTasks.map((task) => (
               <div
                 key={task.id}
                 className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
