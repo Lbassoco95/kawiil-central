@@ -168,6 +168,19 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const [newStageTemplate, setNewStageTemplate] = useState("contestacion");
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
   const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
+
+  // Local editable fields for case info
+  const [localCourt, setLocalCourt] = useState(lawsuitDetails.court || "");
+  const [localCaseNumber, setLocalCaseNumber] = useState(lawsuitDetails.case_number || "");
+  const [localPlaintiff, setLocalPlaintiff] = useState(lawsuitDetails.plaintiff || "");
+  const [localDefendant, setLocalDefendant] = useState(lawsuitDetails.defendant || "");
+
+  useEffect(() => {
+    setLocalCourt(lawsuitDetails.court || "");
+    setLocalCaseNumber(lawsuitDetails.case_number || "");
+    setLocalPlaintiff(lawsuitDetails.plaintiff || "");
+    setLocalDefendant(lawsuitDetails.defendant || "");
+  }, [lawsuitDetails.court, lawsuitDetails.case_number, lawsuitDetails.plaintiff, lawsuitDetails.defendant]);
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
@@ -179,9 +192,15 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     detailsRef.current = lawsuitDetails;
   }, [lawsuitDetails]);
 
-  const persistDetails = useCallback((updated: LawsuitDetails) => {
+  const persistDetails = useCallback((updated: LawsuitDetails, alsoUpdateName = false) => {
     detailsRef.current = updated; // Update local ref immediately
-    updateLawsuit.mutate(updated);
+    if (alsoUpdateName) {
+      const typeLabel = LAWSUIT_TYPE_LABELS[updated.lawsuit_type] || updated.lawsuit_type;
+      const opponent = updated.defendant || updated.plaintiff || "";
+      updateLawsuitWithName.mutate({ details: updated, opponent, typeLabel });
+    } else {
+      updateLawsuit.mutate(updated);
+    }
   }, []);
 
   const updateLawsuit = useMutation({
@@ -194,6 +213,31 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+    },
+    onError: (e) => toast.error("Error: " + e.message),
+  });
+
+  const updateLawsuitWithName = useMutation({
+    mutationFn: async ({ details, opponent, typeLabel }: { details: LawsuitDetails; opponent: string; typeLabel: string }) => {
+      // Fetch current project to rebuild name with client
+      const { data: proj } = await supabase
+        .from("projects")
+        .select("name, clients(name)")
+        .eq("id", projectId)
+        .single();
+      const clientName = (proj as any)?.clients?.name || "Sin cliente";
+      const newName = opponent
+        ? `Juicio ${typeLabel} - ${clientName} vs ${opponent}`
+        : `Juicio ${typeLabel} - ${clientName}`;
+      const { error } = await supabase
+        .from("projects")
+        .update({ lawsuit_details: details, name: newName } as any)
+        .eq("id", projectId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (e) => toast.error("Error: " + e.message),
   });
@@ -447,21 +491,65 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           <CardTitle className="text-base">Datos del juicio</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 text-sm">
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Juzgado/Tribunal</span>
-            <span className="text-right">{lawsuitDetails.court || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={localCourt}
+              onChange={(e) => setLocalCourt(e.target.value)}
+              onBlur={() => {
+                const current = detailsRef.current;
+                if (localCourt !== (current.court || "")) {
+                  persistDetails({ ...current, court: localCourt || null });
+                }
+              }}
+              placeholder="—"
+            />
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">No. Expediente</span>
-            <span>{lawsuitDetails.case_number || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={localCaseNumber}
+              onChange={(e) => setLocalCaseNumber(e.target.value)}
+              onBlur={() => {
+                const current = detailsRef.current;
+                if (localCaseNumber !== (current.case_number || "")) {
+                  persistDetails({ ...current, case_number: localCaseNumber || null });
+                }
+              }}
+              placeholder="—"
+            />
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Actor</span>
-            <span>{lawsuitDetails.plaintiff || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={localPlaintiff}
+              onChange={(e) => setLocalPlaintiff(e.target.value)}
+              onBlur={() => {
+                const current = detailsRef.current;
+                if (localPlaintiff !== (current.plaintiff || "")) {
+                  persistDetails({ ...current, plaintiff: localPlaintiff || null }, true);
+                }
+              }}
+              placeholder="—"
+            />
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Demandado</span>
-            <span>{lawsuitDetails.defendant || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={localDefendant}
+              onChange={(e) => setLocalDefendant(e.target.value)}
+              onBlur={() => {
+                const current = detailsRef.current;
+                if (localDefendant !== (current.defendant || "")) {
+                  persistDetails({ ...current, defendant: localDefendant || null }, true);
+                }
+              }}
+              placeholder="—"
+            />
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Abogado Patrono</span>
