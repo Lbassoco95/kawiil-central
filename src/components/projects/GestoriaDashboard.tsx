@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,13 +53,17 @@ interface Props {
 export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
-  // Local source of truth to prevent stale props from overwriting concurrent mutations
-  const detailsRef = useRef(gestoriaDetails);
+  // Local source of truth — useState so UI re-renders from it
+  const [localGestoria, setLocalGestoria] = useState(gestoriaDetails);
+
+  // Sync from props only when no mutation is in flight
   useEffect(() => {
-    detailsRef.current = gestoriaDetails;
+    if (!saveMutation.isPending) {
+      setLocalGestoria(gestoriaDetails);
+    }
   }, [gestoriaDetails]);
 
-  const steps: GestoriaStep[] = (gestoriaDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
+  const steps: GestoriaStep[] = (localGestoria?.steps ?? DEFAULT_STEPS).map((s) => ({
     ...s,
     completed: s.status === "completado",
     completed_by: s.completed_by ?? null,
@@ -71,7 +75,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
 
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: GestoriaStep[]) => {
-      detailsRef.current = { steps: updatedSteps };
+      setLocalGestoria({ steps: updatedSteps });
       const { error } = await supabase
         .from("projects")
         .update({ constitution_details: { steps: updatedSteps } } as any)
@@ -87,7 +91,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
   });
 
   const updateStep = (key: string, updates: Partial<GestoriaStep>) => {
-    const currentSteps = detailsRef.current?.steps ?? steps;
+    const currentSteps = localGestoria?.steps ?? steps;
     const updated = currentSteps.map((s) => {
       if (s.key !== key) return s;
       const merged = { ...s, ...updates };

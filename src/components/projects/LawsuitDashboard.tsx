@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DropboxFilePicker } from "./DropboxFilePicker";
 import { StepComments } from "./StepComments";
 import { sendSlackNotification } from "@/lib/slackNotifications";
@@ -184,16 +184,18 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
-  // Local source of truth to prevent stale props from overwriting concurrent mutations
-  const detailsRef = useRef<LawsuitDetails>(lawsuitDetails);
+  // Local source of truth — useState so UI re-renders from it
+  const [localDetails, setLocalDetails] = useState<LawsuitDetails>(lawsuitDetails);
 
-  // Sync ref from props only when props actually change (after refetch)
+  // Sync from props only when no mutation is in flight (prevents stale overwrites)
   useEffect(() => {
-    detailsRef.current = lawsuitDetails;
+    if (!updateLawsuit.isPending && !updateLawsuitWithName.isPending) {
+      setLocalDetails(lawsuitDetails);
+    }
   }, [lawsuitDetails]);
 
   const persistDetails = useCallback((updated: LawsuitDetails, alsoUpdateName = false) => {
-    detailsRef.current = updated; // Update local ref immediately
+    setLocalDetails(updated); // Optimistic update
     if (alsoUpdateName) {
       const typeLabel = LAWSUIT_TYPE_LABELS[updated.lawsuit_type] || updated.lawsuit_type;
       const opponent = updated.defendant || updated.plaintiff || "";
@@ -257,7 +259,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       attachments: [],
       checklist: [],
     };
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({ ...current, stages: [...current.stages, newStage] });
     setStageDialogOpen(false);
     setNewStageCustomLabel("");
@@ -265,7 +267,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const removeStage = (key: string) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       stages: current.stages.filter((s) => s.key !== key),
@@ -281,7 +283,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       name: newAttachment.name,
       url: newAttachment.url,
     };
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       stages: current.stages.map((s) =>
@@ -296,7 +298,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const removeAttachment = (stageKey: string, attachmentId: string) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       stages: current.stages.map((s) =>
@@ -315,7 +317,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       completed: false,
       document_ids: [],
     };
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({ ...current, deadlines: [...(current.deadlines || []), dl] });
 
     if (dl.attendees.length > 0 || dl.assigned_to) {
@@ -335,7 +337,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const toggleDeadline = (id: string) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       deadlines: (current.deadlines || []).map((d) =>
@@ -345,7 +347,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const removeDeadline = (id: string) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       deadlines: (current.deadlines || []).filter((d) => d.id !== id),
@@ -353,7 +355,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const updateDeadlineField = (id: string, field: string, value: any) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       deadlines: (current.deadlines || []).map((d) =>
@@ -381,7 +383,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   });
 
   const handleStageSave = (stageKey: string, updates: Partial<AccountingStep>) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     const updatedStages = current.stages.map((s) => {
       if (s.key !== stageKey) return s;
       const merged = { ...s } as any;
@@ -415,7 +417,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const handleStageToggle = (stageKey: string, completed: boolean) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     const updatedStages = current.stages.map((s) =>
       s.key === stageKey
         ? { ...s, status: completed ? "completado" : "pendiente", completed_at: completed ? new Date().toISOString() : null }
@@ -424,9 +426,9 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     persistDetails({ ...current, stages: updatedStages });
   };
 
-  const completedStages = lawsuitDetails.stages.filter((s) => s.status === "completado").length;
-  const totalStages = lawsuitDetails.stages.filter((s) => s.status !== "no_aplica").length;
-  const upcomingDeadlines = (lawsuitDetails.deadlines || [])
+  const completedStages = localDetails.stages.filter((s) => s.status === "completado").length;
+  const totalStages = localDetails.stages.filter((s) => s.status !== "no_aplica").length;
+  const upcomingDeadlines = (localDetails.deadlines || [])
     .filter((d) => !d.completed)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const urgentDeadlines = upcomingDeadlines.filter(
@@ -498,7 +500,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               value={localCourt}
               onChange={(e) => setLocalCourt(e.target.value)}
               onBlur={() => {
-                const current = detailsRef.current;
+                const current = localDetails;
                 if (localCourt !== (current.court || "")) {
                   persistDetails({ ...current, court: localCourt || null });
                 }
@@ -513,7 +515,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               value={localCaseNumber}
               onChange={(e) => setLocalCaseNumber(e.target.value)}
               onBlur={() => {
-                const current = detailsRef.current;
+                const current = localDetails;
                 if (localCaseNumber !== (current.case_number || "")) {
                   persistDetails({ ...current, case_number: localCaseNumber || null });
                 }
@@ -528,7 +530,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               value={localPlaintiff}
               onChange={(e) => setLocalPlaintiff(e.target.value)}
               onBlur={() => {
-                const current = detailsRef.current;
+                const current = localDetails;
                 if (localPlaintiff !== (current.plaintiff || "")) {
                   persistDetails({ ...current, plaintiff: localPlaintiff || null }, true);
                 }
@@ -543,7 +545,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               value={localDefendant}
               onChange={(e) => setLocalDefendant(e.target.value)}
               onBlur={() => {
-                const current = detailsRef.current;
+                const current = localDetails;
                 if (localDefendant !== (current.defendant || "")) {
                   persistDetails({ ...current, defendant: localDefendant || null }, true);
                 }
@@ -577,7 +579,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           </Button>
         </CardHeader>
         <CardContent className="space-y-1">
-          {lawsuitDetails.stages.map((stage, idx) => {
+          {localDetails.stages.map((stage, idx) => {
             const attachments = stage.attachments || [];
 
             const stageExtraFields = (
@@ -817,8 +819,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               url: file.url,
             };
             const updated = {
-              ...lawsuitDetails,
-              stages: lawsuitDetails.stages.map((s) =>
+              ...localDetails,
+              stages: localDetails.stages.map((s) =>
                 s.key === dropboxPickerStage
                   ? { ...s, attachments: [...(s.attachments || []), attachment] }
                   : s

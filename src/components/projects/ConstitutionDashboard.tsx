@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,28 +52,31 @@ interface Props {
 export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
-  // Local source of truth to prevent stale props from overwriting concurrent mutations
-  const detailsRef = useRef(constitutionDetails);
+  // Local source of truth — useState so UI re-renders from it
+  const [localConstitution, setLocalConstitution] = useState(constitutionDetails);
+
+  // Sync from props only when no mutation is in flight
   useEffect(() => {
-    detailsRef.current = constitutionDetails;
+    if (!saveMutation.isPending) {
+      setLocalConstitution(constitutionDetails);
+    }
   }, [constitutionDetails]);
 
-  const steps: ConstitutionStep[] = (constitutionDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
+  const steps: ConstitutionStep[] = (localConstitution?.steps ?? DEFAULT_STEPS).map((s) => ({
     ...s,
     completed: s.status === "completado",
     completed_by: s.completed_by ?? null,
     step_status: s.step_status || (s.status === "en_progreso" ? "en_progreso" : s.status === "completado" ? "completado" : "pendiente"),
   }));
-  const hasForeignPartners = constitutionDetails?.has_foreign_partners ?? true;
+  const hasForeignPartners = localConstitution?.has_foreign_partners ?? true;
   const visibleSteps = steps.filter((s) => !s.conditional || hasForeignPartners);
   const completedCount = visibleSteps.filter((s) => s.status === "completado").length;
   const progressPct = visibleSteps.length > 0 ? Math.round((completedCount / visibleSteps.length) * 100) : 0;
 
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: ConstitutionStep[]) => {
-      const currentDetails = detailsRef.current;
-      const payload = { steps: updatedSteps, has_foreign_partners: currentDetails?.has_foreign_partners ?? hasForeignPartners };
-      detailsRef.current = payload;
+      const payload = { steps: updatedSteps, has_foreign_partners: localConstitution?.has_foreign_partners ?? hasForeignPartners };
+      setLocalConstitution(payload);
       const { error } = await supabase
         .from("projects")
         .update({ constitution_details: payload } as any)
@@ -89,11 +92,10 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   });
 
   const toggleForeignPartners = () => {
-    const currentDetails = detailsRef.current;
-    const currentSteps = currentDetails?.steps ?? steps;
+    const currentSteps = localConstitution?.steps ?? steps;
     const newHasForeign = !hasForeignPartners;
     const payload = { steps: currentSteps, has_foreign_partners: newHasForeign };
-    detailsRef.current = payload;
+    setLocalConstitution(payload);
     supabase.from("projects").update({ constitution_details: payload } as any).eq("id", projectId)
       .then(({ error }) => {
         if (error) toast.error(error.message);
@@ -102,8 +104,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   };
 
   const updateStep = (key: string, updates: Partial<ConstitutionStep>) => {
-    const currentDetails = detailsRef.current;
-    const currentSteps = currentDetails?.steps ?? steps;
+    const currentSteps = localConstitution?.steps ?? steps;
     const updated = currentSteps.map((s) => {
       if (s.key !== key) return s;
       const merged = { ...s, ...updates };
