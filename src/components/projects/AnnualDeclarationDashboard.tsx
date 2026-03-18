@@ -94,6 +94,7 @@ function DeclarationCard({
                   declarationId={declaration.id}
                   projectId={projectId}
                   clientDropboxPath={clientDropboxPath}
+                  clientId={clientId}
                 />
               ))}
             </div>
