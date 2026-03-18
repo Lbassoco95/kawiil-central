@@ -50,7 +50,7 @@ interface Props {
   clientId?: string;
 }
 
-export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath }: Props) {
+export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
   const steps: GestoriaStep[] = (gestoriaDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
