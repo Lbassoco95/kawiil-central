@@ -495,10 +495,13 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             <span className="text-muted-foreground">Juzgado/Tribunal</span>
             <Input
               className="w-2/3 h-8 text-sm text-right"
-              value={lawsuitDetails.court || ""}
-              onChange={(e) => {
+              value={localCourt}
+              onChange={(e) => setLocalCourt(e.target.value)}
+              onBlur={() => {
                 const current = detailsRef.current;
-                persistDetails({ ...current, court: e.target.value || null });
+                if (localCourt !== (current.court || "")) {
+                  persistDetails({ ...current, court: localCourt || null });
+                }
               }}
               placeholder="—"
             />
@@ -507,10 +510,13 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             <span className="text-muted-foreground">No. Expediente</span>
             <Input
               className="w-2/3 h-8 text-sm text-right"
-              value={lawsuitDetails.case_number || ""}
-              onChange={(e) => {
+              value={localCaseNumber}
+              onChange={(e) => setLocalCaseNumber(e.target.value)}
+              onBlur={() => {
                 const current = detailsRef.current;
-                persistDetails({ ...current, case_number: e.target.value || null });
+                if (localCaseNumber !== (current.case_number || "")) {
+                  persistDetails({ ...current, case_number: localCaseNumber || null });
+                }
               }}
               placeholder="—"
             />
@@ -519,10 +525,13 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             <span className="text-muted-foreground">Actor</span>
             <Input
               className="w-2/3 h-8 text-sm text-right"
-              value={lawsuitDetails.plaintiff || ""}
-              onChange={(e) => {
+              value={localPlaintiff}
+              onChange={(e) => setLocalPlaintiff(e.target.value)}
+              onBlur={() => {
                 const current = detailsRef.current;
-                persistDetails({ ...current, plaintiff: e.target.value || null }, true);
+                if (localPlaintiff !== (current.plaintiff || "")) {
+                  persistDetails({ ...current, plaintiff: localPlaintiff || null }, true);
+                }
               }}
               placeholder="—"
             />
@@ -531,10 +540,13 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             <span className="text-muted-foreground">Demandado</span>
             <Input
               className="w-2/3 h-8 text-sm text-right"
-              value={lawsuitDetails.defendant || ""}
-              onChange={(e) => {
+              value={localDefendant}
+              onChange={(e) => setLocalDefendant(e.target.value)}
+              onBlur={() => {
                 const current = detailsRef.current;
-                persistDetails({ ...current, defendant: e.target.value || null }, true);
+                if (localDefendant !== (current.defendant || "")) {
+                  persistDetails({ ...current, defendant: localDefendant || null }, true);
+                }
               }}
               placeholder="—"
             />
