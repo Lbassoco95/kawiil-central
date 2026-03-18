@@ -168,8 +168,9 @@ export function UnifiedStepRow({
     const item = localChecklist.find((c) => c.id === itemId);
     if (!item) return;
     const newCompleted = !item.completed;
-    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: newCompleted } : c));
-    markChanged();
+    const updatedList = localChecklist.map((c) => c.id === itemId ? { ...c, completed: newCompleted } : c);
+    setLocalChecklist(updatedList);
+    onSave({ checklist: updatedList });
     // Sync linked task status
     if (item.task_id) {
       try {
@@ -214,11 +215,12 @@ export function UnifiedStepRow({
       due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString() : null,
       task_id: taskId,
     };
-    setLocalChecklist([...localChecklist, newItem]);
+    const updatedList = [...localChecklist, newItem];
+    setLocalChecklist(updatedList);
     setNewSubtask("");
     setNewSubtaskAssignee(null);
     setNewSubtaskDueDate(undefined);
-    markChanged();
+    onSave({ checklist: updatedList });
     if (taskId) {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
@@ -227,8 +229,9 @@ export function UnifiedStepRow({
 
   const removeChecklistItem = async (itemId: string) => {
     const item = localChecklist.find((c) => c.id === itemId);
-    setLocalChecklist(localChecklist.filter((c) => c.id !== itemId));
-    markChanged();
+    const filteredList = localChecklist.filter((c) => c.id !== itemId);
+    setLocalChecklist(filteredList);
+    onSave({ checklist: filteredList });
     // Optionally mark linked task as cancelled/deleted - just update status
     if (item?.task_id) {
       try {
