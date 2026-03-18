@@ -160,6 +160,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
                   index={globalIdx}
                   projectId={projectId}
                   clientDropboxPath={clientDropboxPath}
+                  clientId={clientId}
                   showTimer={false}
                   showCheckbox={false}
                   onSave={(updates) => updateStep(step.key, updates as Partial<GestoriaStep>)}

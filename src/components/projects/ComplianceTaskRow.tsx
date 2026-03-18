@@ -163,6 +163,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, clientId
       index={index}
       projectId={projectId}
       clientDropboxPath={clientDropboxPath}
+      clientId={clientId}
       showTimer={true}
       showCheckbox={true}
       commentStepKey={`compliance_${task.id}`}
