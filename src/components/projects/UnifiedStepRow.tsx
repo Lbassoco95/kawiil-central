@@ -229,8 +229,9 @@ export function UnifiedStepRow({
 
   const removeChecklistItem = async (itemId: string) => {
     const item = localChecklist.find((c) => c.id === itemId);
-    setLocalChecklist(localChecklist.filter((c) => c.id !== itemId));
-    markChanged();
+    const filteredList = localChecklist.filter((c) => c.id !== itemId);
+    setLocalChecklist(filteredList);
+    onSave({ checklist: filteredList });
     // Optionally mark linked task as cancelled/deleted - just update status
     if (item?.task_id) {
       try {
