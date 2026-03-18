@@ -45,6 +45,8 @@ export interface UnifiedStepRowProps {
   extraFields?: React.ReactNode;
   /** Comment step key override (e.g. for compliance tasks using `compliance_${id}`) */
   commentStepKey?: string;
+  /** Client ID for linking subtasks to a client */
+  clientId?: string;
 }
 
 export function UnifiedStepRow({
