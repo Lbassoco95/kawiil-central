@@ -385,7 +385,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     Descartar
                   </Button>
                 </div>
-              )
+              )}
 
               {/* Context bar */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
