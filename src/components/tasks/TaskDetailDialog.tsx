@@ -197,6 +197,9 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     id: item.id || `item-${i}`,
     text: item.text || "",
     completed: !!item.completed,
+    assigned_to: item.assigned_to || null,
+    due_date: item.due_date || null,
+    task_id: item.task_id || null,
   }));
   const completedCount = checklist.filter((c) => c.completed).length;
 
