@@ -168,8 +168,9 @@ export function UnifiedStepRow({
     const item = localChecklist.find((c) => c.id === itemId);
     if (!item) return;
     const newCompleted = !item.completed;
-    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: newCompleted } : c));
-    markChanged();
+    const updatedList = localChecklist.map((c) => c.id === itemId ? { ...c, completed: newCompleted } : c);
+    setLocalChecklist(updatedList);
+    onSave({ checklist: updatedList });
     // Sync linked task status
     if (item.task_id) {
       try {
