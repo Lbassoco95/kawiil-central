@@ -38,10 +38,12 @@ function DeclarationCard({
   declaration,
   projectId,
   clientDropboxPath,
+  clientId,
 }: {
   declaration: AnnualDeclaration;
   projectId: string;
   clientDropboxPath?: string;
+  clientId?: string;
 }) {
   const [open, setOpen] = useState(declaration.status !== "completado");
   const completed = declaration.steps.filter((s) => s.completed).length;
