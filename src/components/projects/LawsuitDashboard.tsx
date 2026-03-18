@@ -298,7 +298,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const removeAttachment = (stageKey: string, attachmentId: string) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       stages: current.stages.map((s) =>
