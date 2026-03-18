@@ -408,6 +408,7 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath, pr
                           task={task}
                           projectId={projectId}
                           clientDropboxPath={clientDropboxPath}
+                          clientId={clientId}
                           urgencyBadge={getUrgencyBadge(task)}
                           onUpdate={refreshTasks}
                           index={idx}
