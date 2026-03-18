@@ -50,10 +50,15 @@ const Tareas = () => {
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
 
+  const [showCanceled, setShowCanceled] = useState(false);
+
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
     search: search || undefined,
   });
+
+  const activeTasks = useMemo(() => tasks?.filter((t: any) => t.status !== "cancelada") ?? [], [tasks]);
+  const canceledTasks = useMemo(() => tasks?.filter((t: any) => t.status === "cancelada") ?? [], [tasks]);
 
   const tasksSummaryPrompt = useMemo(() => {
     if (!tasks) return "";
