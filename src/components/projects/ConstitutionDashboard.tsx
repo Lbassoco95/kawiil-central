@@ -106,7 +106,6 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
   const updateStep = (key: string, updates: Partial<ConstitutionStep>) => {
     const currentSteps = localConstitution?.steps ?? steps;
     const updated = currentSteps.map((s) => {
-    const updated = currentSteps.map((s) => {
       if (s.key !== key) return s;
       const merged = { ...s, ...updates };
       const newStepStatus = updates.step_status || s.step_status;
