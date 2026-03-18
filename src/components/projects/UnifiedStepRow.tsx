@@ -339,7 +339,7 @@ export function UnifiedStepRow({
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="mt-3 ml-7 space-y-3 pb-1">
+            <div className="mt-4 ml-7 space-y-4 pb-2">
               {/* Editable name */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">Nombre del paso</label>
