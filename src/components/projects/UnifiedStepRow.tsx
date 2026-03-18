@@ -52,7 +52,7 @@ export interface UnifiedStepRowProps {
 export function UnifiedStepRow({
   step, index, projectId, onSave, onToggle, saving,
   showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
-  commentStepKey,
+  commentStepKey, clientId,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
@@ -63,9 +63,13 @@ export function UnifiedStepRow({
   const [localCollaborators, setLocalCollaborators] = useState<string[]>(step.collaborators || []);
   const [localChecklist, setLocalChecklist] = useState<ChecklistItem[]>(step.checklist || []);
   const [newSubtask, setNewSubtask] = useState("");
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null);
+  const [newSubtaskDueDate, setNewSubtaskDueDate] = useState<Date | undefined>(undefined);
   const [hasChanges, setHasChanges] = useState(false);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
   const { data: profiles = [] } = useProfiles();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   // Due date reason dialog
   const [dueDateReasonOpen, setDueDateReasonOpen] = useState(false);
