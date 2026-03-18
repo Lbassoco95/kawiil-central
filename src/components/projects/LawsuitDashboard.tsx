@@ -110,6 +110,7 @@ interface LawsuitDashboardProps {
   lawsuitDetails: LawsuitDetails;
   dropboxInitialPath?: string | null;
   lockDropboxToInitialPath?: boolean;
+  clientId?: string;
 }
 
 const STAGE_TEMPLATES = [
