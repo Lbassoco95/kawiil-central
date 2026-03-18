@@ -29,6 +29,7 @@ import { DueDateReasonDialog } from "./DueDateReasonDialog";
 import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 
 import { STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
