@@ -229,6 +229,7 @@ const ProyectoDetalle = () => {
             gestoriaDetails={constitutionDetails}
             responsibleUserId={project.responsible_user_id}
             clientDropboxPath={effectiveDropboxPath}
+            clientId={project.client_id || undefined}
           />
         )}
 
