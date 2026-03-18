@@ -551,34 +551,74 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   </div>
                 )}
                 <div className="space-y-1">
-                  {checklist.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2 group py-0.5">
-                      <Checkbox
-                        checked={item.completed}
-                        onCheckedChange={() => toggleChecklistItem(item.id)}
-                      />
-                      <span className={`text-sm flex-1 ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                        {item.text}
-                      </span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                        onClick={() => removeChecklistItem(item.id)}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                  {checklist.map((item) => {
+                    const assigneeName = item.assigned_to ? orgProfiles?.find(p => p.user_id === item.assigned_to)?.full_name : null;
+                    return (
+                      <div key={item.id} className="flex items-start gap-2 group py-1">
+                        <Checkbox
+                          checked={item.completed}
+                          onCheckedChange={() => toggleChecklistItem(item.id)}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                            {item.text}
+                          </span>
+                          <div className="flex flex-wrap gap-1.5 mt-0.5">
+                            {assigneeName && (
+                              <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
+                                <User className="h-2.5 w-2.5" />{assigneeName}
+                              </Badge>
+                            )}
+                            {item.due_date && (
+                              <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
+                                <Calendar className="h-2.5 w-2.5" />{formatMX(item.due_date, "dd MMM yyyy")}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity mt-0.5"
+                          onClick={() => removeChecklistItem(item.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex gap-2 mt-2">
+                <div className="mt-2 space-y-2 p-2 rounded-md border bg-muted/20">
                   <Input
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
-                    placeholder="Agregar subtarea..."
+                    placeholder="Nombre de la subtarea..."
                     className="h-8 text-sm"
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
                   />
-                  <Button size="sm" variant="outline" className="h-8 px-2" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
-                    <Plus className="h-3.5 w-3.5" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-0.5">
+                      <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-0.5"><User className="h-2.5 w-2.5" />Responsable</label>
+                      <SearchableSelect
+                        options={sortedProfiles}
+                        value={newSubtaskAssignee || ""}
+                        onValueChange={(uid) => setNewSubtaskAssignee(uid || null)}
+                        placeholder="Asignar..."
+                        searchPlaceholder="Buscar..."
+                        className="h-7 w-full text-xs"
+                      />
+                    </div>
+                    <div className="space-y-0.5">
+                      <label className="text-[10px] font-medium text-muted-foreground flex items-center gap-0.5"><Calendar className="h-2.5 w-2.5" />Fecha límite</label>
+                      <Input
+                        type="date"
+                        value={newSubtaskDueDate}
+                        onChange={(e) => setNewSubtaskDueDate(e.target.value)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 w-full" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
+                    <Plus className="h-3 w-3" /> Crear subtarea
                   </Button>
                 </div>
               </div>
