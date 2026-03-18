@@ -267,7 +267,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   };
 
   const removeStage = (key: string) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({
       ...current,
       stages: current.stages.filter((s) => s.key !== key),
