@@ -102,6 +102,38 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [newSubtask, setNewSubtask] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Buffered editable fields
+  const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
+  const hasPendingChanges = Object.keys(pendingChanges).length > 0;
+
+  const setPending = (field: string, value: any) => {
+    setPendingChanges((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveChanges = () => {
+    if (!hasPendingChanges) return;
+    updateTask.mutate({ id: taskId, ...pendingChanges }, {
+      onSuccess: () => {
+        setPendingChanges({});
+        toast.success("Cambios guardados");
+      },
+    });
+  };
+
+  // Reset pending changes when task changes
+  useEffect(() => {
+    setPendingChanges({});
+  }, [taskId]);
+
+  // Computed current values (pending override or task value)
+  const currentTitle = pendingChanges.title ?? task?.title ?? "";
+  const currentStatus = pendingChanges.status ?? task?.status ?? "pendiente";
+  const currentPriority = pendingChanges.priority ?? task?.priority ?? "media";
+  const currentAssignedTo = pendingChanges.assigned_to !== undefined ? pendingChanges.assigned_to : task?.assigned_to;
+  const currentCriticality = pendingChanges.criticality_level ?? (task as any)?.criticality_level ?? "normal";
+  const currentDelayCategory = pendingChanges.delay_category !== undefined ? pendingChanges.delay_category : (task as any)?.delay_category;
+  const currentDelayNotes = pendingChanges.delay_notes !== undefined ? pendingChanges.delay_notes : (task as any)?.delay_notes;
+
   // Timer state
   const [timerRunning, setTimerRunning] = useState(false);
   const [displaySeconds, setDisplaySeconds] = useState(0);
@@ -193,7 +225,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     });
   };
 
-  const handleStatusChange = (status: string) => updateTask.mutate({ id: taskId, status });
+  const handleStatusChange = (status: string) => setPending("status", status);
 
   const handleSendComment = () => {
     if (!commentText.trim() && commentAttachments.length === 0) return;
@@ -313,11 +345,26 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
             <div className="px-6 pt-5 pb-3 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <DialogHeader className="flex-1 p-0">
-                  <DialogTitle className="text-base font-semibold leading-snug">{task.title}</DialogTitle>
+                  <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
+                  <Input
+                    value={currentTitle}
+                    onChange={(e) => setPending("title", e.target.value)}
+                    className="text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
+                    placeholder="Nombre de la tarea"
+                  />
                 </DialogHeader>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs">{priorityLabels[task.priority]}</span>
-                  <Select value={task.status} onValueChange={handleStatusChange}>
+                  <Select value={currentPriority} onValueChange={(v) => setPending("priority", v)}>
+                    <SelectTrigger className="h-7 w-[100px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(priorityLabels).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={currentStatus} onValueChange={handleStatusChange}>
                     <SelectTrigger className="h-7 w-[130px] text-xs">
                       <SelectValue />
                     </SelectTrigger>
@@ -329,6 +376,17 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   </Select>
                 </div>
               </div>
+              {hasPendingChanges && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-7 text-xs gap-1">
+                    {updateTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    Guardar cambios
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setPendingChanges({})} className="h-7 text-xs">
+                    Descartar
+                  </Button>
+                </div>
+              )}
 
               {/* Context bar */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -345,8 +403,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   Responsable:
                   <SearchableSelect
                     options={sortedProfiles}
-                    value={task.assigned_to || ""}
-                    onValueChange={(uid) => updateTask.mutate({ id: taskId, assigned_to: uid || null })}
+                    value={currentAssignedTo || ""}
+                    onValueChange={(uid) => setPending("assigned_to", uid || null)}
                     placeholder="Sin asignar"
                     searchPlaceholder="Buscar responsable..."
                     className="inline-flex h-6 w-[160px] text-xs border-dashed"
@@ -489,7 +547,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/20">
                     <div>
                       <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
-                      <Select value={(task as any).criticality_level || "normal"} onValueChange={(v) => updateTask.mutate({ id: taskId, criticality_level: v } as any)}>
+                      <Select value={currentCriticality} onValueChange={(v) => setPending("criticality_level", v)}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {CRITICALITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -498,21 +556,21 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     </div>
                     <div>
                       <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
-                      <Select value={(task as any).delay_category || "__none__"} onValueChange={(v) => updateTask.mutate({ id: taskId, delay_category: v === "__none__" ? null : v } as any)}>
+                      <Select value={currentDelayCategory || "__none__"} onValueChange={(v) => setPending("delay_category", v === "__none__" ? null : v)}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {DELAY_CATEGORIES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-                    {(task as any).delay_category && (
+                    {currentDelayCategory && (
                       <div className="col-span-full">
                         <span className="text-xs text-muted-foreground block mb-1">Notas</span>
                         <Textarea
                           className="text-xs min-h-[60px]"
                           placeholder="Describe la situación..."
-                          defaultValue={(task as any).delay_notes || ""}
-                          onBlur={(e) => updateTask.mutate({ id: taskId, delay_notes: e.target.value || null } as any)}
+                          value={currentDelayNotes || ""}
+                          onChange={(e) => setPending("delay_notes", e.target.value || null)}
                         />
                       </div>
                     )}

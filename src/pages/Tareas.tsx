@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, EyeOff } from "lucide-react";
 import { useTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
@@ -49,10 +50,15 @@ const Tareas = () => {
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
 
+  const [showCanceled, setShowCanceled] = useState(false);
+
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
     search: search || undefined,
   });
+
+  const activeTasks = useMemo(() => tasks?.filter((t: any) => t.status !== "cancelada") ?? [], [tasks]);
+  const canceledTasks = useMemo(() => tasks?.filter((t: any) => t.status === "cancelada") ?? [], [tasks]);
 
   const tasksSummaryPrompt = useMemo(() => {
     if (!tasks) return "";
@@ -192,9 +198,9 @@ INSTRUCCIONES:
 
         {isLoading ? (
           <p className="text-center text-muted-foreground py-12 text-sm">Cargando tareas...</p>
-        ) : tasks && tasks.length > 0 ? (
+        ) : activeTasks.length > 0 ? (
           <div className="divide-y divide-border/40">
-            {tasks.map((task) => (
+            {activeTasks.map((task) => (
               <div
                 key={task.id}
                 className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
@@ -244,6 +250,43 @@ INSTRUCCIONES:
             <Button className="mt-3" size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
             </Button>
+          </div>
+        )}
+
+        {/* Canceled tasks section */}
+        {canceledTasks.length > 0 && (
+          <div className="mt-4">
+            <button
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setShowCanceled(!showCanceled)}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              {showCanceled ? "Ocultar" : "Mostrar"} canceladas ({canceledTasks.length})
+            </button>
+            {showCanceled && (
+              <div className="divide-y divide-border/40 mt-2 opacity-50">
+                {canceledTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
+                    onClick={() => setSelectedTaskId(task.id)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="text-[13px] font-medium text-foreground truncate line-through">{task.title}</h3>
+                        <Badge className={`text-[10px] border-0 px-1.5 py-0 ${statusLabels[task.status]?.color}`} variant="secondary">{statusLabels[task.status]?.label}</Badge>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
+                        {task.due_date && (
+                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
