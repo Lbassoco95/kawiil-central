@@ -402,8 +402,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   Responsable:
                   <SearchableSelect
                     options={sortedProfiles}
-                    value={task.assigned_to || ""}
-                    onValueChange={(uid) => updateTask.mutate({ id: taskId, assigned_to: uid || null })}
+                    value={currentAssignedTo || ""}
+                    onValueChange={(uid) => setPending("assigned_to", uid || null)}
                     placeholder="Sin asignar"
                     searchPlaceholder="Buscar responsable..."
                     className="inline-flex h-6 w-[160px] text-xs border-dashed"
