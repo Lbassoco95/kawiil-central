@@ -264,6 +264,27 @@ export function UnifiedStepRow({
 
   const resolvedStepKey = commentStepKey || step.key;
 
+  // Fetch real titles for linked tasks so edits in TaskDetailDialog are reflected
+  const linkedTaskIds = useMemo(
+    () => localChecklist.filter((c) => c.task_id).map((c) => c.task_id!),
+    [localChecklist]
+  );
+  const { data: linkedTaskTitles } = useQuery({
+    queryKey: ["linked-task-titles", ...linkedTaskIds],
+    queryFn: async () => {
+      if (linkedTaskIds.length === 0) return {};
+      const { data } = await supabase
+        .from("tasks")
+        .select("id, title")
+        .in("id", linkedTaskIds);
+      const map: Record<string, string> = {};
+      data?.forEach((t) => { map[t.id] = t.title; });
+      return map;
+    },
+    enabled: linkedTaskIds.length > 0,
+    staleTime: 10_000,
+  });
+
   return (
     <>
       <Collapsible open={open} onOpenChange={setOpen}>
