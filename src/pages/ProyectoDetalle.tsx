@@ -234,7 +234,7 @@ const ProyectoDetalle = () => {
         )}
 
         {tab === "contabilidad" && hasAccounting && (
-          <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} />
+          <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} clientId={project.client_id || undefined} />
         )}
 
         {tab === "declaracion_anual" && hasAccounting && (
