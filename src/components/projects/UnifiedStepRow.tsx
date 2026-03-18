@@ -586,8 +586,7 @@ export function UnifiedStepRow({
       {selectedSubtaskId && (
         <TaskDetailDialog
           taskId={selectedSubtaskId}
-          open={!!selectedSubtaskId}
-          onOpenChange={(o) => { if (!o) setSelectedSubtaskId(null); }}
+          onClose={() => setSelectedSubtaskId(null)}
         />
       )}
     </>
