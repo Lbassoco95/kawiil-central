@@ -345,11 +345,25 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
             <div className="px-6 pt-5 pb-3 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <DialogHeader className="flex-1 p-0">
-                  <DialogTitle className="text-base font-semibold leading-snug">{task.title}</DialogTitle>
+                  <Input
+                    value={currentTitle}
+                    onChange={(e) => setPending("title", e.target.value)}
+                    className="text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
+                    placeholder="Nombre de la tarea"
+                  />
                 </DialogHeader>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs">{priorityLabels[task.priority]}</span>
-                  <Select value={task.status} onValueChange={handleStatusChange}>
+                  <Select value={currentPriority} onValueChange={(v) => setPending("priority", v)}>
+                    <SelectTrigger className="h-7 w-[100px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(priorityLabels).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={currentStatus} onValueChange={handleStatusChange}>
                     <SelectTrigger className="h-7 w-[130px] text-xs">
                       <SelectValue />
                     </SelectTrigger>
@@ -361,6 +375,17 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   </Select>
                 </div>
               </div>
+              {hasPendingChanges && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-7 text-xs gap-1">
+                    {updateTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                    Guardar cambios
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setPendingChanges({})} className="h-7 text-xs">
+                    Descartar
+                  </Button>
+                </div>
+              )
 
               {/* Context bar */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
