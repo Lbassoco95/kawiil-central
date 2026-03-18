@@ -819,8 +819,8 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               url: file.url,
             };
             const updated = {
-              ...lawsuitDetails,
-              stages: lawsuitDetails.stages.map((s) =>
+              ...localDetails,
+              stages: localDetails.stages.map((s) =>
                 s.key === dropboxPickerStage
                   ? { ...s, attachments: [...(s.attachments || []), attachment] }
                   : s

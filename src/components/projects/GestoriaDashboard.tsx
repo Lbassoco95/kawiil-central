@@ -91,7 +91,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
   });
 
   const updateStep = (key: string, updates: Partial<GestoriaStep>) => {
-    const currentSteps = detailsRef.current?.steps ?? steps;
+    const currentSteps = localGestoria?.steps ?? steps;
     const updated = currentSteps.map((s) => {
       if (s.key !== key) return s;
       const merged = { ...s, ...updates };
