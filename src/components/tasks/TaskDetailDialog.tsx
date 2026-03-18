@@ -225,7 +225,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     });
   };
 
-  const handleStatusChange = (status: string) => updateTask.mutate({ id: taskId, status });
+  const handleStatusChange = (status: string) => setPending("status", status);
 
   const handleSendComment = () => {
     if (!commentText.trim() && commentAttachments.length === 0) return;
