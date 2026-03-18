@@ -259,7 +259,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       attachments: [],
       checklist: [],
     };
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({ ...current, stages: [...current.stages, newStage] });
     setStageDialogOpen(false);
     setNewStageCustomLabel("");
