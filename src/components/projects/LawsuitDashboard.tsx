@@ -317,7 +317,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       completed: false,
       document_ids: [],
     };
-    const current = detailsRef.current;
+    const current = localDetails;
     persistDetails({ ...current, deadlines: [...(current.deadlines || []), dl] });
 
     if (dl.attendees.length > 0 || dl.assigned_to) {
