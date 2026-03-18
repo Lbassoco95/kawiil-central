@@ -383,7 +383,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   });
 
   const handleStageSave = (stageKey: string, updates: Partial<AccountingStep>) => {
-    const current = detailsRef.current;
+    const current = localDetails;
     const updatedStages = current.stages.map((s) => {
       if (s.key !== stageKey) return s;
       const merged = { ...s } as any;
