@@ -513,6 +513,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
                 index={idx}
                 projectId={projectId}
                 clientDropboxPath={dropboxInitialPath || undefined}
+                clientId={clientId}
                 showTimer={true}
                 showCheckbox={true}
                 onToggle={(checked) => handleStageToggle(stage.key, checked)}
