@@ -252,6 +252,43 @@ INSTRUCCIONES:
             </Button>
           </div>
         )}
+
+        {/* Canceled tasks section */}
+        {canceledTasks.length > 0 && (
+          <div className="mt-4">
+            <button
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setShowCanceled(!showCanceled)}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              {showCanceled ? "Ocultar" : "Mostrar"} canceladas ({canceledTasks.length})
+            </button>
+            {showCanceled && (
+              <div className="divide-y divide-border/40 mt-2 opacity-50">
+                {canceledTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
+                    onClick={() => setSelectedTaskId(task.id)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <h3 className="text-[13px] font-medium text-foreground truncate line-through">{task.title}</h3>
+                        <Badge className={`text-[10px] border-0 px-1.5 py-0 ${statusLabels[task.status]?.color}`} variant="secondary">{statusLabels[task.status]?.label}</Badge>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
+                        {task.due_date && (
+                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <TaskFormDialog open={showCreate} onOpenChange={setShowCreate} />

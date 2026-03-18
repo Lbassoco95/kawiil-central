@@ -546,7 +546,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/20">
                     <div>
                       <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
-                      <Select value={(task as any).criticality_level || "normal"} onValueChange={(v) => updateTask.mutate({ id: taskId, criticality_level: v } as any)}>
+                      <Select value={currentCriticality} onValueChange={(v) => setPending("criticality_level", v)}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {CRITICALITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -555,21 +555,21 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                     </div>
                     <div>
                       <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
-                      <Select value={(task as any).delay_category || "__none__"} onValueChange={(v) => updateTask.mutate({ id: taskId, delay_category: v === "__none__" ? null : v } as any)}>
+                      <Select value={currentDelayCategory || "__none__"} onValueChange={(v) => setPending("delay_category", v === "__none__" ? null : v)}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {DELAY_CATEGORIES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
-                    {(task as any).delay_category && (
+                    {currentDelayCategory && (
                       <div className="col-span-full">
                         <span className="text-xs text-muted-foreground block mb-1">Notas</span>
                         <Textarea
                           className="text-xs min-h-[60px]"
                           placeholder="Describe la situación..."
-                          defaultValue={(task as any).delay_notes || ""}
-                          onBlur={(e) => updateTask.mutate({ id: taskId, delay_notes: e.target.value || null } as any)}
+                          value={currentDelayNotes || ""}
+                          onChange={(e) => setPending("delay_notes", e.target.value || null)}
                         />
                       </div>
                     )}
