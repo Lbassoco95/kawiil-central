@@ -163,21 +163,79 @@ export function UnifiedStepRow({
   // Checklist helpers
   const completedCount = localChecklist.filter((c) => c.completed).length;
 
-  const toggleChecklistItem = (itemId: string) => {
-    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
+  const toggleChecklistItem = async (itemId: string) => {
+    const item = localChecklist.find((c) => c.id === itemId);
+    if (!item) return;
+    const newCompleted = !item.completed;
+    setLocalChecklist(localChecklist.map((c) => c.id === itemId ? { ...c, completed: newCompleted } : c));
     markChanged();
+    // Sync linked task status
+    if (item.task_id) {
+      try {
+        await supabase.from("tasks").update({
+          status: newCompleted ? "completada" : "pendiente",
+          completed_at: newCompleted ? new Date().toISOString() : null,
+        } as any).eq("id", item.task_id);
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      } catch { /* silent */ }
+    }
   };
 
-  const addChecklistItem = () => {
+  const addChecklistItem = async () => {
     if (!newSubtask.trim()) return;
-    setLocalChecklist([...localChecklist, { id: `sub-${Date.now()}`, text: newSubtask.trim(), completed: false }]);
+    const itemId = `sub-${Date.now()}`;
+    let taskId: string | null = null;
+
+    // Create linked task in the tasks table
+    try {
+      const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
+      const { data: taskData, error: taskError } = await supabase.from("tasks").insert({
+        title: newSubtask.trim(),
+        organization_id: orgId!,
+        project_id: projectId,
+        client_id: clientId || null,
+        assigned_to: newSubtaskAssignee || localAssignee || null,
+        due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString().split("T")[0] : null,
+        created_by: user!.id,
+        area: step.key,
+      } as any).select("id").single();
+      if (!taskError && taskData) {
+        taskId = taskData.id;
+      }
+    } catch { /* continue without linked task */ }
+
+    const newItem: ChecklistItem = {
+      id: itemId,
+      text: newSubtask.trim(),
+      completed: false,
+      assigned_to: newSubtaskAssignee || localAssignee || null,
+      due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString() : null,
+      task_id: taskId,
+    };
+    setLocalChecklist([...localChecklist, newItem]);
     setNewSubtask("");
+    setNewSubtaskAssignee(null);
+    setNewSubtaskDueDate(undefined);
     markChanged();
+    if (taskId) {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+    }
   };
 
-  const removeChecklistItem = (itemId: string) => {
+  const removeChecklistItem = async (itemId: string) => {
+    const item = localChecklist.find((c) => c.id === itemId);
     setLocalChecklist(localChecklist.filter((c) => c.id !== itemId));
     markChanged();
+    // Optionally mark linked task as cancelled/deleted - just update status
+    if (item?.task_id) {
+      try {
+        await supabase.from("tasks").update({ status: "cancelada" } as any).eq("id", item.task_id);
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      } catch { /* silent */ }
+    }
   };
 
   const handleDocumentAdded = (newIds: string[]) => {
