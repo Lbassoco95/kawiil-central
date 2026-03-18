@@ -49,7 +49,7 @@ interface Props {
   clientId?: string;
 }
 
-export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath }: Props) {
+export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
   const queryClient = useQueryClient();
 
   const steps: ConstitutionStep[] = (constitutionDetails?.steps ?? DEFAULT_STEPS).map((s) => ({
