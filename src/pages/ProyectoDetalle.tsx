@@ -247,6 +247,7 @@ const ProyectoDetalle = () => {
             lawsuitDetails={lawsuitDetails}
             dropboxInitialPath={effectiveDropboxPath}
             lockDropboxToInitialPath={lockDropboxToInitialPath}
+            clientId={project.client_id || undefined}
           />
         )}
 
