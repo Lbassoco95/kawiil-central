@@ -215,11 +215,12 @@ export function UnifiedStepRow({
       due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString() : null,
       task_id: taskId,
     };
-    setLocalChecklist([...localChecklist, newItem]);
+    const updatedList = [...localChecklist, newItem];
+    setLocalChecklist(updatedList);
     setNewSubtask("");
     setNewSubtaskAssignee(null);
     setNewSubtaskDueDate(undefined);
-    markChanged();
+    onSave({ checklist: updatedList });
     if (taskId) {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
