@@ -42,6 +42,7 @@ export interface ComplianceTaskRowProps {
   };
   projectId: string;
   clientDropboxPath?: string;
+  clientId?: string;
   urgencyBadge: React.ReactNode;
   onUpdate: () => void;
   index?: number;
