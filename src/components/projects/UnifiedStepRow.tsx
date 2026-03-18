@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -264,6 +264,27 @@ export function UnifiedStepRow({
 
   const resolvedStepKey = commentStepKey || step.key;
 
+  // Fetch real titles for linked tasks so edits in TaskDetailDialog are reflected
+  const linkedTaskIds = useMemo(
+    () => localChecklist.filter((c) => c.task_id).map((c) => c.task_id!),
+    [localChecklist]
+  );
+  const { data: linkedTaskTitles } = useQuery({
+    queryKey: ["linked-task-titles", ...linkedTaskIds],
+    queryFn: async () => {
+      if (linkedTaskIds.length === 0) return {};
+      const { data } = await supabase
+        .from("tasks")
+        .select("id, title")
+        .in("id", linkedTaskIds);
+      const map: Record<string, string> = {};
+      data?.forEach((t) => { map[t.id] = t.title; });
+      return map;
+    },
+    enabled: linkedTaskIds.length > 0,
+    staleTime: 10_000,
+  });
+
   return (
     <>
       <Collapsible open={open} onOpenChange={setOpen}>
@@ -463,7 +484,7 @@ export function UnifiedStepRow({
                           onClick={() => item.task_id && setSelectedSubtaskId(item.task_id)}
                           title={item.task_id ? "Ver detalle de tarea" : undefined}
                         >
-                          {item.text}
+                          {(item.task_id && linkedTaskTitles?.[item.task_id]) || item.text}
                         </span>
                         {itemAssigneeName && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
