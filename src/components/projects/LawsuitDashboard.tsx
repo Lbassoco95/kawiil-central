@@ -168,6 +168,19 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   const [newStageTemplate, setNewStageTemplate] = useState("contestacion");
   const [newStageCustomLabel, setNewStageCustomLabel] = useState("");
   const [newAttachment, setNewAttachment] = useState({ name: "", url: "" });
+
+  // Local editable fields for case info
+  const [localCourt, setLocalCourt] = useState(lawsuitDetails.court || "");
+  const [localCaseNumber, setLocalCaseNumber] = useState(lawsuitDetails.case_number || "");
+  const [localPlaintiff, setLocalPlaintiff] = useState(lawsuitDetails.plaintiff || "");
+  const [localDefendant, setLocalDefendant] = useState(lawsuitDetails.defendant || "");
+
+  useEffect(() => {
+    setLocalCourt(lawsuitDetails.court || "");
+    setLocalCaseNumber(lawsuitDetails.case_number || "");
+    setLocalPlaintiff(lawsuitDetails.plaintiff || "");
+    setLocalDefendant(lawsuitDetails.defendant || "");
+  }, [lawsuitDetails.court, lawsuitDetails.case_number, lawsuitDetails.plaintiff, lawsuitDetails.defendant]);
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
