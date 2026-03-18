@@ -478,21 +478,53 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           <CardTitle className="text-base">Datos del juicio</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 text-sm">
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Juzgado/Tribunal</span>
-            <span className="text-right">{lawsuitDetails.court || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={lawsuitDetails.court || ""}
+              onChange={(e) => {
+                const current = detailsRef.current;
+                persistDetails({ ...current, court: e.target.value || null });
+              }}
+              placeholder="—"
+            />
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">No. Expediente</span>
-            <span>{lawsuitDetails.case_number || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={lawsuitDetails.case_number || ""}
+              onChange={(e) => {
+                const current = detailsRef.current;
+                persistDetails({ ...current, case_number: e.target.value || null });
+              }}
+              placeholder="—"
+            />
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Actor</span>
-            <span>{lawsuitDetails.plaintiff || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={lawsuitDetails.plaintiff || ""}
+              onChange={(e) => {
+                const current = detailsRef.current;
+                persistDetails({ ...current, plaintiff: e.target.value || null }, true);
+              }}
+              placeholder="—"
+            />
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Demandado</span>
-            <span>{lawsuitDetails.defendant || "—"}</span>
+            <Input
+              className="w-2/3 h-8 text-sm text-right"
+              value={lawsuitDetails.defendant || ""}
+              onChange={(e) => {
+                const current = detailsRef.current;
+                persistDetails({ ...current, defendant: e.target.value || null }, true);
+              }}
+              placeholder="—"
+            />
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Abogado Patrono</span>
