@@ -318,6 +318,12 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
+      // Refresh linked task titles in step checklists when title changes
+      if (vars.title) {
+        queryClient.invalidateQueries({ queryKey: ["linked-task-titles"] });
+        queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
+        queryClient.invalidateQueries({ queryKey: ["annual-declarations"] });
+      }
       logActivity({ entityType: "task", entityId: vars.id, action: "updated", details: { changes: Object.keys(vars).filter(k => k !== "id") } });
 
       if (vars.status) {

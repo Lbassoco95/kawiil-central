@@ -484,7 +484,7 @@ export function UnifiedStepRow({
                           onClick={() => item.task_id && setSelectedSubtaskId(item.task_id)}
                           title={item.task_id ? "Ver detalle de tarea" : undefined}
                         >
-                          {item.text}
+                          {(item.task_id && linkedTaskTitles?.[item.task_id]) || item.text}
                         </span>
                         {itemAssigneeName && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
