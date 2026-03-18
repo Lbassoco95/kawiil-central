@@ -46,6 +46,7 @@ interface Props {
   constitutionDetails: { steps: ConstitutionStep[]; has_foreign_partners: boolean } | null;
   responsibleUserId?: string | null;
   clientDropboxPath?: string;
+  clientId?: string;
 }
 
 export function ConstitutionDashboard({ projectId, constitutionDetails, responsibleUserId, clientDropboxPath }: Props) {
