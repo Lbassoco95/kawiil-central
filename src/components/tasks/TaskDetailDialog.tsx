@@ -762,12 +762,6 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                 </TabsContent>
               </Tabs>
 
-              {/* Block time button */}
-              <div className="flex justify-end">
-                <Button variant="outline" size="sm" onClick={() => setShowBlockTime(true)} className="gap-1 text-xs">
-                  <Clock className="h-3 w-3" /> Bloquear tiempo
-                </Button>
-              </div>
             </div>
           </div>
         ) : (
