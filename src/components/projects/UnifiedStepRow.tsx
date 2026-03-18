@@ -392,6 +392,8 @@ export function UnifiedStepRow({
                 </div>
               </div>
 
+              <Separator className="my-1" />
+
               {/* Collaborators */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
