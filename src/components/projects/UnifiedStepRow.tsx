@@ -437,35 +437,88 @@ export function UnifiedStepRow({
                   </div>
                 )}
                 <div className="space-y-1">
-                  {localChecklist.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2 group py-0.5">
-                      <Checkbox
-                        checked={item.completed}
-                        onCheckedChange={() => toggleChecklistItem(item.id)}
-                      />
-                      <span className={cn("text-xs flex-1", item.completed && "line-through text-muted-foreground")}>
-                        {item.text}
-                      </span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
-                        onClick={() => removeChecklistItem(item.id)}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                  {localChecklist.map((item) => {
+                    const itemAssigneeName = item.assigned_to
+                      ? profiles.find((p) => p.user_id === item.assigned_to)?.full_name?.split(" ")[0]
+                      : null;
+                    return (
+                      <div key={item.id} className="flex items-center gap-2 group py-0.5">
+                        <Checkbox
+                          checked={item.completed}
+                          onCheckedChange={() => toggleChecklistItem(item.id)}
+                        />
+                        <span
+                          className={cn(
+                            "text-xs flex-1 cursor-pointer hover:underline",
+                            item.completed && "line-through text-muted-foreground"
+                          )}
+                          onClick={() => item.task_id && setSelectedSubtaskId(item.task_id)}
+                          title={item.task_id ? "Ver detalle de tarea" : undefined}
+                        >
+                          {item.text}
+                        </span>
+                        {itemAssigneeName && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                            <User className="h-2.5 w-2.5" />{itemAssigneeName}
+                          </span>
+                        )}
+                        {item.due_date && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {format(new Date(item.due_date), "dd MMM", { locale: es })}
+                          </span>
+                        )}
+                        <button
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                          onClick={() => removeChecklistItem(item.id)}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="flex gap-2">
+                {/* Add subtask form */}
+                <div className="space-y-2 rounded-md border border-dashed border-border p-2">
                   <Input
                     value={newSubtask}
                     onChange={(e) => setNewSubtask(e.target.value)}
-                    placeholder="Agregar subtarea..."
+                    placeholder="Nueva subtarea..."
                     className="h-7 text-xs"
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addChecklistItem(); } }}
                   />
-                  <Button size="sm" variant="outline" className="h-7 px-2" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
+                  {newSubtask.trim() && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Select
+                        value={newSubtaskAssignee || "__none__"}
+                        onValueChange={(v) => setNewSubtaskAssignee(v === "__none__" ? null : v)}
+                      >
+                        <SelectTrigger className="h-6 text-[10px] w-auto min-w-[120px] border-dashed gap-1 px-2">
+                          <User className="h-3 w-3 shrink-0" />
+                          <SelectValue placeholder="Responsable" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Sin asignar</SelectItem>
+                          {profiles.map((p) => (
+                            <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className={cn("h-6 text-[10px] px-2 font-normal", !newSubtaskDueDate && "text-muted-foreground")}>
+                            <CalendarIcon className="mr-1 h-3 w-3" />
+                            {newSubtaskDueDate ? format(newSubtaskDueDate, "dd MMM", { locale: es }) : "Fecha"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={newSubtaskDueDate} onSelect={setNewSubtaskDueDate} initialFocus className="p-3 pointer-events-auto" />
+                        </PopoverContent>
+                      </Popover>
+                      <Button size="sm" variant="default" className="h-6 px-2 text-[10px]" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
+                        <Plus className="h-3 w-3 mr-0.5" /> Crear
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
 
