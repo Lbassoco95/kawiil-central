@@ -75,7 +75,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
 
   const saveMutation = useMutation({
     mutationFn: async (updatedSteps: GestoriaStep[]) => {
-      detailsRef.current = { steps: updatedSteps };
+      setLocalGestoria({ steps: updatedSteps });
       const { error } = await supabase
         .from("projects")
         .update({ constitution_details: { steps: updatedSteps } } as any)
