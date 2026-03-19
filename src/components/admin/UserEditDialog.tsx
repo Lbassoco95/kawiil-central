@@ -35,7 +35,7 @@ import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
 import type { AppGrado } from "@/lib/gradoLabels";
 import { useEffect, useState } from "react";
 import { useUserCelulas, useSyncUserCelulas } from "@/hooks/useUserCelulas";
-import { useEffect } from "react";
+
 
 const editSchema = z.object({
   full_name: z.string().trim().min(1, "El nombre es requerido").max(200),
