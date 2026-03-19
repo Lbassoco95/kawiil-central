@@ -24,13 +24,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { useCelulas } from "@/hooks/useCatalogs";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { OrgUser } from "@/hooks/useOrgUsers";
 import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
 import type { AppGrado } from "@/lib/gradoLabels";
+import { useEffect, useState } from "react";
+import { useUserCelulas, useSyncUserCelulas } from "@/hooks/useUserCelulas";
 import { useEffect } from "react";
 
 const editSchema = z.object({
