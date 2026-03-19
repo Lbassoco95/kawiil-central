@@ -160,6 +160,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
         celulaIds: selectedCelulaIds,
         organizationId: profile.organization_id,
       });
+      toast.success("Células actualizadas");
     }
 
     onOpenChange(false);

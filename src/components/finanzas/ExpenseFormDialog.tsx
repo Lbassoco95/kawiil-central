@@ -184,9 +184,7 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
               name="client_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    Cliente {watchCategory === "terceros" && "*"}
-                  </FormLabel>
+                  <FormLabel>Cliente</FormLabel>
                   <SearchableSelect
                     options={[{ value: "", label: "Ninguno" }, ...clientOptions]}
                     value={field.value || ""}

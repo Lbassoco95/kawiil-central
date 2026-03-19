@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,8 @@ import { UserEditDialog } from "@/components/admin/UserEditDialog";
 import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { gradoLabel, gradoBadgeClass } from "@/lib/gradoLabels";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,9 +25,44 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+
+function UserCelulaBadges({ userId, fallbackArea, areaLabelMap }: { userId: string; fallbackArea?: string | null; areaLabelMap: Record<string, string> }) {
+  const { data: celulas, isLoading } = useQuery({
+    queryKey: ["user-celulas-display", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_celulas")
+        .select("celula_id, celulas!inner(name, color, slug)")
+        .eq("user_id", userId);
+      if (error) return [];
+      return (data || []).map((uc: any) => ({
+        name: uc.celulas?.name,
+        color: uc.celulas?.color || "#6366f1",
+        slug: uc.celulas?.slug,
+      }));
+    },
+  });
+
+  if (isLoading) return <span className="text-muted-foreground italic text-xs">Cargando...</span>;
+  if (!celulas?.length) {
+    if (fallbackArea) {
+      return <Badge variant="secondary" className="text-xs">{areaLabelMap[fallbackArea] || fallbackArea}</Badge>;
+    }
+    return <span className="text-muted-foreground italic">Sin asignar</span>;
+  }
+
+  return (
+    <>
+      {celulas.map((c) => (
+        <Badge key={c.slug} variant="secondary" className="text-xs" style={{ borderLeft: `3px solid ${c.color}` }}>
+          {c.name}
+        </Badge>
+      ))}
+    </>
+  );
+}
 
 const ONBOARDING_CONFIG: Record<OnboardingStatus, { label: string; className: string; icon: typeof Send }> = {
   invited: {
@@ -224,16 +262,10 @@ export function UserManagement() {
                           </span>
                         </div>
                         <div>
-                          <span className="text-xs text-muted-foreground block">Célula</span>
-                          <span className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs text-muted-foreground block">Células</span>
+                          <span className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            {user.area ? (
-                              <Badge variant="secondary" className="text-xs">
-                                {areaLabelMap[user.area] || user.area}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground italic">Sin asignar</span>
-                            )}
+                            <UserCelulaBadges userId={user.user_id} fallbackArea={user.area} areaLabelMap={areaLabelMap} />
                           </span>
                         </div>
                         <div>
