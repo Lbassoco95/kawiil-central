@@ -24,14 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { useCelulas } from "@/hooks/useCatalogs";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { OrgUser } from "@/hooks/useOrgUsers";
 import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
 import type { AppGrado } from "@/lib/gradoLabels";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useUserCelulas, useSyncUserCelulas } from "@/hooks/useUserCelulas";
+
 
 const editSchema = z.object({
   full_name: z.string().trim().min(1, "El nombre es requerido").max(200),
@@ -89,7 +93,12 @@ function useUpdateUser() {
 
 export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps) {
   const { areaOptions } = useAreaOptions();
+  const { data: celulas = [] } = useCelulas();
+  const activeCelulas = celulas.filter((c) => c.is_active);
   const updateUser = useUpdateUser();
+  const syncCelulas = useSyncUserCelulas();
+  const { data: userCelulas = [] } = useUserCelulas(user?.user_id);
+  const [selectedCelulaIds, setSelectedCelulaIds] = useState<string[]>([]);
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
@@ -109,20 +118,50 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
         area: user.area || "",
         role: (user.role as AppGrado) || "ejecutor",
       });
+      setSelectedCelulaIds(userCelulas.map((uc) => uc.celula_id));
     }
-  }, [user, open, form]);
+  }, [user, open, form, userCelulas]);
+
+  const toggleCelula = (celulaId: string) => {
+    setSelectedCelulaIds((prev) =>
+      prev.includes(celulaId)
+        ? prev.filter((id) => id !== celulaId)
+        : [...prev, celulaId]
+    );
+  };
 
   const onSubmit = async (values: EditFormValues) => {
     if (!user) return;
+
+    // Determine primary area from selected células
+    const primaryCelula = activeCelulas.find((c) => selectedCelulaIds.includes(c.id));
+    const primaryArea = primaryCelula?.slug || values.area || null;
+
     await updateUser.mutateAsync({
       userId: user.user_id,
       profileData: {
         full_name: values.full_name,
         phone: values.phone || null,
-        area: values.area || null,
+        area: primaryArea,
       },
       role: values.role,
     });
+
+    // Sync multi-célula assignments
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("user_id", user.user_id)
+      .single();
+
+    if (profile) {
+      await syncCelulas.mutateAsync({
+        userId: user.user_id,
+        celulaIds: selectedCelulaIds,
+        organizationId: profile.organization_id,
+      });
+    }
+
     onOpenChange(false);
   };
 
@@ -190,25 +229,30 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
             <FormField
               control={form.control}
               name="area"
-              render={({ field }) => (
+              render={() => (
                 <FormItem>
-                  <FormLabel>Célula</FormLabel>
-                  <Select
-                    onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
-                    value={field.value || "__none__"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sin asignar" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Sin asignar</SelectItem>
-                      {areaOptions.map((a) => (
-                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Células asignadas</FormLabel>
+                  <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                    {activeCelulas.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No hay células disponibles</p>
+                    )}
+                    {activeCelulas.map((cel) => (
+                      <label
+                        key={cel.id}
+                        className="flex items-center gap-2 cursor-pointer text-sm"
+                      >
+                        <Checkbox
+                          checked={selectedCelulaIds.includes(cel.id)}
+                          onCheckedChange={() => toggleCelula(cel.id)}
+                        />
+                        <span
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{ backgroundColor: cel.color || "#6366f1" }}
+                        />
+                        {cel.name}
+                      </label>
+                    ))}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
