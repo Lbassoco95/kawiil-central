@@ -25,9 +25,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 
 function UserCelulaBadges({ userId, fallbackArea, areaLabelMap }: { userId: string; fallbackArea?: string | null; areaLabelMap: Record<string, string> }) {
   const { data: celulas, isLoading } = useQuery({
