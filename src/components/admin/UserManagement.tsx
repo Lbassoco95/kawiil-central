@@ -25,9 +25,45 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+
+function UserCelulaBadges({ userId, fallbackArea, areaLabelMap }: { userId: string; fallbackArea?: string | null; areaLabelMap: Record<string, string> }) {
+  const { data: celulas, isLoading } = useQuery({
+    queryKey: ["user-celulas-display", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_celulas")
+        .select("celula_id, celulas!inner(name, color, slug)")
+        .eq("user_id", userId);
+      if (error) return [];
+      return (data || []).map((uc: any) => ({
+        name: uc.celulas?.name,
+        color: uc.celulas?.color || "#6366f1",
+        slug: uc.celulas?.slug,
+      }));
+    },
+  });
+
+  if (isLoading) return <span className="text-muted-foreground italic text-xs">Cargando...</span>;
+  if (!celulas?.length) {
+    if (fallbackArea) {
+      return <Badge variant="secondary" className="text-xs">{areaLabelMap[fallbackArea] || fallbackArea}</Badge>;
+    }
+    return <span className="text-muted-foreground italic">Sin asignar</span>;
+  }
+
+  return (
+    <>
+      {celulas.map((c) => (
+        <Badge key={c.slug} variant="secondary" className="text-xs" style={{ borderLeft: `3px solid ${c.color}` }}>
+          {c.name}
+        </Badge>
+      ))}
+    </>
+  );
+}
 
 const ONBOARDING_CONFIG: Record<OnboardingStatus, { label: string; className: string; icon: typeof Send }> = {
   invited: {
