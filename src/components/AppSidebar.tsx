@@ -37,6 +37,7 @@ const navItems = [
   { title: "Notificaciones", url: "/notificaciones", icon: Bell },
   { title: "Hub", url: "/hub", icon: Building2 },
   { title: "Kawiil AI", url: "/asistente", icon: Sparkles },
+  { title: "Finanzas", url: "/finanzas", icon: Wallet },
   { title: "Administración", url: "/admin", icon: Settings },
 ];
 
