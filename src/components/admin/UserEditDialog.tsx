@@ -93,7 +93,12 @@ function useUpdateUser() {
 
 export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps) {
   const { areaOptions } = useAreaOptions();
+  const { data: celulas = [] } = useCelulas();
+  const activeCelulas = celulas.filter((c) => c.is_active);
   const updateUser = useUpdateUser();
+  const syncCelulas = useSyncUserCelulas();
+  const { data: userCelulas = [] } = useUserCelulas(user?.user_id);
+  const [selectedCelulaIds, setSelectedCelulaIds] = useState<string[]>([]);
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
@@ -113,20 +118,50 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
         area: user.area || "",
         role: (user.role as AppGrado) || "ejecutor",
       });
+      setSelectedCelulaIds(userCelulas.map((uc) => uc.celula_id));
     }
-  }, [user, open, form]);
+  }, [user, open, form, userCelulas]);
+
+  const toggleCelula = (celulaId: string) => {
+    setSelectedCelulaIds((prev) =>
+      prev.includes(celulaId)
+        ? prev.filter((id) => id !== celulaId)
+        : [...prev, celulaId]
+    );
+  };
 
   const onSubmit = async (values: EditFormValues) => {
     if (!user) return;
+
+    // Determine primary area from selected células
+    const primaryCelula = activeCelulas.find((c) => selectedCelulaIds.includes(c.id));
+    const primaryArea = primaryCelula?.slug || values.area || null;
+
     await updateUser.mutateAsync({
       userId: user.user_id,
       profileData: {
         full_name: values.full_name,
         phone: values.phone || null,
-        area: values.area || null,
+        area: primaryArea,
       },
       role: values.role,
     });
+
+    // Sync multi-célula assignments
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("user_id", user.user_id)
+      .single();
+
+    if (profile) {
+      await syncCelulas.mutateAsync({
+        userId: user.user_id,
+        celulaIds: selectedCelulaIds,
+        organizationId: profile.organization_id,
+      });
+    }
+
     onOpenChange(false);
   };
 
