@@ -227,16 +227,10 @@ export function UserManagement() {
                           </span>
                         </div>
                         <div>
-                          <span className="text-xs text-muted-foreground block">Célula</span>
-                          <span className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs text-muted-foreground block">Células</span>
+                          <span className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            {user.area ? (
-                              <Badge variant="secondary" className="text-xs">
-                                {areaLabelMap[user.area] || user.area}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground italic">Sin asignar</span>
-                            )}
+                            <UserCelulaBadges userId={user.user_id} fallbackArea={user.area} areaLabelMap={areaLabelMap} />
                           </span>
                         </div>
                         <div>

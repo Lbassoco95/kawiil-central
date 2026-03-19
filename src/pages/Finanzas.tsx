@@ -173,6 +173,42 @@ export default function Finanzas() {
           </>
         ) : (
           <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Aquí puedes registrar solicitudes de pago y dar seguimiento a tus solicitudes.
+            </p>
+            {/* Personal summary cards */}
+            <div className="grid grid-cols-3 gap-3">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                    <Clock className="h-3.5 w-3.5" /> Pendientes
+                  </div>
+                  <p className="text-lg font-bold">
+                    {myExpenses.filter((e) => ["solicitado", "en_revision"].includes(e.status)).length}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                    <CheckCircle className="h-3.5 w-3.5" /> Aprobados
+                  </div>
+                  <p className="text-lg font-bold text-green-600">
+                    {myExpenses.filter((e) => e.status === "aprobado").length}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                    <DollarSign className="h-3.5 w-3.5" /> Pagados
+                  </div>
+                  <p className="text-lg font-bold text-purple-600">
+                    {myExpenses.filter((e) => e.status === "pagado").length}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
             <h2 className="text-sm font-medium text-muted-foreground">Mis solicitudes</h2>
             <ExpenseTable
               expenses={myExpenses}
