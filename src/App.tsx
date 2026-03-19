@@ -20,6 +20,7 @@ import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Hub from "./pages/Hub";
 import Notificaciones from "./pages/Notificaciones";
 import AsistenteIA from "./pages/AsistenteIA";
+import Finanzas from "./pages/Finanzas";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
