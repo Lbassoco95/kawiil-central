@@ -666,6 +666,96 @@ export type Database = {
           },
         ]
       }
+      expenses: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          category: string
+          client_id: string | null
+          created_at: string
+          currency: string
+          description: string
+          expense_date: string
+          id: string
+          notes: string | null
+          organization_id: string
+          paid_at: string | null
+          paid_by: string | null
+          project_id: string | null
+          receipt_path: string | null
+          rejection_reason: string | null
+          requested_by: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          category: string
+          client_id?: string | null
+          created_at?: string
+          currency?: string
+          description: string
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          organization_id: string
+          paid_at?: string | null
+          paid_by?: string | null
+          project_id?: string | null
+          receipt_path?: string | null
+          rejection_reason?: string | null
+          requested_by: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          category?: string
+          client_id?: string | null
+          created_at?: string
+          currency?: string
+          description?: string
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          organization_id?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          project_id?: string | null
+          receipt_path?: string | null
+          rejection_reason?: string | null
+          requested_by?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       extracted_documents: {
         Row: {
           ai_observations: Json | null
