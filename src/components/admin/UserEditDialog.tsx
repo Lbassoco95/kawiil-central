@@ -229,25 +229,30 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
             <FormField
               control={form.control}
               name="area"
-              render={({ field }) => (
+              render={() => (
                 <FormItem>
-                  <FormLabel>Célula</FormLabel>
-                  <Select
-                    onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}
-                    value={field.value || "__none__"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sin asignar" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__none__">Sin asignar</SelectItem>
-                      {areaOptions.map((a) => (
-                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Células asignadas</FormLabel>
+                  <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                    {activeCelulas.length === 0 && (
+                      <p className="text-xs text-muted-foreground">No hay células disponibles</p>
+                    )}
+                    {activeCelulas.map((cel) => (
+                      <label
+                        key={cel.id}
+                        className="flex items-center gap-2 cursor-pointer text-sm"
+                      >
+                        <Checkbox
+                          checked={selectedCelulaIds.includes(cel.id)}
+                          onCheckedChange={() => toggleCelula(cel.id)}
+                        />
+                        <span
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{ backgroundColor: cel.color || "#6366f1" }}
+                        />
+                        {cel.name}
+                      </label>
+                    ))}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
