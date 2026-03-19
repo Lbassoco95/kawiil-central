@@ -17,7 +17,7 @@ export function useFinanceAccess() {
         .eq("user_id", user.id);
       if (error) return false;
       return (data || []).some((uc: any) =>
-        ["finanzas", "administracion"].includes(uc.celulas?.slug)
+        ["finanzas", "administracion", "administraci_n"].includes(uc.celulas?.slug)
       );
     },
     enabled: !!user,
