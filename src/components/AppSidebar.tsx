@@ -17,6 +17,7 @@ import {
   Building2,
   Bell,
   Sparkles,
+  Wallet,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
