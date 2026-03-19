@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,8 @@ import { UserEditDialog } from "@/components/admin/UserEditDialog";
 import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { gradoLabel, gradoBadgeClass } from "@/lib/gradoLabels";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   AlertDialog,
   AlertDialogAction,
