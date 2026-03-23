@@ -69,7 +69,7 @@ const Tareas = () => {
     const byArea: Record<string, number> = {};
     pending.forEach((t: any) => {
       byPriority[t.priority] = (byPriority[t.priority] || 0) + 1;
-      if (t.area) byArea[areaLabelMap[t.area] || t.area] = (byArea[areaLabelMap[t.area] || t.area] || 0) + 1;
+      if (t.area) { const lbl = getCelulaLabel(t.area); byArea[lbl] = (byArea[lbl] || 0) + 1; }
     });
 
     // Build assigned steps context
