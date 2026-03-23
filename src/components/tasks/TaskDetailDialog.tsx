@@ -53,6 +53,8 @@ interface Props {
   onClose: () => void;
 }
 
+// Nested subtask dialog state
+
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 
 const statusLabels = TASK_STATUS_CONFIG;
