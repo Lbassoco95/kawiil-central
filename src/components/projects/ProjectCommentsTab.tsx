@@ -97,7 +97,7 @@ export function ProjectCommentsTab({ projectId, projectName = "un proyecto" }: P
   });
 
   const renderContent = (content: string) => {
-    const parts = content.split(/(@\w[\w\s]*\w)/g);
+    const parts = content.split(/(@[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w])/g);
     return parts.map((part, i) => {
       if (part.startsWith("@")) {
         const name = part.slice(1);

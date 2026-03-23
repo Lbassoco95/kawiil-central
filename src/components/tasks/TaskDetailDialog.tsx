@@ -772,7 +772,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                             <span className="text-xs font-medium">{c.profile?.full_name || "Usuario"}</span>
                             <span className="text-[10px] text-muted-foreground">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
                           </div>
-                          <p className="text-sm text-foreground whitespace-pre-wrap">{renderCommentContent(c.content)}</p>
+                          <p className="text-sm text-foreground whitespace-pre-wrap break-words overflow-hidden">{renderCommentContent(c.content)}</p>
                         </div>
                       </div>
                     ))}
