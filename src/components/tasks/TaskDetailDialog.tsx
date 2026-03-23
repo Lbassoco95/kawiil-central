@@ -600,15 +600,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                             <button
                               type="button"
                               className={`text-sm text-left hover:underline inline-flex items-center gap-1 ${item.completed ? "line-through text-muted-foreground" : "text-primary"}`}
-                              onClick={() => {
-                                onClose();
-                                setTimeout(() => {
-                                  const params = new URLSearchParams(window.location.search);
-                                  params.set("taskId", item.task_id!);
-                                  window.history.pushState({}, "", `${window.location.pathname}?${params}`);
-                                  window.dispatchEvent(new PopStateEvent("popstate"));
-                                }, 150);
-                              }}
+                              onClick={() => setSelectedSubtaskId(item.task_id!)}
                             >
                               {item.text}
                               <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
