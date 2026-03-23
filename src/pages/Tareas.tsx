@@ -216,7 +216,7 @@ INSTRUCCIONES:
                     {(task as any).delay_category && <Badge variant="outline" className="text-[9px] px-1 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>}
                   </div>
                   <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                    {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
+                    {task.area && <span>{getCelulaLabel(task.area)}</span>}
                     {task.assigned_to && profileMap.get(task.assigned_to) ? (
                       <span className="flex items-center gap-1"><User className="h-3 w-3" />{profileMap.get(task.assigned_to)}</span>
                     ) : (
