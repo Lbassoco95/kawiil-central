@@ -36,7 +36,7 @@ const Proyectos = () => {
   const { data: projects, isLoading } = useProjects();
   const deleteProject = useDeleteProject();
   const { isAdminOrManager } = useUserRole();
-  const { areaLabelMap } = useAreaOptions();
+  const { areaLabelMap, getCelulaLabel } = useAreaOptions();
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);

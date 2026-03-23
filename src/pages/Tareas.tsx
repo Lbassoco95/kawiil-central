@@ -45,7 +45,7 @@ const Tareas = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteTask = useDeleteTask();
   const { isAdminOrManager } = useUserRole();
-  const { areaOptions, areaLabelMap } = useAreaOptions();
+  const { areaOptions, areaLabelMap, getCelulaLabel } = useAreaOptions();
   const { data: assignedSteps = [] } = useAssignedSteps();
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);

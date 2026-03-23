@@ -11,7 +11,7 @@ import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
 import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
-import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { useAreaOptions, formatCelulaLabel } from "@/hooks/useAreaOptions";
 import { gradoLabel, gradoBadgeClass } from "@/lib/gradoLabels";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
