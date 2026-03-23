@@ -53,6 +53,8 @@ interface Props {
   onClose: () => void;
 }
 
+// Nested subtask dialog state
+
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 
 const statusLabels = TASK_STATUS_CONFIG;
@@ -96,6 +98,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
   const [showBlockTime, setShowBlockTime] = useState(false);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
   const [showDropboxPicker, setShowDropboxPicker] = useState(false);
   const { data: orgProfiles } = useProfiles();
   const [scannedFile, setScannedFile] = useState<File | null>(null);
@@ -598,15 +601,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                             <button
                               type="button"
                               className={`text-sm text-left hover:underline inline-flex items-center gap-1 ${item.completed ? "line-through text-muted-foreground" : "text-primary"}`}
-                              onClick={() => {
-                                onClose();
-                                setTimeout(() => {
-                                  const params = new URLSearchParams(window.location.search);
-                                  params.set("taskId", item.task_id!);
-                                  window.history.pushState({}, "", `${window.location.pathname}?${params}`);
-                                  window.dispatchEvent(new PopStateEvent("popstate"));
-                                }, 150);
-                              }}
+                              onClick={() => setSelectedSubtaskId(item.task_id!)}
                             >
                               {item.text}
                               <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
@@ -958,6 +953,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
       />
       <DropboxFilePicker open={showCommentDropbox} onClose={() => setShowCommentDropbox(false)} onSelect={(file) => setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }])} />
       <DocumentPreviewDialog open={!!previewDoc} onOpenChange={(o) => { if (!o) setPreviewDoc(null); }} document={previewDoc} />
+      <TaskDetailDialog taskId={selectedSubtaskId} onClose={() => setSelectedSubtaskId(null)} />
     </Dialog>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
@@ -51,6 +51,14 @@ const Tareas = () => {
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
 
   const [showCanceled, setShowCanceled] = useState(false);
+
+  // Sync selectedTaskId with URL query param for deep links
+  useEffect(() => {
+    const urlTaskId = searchParams.get("taskId");
+    if (urlTaskId && urlTaskId !== selectedTaskId) {
+      setSelectedTaskId(urlTaskId);
+    }
+  }, [searchParams]);
 
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
