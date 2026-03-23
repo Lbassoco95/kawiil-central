@@ -98,6 +98,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
   const [showBlockTime, setShowBlockTime] = useState(false);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
   const [showDropboxPicker, setShowDropboxPicker] = useState(false);
   const { data: orgProfiles } = useProfiles();
   const [scannedFile, setScannedFile] = useState<File | null>(null);
