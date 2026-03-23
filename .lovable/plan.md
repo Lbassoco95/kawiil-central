@@ -1,33 +1,58 @@
 
+## Plan: Corregir visualización de enlaces y normalizar nombres de células en el frontend
 
-## Plan: Corregir subtareas clickeables, ancho de enlaces y menciones en negritas
+### Hallazgos
+1. En `TaskDetailDialog.tsx` la pestaña **Enlaces** ya tiene `truncate` y `break-all`, pero sigue mostrando la URL completa en una segunda línea. Eso hace que cada tarjeta crezca demasiado y puede seguir empujando la percepción del layout.
+2. El frontend todavía tiene varios fallback del tipo `areaLabelMap[slug] || slug` / `celulaLabelMap[slug] || slug`. Cuando el mapa no resuelve, se termina mostrando el slug técnico (`administracion`, `administraci_n`) en vez de la etiqueta correcta (`Administración`).
 
-### Problemas identificados
+### Cambios propuestos
 
-1. **Subtareas no abren la tarea vinculada** — En `TaskDetailDialog.tsx` (líneas 556-586), los items del checklist que tienen `task_id` no son clickeables. No hay forma de navegar a la tarea vinculada desde la vista de la tarea padre.
+**1. `TaskDetailDialog.tsx` — Enlaces más compactos y sin deformar la vista**
+- Reemplazar la visualización actual del link por una versión resumida:
+  - título visible: `link.name` si existe
+  - subtítulo corto: dominio + ruta abreviada, no la URL completa cruda
+- Mantener la URL completa solo como `title`, tooltip o acción secundaria, no visible ocupando ancho/alto.
+- Reforzar restricciones de layout en toda la cadena del tab:
+  - `DialogContent`
+  - contenedor scrollable
+  - `Tabs`
+  - `TabsContent`
+  - tarjeta individual del enlace
+- Asegurar `min-w-0`, `overflow-hidden`, `truncate` y ancho controlado en todos los nodos flex relevantes.
+- Aplicar la misma lógica compacta al render de links dentro de comentarios para que no reaparezca el problema en otra sección.
 
-2. **Enlaces rompen el ancho del diálogo** — Los attachments en comentarios se guardan como texto plano `📎 [nombre](url)` (línea 291). La función `renderCommentContent` no parsea estos pseudo-links de markdown, así que URLs largas se renderizan como texto corrido sin truncar, desbordando el contenedor.
+**2. Etiquetas de células/áreas — Mostrar siempre texto correcto en frontend**
+- Centralizar una función/helper de presentación para células, por ejemplo:
+  - `administracion` / `administraci_n` → `Administración`
+  - `finanzas` → `Finanzas`
+  - otros slugs → convertir a texto legible con mayúscula inicial
+- Extender `useCelulaOptions.ts` para devolver no solo el mapa, sino también un formateador seguro de etiquetas.
+- Sustituir todos los fallback de slug crudo por ese helper compartido.
 
-3. **Menciones no se muestran en negritas** — La regex `/@\w[\w\s]*\w/g` usada en los 3 componentes (`TaskDetailDialog`, `StepComments`, `ProjectCommentsTab`) utiliza `\w` que solo cubre `[a-zA-Z0-9_]`. No reconoce caracteres acentuados (á, é, í, ó, ú, ñ) comunes en nombres en español, por lo que las menciones nunca hacen match.
+**3. Pantallas a revisar para el texto correcto**
+Actualizar donde hoy se usa `map[slug] || slug`, al menos en:
+- `src/components/tasks/TaskDetailDialog.tsx`
+- `src/components/admin/UserManagement.tsx`
+- `src/pages/Tareas.tsx`
+- `src/pages/Proyectos.tsx`
 
-### Cambios
+Y durante la implementación revisar cualquier otra ocurrencia similar para que no se vuelva a filtrar el slug técnico en la UI.
 
-**1. `TaskDetailDialog.tsx` — Subtareas clickeables**
-- En el render de cada checklist item (línea 564), si `item.task_id` existe, envolver el texto en un botón/link que llame `onClose()` y luego abra el TaskDetailDialog de esa subtarea (usando la URL con query param `taskId`).
-- Agregar un icono sutil de "abrir" junto al texto para indicar que es clickeable.
+### Resultado esperado
+- La pestaña **Enlaces** ya no alarga ni deforma la ventana.
+- Los links se ven limpios, cortos y legibles.
+- En toda la aplicación se mostrará **Administración** con acento y mayúscula correcta, aunque internamente el valor técnico en base de datos sea distinto.
+- Se evita que futuros slugs técnicos se vean “tal cual” en el diseño.
 
-**2. `TaskDetailDialog.tsx` — Parsear enlaces en comentarios**
-- Actualizar `renderCommentContent` para detectar el patrón `📎 [nombre](url)` y renderizarlo como un link real `<a>` con `truncate` y `break-all` para evitar desborde.
-- Agregar `break-words overflow-hidden` al contenedor del comentario (línea 723) para prevenir que cualquier texto largo desborde.
-
-**3. Todos los componentes — Regex de menciones con soporte Unicode**
-- Reemplazar `/@\w[\w\s]*\w/g` por una regex que soporte caracteres acentuados: `/@[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w]/g`
-- Aplicar en los 3 archivos: `TaskDetailDialog.tsx`, `StepComments.tsx`, `ProjectCommentsTab.tsx`
-- También actualizar la regex en `MentionTextarea.tsx` `extractMentionIds` (línea 50) que usa el mismo patrón.
+### Detalles técnicos
+- No requiere cambios de backend ni de base de datos.
+- El ajuste principal es de presentación y reutilización de etiquetas.
+- La implementación debe seguir el patrón visual ya usado en la app: texto compacto, truncado controlado y labels legibles para usuarios finales.
 
 ### Archivos a modificar
-- `src/components/tasks/TaskDetailDialog.tsx` — Subtareas clickeables + parsear links + regex Unicode
-- `src/components/projects/StepComments.tsx` — Regex Unicode
-- `src/components/projects/ProjectCommentsTab.tsx` — Regex Unicode
-- `src/components/tasks/MentionTextarea.tsx` — Regex Unicode en extractMentionIds
-
+- `src/components/tasks/TaskDetailDialog.tsx`
+- `src/hooks/useCelulaOptions.ts`
+- `src/components/admin/UserManagement.tsx`
+- `src/pages/Tareas.tsx`
+- `src/pages/Proyectos.tsx`
+- y cualquier otro archivo con fallback `labelMap[slug] || slug`
