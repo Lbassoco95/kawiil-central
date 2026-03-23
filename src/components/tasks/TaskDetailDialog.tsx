@@ -84,7 +84,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const removeAssignee = useRemoveTaskAssignee();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { celulaLabelMap } = useCelulaOptions();
+  const { celulaLabelMap, getCelulaLabel } = useCelulaOptions();
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
