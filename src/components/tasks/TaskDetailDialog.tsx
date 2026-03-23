@@ -844,24 +844,46 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                 </TabsContent>
 
                 {/* Links tab */}
-                <TabsContent value="links" className="space-y-3 mt-3">
-                  <div className="space-y-1.5">
+                <TabsContent value="links" className="space-y-3 mt-3 min-w-0">
+                  <div className="space-y-1.5 min-w-0">
                     {dropboxLinks.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin enlaces de Dropbox</p>}
                     {dropboxLinks.map((link: any, i: number) => (
-                      <div key={i} className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <a href={link.url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline truncate flex-1">{link.url}</a>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{link.added_at ? formatMX(link.added_at, "dd MMM") : ""}</span>
-                        <X className="h-3.5 w-3.5 cursor-pointer text-muted-foreground hover:text-destructive shrink-0" onClick={() => handleRemoveLink(i)} />
+                      <div key={i} className="flex w-full min-w-0 items-start gap-2 overflow-hidden rounded-md border bg-muted/30 p-2">
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block max-w-full truncate text-xs text-primary hover:underline"
+                            title={link.url}
+                          >
+                            {link.name || link.url}
+                          </a>
+                          <p className="mt-0.5 line-clamp-2 break-all text-[10px] text-muted-foreground">
+                            {link.url}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5">{link.added_at ? formatMX(link.added_at, "dd MMM") : ""}</span>
+                        <button
+                          type="button"
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveLink(i)}
+                          aria-label="Eliminar enlace"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     ))}
                   </div>
-                  <div className="flex gap-2">
-                    <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} placeholder="https://www.dropbox.com/..." className="flex-1 h-8 text-sm"
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} placeholder="https://www.dropbox.com/..." className="h-8 flex-1 min-w-0 text-sm"
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddDropboxLink(); } }}
                     />
-                    <Button size="sm" variant="outline" className="h-8" onClick={handleAddDropboxLink}><Plus className="h-3.5 w-3.5 mr-1" />Agregar</Button>
-                    <Button size="sm" variant="outline" className="h-8" onClick={() => setShowDropboxPicker(true)} title="Seleccionar archivo de Dropbox"><FolderOpen className="h-3.5 w-3.5" /></Button>
+                    <div className="flex gap-2 shrink-0">
+                      <Button size="sm" variant="outline" className="h-8" onClick={handleAddDropboxLink}><Plus className="h-3.5 w-3.5 mr-1" />Agregar</Button>
+                      <Button size="sm" variant="outline" className="h-8" onClick={() => setShowDropboxPicker(true)} title="Seleccionar archivo de Dropbox"><FolderOpen className="h-3.5 w-3.5" /></Button>
+                    </div>
                   </div>
                 </TabsContent>
 
