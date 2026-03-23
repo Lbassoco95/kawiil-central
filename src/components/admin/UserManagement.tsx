@@ -48,7 +48,7 @@ function UserCelulaBadges({ userId, fallbackArea, areaLabelMap }: { userId: stri
   if (isLoading) return <span className="text-muted-foreground italic text-xs">Cargando...</span>;
   if (!celulas?.length) {
     if (fallbackArea) {
-      return <Badge variant="secondary" className="text-xs">{areaLabelMap[fallbackArea] || fallbackArea}</Badge>;
+      return <Badge variant="secondary" className="text-xs">{formatCelulaLabel(fallbackArea, areaLabelMap)}</Badge>;
     }
     return <span className="text-muted-foreground italic">Sin asignar</span>;
   }

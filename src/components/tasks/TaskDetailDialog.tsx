@@ -876,7 +876,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} placeholder="https://www.dropbox.com/..." className="h-8 flex-1 min-w-0 text-sm"

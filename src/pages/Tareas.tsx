@@ -277,7 +277,7 @@ INSTRUCCIONES:
                         <Badge className={`text-[10px] border-0 px-1.5 py-0 ${statusLabels[task.status]?.color}`} variant="secondary">{statusLabels[task.status]?.label}</Badge>
                       </div>
                       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                        {task.area && <span>{areaLabelMap[task.area] || task.area}</span>}
+                        {task.area && <span>{getCelulaLabel(task.area)}</span>}
                         {task.due_date && (
                           <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>
                         )}

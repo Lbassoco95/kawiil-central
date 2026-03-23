@@ -73,7 +73,7 @@ const Proyectos = () => {
   const getAreaLabel = (slug: string) => {
     if (slug === "all") return "Todos";
     if (slug === "sin_area") return "Sin categoría";
-    return areaLabelMap[slug] || slug;
+    return getCelulaLabel(slug);
   };
 
   return (
