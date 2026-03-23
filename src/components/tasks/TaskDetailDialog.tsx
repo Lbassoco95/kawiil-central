@@ -270,15 +270,48 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     updateChecklist(checklist.filter((c) => c.id !== itemId));
   };
 
+  const MENTION_REGEX = /(@[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w])/g;
+  const LINK_REGEX = /📎\s*\[([^\]]+)\]\(([^)]+)\)/g;
+
   const renderCommentContent = (content: string) => {
-    const parts = content.split(/(@\w[\w\s]*\w)/g);
+    // First parse attachment links
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let linkMatch;
+    const tempContent = content;
+    const linkRegex = new RegExp(LINK_REGEX.source, "g");
+
+    while ((linkMatch = linkRegex.exec(tempContent)) !== null) {
+      const before = tempContent.slice(lastIndex, linkMatch.index);
+      if (before) elements.push(...renderMentions(before, elements.length));
+      elements.push(
+        <a
+          key={`link-${linkMatch.index}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all max-w-full"
+        >
+          📎 <span className="truncate max-w-[200px]">{linkMatch[1]}</span>
+          <ExternalLink className="h-3 w-3 shrink-0 inline" />
+        </a>
+      );
+      lastIndex = linkMatch.index + linkMatch[0].length;
+    }
+    const remaining = tempContent.slice(lastIndex);
+    if (remaining) elements.push(...renderMentions(remaining, elements.length));
+    return elements.length > 0 ? elements : content;
+  };
+
+  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] => {
+    const parts = text.split(MENTION_REGEX);
     return parts.map((part, i) => {
       if (part.startsWith("@")) {
         const name = part.slice(1);
         const isKnown = orgProfiles?.some((p) => p.full_name.toLowerCase() === name.toLowerCase());
-        if (isKnown) return <span key={i} className="text-primary font-bold">{part}</span>;
+        if (isKnown) return <span key={`m-${keyOffset}-${i}`} className="text-primary font-bold">{part}</span>;
       }
-      return part;
+      return <span key={`t-${keyOffset}-${i}`}>{part}</span>;
     });
   };
 
@@ -560,10 +593,29 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                           onCheckedChange={() => toggleChecklistItem(item.id)}
                           className="mt-0.5"
                         />
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-sm ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                            {item.text}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                          {item.task_id ? (
+                            <button
+                              type="button"
+                              className={`text-sm text-left hover:underline inline-flex items-center gap-1 ${item.completed ? "line-through text-muted-foreground" : "text-primary"}`}
+                              onClick={() => {
+                                onClose();
+                                setTimeout(() => {
+                                  const params = new URLSearchParams(window.location.search);
+                                  params.set("taskId", item.task_id!);
+                                  window.history.pushState({}, "", `${window.location.pathname}?${params}`);
+                                  window.dispatchEvent(new PopStateEvent("popstate"));
+                                }, 150);
+                              }}
+                            >
+                              {item.text}
+                              <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+                            </button>
+                          ) : (
+                            <span className={`text-sm ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                              {item.text}
+                            </span>
+                          )}
                           <div className="flex flex-wrap gap-1.5 mt-0.5">
                             {assigneeName && (
                               <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
@@ -720,7 +772,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                             <span className="text-xs font-medium">{c.profile?.full_name || "Usuario"}</span>
                             <span className="text-[10px] text-muted-foreground">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
                           </div>
-                          <p className="text-sm text-foreground whitespace-pre-wrap">{renderCommentContent(c.content)}</p>
+                          <p className="text-sm text-foreground whitespace-pre-wrap break-words overflow-hidden">{renderCommentContent(c.content)}</p>
                         </div>
                       </div>
                     ))}

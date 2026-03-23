@@ -43,7 +43,7 @@ export function MentionTextarea({
 
   const extractMentionIds = useCallback(
     (text: string): string[] => {
-      const mentionRegex = /@(\w[\w\s]*\w)/g;
+      const mentionRegex = /@([a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w])/g;
       const ids: string[] = [];
       let match;
       while ((match = mentionRegex.exec(text)) !== null) {
