@@ -270,15 +270,48 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     updateChecklist(checklist.filter((c) => c.id !== itemId));
   };
 
+  const MENTION_REGEX = /(@[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w])/g;
+  const LINK_REGEX = /📎\s*\[([^\]]+)\]\(([^)]+)\)/g;
+
   const renderCommentContent = (content: string) => {
-    const parts = content.split(/(@\w[\w\s]*\w)/g);
+    // First parse attachment links
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let linkMatch;
+    const tempContent = content;
+    const linkRegex = new RegExp(LINK_REGEX.source, "g");
+
+    while ((linkMatch = linkRegex.exec(tempContent)) !== null) {
+      const before = tempContent.slice(lastIndex, linkMatch.index);
+      if (before) elements.push(...renderMentions(before, elements.length));
+      elements.push(
+        <a
+          key={`link-${linkMatch.index}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline break-all max-w-full"
+        >
+          📎 <span className="truncate max-w-[200px]">{linkMatch[1]}</span>
+          <ExternalLink className="h-3 w-3 shrink-0 inline" />
+        </a>
+      );
+      lastIndex = linkMatch.index + linkMatch[0].length;
+    }
+    const remaining = tempContent.slice(lastIndex);
+    if (remaining) elements.push(...renderMentions(remaining, elements.length));
+    return elements.length > 0 ? elements : content;
+  };
+
+  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] => {
+    const parts = text.split(MENTION_REGEX);
     return parts.map((part, i) => {
       if (part.startsWith("@")) {
         const name = part.slice(1);
         const isKnown = orgProfiles?.some((p) => p.full_name.toLowerCase() === name.toLowerCase());
-        if (isKnown) return <span key={i} className="text-primary font-bold">{part}</span>;
+        if (isKnown) return <span key={`m-${keyOffset}-${i}`} className="text-primary font-bold">{part}</span>;
       }
-      return part;
+      return <span key={`t-${keyOffset}-${i}`}>{part}</span>;
     });
   };
 
