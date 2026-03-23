@@ -953,6 +953,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
       />
       <DropboxFilePicker open={showCommentDropbox} onClose={() => setShowCommentDropbox(false)} onSelect={(file) => setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }])} />
       <DocumentPreviewDialog open={!!previewDoc} onOpenChange={(o) => { if (!o) setPreviewDoc(null); }} document={previewDoc} />
+      <TaskDetailDialog taskId={selectedSubtaskId} onClose={() => setSelectedSubtaskId(null)} />
     </Dialog>
   );
 }
