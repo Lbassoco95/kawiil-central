@@ -422,7 +422,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   };
 
   const dropboxLinks = (task?.dropbox_links as any[]) ?? [];
-  const areaLabel = task?.area ? (celulaLabelMap[task.area] || task.area) : null;
+  const areaLabel = task?.area ? getCelulaLabel(task.area) : null;
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
