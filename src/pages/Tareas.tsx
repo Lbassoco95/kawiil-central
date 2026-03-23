@@ -52,6 +52,14 @@ const Tareas = () => {
 
   const [showCanceled, setShowCanceled] = useState(false);
 
+  // Sync selectedTaskId with URL query param for deep links
+  useEffect(() => {
+    const urlTaskId = searchParams.get("taskId");
+    if (urlTaskId && urlTaskId !== selectedTaskId) {
+      setSelectedTaskId(urlTaskId);
+    }
+  }, [searchParams]);
+
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
     search: search || undefined,
