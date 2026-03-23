@@ -593,10 +593,29 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                           onCheckedChange={() => toggleChecklistItem(item.id)}
                           className="mt-0.5"
                         />
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-sm ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                            {item.text}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                          {item.task_id ? (
+                            <button
+                              type="button"
+                              className={`text-sm text-left hover:underline inline-flex items-center gap-1 ${item.completed ? "line-through text-muted-foreground" : "text-primary"}`}
+                              onClick={() => {
+                                onClose();
+                                setTimeout(() => {
+                                  const params = new URLSearchParams(window.location.search);
+                                  params.set("taskId", item.task_id!);
+                                  window.history.pushState({}, "", `${window.location.pathname}?${params}`);
+                                  window.dispatchEvent(new PopStateEvent("popstate"));
+                                }, 150);
+                              }}
+                            >
+                              {item.text}
+                              <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+                            </button>
+                          ) : (
+                            <span className={`text-sm ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                              {item.text}
+                            </span>
+                          )}
                           <div className="flex flex-wrap gap-1.5 mt-0.5">
                             {assigneeName && (
                               <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
