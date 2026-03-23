@@ -11,7 +11,7 @@ import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
 import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
-import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { useAreaOptions, formatCelulaLabel } from "@/hooks/useAreaOptions";
 import { gradoLabel, gradoBadgeClass } from "@/lib/gradoLabels";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,7 +48,7 @@ function UserCelulaBadges({ userId, fallbackArea, areaLabelMap }: { userId: stri
   if (isLoading) return <span className="text-muted-foreground italic text-xs">Cargando...</span>;
   if (!celulas?.length) {
     if (fallbackArea) {
-      return <Badge variant="secondary" className="text-xs">{areaLabelMap[fallbackArea] || fallbackArea}</Badge>;
+      return <Badge variant="secondary" className="text-xs">{formatCelulaLabel(fallbackArea, areaLabelMap)}</Badge>;
     }
     return <span className="text-muted-foreground italic">Sin asignar</span>;
   }

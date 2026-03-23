@@ -36,7 +36,7 @@ const Proyectos = () => {
   const { data: projects, isLoading } = useProjects();
   const deleteProject = useDeleteProject();
   const { isAdminOrManager } = useUserRole();
-  const { areaLabelMap } = useAreaOptions();
+  const { areaLabelMap, getCelulaLabel } = useAreaOptions();
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -73,7 +73,7 @@ const Proyectos = () => {
   const getAreaLabel = (slug: string) => {
     if (slug === "all") return "Todos";
     if (slug === "sin_area") return "Sin categoría";
-    return areaLabelMap[slug] || slug;
+    return getCelulaLabel(slug);
   };
 
   return (

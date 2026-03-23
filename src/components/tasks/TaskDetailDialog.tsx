@@ -84,7 +84,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const removeAssignee = useRemoveTaskAssignee();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { celulaLabelMap } = useCelulaOptions();
+  const { celulaLabelMap, getCelulaLabel } = useCelulaOptions();
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
@@ -422,7 +422,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   };
 
   const dropboxLinks = (task?.dropbox_links as any[]) ?? [];
-  const areaLabel = task?.area ? (celulaLabelMap[task.area] || task.area) : null;
+  const areaLabel = task?.area ? getCelulaLabel(task.area) : null;
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
@@ -847,23 +847,25 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                 <TabsContent value="links" className="space-y-3 mt-3 min-w-0">
                   <div className="space-y-1.5 min-w-0">
                     {dropboxLinks.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin enlaces de Dropbox</p>}
-                    {dropboxLinks.map((link: any, i: number) => (
-                      <div key={i} className="flex w-full min-w-0 items-start gap-2 overflow-hidden rounded-md border bg-muted/30 p-2">
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block max-w-full truncate text-xs text-primary hover:underline"
-                            title={link.url}
-                          >
-                            {link.name || link.url}
-                          </a>
-                          <p className="mt-0.5 line-clamp-2 break-all text-[10px] text-muted-foreground">
-                            {link.url}
-                          </p>
-                        </div>
+                    {dropboxLinks.map((link: any, i: number) => {
+                      let shortUrl = link.url;
+                      try {
+                        const u = new URL(link.url);
+                        const path = u.pathname.length > 25 ? u.pathname.slice(0, 22) + "…" : u.pathname;
+                        shortUrl = u.hostname + path;
+                      } catch {}
+                      return (
+                      <div key={i} className="flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted/30 p-2">
+                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 min-w-0 truncate text-xs text-primary hover:underline"
+                          title={link.url}
+                        >
+                          {link.name || shortUrl}
+                        </a>
                         <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5">{link.added_at ? formatMX(link.added_at, "dd MMM") : ""}</span>
                         <button
                           type="button"
@@ -874,7 +876,8 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                           <X className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} placeholder="https://www.dropbox.com/..." className="h-8 flex-1 min-w-0 text-sm"
