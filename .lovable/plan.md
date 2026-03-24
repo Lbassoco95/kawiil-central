@@ -1,21 +1,18 @@
 
 
-## Plan: Mostrar todos los clientes en el formulario de juicios
+## Plan: Arreglar scroll en listas desplegables de SearchableSelect
 
 ### Problema
-En `LawsuitFormDialog.tsx` (línea 77), los clientes se filtran con `.filter((c) => c.services?.includes("juicios"))`. Si solo 2 clientes tienen el servicio "juicios" configurado, solo aparecen esos 2. El fallback a todos los clientes solo aplica si `lawsuitClients` queda vacío, no si tiene pocos resultados.
+El `ScrollArea` de Radix con `max-h-[200px]` no permite desplazarse correctamente por la lista de opciones. Esto impide ver y seleccionar clientes que están más abajo en la lista.
 
-### Hallazgo adicional
-Los demás formularios (`ProjectFormDialog`, `TaskFormDialog`, `DocumentFormDialog`, `ExpenseFormDialog`) ya usan `SearchableSelect` con todos los clientes y orden alfabético. El único problema está en `LawsuitFormDialog`.
+### Causa raíz
+El componente `ScrollArea` de Radix requiere que el viewport interno también tenga restricción de altura. Actualmente el viewport tiene `h-full` sin `max-height`, lo que puede impedir el scroll en ciertos contextos (dentro de popovers, dialogs).
 
-### Cambio
+### Solución
+En `src/components/shared/SearchableSelect.tsx`:
+- Reemplazar `<ScrollArea className="max-h-[200px]">` por un `<div>` nativo con `overflow-y-auto` y `max-h-[300px]` (aumentar un poco la altura para mejor usabilidad).
+- Esto garantiza scroll nativo confiable en todos los navegadores y contextos sin depender de la implementación interna de Radix ScrollArea.
 
-**`src/components/projects/LawsuitFormDialog.tsx`**
-- Eliminar el filtro `lawsuitClients` (líneas 76-77) y la lógica condicional en línea 168.
-- Pasar directamente `(clients || []).map(...)` al `SearchableSelect`, igual que en los demás formularios.
-- El componente `SearchableSelect` ya ordena alfabéticamente internamente y permite búsqueda.
-
-### Resultado
-- Todos los clientes aparecerán en la lista al crear un juicio, ordenados A-Z y con búsqueda.
-- Consistencia con el resto de formularios de la aplicación.
+### Archivo a modificar
+- `src/components/shared/SearchableSelect.tsx` — una sola línea: cambiar el wrapper de `ScrollArea` a un `div` con overflow scroll.
 
