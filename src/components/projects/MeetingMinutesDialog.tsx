@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -456,179 +456,213 @@ export function MeetingMinutesDialog({
                 <p className="text-sm text-muted-foreground">No se encontraron tareas.</p>
               </div>
             ) : (
-              proposedTasks.map((task, index) => {
-                const isExpanded = expandedIndex === index;
-                return (
-                  <div
-                    key={index}
-                    className={`border rounded-lg transition-colors ${
-                      task.accepted
-                        ? "bg-background border-border"
-                        : "bg-muted/30 border-border/50 opacity-60"
-                    }`}
-                  >
-                    {/* Collapsed row */}
-                    <div className="flex items-center gap-3 p-3">
-                      <Checkbox
-                        checked={task.accepted}
-                        onCheckedChange={() => toggleTask(index)}
-                        className="shrink-0"
-                      />
-                      <div
-                        className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() => setExpandedIndex(isExpanded ? null : index)}
-                      >
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-sm font-medium truncate">
-                            {task.title || <span className="text-muted-foreground italic">Sin título</span>}
-                          </h4>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] px-1.5 py-0 shrink-0 ${PRIORITY_STYLES[task.priority] || ""}`}
-                          >
-                            {task.priority}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                          {task.phase && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-                              <Layers className="h-2.5 w-2.5 mr-0.5" />
-                              {task.phase}
-                            </Badge>
-                          )}
-                          {task.due_date && (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {task.due_date}
-                            </span>
-                          )}
-                          {task.assigned_to_name && (
-                            <span className="flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              {task.assigned_to_name}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
+              (() => {
+                // Group tasks by phase
+                const phaseGroups = new Map<string, { task: ProposedTask; index: number }[]>();
+                proposedTasks.forEach((task, index) => {
+                  const key = task.phase || "__none__";
+                  if (!phaseGroups.has(key)) phaseGroups.set(key, []);
+                  phaseGroups.get(key)!.push({ task, index });
+                });
+                // Ordered: phases first, then "Sin fase"
+                const orderedKeys = [...phaseGroups.keys()].sort((a, b) => {
+                  if (a === "__none__") return 1;
+                  if (b === "__none__") return -1;
+                  return 0;
+                });
+                const hasPhases = orderedKeys.some(k => k !== "__none__");
+
+                const renderTaskRow = (task: ProposedTask, index: number) => {
+                  const isExpanded = expandedIndex === index;
+                  return (
+                    <div
+                      key={index}
+                      className={`border rounded-lg transition-colors ${
+                        task.accepted
+                          ? "bg-background border-border"
+                          : "bg-muted/30 border-border/50 opacity-60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 p-3">
+                        <Checkbox
+                          checked={task.accepted}
+                          onCheckedChange={() => toggleTask(index)}
+                          className="shrink-0"
+                        />
+                        <div
+                          className="flex-1 min-w-0 cursor-pointer"
                           onClick={() => setExpandedIndex(isExpanded ? null : index)}
                         >
-                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => deleteTask(index)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Expanded edit form */}
-                    {isExpanded && (
-                      <div className="px-3 pb-3 pt-1 border-t border-border/40 space-y-3">
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Título</label>
-                          <Input
-                            value={task.title}
-                            onChange={(e) => updateTask(index, "title", e.target.value)}
-                            placeholder="Título de la tarea"
-                            className="text-sm"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Descripción</label>
-                          <Textarea
-                            value={task.description}
-                            onChange={(e) => updateTask(index, "description", e.target.value)}
-                            placeholder="Descripción..."
-                            className="text-sm min-h-[60px]"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Prioridad</label>
-                            <Select
-                              value={task.priority}
-                              onValueChange={(v) => updateTask(index, "priority", v)}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-medium truncate">
+                              {task.title || <span className="text-muted-foreground italic">Sin título</span>}
+                            </h4>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 shrink-0 ${PRIORITY_STYLES[task.priority] || ""}`}
                             >
-                              <SelectTrigger className="text-sm">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="urgente">🔴 Urgente</SelectItem>
-                                <SelectItem value="alta">🟠 Alta</SelectItem>
-                                <SelectItem value="media">🔵 Media</SelectItem>
-                                <SelectItem value="baja">⚪ Baja</SelectItem>
-                              </SelectContent>
-                            </Select>
+                              {task.priority}
+                            </Badge>
                           </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                            {!hasPhases && task.phase && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                                <Layers className="h-2.5 w-2.5 mr-0.5" />
+                                {task.phase}
+                              </Badge>
+                            )}
+                            {task.due_date && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {task.due_date}
+                              </span>
+                            )}
+                            {task.assigned_to_name && (
+                              <span className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {task.assigned_to_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => setExpandedIndex(isExpanded ? null : index)}
+                          >
+                            {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => deleteTask(index)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
 
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t border-border/40 space-y-3">
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Fecha límite</label>
+                            <label className="text-xs font-medium text-muted-foreground">Título</label>
                             <Input
-                              type="date"
-                              value={task.due_date || ""}
-                              onChange={(e) => updateTask(index, "due_date", e.target.value || null)}
+                              value={task.title}
+                              onChange={(e) => updateTask(index, "title", e.target.value)}
+                              placeholder="Título de la tarea"
                               className="text-sm"
                             />
                           </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Responsable</label>
-                          <Select
-                            value={task.assigned_to_id || "none"}
-                            onValueChange={(v) => handleAssigneeChange(index, v)}
-                          >
-                            <SelectTrigger className="text-sm">
-                              <SelectValue placeholder="Sin asignar" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Sin asignar</SelectItem>
-                              {orgUsers
-                                .filter((u) => u.is_active)
-                                .map((u) => (
-                                  <SelectItem key={u.user_id} value={u.user_id}>
-                                    {u.full_name}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {phases.length > 0 && (
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-muted-foreground">Fase / Etapa</label>
+                            <label className="text-xs font-medium text-muted-foreground">Descripción</label>
+                            <Textarea
+                              value={task.description}
+                              onChange={(e) => updateTask(index, "description", e.target.value)}
+                              placeholder="Descripción..."
+                              className="text-sm min-h-[60px]"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-muted-foreground">Prioridad</label>
+                              <Select
+                                value={task.priority}
+                                onValueChange={(v) => updateTask(index, "priority", v)}
+                              >
+                                <SelectTrigger className="text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="urgente">🔴 Urgente</SelectItem>
+                                  <SelectItem value="alta">🟠 Alta</SelectItem>
+                                  <SelectItem value="media">🔵 Media</SelectItem>
+                                  <SelectItem value="baja">⚪ Baja</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-muted-foreground">Fecha límite</label>
+                              <Input
+                                type="date"
+                                value={task.due_date || ""}
+                                onChange={(e) => updateTask(index, "due_date", e.target.value || null)}
+                                className="text-sm"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">Responsable</label>
                             <Select
-                              value={task.phase || "__none__"}
-                              onValueChange={(v) => updateTask(index, "phase", v === "__none__" ? null : v)}
+                              value={task.assigned_to_id || "none"}
+                              onValueChange={(v) => handleAssigneeChange(index, v)}
                             >
                               <SelectTrigger className="text-sm">
-                                <SelectValue placeholder="Sin fase" />
+                                <SelectValue placeholder="Sin asignar" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="__none__">Sin fase</SelectItem>
-                                {phases.map((phase) => (
-                                  <SelectItem key={phase} value={phase}>{phase}</SelectItem>
-                                ))}
+                                <SelectItem value="none">Sin asignar</SelectItem>
+                                {orgUsers
+                                  .filter((u) => u.is_active)
+                                  .map((u) => (
+                                    <SelectItem key={u.user_id} value={u.user_id}>
+                                      {u.full_name}
+                                    </SelectItem>
+                                  ))}
                               </SelectContent>
                             </Select>
                           </div>
-                        )}
+                          {phases.length > 0 && (
+                            <div className="space-y-1">
+                              <label className="text-xs font-medium text-muted-foreground">Fase / Etapa</label>
+                              <Select
+                                value={task.phase || "__none__"}
+                                onValueChange={(v) => updateTask(index, "phase", v === "__none__" ? null : v)}
+                              >
+                                <SelectTrigger className="text-sm">
+                                  <SelectValue placeholder="Sin fase" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">Sin fase</SelectItem>
+                                  {phases.map((phase) => (
+                                    <SelectItem key={phase} value={phase}>{phase}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                };
+
+                if (!hasPhases) {
+                  return proposedTasks.map((task, index) => renderTaskRow(task, index));
+                }
+
+                return orderedKeys.map((phaseKey) => {
+                  const items = phaseGroups.get(phaseKey)!;
+                  const phaseName = phaseKey === "__none__" ? "Sin fase" : phaseKey;
+                  const acceptedInPhase = items.filter(i => i.task.accepted).length;
+                  return (
+                    <div key={phaseKey} className="space-y-1.5">
+                      <div className="flex items-center gap-2 px-1 py-1.5 rounded-md bg-secondary/40 border border-border/30">
+                        <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-xs font-semibold text-foreground">{phaseName}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-auto">
+                          {acceptedInPhase}/{items.length}
+                        </Badge>
                       </div>
-                    )}
-                  </div>
-                );
-              })
+                      <div className="pl-2 space-y-1.5">
+                        {items.map(({ task, index }) => renderTaskRow(task, index))}
+                      </div>
+                    </div>
+                  );
+                });
+              })()
             )}
 
             {/* Add task button */}
