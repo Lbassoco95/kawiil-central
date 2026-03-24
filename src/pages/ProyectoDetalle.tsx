@@ -27,8 +27,11 @@ type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { PROJECT_STATUS_CONFIG, TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
-import { useProfiles } from "@/hooks/useTasks";
+import { useProfiles, useDeleteTask } from "@/hooks/useTasks";
 import { formatMX } from "@/lib/dateUtils";
+import { useUserRole } from "@/hooks/useUserRole";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { toast } from "sonner";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
