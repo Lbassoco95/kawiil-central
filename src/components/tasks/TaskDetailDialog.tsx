@@ -33,6 +33,8 @@ import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useDeleteTask } from "@/hooks/useTasks";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 interface CommentAttachment {
   type: "image" | "dropbox" | "link";
