@@ -967,6 +967,23 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
       <DropboxFilePicker open={showCommentDropbox} onClose={() => setShowCommentDropbox(false)} onSelect={(file) => setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }])} />
       <DocumentPreviewDialog open={!!previewDoc} onOpenChange={(o) => { if (!o) setPreviewDoc(null); }} document={previewDoc} />
       <TaskDetailDialog taskId={selectedSubtaskId} onClose={() => setSelectedSubtaskId(null)} />
+      <DeleteConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="¿Eliminar esta tarea?"
+        description="Se eliminará permanentemente esta tarea y todos sus datos asociados."
+        onConfirm={async () => {
+          try {
+            await deleteTask.mutateAsync(taskId!);
+            toast.success("Tarea eliminada");
+            setShowDeleteConfirm(false);
+            onClose();
+          } catch (e: any) {
+            toast.error("Error al eliminar: " + e.message);
+          }
+        }}
+        isPending={deleteTask.isPending}
+      />
     </Dialog>
   );
 }

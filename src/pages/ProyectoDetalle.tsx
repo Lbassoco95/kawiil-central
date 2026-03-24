@@ -404,6 +404,23 @@ const ProyectoDetalle = () => {
         )}
       </div>
       <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <DeleteConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(o) => { if (!o) setDeleteTargetId(null); }}
+        title="¿Eliminar esta tarea?"
+        description="Se eliminará permanentemente esta tarea y todos sus datos asociados."
+        onConfirm={async () => {
+          try {
+            await deleteTask.mutateAsync(deleteTargetId!);
+            toast.success("Tarea eliminada");
+            setDeleteTargetId(null);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", id] });
+          } catch (e: any) {
+            toast.error("Error al eliminar: " + e.message);
+          }
+        }}
+        isPending={deleteTask.isPending}
+      />
       <MeetingMinutesDialog
         open={showMinutesDialog}
         onOpenChange={setShowMinutesDialog}
