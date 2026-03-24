@@ -90,6 +90,8 @@ export function MeetingMinutesDialog({
   const [proposedTasks, setProposedTasks] = useState<ProposedTask[]>([]);
   const [creating, setCreating] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [phases, setPhases] = useState<string[]>([]);
+  const [newPhaseName, setNewPhaseName] = useState("");
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
