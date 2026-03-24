@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { useOrgSettings, useUpdateOrgSettings } from "@/hooks/useOrgSettings";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Shield } from "lucide-react";
