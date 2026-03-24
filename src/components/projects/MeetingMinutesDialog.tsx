@@ -331,6 +331,8 @@ export function MeetingMinutesDialog({
     setSummary("");
     setProposedTasks([]);
     setExpandedIndex(null);
+    setPhases([]);
+    setNewPhaseName("");
     onOpenChange(false);
   };
 
