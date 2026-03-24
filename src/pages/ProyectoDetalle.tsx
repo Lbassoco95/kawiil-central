@@ -31,6 +31,7 @@ import { useProfiles, useDeleteTask } from "@/hooks/useTasks";
 import { formatMX } from "@/lib/dateUtils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
