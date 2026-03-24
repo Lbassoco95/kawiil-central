@@ -88,6 +88,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { celulaLabelMap, getCelulaLabel } = useCelulaOptions();
+  const { canManageTasks } = useUserRole();
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
