@@ -163,7 +163,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
             <div className="space-y-2">
               <Label>Cliente *</Label>
               <SearchableSelect
-                options={(lawsuitClients.length > 0 ? lawsuitClients : clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
                 value={clientId}
                 onValueChange={setClientId}
                 placeholder="Seleccionar cliente"
