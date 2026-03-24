@@ -53,6 +53,9 @@ const ProyectoDetalle = () => {
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
   const [showMinutesDialog, setShowMinutesDialog] = useState(false);
+  const { canDeleteTasks } = useUserRole();
+  const deleteTask = useDeleteTask();
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
