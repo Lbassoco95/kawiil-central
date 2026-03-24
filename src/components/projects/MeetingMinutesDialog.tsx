@@ -224,7 +224,7 @@ export function MeetingMinutesDialog({
 
       setSummary(data.summary || "");
       setProposedTasks(
-        (data.tasks || []).map((t: any) => ({ ...t, accepted: true }))
+        (data.tasks || []).map((t: any) => ({ ...t, accepted: true, phase: null }))
       );
       setStep("preview");
     } catch (err: any) {
