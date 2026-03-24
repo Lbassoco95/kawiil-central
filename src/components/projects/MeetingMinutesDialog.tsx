@@ -264,6 +264,7 @@ export function MeetingMinutesDialog({
       client_id: clientId || null,
       area: area || null,
       accepted: true,
+      phase: null,
     };
     setProposedTasks((prev) => [...prev, newTask]);
     setExpandedIndex(proposedTasks.length);
