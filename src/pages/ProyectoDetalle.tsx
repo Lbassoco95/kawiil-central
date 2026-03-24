@@ -62,6 +62,20 @@ const ProyectoDetalle = () => {
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const { data: tasks = [] } = useQuery({
+    queryKey: ["project-tasks", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("project_id", id!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!id,
+  });
+
   const toggleTaskSelection = useCallback((taskId: string) => {
     setSelectedTaskIds(prev => {
       const next = new Set(prev);
@@ -78,20 +92,6 @@ const ProyectoDetalle = () => {
     setSelectionMode(false);
     setSelectedTaskIds(new Set());
   }, []);
-
-  const { data: tasks = [] } = useQuery({
-    queryKey: ["project-tasks", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("*")
-        .eq("project_id", id!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user && !!id,
-  });
 
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
