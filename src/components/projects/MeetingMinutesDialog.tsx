@@ -50,6 +50,7 @@ interface ProposedTask {
   client_id: string | null;
   area: string | null;
   accepted: boolean;
+  phase: string | null;
 }
 
 interface MeetingMinutesDialogProps {
