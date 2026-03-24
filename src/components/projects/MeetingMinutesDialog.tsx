@@ -168,7 +168,8 @@ export function MeetingMinutesDialog({
         if (data?.error) throw new Error(data.error);
         setContent(extractedText);
         setSummary(data.summary ?? "");
-        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true, phase: null })));
+        setPhases(data.phases ?? []);
+        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true, phase: t.phase || null })));
         setStep("preview");
         toast.success("Análisis listo. Revisa las tareas propuestas.");
       } catch (err: any) {
@@ -225,8 +226,9 @@ export function MeetingMinutesDialog({
       if (data?.error) throw new Error(data.error);
 
       setSummary(data.summary || "");
+      setPhases(data.phases || []);
       setProposedTasks(
-        (data.tasks || []).map((t: any) => ({ ...t, accepted: true, phase: null }))
+        (data.tasks || []).map((t: any) => ({ ...t, accepted: true, phase: t.phase || null }))
       );
       setStep("preview");
     } catch (err: any) {
