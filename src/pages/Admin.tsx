@@ -3,15 +3,58 @@ import { UserManagement } from "@/components/admin/UserManagement";
 import { CelulaManagement } from "@/components/admin/CelulaManagement";
 import { CatalogManagement } from "@/components/admin/CatalogManagement";
 import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useOrgSettings, useUpdateOrgSettings } from "@/hooks/useOrgSettings";
+import { useUserRole } from "@/hooks/useUserRole";
+import { Shield } from "lucide-react";
 
 const tabs = [
   { key: "usuarios", label: "Kawiilers" },
   { key: "celulas", label: "Células" },
   { key: "catalogos", label: "Catálogos" },
+  { key: "permisos", label: "Permisos" },
 ] as const;
+
+function PermissionsTab() {
+  const { settings } = useOrgSettings();
+  const updateSettings = useUpdateOrgSettings();
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Permisos de Referentes (G3)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Gestión avanzada de tareas</Label>
+              <p className="text-xs text-muted-foreground">
+                Permite a los Kawiilers Referente eliminar tareas y modificar fechas límite de cualquier tarea.
+              </p>
+            </div>
+            <Switch
+              checked={!!settings.referente_task_management}
+              onCheckedChange={(checked) =>
+                updateSettings.mutate({ referente_task_management: checked })
+              }
+              disabled={updateSettings.isPending}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 const Admin = () => {
   const [tab, setTab] = useState<string>("usuarios");
+  const { isTransformador } = useUserRole();
 
   return (
     <AppLayout>
@@ -22,24 +65,29 @@ const Admin = () => {
         </div>
 
         <div className="flex gap-1.5">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                tab === t.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          {tabs.map((t) => {
+            // Only show Permisos tab to Transformadores
+            if (t.key === "permisos" && !isTransformador) return null;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  tab === t.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
         </div>
 
         {tab === "usuarios" && <UserManagement />}
         {tab === "celulas" && <CelulaManagement />}
         {tab === "catalogos" && <CatalogManagement />}
+        {tab === "permisos" && <PermissionsTab />}
       </div>
     </AppLayout>
   );

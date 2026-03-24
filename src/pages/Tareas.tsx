@@ -239,7 +239,7 @@ INSTRUCCIONES:
                     )}
                   </div>
                 </div>
-                {isAdminOrManager && (
+                {canManageTasks && (
                   <button
                     className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0"
                     onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
