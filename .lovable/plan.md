@@ -1,31 +1,27 @@
 
 
-## Plan: Eliminación masiva de tareas en proyecto
+## Plan: Agrupar tareas visualmente por fases/etapas
 
 ### Problema
-Para eliminar varias tareas hay que hacerlo una por una. Se necesita un modo de selección múltiple para eliminar en lote.
+Las tareas con fases se muestran en una lista plana. No hay agrupación visual que permita ver en qué etapa va cada cosa. Solo se ve el prefijo `[Fase]` en el título.
 
-### Cambios en `src/pages/ProyectoDetalle.tsx`
+### Cambios
 
-1. **Estado de selección múltiple**
-   - Agregar `selectionMode: boolean` y `selectedTaskIds: Set<string>`
-   - Botón "Seleccionar" junto a "Crear tarea" (visible solo si `canDeleteTasks`)
-   - Al activar, aparece un checkbox en cada fila de tarea y una barra de acciones flotante abajo
+**1. `src/components/projects/MeetingMinutesDialog.tsx` — Agrupar en preview**
+- En el paso "preview", en vez de renderizar `proposedTasks.map(...)` en lista plana, agrupar por fase:
+  - Primero renderizar cada fase como una sección con header (nombre de fase, icono Layers, count de tareas, fondo sutil)
+  - Dentro de cada sección, las tareas que pertenecen a esa fase
+  - Al final, sección "Sin fase" para tareas sin fase asignada
+- Usar Collapsible (ya existe en el proyecto) para poder colapsar/expandir cada grupo de fase
 
-2. **UI de selección**
-   - Checkbox (componente existente) al inicio de cada fila de tarea, solo en modo selección
-   - Checkbox "Seleccionar todas" en el header de la lista
-   - Click en fila: si `selectionMode`, toggle selección en vez de abrir detalle
-
-3. **Barra de acciones masivas**
-   - Aparece fija al fondo cuando hay tareas seleccionadas: `"N tareas seleccionadas"` + botón `"Eliminar seleccionadas"` (rojo)
-   - Al confirmar, ejecuta `deleteTask.mutateAsync` en secuencia para cada ID seleccionado
-   - Usa `DeleteConfirmDialog` con mensaje adaptado: "Se eliminarán N tareas permanentemente"
-   - Al terminar, limpia selección, sale del modo selección, invalida queries
-
-4. **Imports adicionales**
-   - `Checkbox` de `@/components/ui/checkbox`
+**2. `src/pages/ProyectoDetalle.tsx` — Agrupar tareas creadas por fase**
+- Parsear el prefijo `[NombreFase]` del título de cada tarea para extraer la fase
+- Agrupar tareas por fase detectada, con sección "Sin fase" al final
+- Cada grupo muestra un header con el nombre de la fase, un badge con el count, y un divider visual
+- Si no hay ninguna tarea con fase, mantener la vista plana actual (sin cambio visual)
+- Usar Collapsible para expandir/colapsar grupos
 
 ### Archivos a modificar
-- `src/pages/ProyectoDetalle.tsx` — único archivo afectado
+- `src/components/projects/MeetingMinutesDialog.tsx`
+- `src/pages/ProyectoDetalle.tsx`
 
