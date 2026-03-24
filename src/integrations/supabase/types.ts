@@ -1184,6 +1184,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          settings: Json
           slug: string
           updated_at: string
         }
@@ -1191,6 +1192,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          settings?: Json
           slug: string
           updated_at?: string
         }
@@ -1198,6 +1200,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          settings?: Json
           slug?: string
           updated_at?: string
         }
