@@ -487,6 +487,29 @@ const ProyectoDetalle = () => {
         }}
         isPending={deleteTask.isPending}
       />
+      <DeleteConfirmDialog
+        open={showBulkDelete}
+        onOpenChange={(o) => { if (!o) setShowBulkDelete(false); }}
+        title={`¿Eliminar ${selectedTaskIds.size} tarea${selectedTaskIds.size > 1 ? "s" : ""}?`}
+        description={`Se eliminarán permanentemente ${selectedTaskIds.size} tarea${selectedTaskIds.size > 1 ? "s" : ""} y todos sus datos asociados.`}
+        onConfirm={async () => {
+          setBulkDeleting(true);
+          try {
+            for (const taskId of selectedTaskIds) {
+              await deleteTask.mutateAsync(taskId);
+            }
+            toast.success(`${selectedTaskIds.size} tarea${selectedTaskIds.size > 1 ? "s" : ""} eliminada${selectedTaskIds.size > 1 ? "s" : ""}`);
+            exitSelectionMode();
+            setShowBulkDelete(false);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", id] });
+          } catch (e: any) {
+            toast.error("Error al eliminar: " + e.message);
+          } finally {
+            setBulkDeleting(false);
+          }
+        }}
+        isPending={bulkDeleting}
+      />
       <MeetingMinutesDialog
         open={showMinutesDialog}
         onOpenChange={setShowMinutesDialog}
