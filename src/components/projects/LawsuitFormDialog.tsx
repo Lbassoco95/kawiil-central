@@ -73,8 +73,6 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
   const { data: profiles } = useOrgProfiles();
   const queryClient = useQueryClient();
 
-  // Filter clients that have juicios service
-  const lawsuitClients = clients?.filter((c) => c.services?.includes("juicios")) || [];
 
   const createLawsuit = useMutation({
     mutationFn: async () => {
@@ -165,7 +163,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
             <div className="space-y-2">
               <Label>Cliente *</Label>
               <SearchableSelect
-                options={(lawsuitClients.length > 0 ? lawsuitClients : clients || []).map((c) => ({ value: c.id, label: c.name }))}
+                options={(clients || []).map((c) => ({ value: c.id, label: c.name }))}
                 value={clientId}
                 onValueChange={setClientId}
                 placeholder="Seleccionar cliente"
