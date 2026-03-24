@@ -71,18 +71,21 @@ FECHA ACTUAL: ${today}
 
 INSTRUCCIONES:
 1. Analiza a fondo todo el contenido: compromisos, acuerdos, plazos y responsables mencionados.
-2. Para cada tarea que identifiques, propón:
+2. Identifica FASES o ETAPAS lógicas que agrupen las tareas (por ejemplo: "Preparación documental", "Revisión fiscal", "Presentación ante SAT", etc.). Las fases deben representar bloques de trabajo secuenciales o temáticos.
+3. Para cada tarea que identifiques, propón:
    - title: Nombre claro de la tarea, listo para usarse como título en el proyecto (concreto y accionable).
    - description: Descripción breve con contexto para quien ejecute la tarea.
    - priority: "urgente", "alta", "media" o "baja" según el documento y el impacto.
    - due_date: Fecha de vencimiento propuesta en YYYY-MM-DD (usa las fechas indicadas en el documento o estima una razonable).
    - assigned_to_name y assigned_to_id: Si en el documento se menciona a alguien del equipo por nombre, asigna su user_id de la lista; si no, null.
-3. Incluye TODAS las tareas, compromisos y pendientes que encuentres.
-4. Responde EXCLUSIVAMENTE con el JSON solicitado, sin texto adicional antes ni después.
+   - phase: Nombre de la fase/etapa a la que pertenece esta tarea (debe coincidir exactamente con uno de los nombres en el array "phases"). Si no aplica, null.
+4. Incluye TODAS las tareas, compromisos y pendientes que encuentres.
+5. Responde EXCLUSIVAMENTE con el JSON solicitado, sin texto adicional antes ni después.
 
 RESPONDE con un JSON válido con esta estructura exacta:
 {
   "summary": "Resumen breve de la reunión o documento en 2-3 oraciones",
+  "phases": ["Fase 1", "Fase 2"],
   "tasks": [
     {
       "title": "Nombre claro de la tarea",
@@ -90,7 +93,8 @@ RESPONDE con un JSON válido con esta estructura exacta:
       "priority": "media",
       "due_date": "YYYY-MM-DD",
       "assigned_to_name": "Nombre de la persona o null",
-      "assigned_to_id": "UUID del usuario o null"
+      "assigned_to_id": "UUID del usuario o null",
+      "phase": "Fase 1 o null"
     }
   ]
 }`;
