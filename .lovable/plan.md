@@ -1,26 +1,31 @@
 
 
-## Plan: Agregar botón de eliminar tareas para Transformadores
+## Plan: Eliminación masiva de tareas en proyecto
 
 ### Problema
-Los Transformadores (G4) no tienen opción de eliminar tareas desde la vista de proyecto (`ProyectoDetalle`) ni desde el detalle de una tarea (`TaskDetailDialog`). Solo existe en la lista general de `/tareas`.
+Para eliminar varias tareas hay que hacerlo una por una. Se necesita un modo de selección múltiple para eliminar en lote.
 
-### Cambios
+### Cambios en `src/pages/ProyectoDetalle.tsx`
 
-**`src/pages/ProyectoDetalle.tsx`**
-- Importar `Trash2` de lucide-react, `useUserRole`, `useDeleteTask` de hooks, y `DeleteConfirmDialog`
-- Agregar estado `deleteTarget` para la tarea a eliminar
-- En cada fila de tarea (líneas 278-307), agregar un botón de eliminar visible solo si `canDeleteTasks` es true
-- Agregar el componente `DeleteConfirmDialog` al final del JSX
-- Invalidar queries de tareas del proyecto tras eliminar
+1. **Estado de selección múltiple**
+   - Agregar `selectionMode: boolean` y `selectedTaskIds: Set<string>`
+   - Botón "Seleccionar" junto a "Crear tarea" (visible solo si `canDeleteTasks`)
+   - Al activar, aparece un checkbox en cada fila de tarea y una barra de acciones flotante abajo
 
-**`src/components/tasks/TaskDetailDialog.tsx`**
-- Importar `Trash2`, `useDeleteTask`, y `DeleteConfirmDialog`
-- Leer `canDeleteTasks` de `useUserRole()` (ya importado)
-- Agregar un botón "Eliminar tarea" en el header o footer del dialog, visible solo si `canDeleteTasks`
-- Al confirmar eliminación, cerrar el dialog y ejecutar `deleteTask.mutateAsync`
+2. **UI de selección**
+   - Checkbox (componente existente) al inicio de cada fila de tarea, solo en modo selección
+   - Checkbox "Seleccionar todas" en el header de la lista
+   - Click en fila: si `selectionMode`, toggle selección en vez de abrir detalle
+
+3. **Barra de acciones masivas**
+   - Aparece fija al fondo cuando hay tareas seleccionadas: `"N tareas seleccionadas"` + botón `"Eliminar seleccionadas"` (rojo)
+   - Al confirmar, ejecuta `deleteTask.mutateAsync` en secuencia para cada ID seleccionado
+   - Usa `DeleteConfirmDialog` con mensaje adaptado: "Se eliminarán N tareas permanentemente"
+   - Al terminar, limpia selección, sale del modo selección, invalida queries
+
+4. **Imports adicionales**
+   - `Checkbox` de `@/components/ui/checkbox`
 
 ### Archivos a modificar
-- `src/pages/ProyectoDetalle.tsx`
-- `src/components/tasks/TaskDetailDialog.tsx`
+- `src/pages/ProyectoDetalle.tsx` — único archivo afectado
 
