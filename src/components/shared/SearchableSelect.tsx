@@ -75,7 +75,7 @@ export function SearchableSelect({
             className="h-8 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
           />
         </div>
-        <ScrollArea className="max-h-[200px]">
+        <div className="max-h-[300px] overflow-y-auto">
           <div className="p-1">
             {emptyLabel && !search && (
               <button
@@ -114,7 +114,7 @@ export function SearchableSelect({
               </button>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );
