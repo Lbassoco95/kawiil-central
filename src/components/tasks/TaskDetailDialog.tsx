@@ -88,7 +88,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { celulaLabelMap, getCelulaLabel } = useCelulaOptions();
-  const { canManageTasks } = useUserRole();
+  const { canEditDueDates } = useUserRole();
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
@@ -510,7 +510,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   <div className="flex-1 min-w-0">
                     <span className="text-xs">{task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}</span>
                   </div>
-                  {(isAssignedUser || canManageTasks) && (
+                  {(isAssignedUser || canEditDueDates) && (
                     <button className="hover:text-foreground text-muted-foreground" onClick={() => { setNewDueDate(task.due_date || ""); setDueDateReason(""); setEditingDueDate(true); }}>
                       <Pencil className="h-3 w-3" />
                     </button>

@@ -44,7 +44,7 @@ const Tareas = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const deleteTask = useDeleteTask();
-  const { isAdminOrManager, canManageTasks } = useUserRole();
+  const { isAdminOrManager, canDeleteTasks } = useUserRole();
   const { areaOptions, areaLabelMap, getCelulaLabel } = useAreaOptions();
   const { data: assignedSteps = [] } = useAssignedSteps();
   const { data: profiles = [] } = useProfiles();
@@ -239,7 +239,7 @@ INSTRUCCIONES:
                     )}
                   </div>
                 </div>
-                {canManageTasks && (
+                {canDeleteTasks && (
                   <button
                     className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0"
                     onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}

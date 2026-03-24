@@ -37,6 +37,8 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Layers,
+  X,
 } from "lucide-react";
 
 interface ProposedTask {
@@ -50,6 +52,7 @@ interface ProposedTask {
   client_id: string | null;
   area: string | null;
   accepted: boolean;
+  phase: string | null;
 }
 
 interface MeetingMinutesDialogProps {
@@ -89,6 +92,8 @@ export function MeetingMinutesDialog({
   const [proposedTasks, setProposedTasks] = useState<ProposedTask[]>([]);
   const [creating, setCreating] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [phases, setPhases] = useState<string[]>([]);
+  const [newPhaseName, setNewPhaseName] = useState("");
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -163,7 +168,7 @@ export function MeetingMinutesDialog({
         if (data?.error) throw new Error(data.error);
         setContent(extractedText);
         setSummary(data.summary ?? "");
-        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true })));
+        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true, phase: null })));
         setStep("preview");
         toast.success("Análisis listo. Revisa las tareas propuestas.");
       } catch (err: any) {
@@ -221,7 +226,7 @@ export function MeetingMinutesDialog({
 
       setSummary(data.summary || "");
       setProposedTasks(
-        (data.tasks || []).map((t: any) => ({ ...t, accepted: true }))
+        (data.tasks || []).map((t: any) => ({ ...t, accepted: true, phase: null }))
       );
       setStep("preview");
     } catch (err: any) {
@@ -261,6 +266,7 @@ export function MeetingMinutesDialog({
       client_id: clientId || null,
       area: area || null,
       accepted: true,
+      phase: null,
     };
     setProposedTasks((prev) => [...prev, newTask]);
     setExpandedIndex(proposedTasks.length);
@@ -293,8 +299,9 @@ export function MeetingMinutesDialog({
 
       let created = 0;
       for (const task of accepted) {
+        const finalTitle = task.phase ? `[${task.phase}] ${task.title}` : task.title;
         const { error } = await supabase.from("tasks").insert({
-          title: task.title,
+          title: finalTitle,
           description: task.description || null,
           priority: task.priority || "media",
           due_date: task.due_date || null,
@@ -326,6 +333,8 @@ export function MeetingMinutesDialog({
     setSummary("");
     setProposedTasks([]);
     setExpandedIndex(null);
+    setPhases([]);
+    setNewPhaseName("");
     onOpenChange(false);
   };
 
@@ -385,6 +394,60 @@ export function MeetingMinutesDialog({
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-2">
+            {/* Phase management */}
+            <div className="space-y-2 pb-2 border-b border-border/40">
+              <div className="flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Fases / Etapas</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {phases.map((phase) => (
+                  <Badge key={phase} variant="secondary" className="text-xs gap-1 pr-1">
+                    {phase}
+                    <button
+                      onClick={() => {
+                        setPhases((p) => p.filter((ph) => ph !== phase));
+                        setProposedTasks((prev) => prev.map((t) => t.phase === phase ? { ...t, phase: null } : t));
+                      }}
+                      className="ml-0.5 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={newPhaseName}
+                    onChange={(e) => setNewPhaseName(e.target.value)}
+                    placeholder="Nueva fase..."
+                    className="h-7 text-xs w-32"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newPhaseName.trim()) {
+                        if (!phases.includes(newPhaseName.trim())) {
+                          setPhases((p) => [...p, newPhaseName.trim()]);
+                        }
+                        setNewPhaseName("");
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={!newPhaseName.trim()}
+                    onClick={() => {
+                      if (newPhaseName.trim() && !phases.includes(newPhaseName.trim())) {
+                        setPhases((p) => [...p, newPhaseName.trim()]);
+                      }
+                      setNewPhaseName("");
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             {proposedTasks.length === 0 ? (
               <div className="text-center py-8">
                 <AlertTriangle className="h-8 w-8 text-warning mx-auto mb-2" />
@@ -425,6 +488,12 @@ export function MeetingMinutesDialog({
                           </Badge>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          {task.phase && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                              <Layers className="h-2.5 w-2.5 mr-0.5" />
+                              {task.phase}
+                            </Badge>
+                          )}
                           {task.due_date && (
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
@@ -533,6 +602,26 @@ export function MeetingMinutesDialog({
                             </SelectContent>
                           </Select>
                         </div>
+
+                        {phases.length > 0 && (
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">Fase / Etapa</label>
+                            <Select
+                              value={task.phase || "__none__"}
+                              onValueChange={(v) => updateTask(index, "phase", v === "__none__" ? null : v)}
+                            >
+                              <SelectTrigger className="text-sm">
+                                <SelectValue placeholder="Sin fase" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Sin fase</SelectItem>
+                                {phases.map((phase) => (
+                                  <SelectItem key={phase} value={phase}>{phase}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

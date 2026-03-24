@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { useOrgSettings, useUpdateOrgSettings } from "@/hooks/useOrgSettings";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Shield } from "lucide-react";
@@ -33,15 +34,31 @@ function PermissionsTab() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Gestión avanzada de tareas</Label>
+              <Label className="text-sm font-medium">Eliminar tareas</Label>
               <p className="text-xs text-muted-foreground">
-                Permite a los Kawiilers Referente eliminar tareas y modificar fechas límite de cualquier tarea.
+                Permite a los Kawiilers Referente eliminar tareas de cualquier miembro.
               </p>
             </div>
             <Switch
-              checked={!!settings.referente_task_management}
+              checked={!!settings.referente_delete_tasks}
               onCheckedChange={(checked) =>
-                updateSettings.mutate({ referente_task_management: checked })
+                updateSettings.mutate({ referente_delete_tasks: checked })
+              }
+              disabled={updateSettings.isPending}
+            />
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Modificar fechas límite</Label>
+              <p className="text-xs text-muted-foreground">
+                Permite a los Kawiilers Referente cambiar la fecha de entrega de cualquier tarea.
+              </p>
+            </div>
+            <Switch
+              checked={!!settings.referente_edit_due_dates}
+              onCheckedChange={(checked) =>
+                updateSettings.mutate({ referente_edit_due_dates: checked })
               }
               disabled={updateSettings.isPending}
             />

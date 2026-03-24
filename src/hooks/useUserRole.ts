@@ -27,8 +27,10 @@ export function useUserRole() {
   const isReferente = currentRole === "referente";
   const isReferenteOrAbove = isTransformador || isReferente;
 
-  // Transformador always can manage tasks; Referente only if setting is enabled
-  const canManageTasks = isTransformador || (isReferente && !!settings.referente_task_management);
+  // Granular permissions
+  const canDeleteTasks = isTransformador || (isReferente && !!settings.referente_delete_tasks);
+  const canEditDueDates = isTransformador || (isReferente && !!settings.referente_edit_due_dates);
+  const canManageTasks = canDeleteTasks || canEditDueDates;
 
   return {
     role: currentRole,
@@ -36,6 +38,8 @@ export function useUserRole() {
     isTransformador,
     isReferenteOrAbove,
     canManageTasks,
+    canDeleteTasks,
+    canEditDueDates,
     // Backward-compatible aliases
     isAdmin: isTransformador,
     isAdminOrManager: isReferenteOrAbove,
