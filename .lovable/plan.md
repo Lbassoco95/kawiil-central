@@ -1,36 +1,21 @@
 
-## Plan: Corregir navegación de subtareas dentro del detalle de tarea
 
-### Problema raíz
-Hoy el click de una subtarea en `TaskDetailDialog.tsx` hace esto:
-1. Cierra la tarea actual con `onClose()`
-2. Cambia manualmente el query param `taskId` con `pushState`
+## Plan: Mostrar todos los clientes en el formulario de juicios
 
-Eso provoca que el usuario “regrese” a la vista de **Tareas** en lugar de abrir la subtarea directamente con el diseño normal del detalle.
+### Problema
+En `LawsuitFormDialog.tsx` (línea 77), los clientes se filtran con `.filter((c) => c.services?.includes("juicios"))`. Si solo 2 clientes tienen el servicio "juicios" configurado, solo aparecen esos 2. El fallback a todos los clientes solo aplica si `lawsuitClients` queda vacío, no si tiene pocos resultados.
 
-### Enfoque
-Usar el mismo patrón que ya funciona en `UnifiedStepRow.tsx`: abrir la subtarea con otro `TaskDetailDialog`, sin depender de hacks de URL.
+### Hallazgo adicional
+Los demás formularios (`ProjectFormDialog`, `TaskFormDialog`, `DocumentFormDialog`, `ExpenseFormDialog`) ya usan `SearchableSelect` con todos los clientes y orden alfabético. El único problema está en `LawsuitFormDialog`.
 
-### Cambios propuestos
+### Cambio
 
-**1. `src/components/tasks/TaskDetailDialog.tsx`**
-- Agregar un estado local para la subtarea seleccionada, por ejemplo `selectedSubtaskId`.
-- Reemplazar el `onClick` actual de la subtarea:
-  - quitar `onClose()`
-  - quitar `pushState`, `PopStateEvent` y `setTimeout`
-  - usar `setSelectedSubtaskId(item.task_id)`
-- Renderizar un segundo `TaskDetailDialog` cuando exista `selectedSubtaskId`, para abrir esa subtarea con el **mismo diseño completo de tarea normal**.
-- Mantener el icono/link visual actual, pero haciendo que abra la subtarea en contexto.
+**`src/components/projects/LawsuitFormDialog.tsx`**
+- Eliminar el filtro `lawsuitClients` (líneas 76-77) y la lógica condicional en línea 168.
+- Pasar directamente `(clients || []).map(...)` al `SearchableSelect`, igual que en los demás formularios.
+- El componente `SearchableSelect` ya ordena alfabéticamente internamente y permite búsqueda.
 
-**2. Ajuste defensivo en `src/pages/Tareas.tsx`**
-- Agregar sincronización entre `searchParams.get("taskId")` y `selectedTaskId`.
-- Esto no será la solución principal del bug, pero sí evita desincronizaciones futuras cuando la URL cambie por deep links o navegación externa.
+### Resultado
+- Todos los clientes aparecerán en la lista al crear un juicio, ordenados A-Z y con búsqueda.
+- Consistencia con el resto de formularios de la aplicación.
 
-### Resultado esperado
-- Al dar click en una subtarea desde una tarea, se abrirá **esa misma subtarea** con el diseño completo del detalle normal.
-- Ya no enviará al usuario “a Tareas” ni lo dejará en la lista.
-- Se conserva el contexto actual y la navegación se siente consistente con los pasos de proyecto.
-
-### Archivos a modificar
-- `src/components/tasks/TaskDetailDialog.tsx`
-- `src/pages/Tareas.tsx`
