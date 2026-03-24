@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 export interface OrgSettings {
   referente_task_management?: boolean;
+  referente_delete_tasks?: boolean;
+  referente_edit_due_dates?: boolean;
 }
 
 export function useOrgSettings() {
