@@ -488,6 +488,12 @@ export function MeetingMinutesDialog({
                           </Badge>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          {task.phase && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+                              <Layers className="h-2.5 w-2.5 mr-0.5" />
+                              {task.phase}
+                            </Badge>
+                          )}
                           {task.due_date && (
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
