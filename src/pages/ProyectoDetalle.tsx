@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
@@ -31,6 +31,7 @@ import { useProfiles, useDeleteTask } from "@/hooks/useTasks";
 import { formatMX } from "@/lib/dateUtils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
@@ -56,6 +57,10 @@ const ProyectoDetalle = () => {
   const { canDeleteTasks } = useUserRole();
   const deleteTask = useDeleteTask();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
@@ -70,6 +75,23 @@ const ProyectoDetalle = () => {
     },
     enabled: !!user && !!id,
   });
+
+  const toggleTaskSelection = useCallback((taskId: string) => {
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId); else next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedTaskIds(prev => prev.size === tasks.length ? new Set() : new Set(tasks.map(t => t.id)));
+  }, [tasks]);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedTaskIds(new Set());
+  }, []);
 
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
@@ -265,10 +287,32 @@ const ProyectoDetalle = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Tareas del proyecto</h3>
-              <Button size="sm" onClick={() => setShowTaskForm(true)}>
-                <Plus className="h-3.5 w-3.5 mr-1" />Crear tarea
-              </Button>
+              <div className="flex items-center gap-2">
+                {canDeleteTasks && tasks.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant={selectionMode ? "secondary" : "outline"}
+                    onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
+                  >
+                    <CheckSquare className="h-3.5 w-3.5 mr-1" />
+                    {selectionMode ? "Cancelar" : "Seleccionar"}
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => setShowTaskForm(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />Crear tarea
+                </Button>
+              </div>
             </div>
+
+            {selectionMode && tasks.length > 0 && (
+              <div className="flex items-center gap-2 px-2">
+                <Checkbox
+                  checked={selectedTaskIds.size === tasks.length && tasks.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-xs text-muted-foreground">Seleccionar todas</span>
+              </div>
+            )}
 
             {tasks.length === 0 ? (
               <div className="text-center py-16">
@@ -283,9 +327,17 @@ const ProyectoDetalle = () => {
                 {tasks.map((t) => (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
-                    onClick={() => setSelectedTaskId(t.id)}
+                    className={`flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer ${selectedTaskIds.has(t.id) ? "bg-primary/5" : ""}`}
+                    onClick={() => selectionMode ? toggleTaskSelection(t.id) : setSelectedTaskId(t.id)}
                   >
+                    {selectionMode && (
+                      <Checkbox
+                        checked={selectedTaskIds.has(t.id)}
+                        onCheckedChange={() => toggleTaskSelection(t.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0"
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
@@ -323,6 +375,20 @@ const ProyectoDetalle = () => {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Bulk action bar */}
+            {selectionMode && selectedTaskIds.size > 0 && (
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-background border border-border shadow-lg rounded-full px-5 py-2.5 flex items-center gap-4">
+                <span className="text-sm font-medium">{selectedTaskIds.size} tarea{selectedTaskIds.size > 1 ? "s" : ""} seleccionada{selectedTaskIds.size > 1 ? "s" : ""}</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setShowBulkDelete(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />Eliminar
+                </Button>
               </div>
             )}
 
@@ -420,6 +486,29 @@ const ProyectoDetalle = () => {
           }
         }}
         isPending={deleteTask.isPending}
+      />
+      <DeleteConfirmDialog
+        open={showBulkDelete}
+        onOpenChange={(o) => { if (!o) setShowBulkDelete(false); }}
+        title={`¿Eliminar ${selectedTaskIds.size} tarea${selectedTaskIds.size > 1 ? "s" : ""}?`}
+        description={`Se eliminarán permanentemente ${selectedTaskIds.size} tarea${selectedTaskIds.size > 1 ? "s" : ""} y todos sus datos asociados.`}
+        onConfirm={async () => {
+          setBulkDeleting(true);
+          try {
+            for (const taskId of selectedTaskIds) {
+              await deleteTask.mutateAsync(taskId);
+            }
+            toast.success(`${selectedTaskIds.size} tarea${selectedTaskIds.size > 1 ? "s" : ""} eliminada${selectedTaskIds.size > 1 ? "s" : ""}`);
+            exitSelectionMode();
+            setShowBulkDelete(false);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", id] });
+          } catch (e: any) {
+            toast.error("Error al eliminar: " + e.message);
+          } finally {
+            setBulkDeleting(false);
+          }
+        }}
+        isPending={bulkDeleting}
       />
       <MeetingMinutesDialog
         open={showMinutesDialog}
