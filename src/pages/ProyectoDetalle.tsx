@@ -378,6 +378,20 @@ const ProyectoDetalle = () => {
               </div>
             )}
 
+            {/* Bulk action bar */}
+            {selectionMode && selectedTaskIds.size > 0 && (
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-background border border-border shadow-lg rounded-full px-5 py-2.5 flex items-center gap-4">
+                <span className="text-sm font-medium">{selectedTaskIds.size} tarea{selectedTaskIds.size > 1 ? "s" : ""} seleccionada{selectedTaskIds.size > 1 ? "s" : ""}</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setShowBulkDelete(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />Eliminar
+                </Button>
+              </div>
+            )}
+
             <TaskFormDialog
               open={showTaskForm}
               onOpenChange={(o) => {
