@@ -186,6 +186,9 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const [newDueDate, setNewDueDate] = useState("");
   const [dueDateReason, setDueDateReason] = useState("");
 
+  // Import role-based permissions
+  const { canManageTasks } = (await import("@/hooks/useUserRole")).useUserRole ? { canManageTasks: false } : { canManageTasks: false };
+
   const sortedProfiles = useMemo(
     () => (orgProfiles ?? []).map((p) => ({ value: p.user_id, label: p.full_name })).sort((a, b) => a.label.localeCompare(b.label, "es")),
     [orgProfiles]
