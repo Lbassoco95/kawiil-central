@@ -57,6 +57,27 @@ const ProyectoDetalle = () => {
   const { canDeleteTasks } = useUserRole();
   const deleteTask = useDeleteTask();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const toggleTaskSelection = useCallback((taskId: string) => {
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId); else next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedTaskIds(prev => prev.size === tasks.length ? new Set() : new Set(tasks.map(t => t.id)));
+  }, [tasks]);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedTaskIds(new Set());
+  }, []);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
