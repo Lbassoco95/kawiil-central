@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles, User, Calendar, Trash2 } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles, User, Calendar, Trash2, Layers, ChevronDown, ChevronRight } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
