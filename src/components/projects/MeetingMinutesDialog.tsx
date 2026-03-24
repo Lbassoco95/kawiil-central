@@ -596,6 +596,26 @@ export function MeetingMinutesDialog({
                             </SelectContent>
                           </Select>
                         </div>
+
+                        {phases.length > 0 && (
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">Fase / Etapa</label>
+                            <Select
+                              value={task.phase || "__none__"}
+                              onValueChange={(v) => updateTask(index, "phase", v === "__none__" ? null : v)}
+                            >
+                              <SelectTrigger className="text-sm">
+                                <SelectValue placeholder="Sin fase" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Sin fase</SelectItem>
+                                {phases.map((phase) => (
+                                  <SelectItem key={phase} value={phase}>{phase}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
