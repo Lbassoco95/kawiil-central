@@ -297,8 +297,9 @@ export function MeetingMinutesDialog({
 
       let created = 0;
       for (const task of accepted) {
+        const finalTitle = task.phase ? `[${task.phase}] ${task.title}` : task.title;
         const { error } = await supabase.from("tasks").insert({
-          title: task.title,
+          title: finalTitle,
           description: task.description || null,
           priority: task.priority || "media",
           due_date: task.due_date || null,
