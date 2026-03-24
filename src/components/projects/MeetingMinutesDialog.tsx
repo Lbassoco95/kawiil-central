@@ -37,7 +37,10 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  Layers,
+  X,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface ProposedTask {
   title: string;
