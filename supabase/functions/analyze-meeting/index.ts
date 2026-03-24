@@ -211,7 +211,9 @@ RESPONDE con un JSON válido con esta estructura exacta:
       area: area || null,
     }));
 
-    return new Response(JSON.stringify({ summary: parsed.summary, tasks }), {
+    const phases = parsed.phases || [];
+
+    return new Response(JSON.stringify({ summary: parsed.summary, phases, tasks }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
