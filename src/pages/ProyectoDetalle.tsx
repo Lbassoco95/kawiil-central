@@ -327,9 +327,17 @@ const ProyectoDetalle = () => {
                 {tasks.map((t) => (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
-                    onClick={() => setSelectedTaskId(t.id)}
+                    className={`flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer ${selectedTaskIds.has(t.id) ? "bg-primary/5" : ""}`}
+                    onClick={() => selectionMode ? toggleTaskSelection(t.id) : setSelectedTaskId(t.id)}
                   >
+                    {selectionMode && (
+                      <Checkbox
+                        checked={selectedTaskIds.has(t.id)}
+                        onCheckedChange={() => toggleTaskSelection(t.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0"
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
