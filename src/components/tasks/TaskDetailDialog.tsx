@@ -445,12 +445,19 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               {/* Row 1: Editable title */}
               <DialogHeader className="p-0">
                 <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
-                <Input
-                  value={currentTitle}
-                  onChange={(e) => setPending("title", e.target.value)}
-                  className="text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
-                  placeholder="Nombre de la tarea"
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={currentTitle}
+                    onChange={(e) => setPending("title", e.target.value)}
+                    className="flex-1 text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
+                    placeholder="Nombre de la tarea"
+                  />
+                  {canDeleteTasks && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </DialogHeader>
 
               {/* Row 2: Main controls — Status, Priority, Assignee */}
