@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles, User, Calendar } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles, User, Calendar, Trash2 } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
@@ -27,8 +27,11 @@ type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { PROJECT_STATUS_CONFIG, TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
-import { useProfiles } from "@/hooks/useTasks";
+import { useProfiles, useDeleteTask } from "@/hooks/useTasks";
 import { formatMX } from "@/lib/dateUtils";
+import { useUserRole } from "@/hooks/useUserRole";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { toast } from "sonner";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -50,6 +53,9 @@ const ProyectoDetalle = () => {
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
   const [showMinutesDialog, setShowMinutesDialog] = useState(false);
+  const { canDeleteTasks } = useUserRole();
+  const deleteTask = useDeleteTask();
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
@@ -304,6 +310,17 @@ const ProyectoDetalle = () => {
                         )}
                       </div>
                     </div>
+                    {canDeleteTasks && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTargetId(t.id); }}
+                        title="Eliminar tarea"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -387,6 +404,23 @@ const ProyectoDetalle = () => {
         )}
       </div>
       <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <DeleteConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(o) => { if (!o) setDeleteTargetId(null); }}
+        title="¿Eliminar esta tarea?"
+        description="Se eliminará permanentemente esta tarea y todos sus datos asociados."
+        onConfirm={async () => {
+          try {
+            await deleteTask.mutateAsync(deleteTargetId!);
+            toast.success("Tarea eliminada");
+            setDeleteTargetId(null);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", id] });
+          } catch (e: any) {
+            toast.error("Error al eliminar: " + e.message);
+          }
+        }}
+        isPending={deleteTask.isPending}
+      />
       <MeetingMinutesDialog
         open={showMinutesDialog}
         onOpenChange={setShowMinutesDialog}

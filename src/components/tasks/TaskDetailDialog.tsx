@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
   Upload, ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
-  Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2
+  Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
@@ -33,6 +33,8 @@ import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useDeleteTask } from "@/hooks/useTasks";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 interface CommentAttachment {
   type: "image" | "dropbox" | "link";
@@ -88,7 +90,9 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { celulaLabelMap, getCelulaLabel } = useCelulaOptions();
-  const { canEditDueDates } = useUserRole();
+  const { canEditDueDates, canDeleteTasks } = useUserRole();
+  const deleteTask = useDeleteTask();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentMentions, setCommentMentions] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<CommentAttachment[]>([]);
@@ -441,12 +445,19 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
               {/* Row 1: Editable title */}
               <DialogHeader className="p-0">
                 <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
-                <Input
-                  value={currentTitle}
-                  onChange={(e) => setPending("title", e.target.value)}
-                  className="text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
-                  placeholder="Nombre de la tarea"
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={currentTitle}
+                    onChange={(e) => setPending("title", e.target.value)}
+                    className="flex-1 text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
+                    placeholder="Nombre de la tarea"
+                  />
+                  {canDeleteTasks && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </DialogHeader>
 
               {/* Row 2: Main controls — Status, Priority, Assignee */}
@@ -956,6 +967,23 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
       <DropboxFilePicker open={showCommentDropbox} onClose={() => setShowCommentDropbox(false)} onSelect={(file) => setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }])} />
       <DocumentPreviewDialog open={!!previewDoc} onOpenChange={(o) => { if (!o) setPreviewDoc(null); }} document={previewDoc} />
       <TaskDetailDialog taskId={selectedSubtaskId} onClose={() => setSelectedSubtaskId(null)} />
+      <DeleteConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="¿Eliminar esta tarea?"
+        description="Se eliminará permanentemente esta tarea y todos sus datos asociados."
+        onConfirm={async () => {
+          try {
+            await deleteTask.mutateAsync(taskId!);
+            toast.success("Tarea eliminada");
+            setShowDeleteConfirm(false);
+            onClose();
+          } catch (e: any) {
+            toast.error("Error al eliminar: " + e.message);
+          }
+        }}
+        isPending={deleteTask.isPending}
+      />
     </Dialog>
   );
 }
