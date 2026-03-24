@@ -287,10 +287,32 @@ const ProyectoDetalle = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Tareas del proyecto</h3>
-              <Button size="sm" onClick={() => setShowTaskForm(true)}>
-                <Plus className="h-3.5 w-3.5 mr-1" />Crear tarea
-              </Button>
+              <div className="flex items-center gap-2">
+                {canDeleteTasks && tasks.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant={selectionMode ? "secondary" : "outline"}
+                    onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
+                  >
+                    <CheckSquare className="h-3.5 w-3.5 mr-1" />
+                    {selectionMode ? "Cancelar" : "Seleccionar"}
+                  </Button>
+                )}
+                <Button size="sm" onClick={() => setShowTaskForm(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />Crear tarea
+                </Button>
+              </div>
             </div>
+
+            {selectionMode && tasks.length > 0 && (
+              <div className="flex items-center gap-2 px-2">
+                <Checkbox
+                  checked={selectedTaskIds.size === tasks.length && tasks.length > 0}
+                  onCheckedChange={toggleSelectAll}
+                />
+                <span className="text-xs text-muted-foreground">Seleccionar todas</span>
+              </div>
+            )}
 
             {tasks.length === 0 ? (
               <div className="text-center py-16">
