@@ -395,6 +395,60 @@ export function MeetingMinutesDialog({
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-2">
+            {/* Phase management */}
+            <div className="space-y-2 pb-2 border-b border-border/40">
+              <div className="flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Fases / Etapas</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {phases.map((phase) => (
+                  <Badge key={phase} variant="secondary" className="text-xs gap-1 pr-1">
+                    {phase}
+                    <button
+                      onClick={() => {
+                        setPhases((p) => p.filter((ph) => ph !== phase));
+                        setProposedTasks((prev) => prev.map((t) => t.phase === phase ? { ...t, phase: null } : t));
+                      }}
+                      className="ml-0.5 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={newPhaseName}
+                    onChange={(e) => setNewPhaseName(e.target.value)}
+                    placeholder="Nueva fase..."
+                    className="h-7 text-xs w-32"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newPhaseName.trim()) {
+                        if (!phases.includes(newPhaseName.trim())) {
+                          setPhases((p) => [...p, newPhaseName.trim()]);
+                        }
+                        setNewPhaseName("");
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={!newPhaseName.trim()}
+                    onClick={() => {
+                      if (newPhaseName.trim() && !phases.includes(newPhaseName.trim())) {
+                        setPhases((p) => [...p, newPhaseName.trim()]);
+                      }
+                      setNewPhaseName("");
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             {proposedTasks.length === 0 ? (
               <div className="text-center py-8">
                 <AlertTriangle className="h-8 w-8 text-warning mx-auto mb-2" />
