@@ -166,7 +166,7 @@ export function MeetingMinutesDialog({
         if (data?.error) throw new Error(data.error);
         setContent(extractedText);
         setSummary(data.summary ?? "");
-        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true })));
+        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true, phase: null })));
         setStep("preview");
         toast.success("Análisis listo. Revisa las tareas propuestas.");
       } catch (err: any) {
