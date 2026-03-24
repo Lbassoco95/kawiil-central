@@ -323,59 +323,16 @@ const ProyectoDetalle = () => {
                 </Button>
               </div>
             ) : (
-              <div className="divide-y divide-border/40">
-                {tasks.map((t) => (
-                  <div
-                    key={t.id}
-                    className={`flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer ${selectedTaskIds.has(t.id) ? "bg-primary/5" : ""}`}
-                    onClick={() => selectionMode ? toggleTaskSelection(t.id) : setSelectedTaskId(t.id)}
-                  >
-                    {selectionMode && (
-                      <Checkbox
-                        checked={selectedTaskIds.has(t.id)}
-                        onCheckedChange={() => toggleTaskSelection(t.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        className="shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
-                        <Badge className={`text-[10px] border-0 px-1.5 py-0 ${PRIORITY_CONFIG[t.priority as keyof typeof PRIORITY_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`} variant="secondary">
-                          {PRIORITY_CONFIG[t.priority as keyof typeof PRIORITY_CONFIG]?.label || t.priority}
-                        </Badge>
-                        <Badge className={`text-[10px] border-0 px-1.5 py-0 ${TASK_STATUS_CONFIG[t.status as keyof typeof TASK_STATUS_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`} variant="secondary">
-                          {TASK_STATUS_CONFIG[t.status as keyof typeof TASK_STATUS_CONFIG]?.label || t.status}
-                        </Badge>
-                        {t.criticality_level === "critico" && <span className="text-[10px]" title="Crítico">🔴</span>}
-                        {t.criticality_level === "atencion" && <span className="text-[10px]" title="Atención">🟡</span>}
-                        {t.delay_category && <Badge variant="outline" className="text-[9px] px-1 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>}
-                      </div>
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                      {t.assigned_to && profileMap.get(t.assigned_to) ? (
-                          <span className="flex items-center gap-1"><User className="h-3 w-3" />{profileMap.get(t.assigned_to)}</span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-destructive/70 font-medium">⚠ Sin responsable</span>
-                        )}
-                        {t.due_date && (
-                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(t.due_date, "dd MMM yyyy")}</span>
-                        )}
-                      </div>
-                    </div>
-                    {canDeleteTasks && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTargetId(t.id); }}
-                        title="Eliminar tarea"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <TaskListGrouped
+                tasks={tasks}
+                selectionMode={selectionMode}
+                selectedTaskIds={selectedTaskIds}
+                toggleTaskSelection={toggleTaskSelection}
+                setSelectedTaskId={setSelectedTaskId}
+                profileMap={profileMap}
+                canDeleteTasks={canDeleteTasks}
+                setDeleteTargetId={setDeleteTargetId}
+              />
             )}
 
             {/* Bulk action bar */}
