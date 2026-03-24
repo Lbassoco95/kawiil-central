@@ -114,7 +114,7 @@ export function SearchableSelect({
               </button>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );
