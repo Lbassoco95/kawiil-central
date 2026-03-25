@@ -1,27 +1,30 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Sparkles, Copy, X } from "lucide-react";
+import { Loader2, Sparkles, Copy, X, Languages, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
-const QUICK_PROMPTS = [
+const FULL_PROMPTS = [
   { label: "Respuesta profesional", prompt: "Redacta una respuesta profesional y cordial a este correo." },
-  { label: "Resumir hilo", prompt: "Resume los puntos clave de este correo en viñetas." },
-  { label: "Traducir al inglés", prompt: "Traduce este correo al inglés manteniendo el tono profesional." },
+  { label: "Respuesta breve", prompt: "Redacta una respuesta breve y directa a este correo." },
+  { label: "Tono formal", prompt: "Redacta una respuesta con tono muy formal y corporativo a este correo." },
 ];
 
 interface Props {
+  mode: "quick" | "full";
   emailSubject: string;
   emailBody: string;
   senderName?: string;
   onInsertText?: (text: string) => void;
-  onClose: () => void;
+  onClose?: () => void;
+  /** For quick mode: auto-execute this prompt on mount */
+  autoPrompt?: string;
 }
 
-export function EmailAIAssistant({ emailSubject, emailBody, senderName, onInsertText, onClose }: Props) {
+export function EmailAIAssistant({ mode, emailSubject, emailBody, senderName, onInsertText, onClose, autoPrompt }: Props) {
   const [prompt, setPrompt] = useState("");
   const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
@@ -103,6 +106,48 @@ export function EmailAIAssistant({ emailSubject, emailBody, senderName, onInsert
     }
   };
 
+  // Quick mode: compact result display
+  if (mode === "quick") {
+    return (
+      <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Kawiil AI
+          </div>
+          {onClose && (
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onClose}>
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+        {loading && !response && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Procesando...
+          </div>
+        )}
+        {response && (
+          <div>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+              <ReactMarkdown>{response}</ReactMarkdown>
+            </div>
+            <div className="flex gap-2 mt-2 pt-2 border-t border-border">
+              <Button variant="outline" size="sm" className="text-xs h-6" onClick={handleCopy}>
+                <Copy className="mr-1 h-3 w-3" /> Copiar
+              </Button>
+            </div>
+          </div>
+        )}
+        {!response && !loading && autoPrompt && (
+          <Button variant="outline" size="sm" className="text-xs" onClick={() => sendPrompt(autoPrompt)}>
+            Ejecutar
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // Full mode: complete assistant with drafting
   return (
     <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-3">
       <div className="flex items-center justify-between">
@@ -110,13 +155,15 @@ export function EmailAIAssistant({ emailSubject, emailBody, senderName, onInsert
           <Sparkles className="h-4 w-4 text-primary" />
           Asistente Kawiil AI
         </div>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
-          <X className="h-3.5 w-3.5" />
-        </Button>
+        {onClose && (
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {QUICK_PROMPTS.map((qp) => (
+        {FULL_PROMPTS.map((qp) => (
           <Button
             key={qp.label}
             variant="outline"
