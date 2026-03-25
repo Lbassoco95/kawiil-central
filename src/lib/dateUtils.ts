@@ -12,8 +12,13 @@ export const CDMX_TZ = "America/Mexico_City";
  * para mostrar en pantalla. Usa Intl para obtener las partes correctas.
  */
 export function toMXDate(date: string | Date): Date {
+  // Date-only strings (YYYY-MM-DD) are parsed as UTC by JS,
+  // which shifts them back a day in CDMX. Fix by parsing as local.
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [y, m, day] = date.split("-").map(Number);
+    return new Date(y, m - 1, day);
+  }
   const d = typeof date === "string" ? new Date(date) : date;
-  // Create a date string in CDMX timezone and parse it back
   const mxString = d.toLocaleString("en-US", { timeZone: CDMX_TZ });
   return new Date(mxString);
 }
