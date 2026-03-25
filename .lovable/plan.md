@@ -1,27 +1,37 @@
+## Plan: Corregir fecha límite y actualización automática
 
+### Problemas identificados
 
-## Plan: Agrupar tareas visualmente por fases/etapas
-
-### Problema
-Las tareas con fases se muestran en una lista plana. No hay agrupación visual que permita ver en qué etapa va cada cosa. Solo se ve el prefijo `[Fase]` en el título.
+1. **Bug de zona horaria**: `formatMX("2025-04-02", ...)` interpreta la fecha como UTC medianoche, luego la convierte a CDMX (UTC-6), resultando en **1 de abril a las 18:00** en vez de 2 de abril. Por eso se ve "01 abr" cuando debería ser "02 abr".
+2. **Falta invalidar `project-tasks**`: El hook `useUpdateTask` no invalida la query `["project-tasks"]` en su `onSuccess`, causando que la vista de proyecto no se actualice inmediatamente tras editar una tarea.
 
 ### Cambios
 
-**1. `src/components/projects/MeetingMinutesDialog.tsx` — Agrupar en preview**
-- En el paso "preview", en vez de renderizar `proposedTasks.map(...)` en lista plana, agrupar por fase:
-  - Primero renderizar cada fase como una sección con header (nombre de fase, icono Layers, count de tareas, fondo sutil)
-  - Dentro de cada sección, las tareas que pertenecen a esa fase
-  - Al final, sección "Sin fase" para tareas sin fase asignada
-- Usar Collapsible (ya existe en el proyecto) para poder colapsar/expandir cada grupo de fase
+`**src/lib/dateUtils.ts**`
 
-**2. `src/pages/ProyectoDetalle.tsx` — Agrupar tareas creadas por fase**
-- Parsear el prefijo `[NombreFase]` del título de cada tarea para extraer la fase
-- Agrupar tareas por fase detectada, con sección "Sin fase" al final
-- Cada grupo muestra un header con el nombre de la fase, un badge con el count, y un divider visual
-- Si no hay ninguna tarea con fase, mantener la vista plana actual (sin cambio visual)
-- Usar Collapsible para expandir/colapsar grupos
+- Modificar `toMXDate` para detectar strings de solo fecha (formato `YYYY-MM-DD`) y tratarlos como fecha local en vez de UTC. Esto evita el desfase de un día.
+
+```typescript
+export function toMXDate(date: string | Date): Date {
+  const d = typeof date === "string" ? new Date(date) : date;
+  // Date-only strings (YYYY-MM-DD) are parsed as UTC by JS,
+  // which shifts them back a day in CDMX. Fix by parsing as local.
+  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const [y, m, day] = date.split("-").map(Number);
+    return new Date(y, m - 1, day);
+  }
+  const mxString = d.toLocaleString("en-US", { timeZone: CDMX_TZ });
+  return new Date(mxString);
+}
+```
+
+`**src/hooks/useTasks.ts` — `useUpdateTask` onSuccess**
+
+- Agregar `queryClient.invalidateQueries({ queryKey: ["project-tasks"] })` para que la vista de proyecto se refresque inmediatamente al guardar cambios.
 
 ### Archivos a modificar
-- `src/components/projects/MeetingMinutesDialog.tsx`
-- `src/pages/ProyectoDetalle.tsx`
 
+- `src/lib/dateUtils.ts`
+- `src/hooks/useTasks.ts`
+
+Me interesa que también revises que el tiempo para la aplicación debe ser el horario de México, para todo, para los logs y demás mantener esta zona horaria 
