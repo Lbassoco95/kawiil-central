@@ -192,6 +192,9 @@ export function useUpdateCalendarEvent() {
         }
         throw res.error;
       }
+      if (res.data?.code === "ITEM_NOT_FOUND") {
+        throw new Error("El evento no fue encontrado. Puede que haya sido eliminado o modificado.");
+      }
       if (res.data?.error) throw new Error(res.data.error);
       return { ...(res.data || {}), success: true, eventId, payload };
     },
