@@ -134,10 +134,10 @@ const anthropicTools = [
       },
     },
   },
-  // ─── New deep-context tools ───
+  // ─── Deep-context tools ───
   {
     name: "get_task_details",
-    description: "Obtiene una tarea específica con su descripción completa, comentarios de equipo y archivos adjuntos. Útil para entender el contexto y las discusiones de una tarea.",
+    description: "Obtiene una tarea específica con su descripción completa, comentarios de equipo y archivos adjuntos.",
     input_schema: {
       type: "object",
       properties: {
@@ -148,7 +148,7 @@ const anthropicTools = [
   },
   {
     name: "get_project_details",
-    description: "Obtiene un proyecto específico con descripción, pasos, miembros del equipo y tareas asociadas. Útil para tener la foto completa de un proyecto.",
+    description: "Obtiene un proyecto específico con descripción, pasos, miembros del equipo y tareas asociadas.",
     input_schema: {
       type: "object",
       properties: {
@@ -159,7 +159,7 @@ const anthropicTools = [
   },
   {
     name: "get_recent_activity",
-    description: "Obtiene la actividad reciente de la organización desde el log de actividad. Útil para saber qué ha pasado recientemente: cambios de estatus, tareas completadas, documentos subidos, etc.",
+    description: "Obtiene la actividad reciente de la organización desde el log de actividad.",
     input_schema: {
       type: "object",
       properties: {
@@ -170,7 +170,7 @@ const anthropicTools = [
   },
   {
     name: "search_across",
-    description: "Búsqueda unificada por texto libre en tareas, clientes y proyectos. Ideal para encontrar cualquier entidad por nombre. Devuelve resultados con tipo, id, nombre y URL de navegación.",
+    description: "Búsqueda unificada por texto libre en tareas, clientes y proyectos. Devuelve resultados con tipo, id, nombre y URL.",
     input_schema: {
       type: "object",
       properties: {
@@ -181,7 +181,7 @@ const anthropicTools = [
   },
   {
     name: "get_extracted_documents",
-    description: "Consulta los documentos procesados y extraídos por IA (CFDIs, declaraciones, estados de cuenta). Contiene resúmenes, montos, RFCs, periodos fiscales y observaciones de la IA. Útil para análisis fiscal y contable.",
+    description: "Consulta documentos procesados por IA (CFDIs, declaraciones, estados de cuenta). Contiene resúmenes, montos, RFCs y periodos fiscales.",
     input_schema: {
       type: "object",
       properties: {
@@ -189,6 +189,18 @@ const anthropicTools = [
         project_id: { type: "string", description: "Filtrar por proyecto (UUID)" },
         limit: { type: "number", description: "Máximo de resultados (default 10)" },
       },
+    },
+  },
+  {
+    name: "search_past_conversations",
+    description: "Busca en conversaciones pasadas de toda la organización (no solo del usuario actual). Útil para encontrar discusiones anteriores, decisiones tomadas, y contexto que se haya compartido en otros chats. Respeta la privacidad mencionando que la info viene de otra conversación sin revelar quién la tuvo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Texto a buscar en mensajes pasados" },
+        limit: { type: "number", description: "Máximo de resultados (default 10)" },
+      },
+      required: ["query"],
     },
   },
 ];
@@ -369,14 +381,13 @@ async function executeTool(
       return data;
     }
 
-    // ─── New deep-context tools ───
+    // ─── Deep-context tools ───
     case "get_task_details": {
       const { data: task, error: tErr } = await supabase.from("tasks")
         .select("id, title, description, status, priority, due_date, area, created_at, completed_at, time_spent_seconds, criticality_level, delay_category, delay_notes, checklist, tags, clients(name), projects(name)")
         .eq("id", args.task_id).single();
       if (tErr) return { error: tErr.message };
 
-      // Get comments with author names
       const { data: comments } = await supabase.from("task_comments")
         .select("content, created_at, user_id")
         .eq("task_id", args.task_id)
@@ -396,7 +407,6 @@ async function executeTool(
         }));
       }
 
-      // Get assignees
       const { data: assignees } = await supabase.from("task_assignees")
         .select("user_id").eq("task_id", args.task_id);
       let assigneeNames: string[] = [];
@@ -414,7 +424,6 @@ async function executeTool(
         .eq("id", args.project_id).single();
       if (pErr) return { error: pErr.message };
 
-      // Members
       const { data: members } = await supabase.from("project_members")
         .select("user_id").eq("project_id", args.project_id);
       let memberNames: string[] = [];
@@ -423,7 +432,6 @@ async function executeTool(
         memberNames = (profs || []).map((p: any) => p.full_name);
       }
 
-      // Tasks summary
       const { data: tasks } = await supabase.from("tasks")
         .select("id, title, status, priority, due_date, assigned_to")
         .eq("project_id", args.project_id)
@@ -443,7 +451,6 @@ async function executeTool(
       const { data, error } = await q;
       if (error) return { error: error.message };
 
-      // Resolve user names
       const userIds = [...new Set((data || []).filter((a: any) => a.user_id).map((a: any) => a.user_id))];
       let nameMap: Record<string, string> = {};
       if (userIds.length) {
@@ -461,7 +468,6 @@ async function executeTool(
       const q = args.query;
       const results: any[] = [];
 
-      // Search tasks
       const { data: tasks } = await supabase.from("tasks")
         .select("id, title, status, area")
         .eq("organization_id", orgId)
@@ -471,7 +477,6 @@ async function executeTool(
         results.push({ type: "task", id: t.id, name: t.title, extra: `${t.status} · ${t.area || ""}`, url: `/tareas` });
       }
 
-      // Search clients
       const { data: clients } = await supabase.from("clients")
         .select("id, name, rfc, status")
         .eq("organization_id", orgId)
@@ -481,7 +486,6 @@ async function executeTool(
         results.push({ type: "client", id: c.id, name: c.name, extra: c.rfc || c.status, url: `/clientes/${c.id}` });
       }
 
-      // Search projects
       const { data: projects } = await supabase.from("projects")
         .select("id, name, status, area")
         .eq("organization_id", orgId)
@@ -505,6 +509,64 @@ async function executeTool(
       q = q.limit(args.limit || 10);
       const { data, error } = await q;
       return error ? { error: error.message } : data;
+    }
+
+    case "search_past_conversations": {
+      const searchQuery = args.query;
+      const limit = args.limit || 10;
+
+      // Use service role to search across org conversations
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const serviceClient = createClient(supabaseUrl, serviceKey);
+
+      // Get all conversation IDs in the org
+      const { data: orgConvos } = await serviceClient.from("chat_conversations")
+        .select("id, user_id, title")
+        .eq("organization_id", orgId)
+        .order("updated_at", { ascending: false })
+        .limit(100);
+
+      if (!orgConvos?.length) return { results: [], message: "No hay conversaciones previas." };
+
+      const convoIds = orgConvos.map((c: any) => c.id);
+
+      // Search messages across those conversations
+      const { data: messages } = await serviceClient.from("chat_messages")
+        .select("content, role, conversation_id, created_at")
+        .in("conversation_id", convoIds)
+        .ilike("content", `%${searchQuery}%`)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (!messages?.length) return { results: [], message: "No se encontraron mensajes relacionados." };
+
+      // Map conversation info
+      const convoMap: Record<string, any> = {};
+      for (const c of orgConvos) convoMap[c.id] = c;
+
+      // Get user names for conversation owners
+      const ownerIds = [...new Set(orgConvos.map((c: any) => c.user_id))];
+      let nameMap: Record<string, string> = {};
+      if (ownerIds.length) {
+        const { data: profs } = await serviceClient.from("profiles").select("user_id, full_name").in("user_id", ownerIds);
+        for (const p of profs || []) nameMap[p.user_id] = p.full_name;
+      }
+
+      return {
+        results: messages.map((m: any) => {
+          const convo = convoMap[m.conversation_id];
+          const isCurrentUser = convo?.user_id === userId;
+          return {
+            fragmento: m.content.length > 300 ? m.content.substring(0, 300) + "..." : m.content,
+            rol: m.role,
+            fecha: m.created_at,
+            conversacion: convo?.title || "Sin título",
+            es_del_usuario_actual: isCurrentUser,
+            autor: isCurrentUser ? "Tú" : (nameMap[convo?.user_id] || "Otro Kawiiler"),
+          };
+        }),
+      };
     }
 
     default:
@@ -546,6 +608,7 @@ Ejemplos de tu estilo:
 - Al responder, SIEMPRE cruza la información de múltiples fuentes: comentarios + descripción + actividad.
 - Si el usuario pregunta sobre una persona, consulta sus tareas Y la actividad reciente para dar un panorama completo.
 - Si pregunta sobre un cliente, consulta sus proyectos, tareas Y documentos extraídos.
+- **USA search_past_conversations** para buscar si en conversaciones anteriores (tuyas o de otros Kawiilers) se ha discutido el tema. Si encuentras información relevante de otra conversación, menciónalo: "En una conversación anterior se discutió que..." sin revelar datos personales del otro usuario a menos que sea información de trabajo compartida.
 - Aprende del contexto de la conversación para dar respuestas cada vez más relevantes.
 
 ### 5. Comunicación profesional
@@ -580,7 +643,7 @@ Ejemplos de tu estilo:
 function toAnthropicMessages(openaiMessages: any[]): any[] {
   const msgs: any[] = [];
   for (const m of openaiMessages) {
-    if (m.role === "system") continue; // handled separately
+    if (m.role === "system") continue;
     if (m.role === "user") {
       msgs.push({ role: "user", content: m.content });
     } else if (m.role === "assistant") {
@@ -622,8 +685,17 @@ serve(async (req) => {
       .eq("user_id", user.id).single();
 
     const orgId = profile?.organization_id;
-    const { messages, simple } = await req.json();
+    const body = await req.json();
+    const { messages, simple, searchMode, searchQuery } = body;
     const systemPrompt = buildSystemPrompt(profile);
+
+    // ─── Direct search mode (no AI, just DB query) ───
+    if (searchMode && searchQuery) {
+      const results = await executeTool("search_across", { query: searchQuery }, supabase, user.id, orgId);
+      return new Response(JSON.stringify({ results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // ─── Simple mode (no tools, no streaming) ───
     if (simple) {
@@ -651,7 +723,6 @@ serve(async (req) => {
         }
         console.warn("Claude simple failed, falling back...");
       }
-      // Fallback
       if (LOVABLE_API_KEY) {
         const resp = await fetch(AI_GATEWAY_URL, {
           method: "POST",
@@ -706,7 +777,6 @@ async function handleClaudeChat(
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const isLastChance = round === MAX_ROUNDS - 1;
 
-    // Non-streaming for tool rounds, streaming for final
     const resp = await fetch(ANTHROPIC_API_URL, {
       method: "POST",
       headers: {
@@ -738,14 +808,11 @@ async function handleClaudeChat(
     const stopReason = data.stop_reason;
     const contentBlocks = data.content || [];
 
-    // Check if there are tool_use blocks
     const toolUseBlocks = contentBlocks.filter((b: any) => b.type === "tool_use");
 
     if (toolUseBlocks.length > 0 && stopReason === "tool_use") {
-      // Add assistant response
       anthropicMsgs.push({ role: "assistant", content: contentBlocks });
 
-      // Execute tools and add results
       const toolResults: any[] = [];
       for (const tu of toolUseBlocks) {
         console.log(`Tool [Claude]: ${tu.name}`, tu.input);
@@ -760,7 +827,6 @@ async function handleClaudeChat(
       continue;
     }
 
-    // Final text response — stream it as SSE in OpenAI-compatible format
     const textContent = contentBlocks
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
