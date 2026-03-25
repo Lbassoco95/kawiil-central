@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,12 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useOutlookEmails, useEmailDetail, useReplyEmail, useForwardEmail, useMarkEmailRead } from "@/hooks/useMicrosoft";
-import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send, UserPlus } from "lucide-react";
+import { Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send, ClipboardList, Sparkles } from "lucide-react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { CreateUserFromEmailDialog } from "./CreateUserFromEmailDialog";
+import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
+import { EmailAIAssistant } from "./EmailAIAssistant";
 import { useUserRole } from "@/hooks/useUserRole";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
@@ -23,8 +24,8 @@ export function EmailView() {
   const [emailAction, setEmailAction] = useState<EmailAction>(null);
   const [replyText, setReplyText] = useState("");
   const [forwardTo, setForwardTo] = useState("");
-  const [createUserOpen, setCreateUserOpen] = useState(false);
-  const { isAdminOrManager } = useUserRole();
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: emails = [], isLoading } = useOutlookEmails("inbox", debouncedSearch || undefined);
@@ -36,6 +37,7 @@ export function EmailView() {
   const handleCloseDetail = useCallback(() => {
     setSelectedEmailId(null);
     resetAction();
+    setShowAIAssistant(false);
   }, []);
 
   const handleOpenEmail = (email: any) => {
@@ -104,7 +106,7 @@ export function EmailView() {
             <Card
               key={email.id}
               className={`cursor-pointer transition-colors hover:border-primary/50 ${!email.isRead ? "bg-primary/5" : ""}`}
-              onClick={() => { handleOpenEmail(email); resetAction(); }}
+              onClick={() => { handleOpenEmail(email); resetAction(); setShowAIAssistant(false); }}
             >
               <CardContent className="p-3">
                 <div className="flex items-start gap-3">
@@ -171,7 +173,7 @@ export function EmailView() {
               </DialogHeader>
 
               {/* Action buttons */}
-              <div className="flex items-center gap-2 border-t border-b border-border py-2">
+              <div className="flex items-center gap-2 border-t border-b border-border py-2 flex-wrap">
                 <Button
                   variant={emailAction === "reply" ? "default" : "outline"}
                   size="sm"
@@ -193,17 +195,34 @@ export function EmailView() {
                 >
                   <Forward className="mr-1 h-3.5 w-3.5" /> Reenviar
                 </Button>
-                {isAdminOrManager && (
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button
+                    variant={showAIAssistant ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setShowAIAssistant(!showAIAssistant)}
+                  >
+                    <Sparkles className="mr-1 h-3.5 w-3.5" /> Kawiil AI
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="ml-auto"
-                    onClick={() => setCreateUserOpen(true)}
+                    onClick={() => setCreateTaskOpen(true)}
                   >
-                    <UserPlus className="mr-1 h-3.5 w-3.5" /> Dar de alta
+                    <ClipboardList className="mr-1 h-3.5 w-3.5" /> Crear tarea
                   </Button>
-                )}
+                </div>
               </div>
+
+              {/* AI Assistant */}
+              {showAIAssistant && (
+                <EmailAIAssistant
+                  emailSubject={emailDetail.subject || ""}
+                  emailBody={emailDetail.body?.content || ""}
+                  senderName={emailDetail.from?.emailAddress?.name}
+                  onInsertText={(text) => setReplyText((prev) => prev ? `${prev}\n\n${text}` : text)}
+                  onClose={() => setShowAIAssistant(false)}
+                />
+              )}
 
               {/* Reply/Forward form */}
               {emailAction && (
@@ -242,12 +261,18 @@ export function EmailView() {
                 </div>
               )}
 
-              {/* Email body */}
-              <div className="flex-1 overflow-y-auto mt-2 prose prose-sm max-w-none dark:prose-invert">
+              {/* Email body - sandboxed iframe */}
+              <div className="flex-1 overflow-hidden mt-2">
                 {emailDetail.body?.contentType === "html" ? (
-                  <div dangerouslySetInnerHTML={{ __html: emailDetail.body.content }} />
+                  <iframe
+                    srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:system-ui,sans-serif;font-size:14px;color:#333;margin:0;padding:8px;word-wrap:break-word;}img{max-width:100%;height:auto;}a{color:#2563eb;}table{max-width:100%;}</style></head><body>${emailDetail.body.content}</body></html>`}
+                    sandbox="allow-same-origin"
+                    className="w-full border-0 rounded-md bg-background"
+                    style={{ minHeight: "200px", height: "100%" }}
+                    title="Email content"
+                  />
                 ) : (
-                  <pre className="whitespace-pre-wrap text-sm">{emailDetail.body?.content}</pre>
+                  <pre className="whitespace-pre-wrap text-sm p-2">{emailDetail.body?.content}</pre>
                 )}
               </div>
             </>
@@ -255,12 +280,15 @@ export function EmailView() {
         </DialogContent>
       </Dialog>
 
-      {/* Create user from email dialog */}
-      <CreateUserFromEmailDialog
-        open={createUserOpen}
-        onOpenChange={setCreateUserOpen}
+      {/* Create task from email dialog */}
+      <CreateTaskFromEmailDialog
+        open={createTaskOpen}
+        onOpenChange={setCreateTaskOpen}
+        emailSubject={emailDetail?.subject}
         senderName={emailDetail?.from?.emailAddress?.name}
         senderEmail={emailDetail?.from?.emailAddress?.address}
+        bodyPreview={emailDetail?.bodyPreview}
+        receivedDate={emailDetail?.receivedDateTime ? formatDistanceToNow(parseISO(emailDetail.receivedDateTime), { addSuffix: true, locale: es }) : undefined}
       />
     </div>
   );
