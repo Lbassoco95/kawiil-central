@@ -4,7 +4,6 @@ import { Search, Loader2, Sparkles, ArrowRight, Users, Briefcase, FolderKanban, 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 interface SearchResult {
@@ -28,6 +27,8 @@ const TYPE_LABELS: Record<string, string> = {
   task: "Tarea",
   user: "Usuario",
 };
+
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
 export function GlobalAISearch() {
   const [query, setQuery] = useState("");
@@ -58,64 +59,105 @@ export function GlobalAISearch() {
     setSummary("");
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const { supabase } = await import("@/integrations/supabase/client");
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      if (!token) return;
 
-      const response = await supabase.functions.invoke("ai-chat", {
-        body: {
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({
           messages: [
             {
-              role: "system",
-              content: `Eres un buscador inteligente. El usuario busca entidades en su organización. 
-Usa los tools disponibles para buscar clientes, proyectos, tareas y miembros del equipo.
-Responde con un JSON array de resultados encontrados en este formato exacto:
-\`\`\`json
-[{"type": "client|project|task|user", "id": "uuid", "name": "nombre", "extra": "info adicional breve"}]
-\`\`\`
-Máximo 10 resultados más relevantes. Si no encuentras nada, devuelve [].
-Después del JSON, agrega un resumen de 1 línea.`,
+              role: "user",
+              content: `Busca en la plataforma: "${query}". Usa la herramienta search_across para encontrar resultados. Después, presenta los resultados encontrados de forma clara y concisa, mencionando el tipo (cliente, proyecto, tarea) y un dato extra relevante. Si no encuentras nada, dilo amablemente.`,
             },
-            { role: "user", content: query },
           ],
-        },
+        }),
       });
 
-      if (response.error) throw response.error;
+      if (!resp.ok) throw new Error(`Error ${resp.status}`);
+      if (!resp.body) throw new Error("No stream body");
 
-      const content = response.data?.choices?.[0]?.message?.content || response.data?.content || "";
-      
-      // Parse results from response
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) || content.match(/\[[\s\S]*?\]/);
-      if (jsonMatch) {
-        try {
-          const jsonStr = jsonMatch[1] || jsonMatch[0];
-          const parsed = JSON.parse(jsonStr);
-          if (Array.isArray(parsed)) {
-            setResults(
-              parsed.map((r: any) => ({
-                type: r.type || "project",
-                id: r.id || "",
-                name: r.name || "Sin nombre",
-                url: r.type === "client" ? `/clientes/${r.id}` :
-                     r.type === "project" ? `/proyectos/${r.id}` :
-                     r.type === "task" ? `/tareas` :
-                     `/admin`,
-                extra: r.extra || "",
-              }))
-            );
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+      let fullContent = "";
+      let streamDone = false;
+
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") { streamDone = true; break; }
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) fullContent += content;
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
           }
-        } catch {}
+        }
       }
 
-      // Extract summary (text after JSON)
-      const summaryText = content.replace(/```json[\s\S]*?```/, "").replace(/\[[\s\S]*?\]/, "").trim();
-      if (summaryText) setSummary(summaryText);
+      // Parse search results from the AI's response
+      // The AI uses search_across tool which returns structured data
+      // Try to extract navigable results from the text response
+      const parsedResults = parseSearchResults(fullContent);
+      if (parsedResults.length > 0) {
+        setResults(parsedResults);
+      }
+      setSummary(fullContent);
     } catch (err) {
       console.error("AI Search error:", err);
       setSummary("Error al buscar. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const parseSearchResults = (text: string): SearchResult[] => {
+    // Try to extract mentions of clients, projects, tasks from the AI response
+    const results: SearchResult[] = [];
+    
+    // Look for patterns like "Cliente: Name" or bullet points with entity types
+    const patterns = [
+      { regex: /\*?\*?(?:Cliente|client)[:\s]*\*?\*?\s*([^\n,\-–]+)/gi, type: "client" as const },
+      { regex: /\*?\*?(?:Proyecto|project)[:\s]*\*?\*?\s*([^\n,\-–]+)/gi, type: "project" as const },
+      { regex: /\*?\*?(?:Tarea|task)[:\s]*\*?\*?\s*([^\n,\-–]+)/gi, type: "task" as const },
+    ];
+
+    for (const { regex, type } of patterns) {
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const name = match[1].trim().replace(/\*+/g, "").trim();
+        if (name.length > 2 && name.length < 100) {
+          results.push({
+            type,
+            id: "",
+            name,
+            url: type === "client" ? "/clientes" : type === "project" ? "/proyectos" : "/tareas",
+          });
+        }
+      }
+    }
+
+    return results.slice(0, 10);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -141,7 +183,7 @@ Después del JSON, agrega un resumen de 1 línea.`,
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => results.length > 0 && setOpen(true)}
+          onFocus={() => (results.length > 0 || summary) && setOpen(true)}
           placeholder="Buscar con AI..."
           className="h-8 pl-8 pr-20 text-xs bg-muted/50 border-border/50 focus:bg-background"
         />
@@ -151,7 +193,7 @@ Después del JSON, agrega un resumen de 1 línea.`,
               variant="ghost"
               size="icon"
               className="h-6 w-6"
-              onClick={() => { setQuery(""); setOpen(false); setResults([]); }}
+              onClick={() => { setQuery(""); setOpen(false); setResults([]); setSummary(""); }}
             >
               <X className="h-3 w-3" />
             </Button>
@@ -175,7 +217,7 @@ Después del JSON, agrega un resumen de 1 línea.`,
           {loading && (
             <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Buscando...
+              Buscando con Claude...
             </div>
           )}
 
@@ -207,14 +249,14 @@ Después del JSON, agrega un resumen de 1 línea.`,
           )}
 
           {summary && !loading && (
-            <div className="border-t px-3 py-2 text-xs text-muted-foreground bg-muted/30">
+            <div className="border-t px-3 py-2 text-xs text-muted-foreground bg-muted/30 max-h-[200px] overflow-y-auto whitespace-pre-wrap">
               {summary}
             </div>
           )}
 
           <div className="border-t px-3 py-1.5 flex justify-end">
             <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <Sparkles className="h-2.5 w-2.5" /> Powered by AI
+              <Sparkles className="h-2.5 w-2.5" /> Powered by Claude
             </span>
           </div>
         </div>
