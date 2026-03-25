@@ -1,34 +1,60 @@
 
 
-## Plan: Corregir errores 429 y mantener resumen AI en búsqueda
+## Plan: Markdown en búsqueda/chat, crear tarea desde correo, y mejorar vista de correo con asistente AI
 
 ### Problemas identificados
 
-1. **Error 429 rompe la conversación**: Cuando Claude devuelve 429 (rate limit), la función retorna el error directamente al cliente SIN intentar el fallback al gateway. El `try/catch` en línea 747 no atrapa un `return new Response(429)` — solo atrapa excepciones. Resultado: el chat se muere en vez de cambiar a gateway.
+1. **Markdown no renderizado en búsqueda**: El `summary` en `GlobalAISearch.tsx` se muestra como texto plano (`{summary}`) — los `**negritas**` no se renderizan. Falta `ReactMarkdown`.
 
-2. **La búsqueda perdió el resumen AI**: El `searchMode` actual devuelve solo resultados estructurados (JSON puro). El usuario quiere mantener los resultados navegables Y el resumen contextual que daba antes.
+2. **"Dar de alta" desde correo crea un usuario**: El botón `UserPlus` abre `CreateUserFromEmailDialog` que crea un usuario de Kawiil. El usuario quiere que en su lugar se cree una **tarea** proveniente del correo (con datos del remitente, asunto, etc.).
+
+3. **La vista de correo necesita un asistente AI**: No existe un asistente integrado en la vista de correo para ayudar a redactar respuestas, revisar cadenas de correos, ni generar borradores.
+
+4. **Visualización de correos HTML**: Actualmente usa `dangerouslySetInnerHTML` sin sanitización, lo cual puede tener problemas de estilo y seguridad. Los correos HTML de Outlook a menudo contienen estilos que afectan el layout.
 
 ### Cambios
 
-**1. `supabase/functions/ai-chat/index.ts` — Fallback automático en 429**
+**1. `src/components/shared/GlobalAISearch.tsx` — Renderizar markdown en summary**
 
-- En `handleClaudeChat`: cuando Anthropic devuelve 429, **lanzar un error** (`throw`) en vez de retornar Response. Esto permite que el catch en el handler principal active el fallback al gateway.
-- Agregar un pequeño delay (1s) y reintento antes de lanzar el error, por si es transitorio.
-- En el handler principal: si ambos proveedores fallan con 429, entonces sí retornar el error al usuario con un mensaje amigable.
+- Importar `ReactMarkdown` (ya está en `package.json`)
+- Reemplazar `<p>{summary}</p>` por `<ReactMarkdown>{summary}</ReactMarkdown>` con clases `prose prose-sm`
+- Las negritas (`**texto**`) y otros formatos se mostrarán correctamente
 
-**2. `supabase/functions/ai-chat/index.ts` — Agregar resumen AI a búsqueda**
+**2. `src/components/microsoft/EmailView.tsx` — Cambiar "Dar de alta" por "Crear tarea"**
 
-- En `searchMode`: después de obtener los resultados estructurados de `search_across`, hacer una llamada simple (sin tools) a Claude/gateway pidiendo un resumen breve de los resultados encontrados.
-- Retornar `{ results: [...], summary: "Resumen contextual..." }`.
-- Si la llamada de resumen falla (429, timeout), devolver solo los resultados sin summary — la búsqueda no se rompe.
+- Reemplazar el botón `UserPlus` / "Dar de alta" por un botón `ClipboardList` / "Crear tarea"
+- En vez de abrir `CreateUserFromEmailDialog`, abrir un nuevo `CreateTaskFromEmailDialog`
+- Eliminar la importación de `CreateUserFromEmailDialog`
 
-**3. `src/components/shared/GlobalAISearch.tsx` — Mostrar resumen + resultados**
+**3. Nuevo: `src/components/microsoft/CreateTaskFromEmailDialog.tsx` — Crear tarea desde correo**
 
-- Agregar estado `summary` para el texto contextual.
-- Renderizar el resumen arriba de los resultados en un bloque con ícono de Sparkles.
-- Si no hay summary, mostrar solo los resultados (como ahora).
+- Dialog con campos pre-llenados desde el correo:
+  - Título: `[Correo] {asunto del email}`
+  - Descripción: `De: {remitente}\nFecha: {fecha}\n\n{preview del cuerpo}`
+  - Enlace al email como referencia
+- Campos editables: título, descripción, prioridad, área, asignado a, cliente (opcional)
+- Usa `useCreateTask` existente de `useTasks.ts`
+- Al crearse, muestra toast de confirmación
 
-### Archivos a modificar
-- `supabase/functions/ai-chat/index.ts` — fix 429 fallback + summary en searchMode
-- `src/components/shared/GlobalAISearch.tsx` — mostrar summary
+**4. `src/components/microsoft/EmailView.tsx` — Agregar asistente AI para redacción**
+
+- Agregar botón `Sparkles` / "Asistente AI" en la barra de acciones del email
+- Al hacer clic, abrir un panel lateral o inline donde:
+  - Se envía la cadena del correo (asunto + cuerpo) como contexto al `ai-chat`
+  - El usuario puede pedir: "Redacta una respuesta profesional", "Resume este hilo", "Traduce al inglés"
+  - La respuesta AI se puede copiar al textarea de respuesta con un clic
+- Usar `fetch` al endpoint `ai-chat` con un system prompt especial para contexto de correo
+- Mostrar respuesta con `ReactMarkdown`
+
+**5. `src/components/microsoft/EmailView.tsx` — Mejorar visualización de correos HTML**
+
+- Envolver el HTML del correo en un `<iframe srcDoc>` con `sandbox` para aislar estilos
+- Esto evita que los estilos del correo rompan el layout de la app
+- Alternativa: usar un contenedor con `all: initial` y estilos scoped
+
+### Archivos a crear/modificar
+
+- `src/components/shared/GlobalAISearch.tsx` — agregar ReactMarkdown al summary
+- `src/components/microsoft/CreateTaskFromEmailDialog.tsx` — **nuevo** dialog para crear tarea desde correo
+- `src/components/microsoft/EmailView.tsx` — reemplazar "Dar de alta" por "Crear tarea", agregar asistente AI, mejorar visualización HTML
 
