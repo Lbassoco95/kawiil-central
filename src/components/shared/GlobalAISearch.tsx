@@ -4,6 +4,7 @@ import { Search, Loader2, Sparkles, ArrowRight, Users, Briefcase, FolderKanban, 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import ReactMarkdown from "react-markdown";
 
 interface SearchResult {
   type: "client" | "project" | "task" | "user";
