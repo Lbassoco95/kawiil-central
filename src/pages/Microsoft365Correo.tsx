@@ -3,7 +3,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { EmailView } from "@/components/microsoft/EmailView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection, useUnreadEmailCount } from "@/hooks/useMicrosoft";
-import { Mail, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const Microsoft365Correo = () => {
@@ -31,17 +31,17 @@ const Microsoft365Correo = () => {
   return (
     <AppLayout>
       <ErrorBoundary>
-        <div className="space-y-6">
+        <div className="space-y-3">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-xl font-semibold text-foreground">Correo</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Outlook · {profile?.displayName || profile?.mail || ""} · Referencia rápida para emergencias
+              <h1 className="text-lg font-semibold text-foreground">Correo</h1>
+              <p className="text-xs text-muted-foreground">
+                Outlook · {profile?.displayName || profile?.mail || ""}
               </p>
             </div>
             {unreadCount > 0 && (
-              <Badge variant="destructive" className="text-xs h-6 px-2.5">
-                {unreadCount} sin leer
+              <Badge variant="destructive" className="text-xs h-5 px-2">
+                {unreadCount}
               </Badge>
             )}
           </div>
