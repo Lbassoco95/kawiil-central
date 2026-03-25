@@ -35,6 +35,7 @@ export function GlobalAISearch() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
   const [noResults, setNoResults] = useState(false);
+  const [summary, setSummary] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -55,6 +56,7 @@ export function GlobalAISearch() {
     setOpen(true);
     setResults([]);
     setNoResults(false);
+    setSummary("");
 
     try {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -83,6 +85,7 @@ export function GlobalAISearch() {
       
       if (searchResults.length > 0) {
         setResults(searchResults);
+        if (data.summary) setSummary(data.summary);
       } else {
         setNoResults(true);
       }
@@ -127,7 +130,7 @@ export function GlobalAISearch() {
               variant="ghost"
               size="icon"
               className="h-6 w-6"
-              onClick={() => { setQuery(""); setOpen(false); setResults([]); setNoResults(false); }}
+              onClick={() => { setQuery(""); setOpen(false); setResults([]); setNoResults(false); setSummary(""); }}
             >
               <X className="h-3 w-3" />
             </Button>
@@ -152,6 +155,15 @@ export function GlobalAISearch() {
             <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Buscando...
+            </div>
+          )}
+
+          {summary && (
+            <div className="px-3 py-2 border-b bg-muted/30">
+              <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
+                <p className="leading-relaxed">{summary}</p>
+              </div>
             </div>
           )}
 

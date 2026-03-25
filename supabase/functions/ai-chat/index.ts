@@ -689,10 +689,61 @@ serve(async (req) => {
     const { messages, simple, searchMode, searchQuery } = body;
     const systemPrompt = buildSystemPrompt(profile);
 
-    // ─── Direct search mode (no AI, just DB query) ───
+    // ─── Direct search mode (structured results + optional AI summary) ───
     if (searchMode && searchQuery) {
       const results = await executeTool("search_across", { query: searchQuery }, supabase, user.id, orgId);
-      return new Response(JSON.stringify({ results }), {
+
+      // Try to generate a brief AI summary of the results
+      let summary = "";
+      if (Array.isArray(results) && results.length > 0) {
+        try {
+          const summaryPrompt = `El usuario buscó "${searchQuery}" en la plataforma. Estos son los resultados encontrados:\n${JSON.stringify(results, null, 2)}\n\nGenera un resumen breve (2-3 oraciones) en español que contextualice qué encontramos relacionado con "${searchQuery}". No listes los resultados, solo da contexto. Sé conciso y útil.`;
+
+          const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+          let summaryResp: Response | null = null;
+
+          if (ANTHROPIC_API_KEY) {
+            summaryResp = await fetch(ANTHROPIC_API_URL, {
+              method: "POST",
+              headers: {
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "claude-sonnet-4-20250514",
+                max_tokens: 256,
+                messages: [{ role: "user", content: summaryPrompt }],
+              }),
+            });
+          }
+
+          if (!summaryResp?.ok && LOVABLE_API_KEY) {
+            summaryResp = await fetch(AI_GATEWAY_URL, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "google/gemini-3-flash-preview",
+                messages: [{ role: "user", content: summaryPrompt }],
+                stream: false,
+              }),
+            });
+          }
+
+          if (summaryResp?.ok) {
+            const sData = await summaryResp.json();
+            // Handle both Anthropic and OpenAI response formats
+            summary = sData.content?.find?.((b: any) => b.type === "text")?.text
+              || sData.choices?.[0]?.message?.content
+              || "";
+          }
+        } catch (e) {
+          console.warn("Search summary generation failed (non-critical):", e);
+        }
+      }
+
+      return new Response(JSON.stringify({ results, summary }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -796,10 +847,10 @@ async function handleClaudeChat(
 
     if (!resp.ok) {
       const errText = await resp.text();
+      // On 429, throw so the main handler catches and falls back to gateway
       if (resp.status === 429) {
-        return new Response(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        console.warn("Claude 429 rate limit, will fallback to gateway");
+        throw new Error("RATE_LIMIT_429");
       }
       throw new Error(`Claude error ${resp.status}: ${errText.substring(0, 300)}`);
     }
