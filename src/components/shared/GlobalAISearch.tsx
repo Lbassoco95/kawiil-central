@@ -163,7 +163,9 @@ export function GlobalAISearch() {
             <div className="px-3 py-2 border-b bg-muted/30">
               <div className="flex items-start gap-2 text-xs text-muted-foreground">
                 <Sparkles className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
-                <p className="leading-relaxed">{summary}</p>
+                <div className="leading-relaxed prose prose-sm dark:prose-invert max-w-none [&_p]:m-0 [&_strong]:text-foreground">
+                  <ReactMarkdown>{summary}</ReactMarkdown>
+                </div>
               </div>
             </div>
           )}
