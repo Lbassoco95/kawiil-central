@@ -1,60 +1,69 @@
 
 
-## Plan: Markdown en búsqueda/chat, crear tarea desde correo, y mejorar vista de correo con asistente AI
+## Plan: Interfaz de correo estilo Superhuman + AI contextual en respuesta
 
-### Problemas identificados
+### Resumen
 
-1. **Markdown no renderizado en búsqueda**: El `summary` en `GlobalAISearch.tsx` se muestra como texto plano (`{summary}`) — los `**negritas**` no se renderizan. Falta `ReactMarkdown`.
-
-2. **"Dar de alta" desde correo crea un usuario**: El botón `UserPlus` abre `CreateUserFromEmailDialog` que crea un usuario de Kawiil. El usuario quiere que en su lugar se cree una **tarea** proveniente del correo (con datos del remitente, asunto, etc.).
-
-3. **La vista de correo necesita un asistente AI**: No existe un asistente integrado en la vista de correo para ayudar a redactar respuestas, revisar cadenas de correos, ni generar borradores.
-
-4. **Visualización de correos HTML**: Actualmente usa `dangerouslySetInnerHTML` sin sanitización, lo cual puede tener problemas de estilo y seguridad. Los correos HTML de Outlook a menudo contienen estilos que afectan el layout.
+Redisenar la vista de correo para usar un layout de panel dividido (lista izquierda, detalle derecha) en vez del dialog actual. Reorganizar el asistente AI para que "Resumir hilo" y "Traducir" estén siempre disponibles en la vista del correo, pero "Redactar respuesta" solo aparezca cuando el usuario hace clic en Responder/Reenviar. Revisar que el calendario funcione correctamente.
 
 ### Cambios
 
-**1. `src/components/shared/GlobalAISearch.tsx` — Renderizar markdown en summary**
+**1. `src/components/microsoft/EmailView.tsx` — Layout split-pane estilo Superhuman**
 
-- Importar `ReactMarkdown` (ya está en `package.json`)
-- Reemplazar `<p>{summary}</p>` por `<ReactMarkdown>{summary}</ReactMarkdown>` con clases `prose prose-sm`
-- Las negritas (`**texto**`) y otros formatos se mostrarán correctamente
+- Eliminar el `Dialog` para ver el detalle del correo
+- Cambiar a un layout `flex` con dos paneles:
+  - **Panel izquierdo (w-[380px])**: lista de correos con scroll, búsqueda arriba, correo seleccionado resaltado con `bg-accent`
+  - **Panel derecho (flex-1)**: detalle del correo seleccionado inline, con header (de, para, fecha), cuerpo en iframe, y acciones
+- Si no hay correo seleccionado, mostrar un estado vacío ("Selecciona un correo")
+- Keyboard navigation: flechas arriba/abajo para navegar la lista
 
-**2. `src/components/microsoft/EmailView.tsx` — Cambiar "Dar de alta" por "Crear tarea"**
+**2. `src/components/microsoft/EmailView.tsx` — Reorganizar AI assistant**
 
-- Reemplazar el botón `UserPlus` / "Dar de alta" por un botón `ClipboardList` / "Crear tarea"
-- En vez de abrir `CreateUserFromEmailDialog`, abrir un nuevo `CreateTaskFromEmailDialog`
-- Eliminar la importación de `CreateUserFromEmailDialog`
+- Siempre visible en el detalle del correo: dos botones pequeños "Resumir hilo" y "Traducir al inglés" (acciones rápidas que ejecutan directamente sin abrir panel)
+- El resultado se muestra en un bloque colapsable arriba del cuerpo del correo
+- El botón "Kawiil AI" completo (con textarea para instrucciones personalizadas y "Redactar respuesta profesional") solo se muestra cuando `emailAction !== null` (usuario dio clic en Responder/Reenviar/Forward)
+- "Usar en respuesta" solo disponible cuando hay acción de respuesta activa
 
-**3. Nuevo: `src/components/microsoft/CreateTaskFromEmailDialog.tsx` — Crear tarea desde correo**
+**3. `src/components/microsoft/EmailAIAssistant.tsx` — Separar en dos modos**
 
-- Dialog con campos pre-llenados desde el correo:
-  - Título: `[Correo] {asunto del email}`
-  - Descripción: `De: {remitente}\nFecha: {fecha}\n\n{preview del cuerpo}`
-  - Enlace al email como referencia
-- Campos editables: título, descripción, prioridad, área, asignado a, cliente (opcional)
-- Usa `useCreateTask` existente de `useTasks.ts`
-- Al crearse, muestra toast de confirmación
+- Agregar prop `mode: "quick" | "full"`
+- **quick**: solo muestra resultado de resumir/traducir, sin textarea, sin botón cerrar prominente
+- **full**: el panel completo con textarea, quick prompts de redacción, y "Usar en respuesta"
+- Los quick prompts en modo full cambian: "Respuesta profesional", "Respuesta breve", "Tono formal"
 
-**4. `src/components/microsoft/EmailView.tsx` — Agregar asistente AI para redacción**
+**4. Calendario — Verificación**
 
-- Agregar botón `Sparkles` / "Asistente AI" en la barra de acciones del email
-- Al hacer clic, abrir un panel lateral o inline donde:
-  - Se envía la cadena del correo (asunto + cuerpo) como contexto al `ai-chat`
-  - El usuario puede pedir: "Redacta una respuesta profesional", "Resume este hilo", "Traduce al inglés"
-  - La respuesta AI se puede copiar al textarea de respuesta con un clic
-- Usar `fetch` al endpoint `ai-chat` con un system prompt especial para contexto de correo
-- Mostrar respuesta con `ReactMarkdown`
+- Revisar el `CalendarView.tsx`: la estructura actual parece completa (vistas día/3días/semana/mes, drag&drop, crear/editar/borrar eventos, categorías, Teams)
+- El error 404 de eventos ya fue corregido en el mensaje anterior
+- No se requieren cambios funcionales al calendario
 
-**5. `src/components/microsoft/EmailView.tsx` — Mejorar visualización de correos HTML**
+### Estructura del nuevo layout
 
-- Envolver el HTML del correo en un `<iframe srcDoc>` con `sandbox` para aislar estilos
-- Esto evita que los estilos del correo rompan el layout de la app
-- Alternativa: usar un contenedor con `all: initial` y estilos scoped
+```text
+┌─────────────────────────────────────────────────┐
+│ [🔍 Buscar correos...]                          │
+├──────────────┬──────────────────────────────────┤
+│ Lista correos│  Asunto: Re: Contrato Fiatcoin   │
+│              │  De: Juan <juan@...>              │
+│ ▸ Correo 1   │  Para: Equipo                    │
+│ ▸ Correo 2 ◄─│  Hace 2 horas                    │
+│ ▸ Correo 3   │──────────────────────────────────│
+│ ▸ Correo 4   │  [Resumir] [Traducir] [Tarea]    │
+│              │  [Responder] [Resp.todos] [Reenv] │
+│              │──────────────────────────────────│
+│              │  (AI summary si se pidió)         │
+│              │──────────────────────────────────│
+│              │  Cuerpo del correo (iframe)       │
+│              │                                   │
+│              │──────────────────────────────────│
+│              │  (Si respondiendo:)               │
+│              │  [Kawiil AI panel + textarea]     │
+└──────────────┴──────────────────────────────────┘
+```
 
-### Archivos a crear/modificar
+### Archivos a modificar
 
-- `src/components/shared/GlobalAISearch.tsx` — agregar ReactMarkdown al summary
-- `src/components/microsoft/CreateTaskFromEmailDialog.tsx` — **nuevo** dialog para crear tarea desde correo
-- `src/components/microsoft/EmailView.tsx` — reemplazar "Dar de alta" por "Crear tarea", agregar asistente AI, mejorar visualización HTML
+- `src/components/microsoft/EmailView.tsx` — refactor completo a split-pane, reorganizar botones AI
+- `src/components/microsoft/EmailAIAssistant.tsx` — agregar modo quick vs full
+- `src/pages/Microsoft365Correo.tsx` — ajustar altura del contenedor para que el split-pane ocupe toda la vista
 
