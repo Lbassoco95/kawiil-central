@@ -1,69 +1,51 @@
 
 
-## Plan: Migrar IA a Claude (Anthropic) con contexto profundo y aprendizaje
+## Plan: Mejorar búsqueda, identidad en chat y memoria cruzada de la IA
 
-### Situación actual
-- `ai-chat` usa OpenAI (gpt-4o) como primario, Lovable AI Gateway como fallback
-- `ANTHROPIC_API_KEY` ya está configurada en los secrets
-- Los tools existentes consultan tareas, clientes, proyectos, recordatorios, equipo, células, Hub
-- NO incluyen: comentarios de tareas, descripciones de proyectos, documentos extraídos, actividad reciente
-- La búsqueda global (`GlobalAISearch`) usa `supabase.functions.invoke` sin streaming
-- El streaming actual es simulado (chunking del texto final)
-- Ya existe `process-document` que extrae datos de documentos con Claude y los guarda en `extracted_documents`
+### Problemas detectados
 
-### Cambios
+1. **Búsqueda ineficiente**: La búsqueda global envía la query completa a Claude con tools, pero los resultados estructurados de `search_across` (con IDs y URLs) se pierden porque el frontend intenta parsear texto libre con regex. El resultado es ruidoso y sin enlaces directos.
 
-**1. `supabase/functions/ai-chat/index.ts` — Migrar a Claude como primario**
+2. **El chat no sabe quién es el usuario**: Aunque el system prompt incluye el nombre del usuario, el chat no envía el historial completo de la conversación guardada — solo los mensajes de la sesión actual en memoria.
 
-- Reemplazar OpenAI como proveedor primario por la API de Anthropic (`https://api.anthropic.com/v1/messages`)
-- Modelo: `claude-sonnet-4-20250514`
-- Mantener Lovable AI Gateway como fallback en caso de fallo
-- Adaptar tool-calling al formato Anthropic (`tool_use` / `tool_result`)
-- Streaming real con Anthropic SSE en la respuesta final, reencodando al formato OpenAI-compatible que ya consume el frontend (`data: {"choices":[{"delta":{"content":"..."}}}`)
-- Rondas de tool-calling con `stream: false` para resolver tools rápido
+3. **Sin memoria entre conversaciones**: No existe forma de que Claude consulte conversaciones anteriores del usuario ni de otros usuarios. Cada conversación es aislada.
 
-**Nuevos tools para contexto profundo:**
-- `get_task_details(task_id)` — tarea completa con descripción, comentarios (`task_comments`) y archivos
-- `get_project_details(project_id)` — proyecto con descripción, pasos, miembros y tareas asociadas
-- `get_recent_activity(limit, entity_type?)` — últimas N entradas de `activity_log`
-- `search_across(query)` — búsqueda `ilike` unificada en tareas, clientes y proyectos
-- `get_extracted_documents(client_id?, project_id?, limit?)` — consulta `extracted_documents` para acceder a datos extraídos de documentos (CFDIs, declaraciones, estados de cuenta)
+4. **Error 429 (rate limit)**: Se está pegando al límite de Anthropic, probablemente por enviar demasiados requests de tools.
 
-**System prompt mejorado:**
-- Instrucción de usar toda la información disponible: comentarios, descripciones, documentos extraídos, actividad
-- Contexto de Kawiil como despacho contable/legal en México
-- Indicar que los documentos procesados están en `extracted_documents` y puede consultarlos
+### Cambios propuestos
 
-**2. `src/components/shared/GlobalAISearch.tsx` — Usar streaming con tools**
-- Cambiar de `supabase.functions.invoke` a `fetch` con streaming SSE (igual que `useChat`)
-- Claude usará `search_across` y los tools existentes para buscar datos reales
-- Parsear resultados navegables del response streamed
+**1. `supabase/functions/ai-chat/index.ts` — Mejorar búsqueda y agregar memoria**
 
-### Detalle técnico
+- **Nuevo tool `search_platform`**: Reemplaza la búsqueda vía texto libre. Cuando se detecta que es una búsqueda (body incluye `searchMode: true`), ejecutar `search_across` directamente SIN pasar por Claude, devolviendo los resultados estructurados como JSON puro. Esto es más rápido, más barato y más preciso.
+- **Nuevo tool `search_past_conversations`**: Consulta `chat_messages` + `chat_conversations` buscando por `ilike` en el contenido de mensajes de la organización completa (no solo del usuario). Devuelve fragmentos relevantes con autor y fecha. Esto permite "memoria cruzada".
+- **Enriquecer system prompt**: Agregar instrucción de que si tiene información de conversaciones pasadas que pueda ayudar, la mencione al usuario indicando que "en otra conversación se discutió X".
 
-**Formato Anthropic con tools:**
-```text
-POST https://api.anthropic.com/v1/messages
-Headers: x-api-key, anthropic-version: 2023-06-01
-Body: { model, system, messages, tools: [{name, description, input_schema}], stream: false }
+**2. `src/components/shared/GlobalAISearch.tsx` — Búsqueda directa sin IA**
 
-Tool results: { role: "user", content: [{ type: "tool_result", tool_use_id, content }] }
+- Cambiar a modo híbrido:
+  - **Búsqueda rápida**: Hacer `fetch` con `searchMode: true` que ejecuta `search_across` directamente y devuelve JSON estructurado con `type`, `id`, `name`, `url`, `extra`
+  - **Resumen opcional**: Después de mostrar resultados, opcionalmente pedir un resumen a Claude (botón "Resumir con IA")
+- Eliminar el parseo de texto con regex — los resultados vienen estructurados
+- Los resultados de clientes navegan a `/clientes/{id}`, proyectos a `/proyectos/{id}`
+
+**3. `src/hooks/useChat.ts` — Enviar historial completo**
+
+- Al cargar una conversación existente (`loadConversation`), ya se cargan los mensajes de BD — esto ya funciona
+- Asegurar que `sendMessage` envía todos los mensajes de la conversación (incluyendo los cargados de BD), no solo los de la sesión actual — revisar que `allMessages` incluye el historial completo
+
+**4. `supabase/functions/ai-chat/index.ts` — Endpoint de búsqueda directa**
+
+- Agregar manejo de `searchMode`:
 ```
-
-**Streaming final:**
-- Tool-calling rounds: `stream: false`
-- Final response: `stream: true`, reencoded como SSE compatible con el frontend existente
-
-**Nuevos tools — queries:**
-```text
-get_task_details(task_id) → tasks + task_comments (con perfil del autor)
-get_project_details(project_id) → projects + project_steps + project_members + tasks
-get_recent_activity(limit=20) → activity_log ORDER BY created_at DESC
-search_across(query) → ilike en tasks.title, clients.name, projects.name
-get_extracted_documents(client_id?) → extracted_documents con ai_summary, ai_observations
+if (searchMode) {
+  const results = await executeTool("search_across", { query: searchQuery }, supabase, userId, orgId);
+  return Response JSON con resultados estructurados
+}
 ```
+- Esto evita el costo de una llamada a Claude para búsquedas simples
 
 ### Archivos a modificar
-- `supabase/functions/ai-chat/index.ts` — refactor completo (Claude + nuevos tools + streaming real)
-- `src/components/shared/GlobalAISearch.tsx` — usar fetch+streaming en vez de invoke
+- `supabase/functions/ai-chat/index.ts` — agregar `searchMode`, tool `search_past_conversations`, enriquecer system prompt
+- `src/components/shared/GlobalAISearch.tsx` — búsqueda directa estructurada
+- `src/hooks/useChat.ts` — verificar envío de historial completo
 
