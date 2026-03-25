@@ -506,6 +506,17 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Handle 404 - item not found (e.g. stale recurring event occurrence)
+    if (message.includes("[404]") || message.includes("ErrorItemNotFound")) {
+      return new Response(JSON.stringify({
+        error: "El elemento no fue encontrado. Es posible que haya sido eliminado o modificado. Recarga la vista para actualizar.",
+        code: "ITEM_NOT_FOUND",
+      }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: corsHeaders,
