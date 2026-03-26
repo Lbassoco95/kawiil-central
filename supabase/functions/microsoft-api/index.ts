@@ -486,6 +486,70 @@ Deno.serve(async (req) => {
         result = { success: true };
         break;
       }
+
+      case "mail-folders": {
+        const data = await graphRequest(accessToken, "/me/mailFolders?$top=50");
+        result = data?.value || [];
+        break;
+      }
+
+      case "email-conversation": {
+        const convId = params?.conversationId;
+        if (!convId) throw new Error("conversationId required");
+        const encoded = encodeURIComponent(convId);
+        const data = await graphRequest(
+          accessToken,
+          `/me/messages?$filter=conversationId eq '${encoded}'&$orderby=receivedDateTime desc&$top=20`
+        );
+        result = data?.value || [];
+        break;
+      }
+
+      case "create-reply-draft": {
+        const messageId = params?.messageId;
+        const replyAll = params?.replyAll || false;
+        const endpoint = replyAll ? "createReplyAll" : "createReply";
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${messageId}/${endpoint}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ comment: "" }),
+        });
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`CreateReplyDraft failed [${res.status}]: ${errBody}`);
+        }
+        result = await res.json();
+        break;
+      }
+
+      case "update-draft": {
+        const draftId = params?.draftId;
+        const payload = params?.payload;
+        await graphRequest(accessToken, `/me/messages/${draftId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        result = { success: true };
+        break;
+      }
+
+      case "send-draft": {
+        const draftId = params?.draftId;
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${draftId}/send`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`SendDraft failed [${res.status}]: ${errBody}`);
+        }
+        result = { success: true };
+        break;
+      }
     }
 
     return new Response(JSON.stringify(result), {
