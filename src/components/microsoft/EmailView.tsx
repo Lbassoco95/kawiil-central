@@ -15,6 +15,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   useOutlookEmails,
   useEmailDetail,
   useReplyEmail,
@@ -25,12 +30,13 @@ import {
   useCreateReplyDraft,
   useSendDraft,
   useCreateMailFolder,
+  useMoveEmail,
 } from "@/hooks/useMicrosoft";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
   ClipboardList, Sparkles, Languages, ListChecks, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
-  FolderPlus, X, Check,
+  FolderPlus, X, Check, FolderInput,
 } from "lucide-react";
 import { formatDistanceToNow, parseISO, format } from "date-fns";
 import { es } from "date-fns/locale";
