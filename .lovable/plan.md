@@ -1,65 +1,81 @@
 
 
-## Plan: Ampliar sistema de notificaciones
+## Plan: Email profesional — paneles redimensionables, carpetas, firma, rich text, hilo de conversación
 
-### Problema actual
+### Resumen
 
-Las notificaciones solo se generan cuando alguien te **@menciona** en un comentario (proyectos o tareas). Falta notificar cuando:
-1. Te **asignan una tarea** (o te agregan como colaborador)
-2. Te **reasignan** una tarea
-3. Se **crea un gasto** (para usuarios en célula de Finanzas/Administración)
-4. Se **cambia el estado** de un gasto que tú solicitaste (aprobado, rechazado, pagado)
+Transformar la vista de correo en un cliente completo estilo Superhuman: paneles redimensionables, sidebar de carpetas (Inbox, Sent, Drafts, etc.), editor rich-text para respuestas con toolbar de formato, firma de Outlook embebida automáticamente, y visualización de hilos de conversación previos.
 
 ### Cambios
 
-**1. `src/hooks/useTasks.ts` — Notificar al asignar tarea**
+**1. `supabase/functions/microsoft-api/index.ts` — Nuevas acciones de Graph API**
 
-En `useCreateTask` (`onSuccess`): si `assigned_to` o `additional_assignees` existen, insertar notificaciones tipo `task_assigned` para cada usuario asignado (excepto el creador).
+- `mail-folders`: `GET /me/mailFolders` — devuelve las carpetas del buzón (Inbox, Sent Items, Drafts, Junk, carpetas personalizadas)
+- `email-conversation`: `GET /me/messages?$filter=conversationId eq '{id}'&$orderby=receivedDateTime asc` — trae todos los correos del hilo
+- `get-signature`: `GET /me/mailboxSettings` — obtiene la firma HTML configurada en Outlook (`mailboxSettings.signatureSettings` o `mailboxSettings.userPurpose`)
+- `create-reply-draft`: `POST /me/messages/{id}/createReply` — crea un borrador de respuesta que ya incluye la firma y el hilo (Graph la inyecta automáticamente)
+- `send-draft`: `POST /me/messages/{draftId}/send` — envía el borrador ya creado
+- `update-draft`: `PATCH /me/messages/{draftId}` — actualiza el body del borrador antes de enviar
 
-En `useUpdateTask` (`onSuccess`): si `assigned_to` cambió, notificar al nuevo asignado con tipo `task_reassigned`.
+Esto permite: 1) obtener firma automáticamente del borrador, 2) mantener el hilo completo, 3) soporte de HTML en respuestas.
 
-**2. `src/hooks/useExpenses.ts` — Notificar al crear/actualizar gasto**
+**2. `src/hooks/useMicrosoft.ts` — Nuevos hooks**
 
-En `useCreateExpense` (`onSuccess`): consultar usuarios con célula de finanzas/administración y crear notificación tipo `expense_created` para cada uno.
+- `useMailFolders()` — lista de carpetas con `displayName`, `id`, `unreadItemCount`
+- `useEmailConversation(conversationId)` — correos del hilo ordenados cronológicamente
+- `useCreateReplyDraft()` — crea borrador con firma
+- `useSendDraft()` — envía borrador
+- Modificar `useOutlookEmails(folderId)` para aceptar folder ID dinámico en vez de hardcoded "inbox"
 
-En `useUpdateExpenseStatus` (`onSuccess`): notificar al solicitante del gasto (`requested_by`) con tipo `expense_status_changed` cuando el estado cambia (aprobado, rechazado, pagado).
+**3. `src/components/microsoft/EmailView.tsx` — Refactor completo**
 
-**3. `src/pages/Notificaciones.tsx` — Agregar tab "Actividad" y mejorar navegación**
+Layout de 3 columnas con paneles redimensionables (`react-resizable-panels`):
 
-- Agregar una tercera pestaña: `"menciones" | "actividad" | "vencimientos"`
-- Tab "Actividad" muestra notificaciones de tipo `task_assigned`, `task_reassigned`, `expense_created`, `expense_status_changed`
-- Tab "Menciones" sigue mostrando solo tipo `mention`
-- Agregar iconos distintos por tipo (ClipboardList para tareas, DollarSign para gastos)
-- Deep-linking: clic en notificación de gasto navega a `/finanzas`, clic en tarea asignada abre el detalle
-
-**4. `src/hooks/useMentionNotifications.ts` — Unificar conteo**
-
-- `useUnreadCount` ya cuenta TODAS las notificaciones no leídas (sin filtrar por tipo), así que el badge en el sidebar ya reflejará las nuevas
-- `useMentionNotifications` renombrar internamente para que traiga todas las notificaciones (ya lo hace — query sin filtro de tipo)
-
-**5. `src/hooks/useTasksRealtime.ts` — Ya escucha `notifications`**
-
-No requiere cambios — ya invalida queries de notificaciones en tiempo real.
-
-### Utilidad auxiliar
-
-Crear `src/lib/notificationHelpers.ts` con función reutilizable:
-```typescript
-async function createNotifications(items: {
-  user_id: string;
-  type: string;
-  title: string;
-  body?: string;
-  entity_type: string;
-  entity_id: string;
-  source_user_id: string;
-}[])
+```text
+┌──────────┬──────────────┬──────────────────────────┐
+│ Carpetas │  Lista       │  Detalle correo          │
+│          │  correos     │                          │
+│ Inbox(3) │  ▸ Correo 1  │  [Hilo conversación]     │
+│ Enviados │  ▸ Correo 2  │  [Correo actual]         │
+│ Borradores│ ▸ Correo 3  │  ──────────────────────  │
+│ Spam     │              │  [Editor rich-text]      │
+│ ──────── │              │  [con firma embebida]    │
+│ Carpeta1 │              │                          │
+│ Carpeta2 │              │                          │
+└──────────┴──────────────┴──────────────────────────┘
 ```
-Para evitar duplicar la lógica de obtener `organization_id` e insertar en cada hook.
+
+- **Panel 1 (sidebar carpetas, w ~180px)**: lista de carpetas con badge de no leídos, carpeta seleccionada resaltada, scroll si hay muchas
+- **Panel 2 (lista correos, w ~320px)**: igual que ahora pero alimentada por `folderId` seleccionado
+- **Panel 3 (detalle)**: correo + hilo + respuesta
+- Paneles redimensionables con `ResizablePanelGroup` ya existente en el proyecto
+
+**4. Hilo de conversación en el panel de detalle**
+
+- Debajo del correo actual, mostrar los correos previos del hilo (`conversationId`) colapsados
+- Cada correo previo muestra: remitente, fecha, y body colapsable (expandir al hacer clic)
+- Orden cronológico descendente (más reciente arriba)
+
+**5. Editor rich-text para respuestas**
+
+- Reemplazar `<Textarea>` por un editor con toolbar de formato básico:
+  - Botones: **Negrita**, *Itálica*, lista, link
+  - Implementado con `contentEditable` div + `document.execCommand` (simple, sin dependencias)
+  - Output en HTML para que Microsoft Graph lo envíe como HTML body
+- El flujo cambia: al hacer clic "Responder", se llama `create-reply-draft` que devuelve un borrador con firma y body HTML del hilo. El editor se inicializa con ese contenido, el usuario edita arriba de la firma.
+
+**6. Firma de Outlook**
+
+- Al crear reply draft via Graph API (`createReply`), Microsoft automáticamente inyecta la firma del usuario en el body del borrador
+- El editor se inicializa con el HTML del borrador (que ya contiene firma + quoted text)
+- El cursor se posiciona al inicio del body, antes de la firma
+- No se necesita llamar a `mailboxSettings` separadamente — la firma viene en el draft
 
 ### Archivos a crear/modificar
-- `src/lib/notificationHelpers.ts` — **nuevo**, utilidad para crear notificaciones
-- `src/hooks/useTasks.ts` — notificar en asignación/reasignación
-- `src/hooks/useExpenses.ts` — notificar a célula finanzas y al solicitante
-- `src/pages/Notificaciones.tsx` — agregar tab "Actividad", iconos por tipo, deep-linking a finanzas
+
+- `supabase/functions/microsoft-api/index.ts` — agregar acciones: `mail-folders`, `email-conversation`, `create-reply-draft`, `update-draft`, `send-draft`
+- `src/hooks/useMicrosoft.ts` — nuevos hooks para carpetas, conversación, drafts
+- `src/components/microsoft/EmailView.tsx` — refactor a 3 paneles, carpetas, hilo, rich-text editor
+- `src/components/microsoft/RichTextEditor.tsx` — **nuevo**, editor contentEditable con toolbar
+- `src/pages/Microsoft365Correo.tsx` — ajustar layout contenedor
 
