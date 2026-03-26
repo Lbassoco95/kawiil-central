@@ -499,7 +499,7 @@ Deno.serve(async (req) => {
         const encoded = encodeURIComponent(convId);
         const data = await graphRequest(
           accessToken,
-          `/me/messages?$filter=conversationId eq '${encoded}'&$orderby=receivedDateTime desc&$top=20`
+          `/me/messages?$filter=conversationId eq '${convId}'&$top=20`
         );
         result = data?.value || [];
         break;
