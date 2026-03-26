@@ -395,6 +395,11 @@ export function EmailView() {
                 {emails.map((email: any) => (
                   <div
                     key={email.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/email-id", email.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
                     className={cn(
                       "px-3 py-2 cursor-pointer transition-colors hover:bg-accent/50",
                       selectedEmailId === email.id && "bg-accent",
