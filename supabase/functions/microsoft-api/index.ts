@@ -496,10 +496,10 @@ Deno.serve(async (req) => {
       case "email-conversation": {
         const convId = params?.conversationId;
         if (!convId) throw new Error("conversationId required");
-        const encoded = encodeURIComponent(convId);
+        // Use $search instead of $filter to avoid InefficientFilter error
         const data = await graphRequest(
           accessToken,
-          `/me/messages?$filter=conversationId eq '${convId}'&$top=20`
+          `/me/messages?$search="conversationId:${convId}"&$top=20`
         );
         result = data?.value || [];
         break;
