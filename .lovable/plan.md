@@ -1,69 +1,65 @@
 
 
-## Plan: Interfaz de correo estilo Superhuman + AI contextual en respuesta
+## Plan: Ampliar sistema de notificaciones
 
-### Resumen
+### Problema actual
 
-Redisenar la vista de correo para usar un layout de panel dividido (lista izquierda, detalle derecha) en vez del dialog actual. Reorganizar el asistente AI para que "Resumir hilo" y "Traducir" estén siempre disponibles en la vista del correo, pero "Redactar respuesta" solo aparezca cuando el usuario hace clic en Responder/Reenviar. Revisar que el calendario funcione correctamente.
+Las notificaciones solo se generan cuando alguien te **@menciona** en un comentario (proyectos o tareas). Falta notificar cuando:
+1. Te **asignan una tarea** (o te agregan como colaborador)
+2. Te **reasignan** una tarea
+3. Se **crea un gasto** (para usuarios en célula de Finanzas/Administración)
+4. Se **cambia el estado** de un gasto que tú solicitaste (aprobado, rechazado, pagado)
 
 ### Cambios
 
-**1. `src/components/microsoft/EmailView.tsx` — Layout split-pane estilo Superhuman**
+**1. `src/hooks/useTasks.ts` — Notificar al asignar tarea**
 
-- Eliminar el `Dialog` para ver el detalle del correo
-- Cambiar a un layout `flex` con dos paneles:
-  - **Panel izquierdo (w-[380px])**: lista de correos con scroll, búsqueda arriba, correo seleccionado resaltado con `bg-accent`
-  - **Panel derecho (flex-1)**: detalle del correo seleccionado inline, con header (de, para, fecha), cuerpo en iframe, y acciones
-- Si no hay correo seleccionado, mostrar un estado vacío ("Selecciona un correo")
-- Keyboard navigation: flechas arriba/abajo para navegar la lista
+En `useCreateTask` (`onSuccess`): si `assigned_to` o `additional_assignees` existen, insertar notificaciones tipo `task_assigned` para cada usuario asignado (excepto el creador).
 
-**2. `src/components/microsoft/EmailView.tsx` — Reorganizar AI assistant**
+En `useUpdateTask` (`onSuccess`): si `assigned_to` cambió, notificar al nuevo asignado con tipo `task_reassigned`.
 
-- Siempre visible en el detalle del correo: dos botones pequeños "Resumir hilo" y "Traducir al inglés" (acciones rápidas que ejecutan directamente sin abrir panel)
-- El resultado se muestra en un bloque colapsable arriba del cuerpo del correo
-- El botón "Kawiil AI" completo (con textarea para instrucciones personalizadas y "Redactar respuesta profesional") solo se muestra cuando `emailAction !== null` (usuario dio clic en Responder/Reenviar/Forward)
-- "Usar en respuesta" solo disponible cuando hay acción de respuesta activa
+**2. `src/hooks/useExpenses.ts` — Notificar al crear/actualizar gasto**
 
-**3. `src/components/microsoft/EmailAIAssistant.tsx` — Separar en dos modos**
+En `useCreateExpense` (`onSuccess`): consultar usuarios con célula de finanzas/administración y crear notificación tipo `expense_created` para cada uno.
 
-- Agregar prop `mode: "quick" | "full"`
-- **quick**: solo muestra resultado de resumir/traducir, sin textarea, sin botón cerrar prominente
-- **full**: el panel completo con textarea, quick prompts de redacción, y "Usar en respuesta"
-- Los quick prompts en modo full cambian: "Respuesta profesional", "Respuesta breve", "Tono formal"
+En `useUpdateExpenseStatus` (`onSuccess`): notificar al solicitante del gasto (`requested_by`) con tipo `expense_status_changed` cuando el estado cambia (aprobado, rechazado, pagado).
 
-**4. Calendario — Verificación**
+**3. `src/pages/Notificaciones.tsx` — Agregar tab "Actividad" y mejorar navegación**
 
-- Revisar el `CalendarView.tsx`: la estructura actual parece completa (vistas día/3días/semana/mes, drag&drop, crear/editar/borrar eventos, categorías, Teams)
-- El error 404 de eventos ya fue corregido en el mensaje anterior
-- No se requieren cambios funcionales al calendario
+- Agregar una tercera pestaña: `"menciones" | "actividad" | "vencimientos"`
+- Tab "Actividad" muestra notificaciones de tipo `task_assigned`, `task_reassigned`, `expense_created`, `expense_status_changed`
+- Tab "Menciones" sigue mostrando solo tipo `mention`
+- Agregar iconos distintos por tipo (ClipboardList para tareas, DollarSign para gastos)
+- Deep-linking: clic en notificación de gasto navega a `/finanzas`, clic en tarea asignada abre el detalle
 
-### Estructura del nuevo layout
+**4. `src/hooks/useMentionNotifications.ts` — Unificar conteo**
 
-```text
-┌─────────────────────────────────────────────────┐
-│ [🔍 Buscar correos...]                          │
-├──────────────┬──────────────────────────────────┤
-│ Lista correos│  Asunto: Re: Contrato Fiatcoin   │
-│              │  De: Juan <juan@...>              │
-│ ▸ Correo 1   │  Para: Equipo                    │
-│ ▸ Correo 2 ◄─│  Hace 2 horas                    │
-│ ▸ Correo 3   │──────────────────────────────────│
-│ ▸ Correo 4   │  [Resumir] [Traducir] [Tarea]    │
-│              │  [Responder] [Resp.todos] [Reenv] │
-│              │──────────────────────────────────│
-│              │  (AI summary si se pidió)         │
-│              │──────────────────────────────────│
-│              │  Cuerpo del correo (iframe)       │
-│              │                                   │
-│              │──────────────────────────────────│
-│              │  (Si respondiendo:)               │
-│              │  [Kawiil AI panel + textarea]     │
-└──────────────┴──────────────────────────────────┘
+- `useUnreadCount` ya cuenta TODAS las notificaciones no leídas (sin filtrar por tipo), así que el badge en el sidebar ya reflejará las nuevas
+- `useMentionNotifications` renombrar internamente para que traiga todas las notificaciones (ya lo hace — query sin filtro de tipo)
+
+**5. `src/hooks/useTasksRealtime.ts` — Ya escucha `notifications`**
+
+No requiere cambios — ya invalida queries de notificaciones en tiempo real.
+
+### Utilidad auxiliar
+
+Crear `src/lib/notificationHelpers.ts` con función reutilizable:
+```typescript
+async function createNotifications(items: {
+  user_id: string;
+  type: string;
+  title: string;
+  body?: string;
+  entity_type: string;
+  entity_id: string;
+  source_user_id: string;
+}[])
 ```
+Para evitar duplicar la lógica de obtener `organization_id` e insertar en cada hook.
 
-### Archivos a modificar
-
-- `src/components/microsoft/EmailView.tsx` — refactor completo a split-pane, reorganizar botones AI
-- `src/components/microsoft/EmailAIAssistant.tsx` — agregar modo quick vs full
-- `src/pages/Microsoft365Correo.tsx` — ajustar altura del contenedor para que el split-pane ocupe toda la vista
+### Archivos a crear/modificar
+- `src/lib/notificationHelpers.ts` — **nuevo**, utilidad para crear notificaciones
+- `src/hooks/useTasks.ts` — notificar en asignación/reasignación
+- `src/hooks/useExpenses.ts` — notificar a célula finanzas y al solicitante
+- `src/pages/Notificaciones.tsx` — agregar tab "Actividad", iconos por tipo, deep-linking a finanzas
 
