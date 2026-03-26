@@ -498,6 +498,44 @@ export function useCreateMailFolder() {
   });
 }
 
+export function useMoveEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ messageId, destinationId }: { messageId: string; destinationId: string }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "move-email", params: { messageId, destinationId } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onMutate: async ({ messageId }) => {
+      await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
+      const previousQueries = queryClient.getQueriesData({ queryKey: ["outlook-emails"] });
+      queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((e: any) => e.id !== messageId);
+      });
+      return { previousQueries };
+    },
+    onError: (_err: Error, _vars, context) => {
+      if (context?.previousQueries) {
+        for (const [key, data] of context.previousQueries) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      toast.error("Error al mover correo");
+    },
+    onSuccess: () => {
+      toast.success("Correo movido");
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+    },
+  });
+}
+
 export function useUnreadEmailCount() {
   const { user } = useAuth();
 
