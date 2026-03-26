@@ -513,6 +513,36 @@ export function EmailView() {
                   <Forward className="mr-1 h-3 w-3" /> Reenviar
                 </Button>
 
+                <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs">
+                      <FolderInput className="mr-1 h-3 w-3" /> Mover a
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-1" align="start">
+                    <ScrollArea className="max-h-64">
+                      {sortedFolders
+                        .filter((f: any) => f.id !== selectedFolderId)
+                        .map((folder: any) => {
+                          const Icon = getFolderIcon(folder.displayName);
+                          const label = getFolderLabel(folder.displayName);
+                          return (
+                            <button
+                              key={folder.id}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent rounded-sm text-left"
+                              onClick={() => {
+                                if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
+                              }}
+                            >
+                              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="truncate">{label}</span>
+                            </button>
+                          );
+                        })}
+                    </ScrollArea>
+                  </PopoverContent>
+                </Popover>
+
                 <div className="w-px h-5 bg-border mx-1" />
 
                 <Button variant="ghost" size="sm" className="h-7 text-xs"
