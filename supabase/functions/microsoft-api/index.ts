@@ -550,6 +550,25 @@ Deno.serve(async (req) => {
         result = { success: true };
         break;
       }
+
+      case "create-mail-folder": {
+        const displayName = params?.displayName;
+        if (!displayName) throw new Error("displayName required");
+        const res = await fetch(`${GRAPH_BASE}/me/mailFolders`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ displayName }),
+        });
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`Create mail folder failed [${res.status}]: ${errBody}`);
+        }
+        result = await res.json();
+        break;
+      }
     }
 
     return new Response(JSON.stringify(result), {

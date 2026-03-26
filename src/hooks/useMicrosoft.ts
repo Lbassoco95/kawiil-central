@@ -478,6 +478,26 @@ export function useForwardEmail() {
   });
 }
 
+export function useCreateMailFolder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (displayName: string) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "create-mail-folder", params: { displayName } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+      toast.success("Carpeta creada");
+    },
+    onError: (err: Error) => toast.error("Error al crear carpeta: " + err.message),
+  });
+}
+
 export function useUnreadEmailCount() {
   const { user } = useAuth();
 
