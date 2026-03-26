@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { createNotifications, getFinanceCelulaUserIds } from "@/lib/notificationHelpers";
 
 export interface Expense {
   id: string;
@@ -81,9 +82,27 @@ export function useCreateExpense() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       toast.success("Solicitud de gasto creada");
+
+      // Notify finance cell users
+      try {
+        const financeUserIds = await getFinanceCelulaUserIds();
+        if (financeUserIds.length > 0 && data) {
+          createNotifications(
+            financeUserIds.map((uid) => ({
+              user_id: uid,
+              type: "expense_created",
+              title: `Nueva solicitud de gasto: ${(data as any).description?.substring(0, 60) || "Sin descripción"}`,
+              body: `$${(data as any).amount} ${(data as any).currency || "MXN"} — ${(data as any).category}`,
+              entity_type: "expense",
+              entity_id: (data as any).id,
+              source_user_id: user!.id,
+            }))
+          );
+        }
+      } catch { /* non-critical */ }
     },
     onError: (e: any) => toast.error(e.message || "Error al crear solicitud"),
   });
@@ -127,9 +146,39 @@ export function useUpdateExpenseStatus() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: async (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       toast.success("Estado actualizado");
+
+      // Notify the expense requester about status change
+      try {
+        const statusLabels: Record<string, string> = {
+          en_revision: "en revisión",
+          aprobado: "aprobado",
+          rechazado: "rechazado",
+          pagado: "pagado",
+        };
+        const label = statusLabels[vars.status] || vars.status;
+
+        // Fetch the expense to get requested_by
+        const { data: expense } = await supabase
+          .from("expenses")
+          .select("requested_by, description")
+          .eq("id", vars.id)
+          .single();
+
+        if (expense && expense.requested_by) {
+          createNotifications([{
+            user_id: expense.requested_by,
+            type: "expense_status_changed",
+            title: `Tu gasto fue ${label}`,
+            body: expense.description?.substring(0, 200) || undefined,
+            entity_type: "expense",
+            entity_id: vars.id,
+            source_user_id: user!.id,
+          }]);
+        }
+      } catch { /* non-critical */ }
     },
     onError: (e: any) => toast.error(e.message || "Error al actualizar"),
   });

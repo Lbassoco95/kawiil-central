@@ -5,6 +5,7 @@ import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
 import { logActivity } from "@/lib/activityLog";
+import { createNotifications } from "@/lib/notificationHelpers";
 
 export type Task = Tables<"tasks"> & {
   clients?: { name: string } | null;
@@ -202,7 +203,7 @@ export function useCreateTask() {
 
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -217,6 +218,26 @@ export function useCreateTask() {
           priority: data.priority,
           area: data.area,
         });
+
+        // Notify assigned users
+        const assignedIds: string[] = [];
+        if (variables.assigned_to) assignedIds.push(variables.assigned_to);
+        if (variables.additional_assignees) assignedIds.push(...variables.additional_assignees);
+        const uniqueIds = [...new Set(assignedIds)];
+
+        if (uniqueIds.length > 0) {
+          createNotifications(
+            uniqueIds.map((uid) => ({
+              user_id: uid,
+              type: "task_assigned",
+              title: `Te asignaron la tarea "${data.title}"`,
+              body: data.description?.substring(0, 200) || undefined,
+              entity_type: "task",
+              entity_id: data.id,
+              source_user_id: user!.id,
+            }))
+          );
+        }
       }
     },
     onError: (err: Error) => {
@@ -291,7 +312,7 @@ export function useAddComment() {
 
 export function useUpdateTask() {
   const queryClient = useQueryClient();
-
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; [key: string]: any }) => {
       // Auto-set started_at when moving away from pendiente
@@ -319,7 +340,6 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
-      // Refresh linked task titles in step checklists when title changes
       if (vars.title) {
         queryClient.invalidateQueries({ queryKey: ["linked-task-titles"] });
         queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
@@ -332,6 +352,18 @@ export function useUpdateTask() {
           title: vars.title || "Tarea",
           status: vars.status,
         });
+      }
+
+      // Notify on reassignment
+      if (vars.assigned_to) {
+        createNotifications([{
+          user_id: vars.assigned_to,
+          type: "task_reassigned",
+          title: `Te reasignaron la tarea "${vars.title || "Tarea"}"`,
+          entity_type: "task",
+          entity_id: vars.id,
+          source_user_id: user!.id,
+        }]);
       }
     },
   });
