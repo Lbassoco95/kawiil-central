@@ -277,12 +277,27 @@ export function EmailView() {
                     key={folder.id}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 text-left",
-                      isActive && "bg-accent text-accent-foreground font-medium"
+                      isActive && "bg-accent text-accent-foreground font-medium",
+                      dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary"
                     )}
                     onClick={() => {
                       setSelectedFolderId(folder.id);
                       setSelectedEmailId(null);
                       resetAction();
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      setDragOverFolderId(folder.id);
+                    }}
+                    onDragLeave={() => setDragOverFolderId(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverFolderId(null);
+                      const messageId = e.dataTransfer.getData("text/email-id");
+                      if (messageId && folder.id !== selectedFolderId) {
+                        handleMoveEmail(messageId, folder.id);
+                      }
                     }}
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
