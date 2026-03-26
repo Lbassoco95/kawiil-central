@@ -24,11 +24,13 @@ import {
   useEmailConversation,
   useCreateReplyDraft,
   useSendDraft,
+  useCreateMailFolder,
 } from "@/hooks/useMicrosoft";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
   ClipboardList, Sparkles, Languages, ListChecks, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
+  FolderPlus, X, Check,
 } from "lucide-react";
 import { formatDistanceToNow, parseISO, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -36,7 +38,6 @@ import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
 import { RichTextEditor } from "./RichTextEditor";
 import { cn } from "@/lib/utils";
-import { Input as FormInput } from "@/components/ui/input";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
@@ -108,6 +109,8 @@ export function EmailView() {
   const [quickAIPrompt, setQuickAIPrompt] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [draftHtml, setDraftHtml] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: folders = [] } = useMailFolders();
@@ -119,6 +122,7 @@ export function EmailView() {
   const markRead = useMarkEmailRead();
   const createReplyDraft = useCreateReplyDraft();
   const sendDraft = useSendDraft();
+  const createMailFolder = useCreateMailFolder();
 
   const sortedFolders = sortFolders(folders);
 
