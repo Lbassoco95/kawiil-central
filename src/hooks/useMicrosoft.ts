@@ -275,14 +275,14 @@ export function useOutlookCategories() {
   });
 }
 
-export function useOutlookEmails(folder = "inbox", search?: string) {
+export function useOutlookEmails(folderId = "inbox", search?: string) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["outlook-emails", folder, search],
+    queryKey: ["outlook-emails", folderId, search],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "emails", params: { folder, search, top: 30 } },
+        body: { action: "emails", params: { folder: folderId, search, top: 30 } },
       });
       if (isNotConnectedError(data, error)) return [];
       if (error) throw error;
@@ -290,7 +290,82 @@ export function useOutlookEmails(folder = "inbox", search?: string) {
       return data?.value || [];
     },
     enabled: !!user,
-    refetchInterval: 60000, // sync read status every 60s
+    refetchInterval: 60000,
+  });
+}
+
+export function useMailFolders() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["mail-folders"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "mail-folders" },
+      });
+      if (isNotConnectedError(data, error)) return [];
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useEmailConversation(conversationId: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["email-conversation", conversationId],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "email-conversation", params: { conversationId } },
+      });
+      if (isNotConnectedError(data, error)) return [];
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: !!user && !!conversationId,
+  });
+}
+
+export function useCreateReplyDraft() {
+  return useMutation({
+    mutationFn: async ({ messageId, replyAll }: { messageId: string; replyAll?: boolean }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "create-reply-draft", params: { messageId, replyAll } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+  });
+}
+
+export function useSendDraft() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ draftId, body }: { draftId: string; body?: { contentType: string; content: string } }) => {
+      // If body provided, update draft first
+      if (body) {
+        const { error: updateError } = await supabase.functions.invoke("microsoft-api", {
+          body: { action: "update-draft", params: { draftId, payload: { body } } },
+        });
+        if (updateError) throw updateError;
+      }
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "send-draft", params: { draftId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      toast.success("Correo enviado");
+    },
+    onError: (err: Error) => toast.error("Error al enviar: " + err.message),
   });
 }
 
