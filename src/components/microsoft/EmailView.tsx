@@ -640,7 +640,6 @@ function ThreadEmailItem({ email }: { email: any }) {
           {email.body?.contentType === "html" ? (
             <AutoResizeIframe html={email.body.content} title="Thread email" minH={100} />
           ) : (
-          ) : (
             <pre className="whitespace-pre-wrap text-xs p-3 text-muted-foreground">{email.body?.content}</pre>
           )}
         </div>
