@@ -15,6 +15,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   useOutlookEmails,
   useEmailDetail,
   useReplyEmail,
@@ -25,12 +30,13 @@ import {
   useCreateReplyDraft,
   useSendDraft,
   useCreateMailFolder,
+  useMoveEmail,
 } from "@/hooks/useMicrosoft";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
   ClipboardList, Sparkles, Languages, ListChecks, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
-  FolderPlus, X, Check,
+  FolderPlus, X, Check, FolderInput,
 } from "lucide-react";
 import { formatDistanceToNow, parseISO, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -111,6 +117,8 @@ export function EmailView() {
   const [draftHtml, setDraftHtml] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: folders = [] } = useMailFolders();
@@ -123,8 +131,23 @@ export function EmailView() {
   const createReplyDraft = useCreateReplyDraft();
   const sendDraft = useSendDraft();
   const createMailFolder = useCreateMailFolder();
+  const moveEmail = useMoveEmail();
 
   const sortedFolders = sortFolders(folders);
+
+  const handleMoveEmail = useCallback((messageId: string, destinationId: string) => {
+    moveEmail.mutate({ messageId, destinationId }, {
+      onSuccess: () => {
+        if (selectedEmailId === messageId) {
+          const idx = emails.findIndex((e: any) => e.id === messageId);
+          const next = emails[idx + 1] || emails[idx - 1];
+          setSelectedEmailId(next?.id || null);
+          resetAction();
+        }
+        setMovePopoverOpen(false);
+      },
+    });
+  }, [moveEmail, selectedEmailId, emails]);
 
   const handleOpenEmail = useCallback((email: any) => {
     setSelectedEmailId(email.id);
@@ -254,12 +277,27 @@ export function EmailView() {
                     key={folder.id}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 text-left",
-                      isActive && "bg-accent text-accent-foreground font-medium"
+                      isActive && "bg-accent text-accent-foreground font-medium",
+                      dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary"
                     )}
                     onClick={() => {
                       setSelectedFolderId(folder.id);
                       setSelectedEmailId(null);
                       resetAction();
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      setDragOverFolderId(folder.id);
+                    }}
+                    onDragLeave={() => setDragOverFolderId(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverFolderId(null);
+                      const messageId = e.dataTransfer.getData("text/email-id");
+                      if (messageId && folder.id !== selectedFolderId) {
+                        handleMoveEmail(messageId, folder.id);
+                      }
                     }}
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -357,6 +395,11 @@ export function EmailView() {
                 {emails.map((email: any) => (
                   <div
                     key={email.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/email-id", email.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
                     className={cn(
                       "px-3 py-2 cursor-pointer transition-colors hover:bg-accent/50",
                       selectedEmailId === email.id && "bg-accent",
@@ -469,6 +512,36 @@ export function EmailView() {
                 >
                   <Forward className="mr-1 h-3 w-3" /> Reenviar
                 </Button>
+
+                <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs">
+                      <FolderInput className="mr-1 h-3 w-3" /> Mover a
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-48 p-1" align="start">
+                    <ScrollArea className="max-h-64">
+                      {sortedFolders
+                        .filter((f: any) => f.id !== selectedFolderId)
+                        .map((folder: any) => {
+                          const Icon = getFolderIcon(folder.displayName);
+                          const label = getFolderLabel(folder.displayName);
+                          return (
+                            <button
+                              key={folder.id}
+                              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent rounded-sm text-left"
+                              onClick={() => {
+                                if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
+                              }}
+                            >
+                              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="truncate">{label}</span>
+                            </button>
+                          );
+                        })}
+                    </ScrollArea>
+                  </PopoverContent>
+                </Popover>
 
                 <div className="w-px h-5 bg-border mx-1" />
 

@@ -551,6 +551,18 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "move-email": {
+        const messageId = params?.messageId;
+        const destinationId = params?.destinationId;
+        if (!messageId || !destinationId) throw new Error("messageId and destinationId required");
+        result = await graphRequest(accessToken, `/me/messages/${messageId}/move`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ destinationId }),
+        });
+        break;
+      }
+
       case "create-mail-folder": {
         const displayName = params?.displayName;
         if (!displayName) throw new Error("displayName required");
