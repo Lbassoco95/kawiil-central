@@ -1,81 +1,41 @@
 
 
-## Plan: Email profesional — paneles redimensionables, carpetas, firma, rich text, hilo de conversación
+## Plan: Corregir layout de correo (sin cortes) + crear carpetas
 
-### Resumen
+### Problema
 
-Transformar la vista de correo en un cliente completo estilo Superhuman: paneles redimensionables, sidebar de carpetas (Inbox, Sent, Drafts, etc.), editor rich-text para respuestas con toolbar de formato, firma de Outlook embebida automáticamente, y visualización de hilos de conversación previos.
+1. **Layout cortado**: La página de correo usa `h-[calc(100vh-100px)]` dentro de un contenedor `AppLayout` que tiene sticky header (~40px) + padding (24px arriba y abajo) + `max-w-7xl`. La altura calculada no resta esos espacios correctamente, causando que el contenido se corte por abajo.
+
+2. **No se pueden crear carpetas**: Solo existe `mail-folders` GET. Falta la acción para crear carpetas nuevas vía `POST /me/mailFolders`.
 
 ### Cambios
 
-**1. `supabase/functions/microsoft-api/index.ts` — Nuevas acciones de Graph API**
+**1. `src/pages/Microsoft365Correo.tsx` — Corregir altura del contenedor**
 
-- `mail-folders`: `GET /me/mailFolders` — devuelve las carpetas del buzón (Inbox, Sent Items, Drafts, Junk, carpetas personalizadas)
-- `email-conversation`: `GET /me/messages?$filter=conversationId eq '{id}'&$orderby=receivedDateTime asc` — trae todos los correos del hilo
-- `get-signature`: `GET /me/mailboxSettings` — obtiene la firma HTML configurada en Outlook (`mailboxSettings.signatureSettings` o `mailboxSettings.userPurpose`)
-- `create-reply-draft`: `POST /me/messages/{id}/createReply` — crea un borrador de respuesta que ya incluye la firma y el hilo (Graph la inyecta automáticamente)
-- `send-draft`: `POST /me/messages/{draftId}/send` — envía el borrador ya creado
-- `update-draft`: `PATCH /me/messages/{draftId}` — actualiza el body del borrador antes de enviar
+- Eliminar el wrapper `max-w-7xl` heredado de AppLayout para la página de correo. Usar una clase CSS que override el padding y max-width para que el email ocupe todo el ancho disponible.
+- Cambiar `h-[calc(100vh-100px)]` a una altura que reste correctamente el sticky header (~40px) + padding (48px total) = `h-[calc(100vh-130px)]` o mejor usar `h-[calc(100dvh-var)]`.
+- Mover el header ("Correo / Outlook") dentro del mismo flujo y reducir su altura.
+- Alternativa más limpia: que la página de correo NO use el wrapper `p-6` de AppLayout sino que el `EmailView` sea full-bleed dentro del main.
 
-Esto permite: 1) obtener firma automáticamente del borrador, 2) mantener el hilo completo, 3) soporte de HTML en respuestas.
+**2. `src/components/microsoft/EmailView.tsx` — Ajustes de layout**
 
-**2. `src/hooks/useMicrosoft.ts` — Nuevos hooks**
+- Cambiar `h-full` del `ResizablePanelGroup` para que herede correctamente del contenedor padre.
+- El iframe del email body: usar auto-resize con `postMessage` para que se ajuste al contenido real (evitar `minHeight: 300px` fijo que puede cortar o dejar espacio vacío).
+- Agregar un botón "Nueva carpeta" en el panel de carpetas con un input inline para nombrarla.
 
-- `useMailFolders()` — lista de carpetas con `displayName`, `id`, `unreadItemCount`
-- `useEmailConversation(conversationId)` — correos del hilo ordenados cronológicamente
-- `useCreateReplyDraft()` — crea borrador con firma
-- `useSendDraft()` — envía borrador
-- Modificar `useOutlookEmails(folderId)` para aceptar folder ID dinámico en vez de hardcoded "inbox"
+**3. `supabase/functions/microsoft-api/index.ts` — Agregar `create-mail-folder`**
 
-**3. `src/components/microsoft/EmailView.tsx` — Refactor completo**
+- Nueva acción `create-mail-folder`: `POST /me/mailFolders` con body `{ displayName: params.displayName }`.
+- Retorna la carpeta creada.
 
-Layout de 3 columnas con paneles redimensionables (`react-resizable-panels`):
+**4. `src/hooks/useMicrosoft.ts` — Hook `useCreateMailFolder`**
 
-```text
-┌──────────┬──────────────┬──────────────────────────┐
-│ Carpetas │  Lista       │  Detalle correo          │
-│          │  correos     │                          │
-│ Inbox(3) │  ▸ Correo 1  │  [Hilo conversación]     │
-│ Enviados │  ▸ Correo 2  │  [Correo actual]         │
-│ Borradores│ ▸ Correo 3  │  ──────────────────────  │
-│ Spam     │              │  [Editor rich-text]      │
-│ ──────── │              │  [con firma embebida]    │
-│ Carpeta1 │              │                          │
-│ Carpeta2 │              │                          │
-└──────────┴──────────────┴──────────────────────────┘
-```
+- Mutation que llama a la acción `create-mail-folder` e invalida el query de `mail-folders`.
 
-- **Panel 1 (sidebar carpetas, w ~180px)**: lista de carpetas con badge de no leídos, carpeta seleccionada resaltada, scroll si hay muchas
-- **Panel 2 (lista correos, w ~320px)**: igual que ahora pero alimentada por `folderId` seleccionado
-- **Panel 3 (detalle)**: correo + hilo + respuesta
-- Paneles redimensionables con `ResizablePanelGroup` ya existente en el proyecto
+### Archivos a modificar
 
-**4. Hilo de conversación en el panel de detalle**
-
-- Debajo del correo actual, mostrar los correos previos del hilo (`conversationId`) colapsados
-- Cada correo previo muestra: remitente, fecha, y body colapsable (expandir al hacer clic)
-- Orden cronológico descendente (más reciente arriba)
-
-**5. Editor rich-text para respuestas**
-
-- Reemplazar `<Textarea>` por un editor con toolbar de formato básico:
-  - Botones: **Negrita**, *Itálica*, lista, link
-  - Implementado con `contentEditable` div + `document.execCommand` (simple, sin dependencias)
-  - Output en HTML para que Microsoft Graph lo envíe como HTML body
-- El flujo cambia: al hacer clic "Responder", se llama `create-reply-draft` que devuelve un borrador con firma y body HTML del hilo. El editor se inicializa con ese contenido, el usuario edita arriba de la firma.
-
-**6. Firma de Outlook**
-
-- Al crear reply draft via Graph API (`createReply`), Microsoft automáticamente inyecta la firma del usuario en el body del borrador
-- El editor se inicializa con el HTML del borrador (que ya contiene firma + quoted text)
-- El cursor se posiciona al inicio del body, antes de la firma
-- No se necesita llamar a `mailboxSettings` separadamente — la firma viene en el draft
-
-### Archivos a crear/modificar
-
-- `supabase/functions/microsoft-api/index.ts` — agregar acciones: `mail-folders`, `email-conversation`, `create-reply-draft`, `update-draft`, `send-draft`
-- `src/hooks/useMicrosoft.ts` — nuevos hooks para carpetas, conversación, drafts
-- `src/components/microsoft/EmailView.tsx` — refactor a 3 paneles, carpetas, hilo, rich-text editor
-- `src/components/microsoft/RichTextEditor.tsx` — **nuevo**, editor contentEditable con toolbar
-- `src/pages/Microsoft365Correo.tsx` — ajustar layout contenedor
+- `src/pages/Microsoft365Correo.tsx` — fix de altura, full-bleed layout
+- `src/components/microsoft/EmailView.tsx` — botón crear carpeta, fix iframe height
+- `supabase/functions/microsoft-api/index.ts` — acción `create-mail-folder`
+- `src/hooks/useMicrosoft.ts` — hook `useCreateMailFolder`
 
