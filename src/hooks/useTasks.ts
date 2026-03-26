@@ -312,7 +312,7 @@ export function useAddComment() {
 
 export function useUpdateTask() {
   const queryClient = useQueryClient();
-
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; [key: string]: any }) => {
       // Auto-set started_at when moving away from pendiente
