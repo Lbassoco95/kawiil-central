@@ -24,11 +24,13 @@ import {
   useEmailConversation,
   useCreateReplyDraft,
   useSendDraft,
+  useCreateMailFolder,
 } from "@/hooks/useMicrosoft";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
   ClipboardList, Sparkles, Languages, ListChecks, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
+  FolderPlus, X, Check,
 } from "lucide-react";
 import { formatDistanceToNow, parseISO, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -36,7 +38,6 @@ import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
 import { RichTextEditor } from "./RichTextEditor";
 import { cn } from "@/lib/utils";
-import { Input as FormInput } from "@/components/ui/input";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
@@ -108,6 +109,8 @@ export function EmailView() {
   const [quickAIPrompt, setQuickAIPrompt] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [draftHtml, setDraftHtml] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: folders = [] } = useMailFolders();
@@ -119,6 +122,7 @@ export function EmailView() {
   const markRead = useMarkEmailRead();
   const createReplyDraft = useCreateReplyDraft();
   const sendDraft = useSendDraft();
+  const createMailFolder = useCreateMailFolder();
 
   const sortedFolders = sortFolders(folders);
 
@@ -235,40 +239,90 @@ export function EmailView() {
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full rounded-lg border border-border overflow-hidden bg-background">
+    <ResizablePanelGroup direction="horizontal" className="h-full border-t border-border overflow-hidden bg-background">
       {/* Panel 1: Folders */}
       <ResizablePanel defaultSize={15} minSize={10} maxSize={25} className="bg-muted/20">
-        <ScrollArea className="h-full">
-          <div className="py-2">
-            {sortedFolders.map((folder: any) => {
-              const Icon = getFolderIcon(folder.displayName);
-              const label = getFolderLabel(folder.displayName);
-              const isActive = selectedFolderId === folder.id;
-              return (
-                <button
-                  key={folder.id}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 text-left",
-                    isActive && "bg-accent text-accent-foreground font-medium"
-                  )}
-                  onClick={() => {
-                    setSelectedFolderId(folder.id);
-                    setSelectedEmailId(null);
-                    resetAction();
+        <div className="flex flex-col h-full">
+          <ScrollArea className="flex-1">
+            <div className="py-2">
+              {sortedFolders.map((folder: any) => {
+                const Icon = getFolderIcon(folder.displayName);
+                const label = getFolderLabel(folder.displayName);
+                const isActive = selectedFolderId === folder.id;
+                return (
+                  <button
+                    key={folder.id}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 text-left",
+                      isActive && "bg-accent text-accent-foreground font-medium"
+                    )}
+                    onClick={() => {
+                      setSelectedFolderId(folder.id);
+                      setSelectedEmailId(null);
+                      resetAction();
+                    }}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate flex-1">{label}</span>
+                    {folder.unreadItemCount > 0 && (
+                      <Badge variant="destructive" className="h-4 px-1.5 text-[10px] font-semibold">
+                        {folder.unreadItemCount}
+                      </Badge>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+          {/* Create folder */}
+          <div className="shrink-0 border-t border-border p-2">
+            {creatingFolder ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  placeholder="Nombre..."
+                  className="h-7 text-xs flex-1"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFolderName.trim()) {
+                      createMailFolder.mutate(newFolderName.trim(), {
+                        onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); },
+                      });
+                    }
+                    if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
                   }}
+                />
+                <Button
+                  variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={() => {
+                    if (newFolderName.trim()) {
+                      createMailFolder.mutate(newFolderName.trim(), {
+                        onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); },
+                      });
+                    }
+                  }}
+                  disabled={createMailFolder.isPending}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate flex-1">{label}</span>
-                  {folder.unreadItemCount > 0 && (
-                    <Badge variant="destructive" className="h-4 px-1.5 text-[10px] font-semibold">
-                      {folder.unreadItemCount}
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
+                  {createMailFolder.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                </Button>
+                <Button
+                  variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="ghost" size="sm" className="w-full h-7 text-xs justify-start gap-2"
+                onClick={() => setCreatingFolder(true)}
+              >
+                <FolderPlus className="h-3.5 w-3.5" /> Nueva carpeta
+              </Button>
+            )}
           </div>
-        </ScrollArea>
+        </div>
       </ResizablePanel>
 
       <ResizableHandle />
@@ -455,13 +509,7 @@ export function EmailView() {
                 <div className="p-4 space-y-4">
                   {/* Current email */}
                   {emailDetail.body?.contentType === "html" ? (
-                    <iframe
-                      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;margin:0;padding:12px;word-wrap:break-word;line-height:1.5;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}table{max-width:100%;border-collapse:collapse;}blockquote{border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#666;}</style></head><body>${emailDetail.body.content}</body></html>`}
-                      sandbox="allow-same-origin"
-                      className="w-full border-0 rounded-md bg-background"
-                      style={{ minHeight: "300px", height: "100%" }}
-                      title="Email content"
-                    />
+                    <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
                   ) : (
                     <pre className="whitespace-pre-wrap text-sm p-2">{emailDetail.body?.content}</pre>
                   )}
@@ -590,19 +638,43 @@ function ThreadEmailItem({ email }: { email: any }) {
       <CollapsibleContent>
         <div className="ml-5 mr-2 mb-2 border border-border rounded-md overflow-hidden">
           {email.body?.contentType === "html" ? (
-            <iframe
-              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,system-ui,sans-serif;font-size:13px;color:#555;margin:0;padding:10px;line-height:1.4;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}</style></head><body>${email.body.content}</body></html>`}
-              sandbox="allow-same-origin"
-              className="w-full border-0 bg-background"
-              style={{ minHeight: "150px" }}
-              title="Thread email"
-            />
+            <AutoResizeIframe html={email.body.content} title="Thread email" minH={100} />
           ) : (
             <pre className="whitespace-pre-wrap text-xs p-3 text-muted-foreground">{email.body?.content}</pre>
           )}
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+// Auto-resize iframe for email content
+function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: string; minH?: number }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(minH);
+
+  const resizeIframe = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc?.body) {
+        const h = doc.body.scrollHeight + 24;
+        setHeight(Math.max(h, minH));
+      }
+    } catch { /* cross-origin guard */ }
+  }, [minH]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;margin:0;padding:12px;word-wrap:break-word;line-height:1.5;overflow:hidden;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}table{max-width:100%;border-collapse:collapse;}blockquote{border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#666;}</style></head><body>${html}</body></html>`}
+      sandbox="allow-same-origin"
+      className="w-full border-0 bg-background"
+      style={{ height: `${height}px` }}
+      title={title}
+      onLoad={resizeIframe}
+    />
   );
 }
 
