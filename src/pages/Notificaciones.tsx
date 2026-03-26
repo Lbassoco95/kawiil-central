@@ -1,9 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { useDueDateAlerts } from "@/hooks/useNotifications";
 import {
   useMentionNotifications,
@@ -12,32 +10,48 @@ import {
 } from "@/hooks/useMentionNotifications";
 import { formatMX } from "@/lib/dateUtils";
 import {
-  AlertTriangle, CalendarClock, Loader2, ArrowRight, User,
-  AtSign, CheckCheck, MessageSquare,
+  AlertTriangle, CalendarClock, Loader2, ArrowRight,
+  AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
 } from "lucide-react";
+
+type Tab = "menciones" | "actividad" | "vencimientos";
+
+const MENTION_TYPES = ["mention"];
+const ACTIVITY_TYPES = ["task_assigned", "task_reassigned", "expense_created", "expense_status_changed"];
+
+function getNotificationIcon(type: string) {
+  if (type === "task_assigned" || type === "task_reassigned") return <ClipboardList className="h-3.5 w-3.5 text-primary" />;
+  if (type === "expense_created" || type === "expense_status_changed") return <DollarSign className="h-3.5 w-3.5 text-emerald-500" />;
+  return <AtSign className="h-3.5 w-3.5 text-primary" />;
+}
 
 export default function Notificaciones() {
   const navigate = useNavigate();
   const { data: alerts, isLoading: loadingAlerts } = useDueDateAlerts();
-  const { data: mentions = [], isLoading: loadingMentions } = useMentionNotifications();
+  const { data: allNotifications = [], isLoading: loadingMentions } = useMentionNotifications();
   const markAsRead = useMarkAsRead();
   const markAllAsRead = useMarkAllAsRead();
-  const [tab, setTab] = useState<"menciones" | "vencimientos">("menciones");
+  const [tab, setTab] = useState<Tab>("menciones");
 
+  const mentions = allNotifications.filter((n) => MENTION_TYPES.includes(n.type));
+  const activityItems = allNotifications.filter((n) => ACTIVITY_TYPES.includes(n.type));
   const unreadMentions = mentions.filter((m) => !m.is_read);
+  const unreadActivity = activityItems.filter((a) => !a.is_read);
 
   const hasOverdue =
     (alerts?.overdue?.length ?? 0) > 0 || (alerts?.stepsOverdue?.length ?? 0) > 0;
   const hasDueSoon =
     (alerts?.dueSoon?.length ?? 0) > 0 || (alerts?.stepsDueSoon?.length ?? 0) > 0;
 
-  const handleMentionClick = (m: typeof mentions[0]) => {
+  const handleNotificationClick = (m: typeof allNotifications[0]) => {
     if (!m.is_read) markAsRead.mutate(m.id);
+
     if (m.entity_type === "project" && m.entity_id) {
-      // Extract step_key from title if it's a step mention (format: "...te mencionó en "StepLabel"")
       navigate(`/proyectos/${m.entity_id}?tab=comentarios`);
     } else if (m.entity_type === "task" && m.entity_id) {
       navigate(`/tareas?taskId=${m.entity_id}`);
+    } else if (m.entity_type === "expense") {
+      navigate("/finanzas");
     }
   };
 
@@ -55,13 +69,22 @@ export default function Notificaciones() {
 
   const isLoading = loadingAlerts || loadingMentions;
 
+  const currentList = tab === "menciones" ? mentions : tab === "actividad" ? activityItems : [];
+  const currentUnread = tab === "menciones" ? unreadMentions : unreadActivity;
+
+  const tabs: { key: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { key: "menciones", label: "Menciones", icon: <AtSign className="h-3 w-3" />, badge: unreadMentions.length },
+    { key: "actividad", label: "Actividad", icon: <Activity className="h-3 w-3" />, badge: unreadActivity.length },
+    { key: "vencimientos", label: "Vencimientos", icon: <CalendarClock className="h-3 w-3" /> },
+  ];
+
   return (
     <AppLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Notificaciones</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Menciones, alertas de vencimiento y seguimiento
+            Menciones, actividad del equipo y alertas de vencimiento
           </p>
         </div>
 
@@ -73,39 +96,31 @@ export default function Notificaciones() {
           <>
             {/* Tab pills */}
             <div className="flex gap-1.5">
-              <button
-                onClick={() => setTab("menciones")}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  tab === "menciones"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
-                <AtSign className="h-3 w-3" />
-                Menciones
-                {unreadMentions.length > 0 && (
-                  <span className="bg-primary-foreground/20 text-[10px] rounded-full px-1.5 font-bold">
-                    {unreadMentions.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setTab("vencimientos")}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  tab === "vencimientos"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
-              >
-                <CalendarClock className="h-3 w-3" />
-                Vencimientos
-              </button>
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    tab === t.key
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+                >
+                  {t.icon}
+                  {t.label}
+                  {(t.badge ?? 0) > 0 && (
+                    <span className="bg-primary-foreground/20 text-[10px] rounded-full px-1.5 font-bold">
+                      {t.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
 
-            {/* Mentions */}
-            {tab === "menciones" && (
+            {/* Mentions & Activity lists */}
+            {(tab === "menciones" || tab === "actividad") && (
               <div className="space-y-4">
-                {unreadMentions.length > 0 && (
+                {currentUnread.length > 0 && (
                   <div className="flex justify-end">
                     <button
                       className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
@@ -118,28 +133,45 @@ export default function Notificaciones() {
                   </div>
                 )}
 
-                {mentions.length === 0 ? (
+                {currentList.length === 0 ? (
                   <div className="text-center py-16">
-                    <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      Sin menciones aún. Cuando alguien te @mencione aparecerá aquí.
-                    </p>
+                    {tab === "menciones" ? (
+                      <>
+                        <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Sin menciones aún. Cuando alguien te @mencione aparecerá aquí.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="mx-auto h-10 w-10 text-muted-foreground/40" />
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Sin actividad reciente. Asignaciones de tareas y gastos aparecerán aquí.
+                        </p>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="divide-y divide-border/40">
-                    {mentions.map((m) => (
+                    {currentList.map((m) => (
                       <div
                         key={m.id}
                         className={`flex items-start gap-3 py-3 px-2 -mx-2 rounded-lg cursor-pointer transition-colors ${
                           m.is_read ? "hover:bg-secondary/30" : "hover:bg-primary/5"
                         }`}
-                        onClick={() => handleMentionClick(m)}
+                        onClick={() => handleNotificationClick(m)}
                       >
-                        <Avatar className="h-7 w-7 shrink-0 mt-0.5">
-                          <AvatarFallback className="text-[10px] bg-secondary">
-                            {m.source_profile?.full_name?.charAt(0) || "?"}
-                          </AvatarFallback>
-                        </Avatar>
+                        {tab === "menciones" ? (
+                          <Avatar className="h-7 w-7 shrink-0 mt-0.5">
+                            <AvatarFallback className="text-[10px] bg-secondary">
+                              {m.source_profile?.full_name?.charAt(0) || "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <div className="h-7 w-7 shrink-0 mt-0.5 rounded-full bg-secondary flex items-center justify-center">
+                            {getNotificationIcon(m.type)}
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-[13px] font-medium text-foreground">
@@ -169,7 +201,6 @@ export default function Notificaciones() {
             {/* Due dates */}
             {tab === "vencimientos" && (
               <div className="space-y-8">
-                {/* Overdue */}
                 <section>
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
@@ -219,7 +250,6 @@ export default function Notificaciones() {
                   )}
                 </section>
 
-                {/* Due soon */}
                 <section>
                   <div className="flex items-center gap-2 mb-3">
                     <CalendarClock className="h-3.5 w-3.5 text-warning" />
