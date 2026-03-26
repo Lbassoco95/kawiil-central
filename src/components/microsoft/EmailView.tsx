@@ -509,13 +509,7 @@ export function EmailView() {
                 <div className="p-4 space-y-4">
                   {/* Current email */}
                   {emailDetail.body?.contentType === "html" ? (
-                    <iframe
-                      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;margin:0;padding:12px;word-wrap:break-word;line-height:1.5;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}table{max-width:100%;border-collapse:collapse;}blockquote{border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#666;}</style></head><body>${emailDetail.body.content}</body></html>`}
-                      sandbox="allow-same-origin"
-                      className="w-full border-0 rounded-md bg-background"
-                      style={{ minHeight: "300px", height: "100%" }}
-                      title="Email content"
-                    />
+                    <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
                   ) : (
                     <pre className="whitespace-pre-wrap text-sm p-2">{emailDetail.body?.content}</pre>
                   )}
