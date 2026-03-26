@@ -117,6 +117,8 @@ export function EmailView() {
   const [draftHtml, setDraftHtml] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: folders = [] } = useMailFolders();
@@ -129,8 +131,23 @@ export function EmailView() {
   const createReplyDraft = useCreateReplyDraft();
   const sendDraft = useSendDraft();
   const createMailFolder = useCreateMailFolder();
+  const moveEmail = useMoveEmail();
 
   const sortedFolders = sortFolders(folders);
+
+  const handleMoveEmail = useCallback((messageId: string, destinationId: string) => {
+    moveEmail.mutate({ messageId, destinationId }, {
+      onSuccess: () => {
+        if (selectedEmailId === messageId) {
+          const idx = emails.findIndex((e: any) => e.id === messageId);
+          const next = emails[idx + 1] || emails[idx - 1];
+          setSelectedEmailId(next?.id || null);
+          resetAction();
+        }
+        setMovePopoverOpen(false);
+      },
+    });
+  }, [moveEmail, selectedEmailId, emails]);
 
   const handleOpenEmail = useCallback((email: any) => {
     setSelectedEmailId(email.id);
