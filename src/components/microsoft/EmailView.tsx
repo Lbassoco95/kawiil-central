@@ -638,19 +638,44 @@ function ThreadEmailItem({ email }: { email: any }) {
       <CollapsibleContent>
         <div className="ml-5 mr-2 mb-2 border border-border rounded-md overflow-hidden">
           {email.body?.contentType === "html" ? (
-            <iframe
-              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,system-ui,sans-serif;font-size:13px;color:#555;margin:0;padding:10px;line-height:1.4;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}</style></head><body>${email.body.content}</body></html>`}
-              sandbox="allow-same-origin"
-              className="w-full border-0 bg-background"
-              style={{ minHeight: "150px" }}
-              title="Thread email"
-            />
+            <AutoResizeIframe html={email.body.content} title="Thread email" minH={100} />
+          ) : (
           ) : (
             <pre className="whitespace-pre-wrap text-xs p-3 text-muted-foreground">{email.body?.content}</pre>
           )}
         </div>
       </CollapsibleContent>
     </Collapsible>
+  );
+}
+
+// Auto-resize iframe for email content
+function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: string; minH?: number }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [height, setHeight] = useState(minH);
+
+  const resizeIframe = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc?.body) {
+        const h = doc.body.scrollHeight + 24;
+        setHeight(Math.max(h, minH));
+      }
+    } catch { /* cross-origin guard */ }
+  }, [minH]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;margin:0;padding:12px;word-wrap:break-word;line-height:1.5;overflow:hidden;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}table{max-width:100%;border-collapse:collapse;}blockquote{border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#666;}</style></head><body>${html}</body></html>`}
+      sandbox="allow-same-origin"
+      className="w-full border-0 bg-background"
+      style={{ height: `${height}px` }}
+      title={title}
+      onLoad={resizeIframe}
+    />
   );
 }
 
