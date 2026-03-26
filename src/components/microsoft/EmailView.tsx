@@ -239,40 +239,90 @@ export function EmailView() {
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full rounded-lg border border-border overflow-hidden bg-background">
+    <ResizablePanelGroup direction="horizontal" className="h-full border-t border-border overflow-hidden bg-background">
       {/* Panel 1: Folders */}
       <ResizablePanel defaultSize={15} minSize={10} maxSize={25} className="bg-muted/20">
-        <ScrollArea className="h-full">
-          <div className="py-2">
-            {sortedFolders.map((folder: any) => {
-              const Icon = getFolderIcon(folder.displayName);
-              const label = getFolderLabel(folder.displayName);
-              const isActive = selectedFolderId === folder.id;
-              return (
-                <button
-                  key={folder.id}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 text-left",
-                    isActive && "bg-accent text-accent-foreground font-medium"
-                  )}
-                  onClick={() => {
-                    setSelectedFolderId(folder.id);
-                    setSelectedEmailId(null);
-                    resetAction();
+        <div className="flex flex-col h-full">
+          <ScrollArea className="flex-1">
+            <div className="py-2">
+              {sortedFolders.map((folder: any) => {
+                const Icon = getFolderIcon(folder.displayName);
+                const label = getFolderLabel(folder.displayName);
+                const isActive = selectedFolderId === folder.id;
+                return (
+                  <button
+                    key={folder.id}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 text-left",
+                      isActive && "bg-accent text-accent-foreground font-medium"
+                    )}
+                    onClick={() => {
+                      setSelectedFolderId(folder.id);
+                      setSelectedEmailId(null);
+                      resetAction();
+                    }}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="truncate flex-1">{label}</span>
+                    {folder.unreadItemCount > 0 && (
+                      <Badge variant="destructive" className="h-4 px-1.5 text-[10px] font-semibold">
+                        {folder.unreadItemCount}
+                      </Badge>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+          {/* Create folder */}
+          <div className="shrink-0 border-t border-border p-2">
+            {creatingFolder ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  autoFocus
+                  placeholder="Nombre..."
+                  className="h-7 text-xs flex-1"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFolderName.trim()) {
+                      createMailFolder.mutate(newFolderName.trim(), {
+                        onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); },
+                      });
+                    }
+                    if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
                   }}
+                />
+                <Button
+                  variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={() => {
+                    if (newFolderName.trim()) {
+                      createMailFolder.mutate(newFolderName.trim(), {
+                        onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); },
+                      });
+                    }
+                  }}
+                  disabled={createMailFolder.isPending}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate flex-1">{label}</span>
-                  {folder.unreadItemCount > 0 && (
-                    <Badge variant="destructive" className="h-4 px-1.5 text-[10px] font-semibold">
-                      {folder.unreadItemCount}
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
+                  {createMailFolder.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                </Button>
+                <Button
+                  variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="ghost" size="sm" className="w-full h-7 text-xs justify-start gap-2"
+                onClick={() => setCreatingFolder(true)}
+              >
+                <FolderPlus className="h-3.5 w-3.5" /> Nueva carpeta
+              </Button>
+            )}
           </div>
-        </ScrollArea>
+        </div>
       </ResizablePanel>
 
       <ResizableHandle />
