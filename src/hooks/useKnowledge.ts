@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -62,6 +63,18 @@ export interface ProjectKnowledgeStat {
   last_chunk_at: string | null;
 }
 
+export interface CelulaKnowledgeStat {
+  celula_id: string;
+  celula_name: string;
+  celula_slug: string;
+  celula_color: string | null;
+  doc_count: number;
+  chunk_count: number;
+  project_count: number;
+  client_count: number;
+  last_chunk_at: string | null;
+}
+
 // ── Feed ──
 
 export function useKnowledgeFeed() {
@@ -123,13 +136,13 @@ export function useKnowledgeInsights(clientId?: string | null, projectId?: strin
   });
 }
 
-// ── Sync Logs ──
+// ── Sync Logs (with conditional polling) ──
 
 export function useKnowledgeSyncLogs() {
   const { profile } = useAuth();
   const orgId = profile?.organization_id;
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ["knowledge-sync-logs", orgId],
     enabled: !!orgId,
     queryFn: async () => {
@@ -142,7 +155,28 @@ export function useKnowledgeSyncLogs() {
       if (error) throw error;
       return data as KnowledgeSyncLog[];
     },
+    refetchInterval: (query) => {
+      const logs = query.state.data as KnowledgeSyncLog[] | undefined;
+      const hasRunning = logs?.some((l) => l.status === "running");
+      return hasRunning ? 5000 : false;
+    },
   });
+
+  return query;
+}
+
+// ── Running Agents (derived from logs) ──
+
+export function useRunningAgents() {
+  const { data: logs } = useKnowledgeSyncLogs();
+
+  return useMemo(() => {
+    if (!logs) return { running: [] as string[], isAnyRunning: false };
+    const running = logs
+      .filter((l) => l.status === "running")
+      .map((l) => l.agent);
+    return { running, isAnyRunning: running.length > 0 };
+  }, [logs]);
 }
 
 // ── Run Sync ──
@@ -152,7 +186,6 @@ export function useRunKnowledgeSync() {
 
   return useMutation({
     mutationFn: async (params?: { agent?: string; client_id?: string }) => {
-      const { data: { session } } = await supabase.auth.getSession();
       const resp = await supabase.functions.invoke("knowledge-sync", {
         body: params || {},
       });
@@ -161,10 +194,6 @@ export function useRunKnowledgeSync() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["knowledge-sync-logs"] });
-      qc.invalidateQueries({ queryKey: ["knowledge-feed"] });
-      qc.invalidateQueries({ queryKey: ["knowledge-insights"] });
-      qc.invalidateQueries({ queryKey: ["client-knowledge-stats"] });
-      qc.invalidateQueries({ queryKey: ["project-knowledge-stats"] });
     },
   });
 }
@@ -203,6 +232,25 @@ export function useProjectKnowledgeStats() {
       });
       if (error) throw error;
       return data as ProjectKnowledgeStat[];
+    },
+  });
+}
+
+// ── Celula Knowledge Stats (RPC) ──
+
+export function useCelulaKnowledgeStats() {
+  const { profile } = useAuth();
+  const orgId = profile?.organization_id;
+
+  return useQuery({
+    queryKey: ["celula-knowledge-stats", orgId],
+    enabled: !!orgId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc("celula_knowledge_stats", {
+        p_org_id: orgId,
+      });
+      if (error) throw error;
+      return data as CelulaKnowledgeStat[];
     },
   });
 }

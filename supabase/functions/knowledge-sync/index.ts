@@ -30,19 +30,47 @@ serve(async (req: Request) => {
     }
 
     const orgId = orgs[0].id;
-    const results: Record<string, any> = {};
 
-    if (!targetAgent || targetAgent === "archivista") {
-      results.archivista = await runArchivista(supabase, supabaseUrl, serviceKey, orgId, targetClientId);
-    }
-    if (!targetAgent || targetAgent === "integrador") {
-      results.integrador = await runIntegrador(supabase, orgId, anthropicKey, targetClientId);
-    }
-    if (!targetAgent || targetAgent === "nutritor") {
-      results.nutritor = await runNutritor(supabase, orgId, anthropicKey);
+    const agents: string[] = targetAgent
+      ? [targetAgent]
+      : ["archivista", "integrador", "nutritor"];
+
+    const logIds: Record<string, string> = {};
+    for (const agent of agents) {
+      logIds[agent] = await startLog(supabase, orgId, agent);
     }
 
-    return json({ success: true, results });
+    // Fire background work, respond immediately
+    const bgWork = (async () => {
+      try {
+        if (agents.includes("archivista")) {
+          await runArchivista(supabase, supabaseUrl, serviceKey, orgId, logIds.archivista, targetClientId);
+          await notifyCompletion(supabase, orgId, "Archivista", "completó el escaneo de documentos");
+        }
+        if (agents.includes("integrador")) {
+          await runIntegrador(supabase, orgId, anthropicKey, logIds.integrador, targetClientId);
+          await notifyCompletion(supabase, orgId, "Integrador", "generó perfiles de conocimiento");
+        }
+        if (agents.includes("nutritor")) {
+          await runNutritor(supabase, orgId, anthropicKey, logIds.nutritor);
+          await notifyCompletion(supabase, orgId, "Nutritor", "actualizó el feed de novedades");
+        }
+      } catch (err) {
+        console.error("Background agent error:", err);
+      }
+    })();
+
+    // Keep the background work alive in Deno edge runtime
+    // @ts-ignore - EdgeRuntime may not be typed
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(bgWork);
+    } else {
+      // Fallback: just let the promise float (Deno will keep it alive)
+      bgWork.catch((e) => console.error("bgWork error:", e));
+    }
+
+    return json({ started: true, agents, log_ids: logIds });
   } catch (err: any) {
     console.error("knowledge-sync error:", err);
     return json({ error: err.message }, 500);
@@ -56,16 +84,55 @@ function json(data: any, status = 200) {
   });
 }
 
+// ────────────── NOTIFICATIONS ──────────────
+async function notifyCompletion(supabase: any, orgId: string, agentLabel: string, description: string) {
+  try {
+    // Get users with conocimiento permission
+    const { data: permUsers } = await supabase
+      .from("user_module_permissions")
+      .select("user_id")
+      .eq("organization_id", orgId)
+      .eq("module_key", "conocimiento")
+      .eq("enabled", true);
+
+    // Also get transformadores (implicit full access)
+    const { data: transformadores } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "transformador");
+
+    const userIds = new Set<string>();
+    for (const u of permUsers || []) userIds.add(u.user_id);
+    for (const u of transformadores || []) userIds.add(u.user_id);
+
+    if (userIds.size === 0) return;
+
+    const rows = Array.from(userIds).map((uid) => ({
+      user_id: uid,
+      organization_id: orgId,
+      type: "knowledge_sync",
+      title: `Agente ${agentLabel} completado`,
+      body: `El agente ${agentLabel} ${description}.`,
+      entity_type: "knowledge",
+      entity_id: orgId,
+      source_user_id: uid,
+    }));
+
+    await supabase.from("notifications").insert(rows);
+  } catch (e: any) {
+    console.error("notifyCompletion error:", e.message);
+  }
+}
+
 // ────────────── ARCHIVISTA ──────────────
 async function runArchivista(
   supabase: any,
   supabaseUrl: string,
   serviceKey: string,
   orgId: string,
+  logId: string,
   targetClientId?: string,
 ) {
-  const logId = await startLog(supabase, orgId, "archivista");
-
   try {
     let query = supabase
       .from("clients")
@@ -79,7 +146,6 @@ async function runArchivista(
 
     const { data: clients } = await query;
     let totalDocs = 0;
-    let totalChunks = 0;
     const clientResults: any[] = [];
 
     for (const client of clients || []) {
@@ -118,19 +184,15 @@ async function runArchivista(
     const { count: chunkCount } = await supabase
       .from("document_chunks")
       .select("id", { count: "exact", head: true });
-    totalChunks = chunkCount || 0;
 
     await completeLog(supabase, logId, {
       clients_scanned: (clients || []).length,
       docs_indexed: totalDocs,
-      total_chunks: totalChunks,
+      total_chunks: chunkCount || 0,
       details: clientResults,
     });
-
-    return { clients_scanned: (clients || []).length, docs_indexed: totalDocs };
   } catch (err: any) {
     await failLog(supabase, logId, err.message);
-    return { error: err.message };
   }
 }
 
@@ -138,15 +200,14 @@ async function runArchivista(
 async function runIntegrador(
   supabase: any,
   orgId: string,
-  anthropicKey?: string,
+  anthropicKey: string | undefined,
+  logId: string,
   targetClientId?: string,
 ) {
-  const logId = await startLog(supabase, orgId, "integrador");
-
   try {
     if (!anthropicKey) {
       await completeLog(supabase, logId, { skipped: true, reason: "No ANTHROPIC_API_KEY" });
-      return { skipped: true };
+      return;
     }
 
     const { data: lastSync } = await supabase
@@ -326,18 +387,13 @@ ${chunkText}`,
       projects_analyzed: (projects || []).length,
       insights_created: insightsCreated,
     });
-
-    return { clients_analyzed: (clients || []).length, insights_created: insightsCreated };
   } catch (err: any) {
     await failLog(supabase, logId, err.message);
-    return { error: err.message };
   }
 }
 
 // ────────────── NUTRITOR ──────────────
-async function runNutritor(supabase: any, orgId: string, anthropicKey?: string) {
-  const logId = await startLog(supabase, orgId, "nutritor");
-
+async function runNutritor(supabase: any, orgId: string, anthropicKey: string | undefined, logId: string) {
   try {
     const yesterday = new Date(Date.now() - 86400000).toISOString();
 
@@ -420,11 +476,8 @@ Responde en markdown, tono profesional y conciso.`,
       recent_insights: (recentInsights || []).length,
       recent_docs: (recentDocs || []).length,
     });
-
-    return { feed_items_created: feedItems };
   } catch (err: any) {
     await failLog(supabase, logId, err.message);
-    return { error: err.message };
   }
 }
 

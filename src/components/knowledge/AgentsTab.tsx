@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   useKnowledgeSyncLogs,
   useKnowledgeFeed,
   useRunKnowledgeSync,
+  useRunningAgents,
+  type KnowledgeSyncLog,
 } from "@/hooks/useKnowledge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bot, Play, Loader2, CheckCircle2, XCircle,
@@ -47,19 +50,42 @@ export function AgentsTab() {
   const { data: logs, isLoading: logsLoading } = useKnowledgeSyncLogs();
   const { feed, isLoading: feedLoading } = useKnowledgeFeed();
   const runSync = useRunKnowledgeSync();
-  const [runningAgent, setRunningAgent] = useState<string | null>(null);
+  const { running, isAnyRunning } = useRunningAgents();
 
-  const handleRun = async (agent?: string) => {
-    setRunningAgent(agent || "all");
-    try {
-      await runSync.mutateAsync(agent ? { agent } : undefined);
-      toast.success(agent ? `Agente ${agentMeta[agent]?.label} ejecutado` : "Sincronización completa ejecutada");
-    } catch (err: any) {
-      toast.error(`Error: ${err.message}`);
-    } finally {
-      setRunningAgent(null);
+  // Track previous log statuses to detect transitions
+  const prevLogsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!logs) return;
+    const prevStatuses = prevLogsRef.current;
+    const newStatuses: Record<string, string> = {};
+
+    for (const log of logs) {
+      newStatuses[log.id] = log.status;
+      const prev = prevStatuses[log.id];
+      if (prev === "running" && log.status === "completed") {
+        const meta = agentMeta[log.agent];
+        toast.success(`${meta?.label || log.agent} completado`, {
+          description: formatStats(log),
+        });
+      } else if (prev === "running" && log.status === "failed") {
+        const meta = agentMeta[log.agent];
+        toast.error(`${meta?.label || log.agent} falló`, {
+          description: log.error_message || "Error desconocido",
+        });
+      }
     }
+
+    prevLogsRef.current = newStatuses;
+  }, [logs]);
+
+  const handleRun = (agent?: string) => {
+    runSync.mutate(agent ? { agent } : undefined, {
+      onError: (err: any) => toast.error(`Error: ${err.message}`),
+    });
   };
+
+  const isAgentRunning = (agent: string) => running.includes(agent);
 
   const lastRunByAgent = (agent: string) => {
     return logs?.find((l) => l.agent === agent);
@@ -68,11 +94,12 @@ export function AgentsTab() {
   return (
     <div className="space-y-6">
       {/* Agent cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         {(["archivista", "integrador", "nutritor"] as const).map((agent, idx) => {
           const meta = agentMeta[agent];
           const Icon = meta.icon;
           const last = lastRunByAgent(agent);
+          const isRunning = isAgentRunning(agent);
 
           return (
             <Card key={agent} className={`animate-fade-in stagger-${idx + 1}`}>
@@ -84,12 +111,21 @@ export function AgentsTab() {
                 <p className="text-[11px] text-muted-foreground">{meta.desc}</p>
               </CardHeader>
               <CardContent className="space-y-3">
-                {last ? (
+                {isRunning && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs text-blue-600">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Ejecutando...</span>
+                    </div>
+                    <Progress value={undefined} className="h-1.5 animate-pulse" />
+                  </div>
+                )}
+
+                {!isRunning && last ? (
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-xs">
                       {last.status === "completed" && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
                       {last.status === "failed" && <XCircle className="h-3.5 w-3.5 text-red-500" />}
-                      {last.status === "running" && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
                       <span className="capitalize">{last.status}</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground flex items-center gap-1">
@@ -113,22 +149,23 @@ export function AgentsTab() {
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : !isRunning ? (
                   <p className="text-xs text-muted-foreground">Nunca ejecutado</p>
-                )}
+                ) : null}
+
                 <Button
                   size="sm"
                   variant="outline"
                   className="w-full"
-                  disabled={runningAgent !== null}
+                  disabled={isAnyRunning}
                   onClick={() => handleRun(agent)}
                 >
-                  {runningAgent === agent ? (
+                  {isRunning ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
                   ) : (
                     <Play className="h-3.5 w-3.5 mr-2" />
                   )}
-                  Ejecutar
+                  {isRunning ? "En progreso..." : "Ejecutar"}
                 </Button>
               </CardContent>
             </Card>
@@ -140,15 +177,15 @@ export function AgentsTab() {
       <div className="flex justify-center">
         <Button
           onClick={() => handleRun()}
-          disabled={runningAgent !== null}
+          disabled={isAnyRunning}
           className="gap-2"
         >
-          {runningAgent === "all" ? (
+          {isAnyRunning ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Bot className="h-4 w-4" />
           )}
-          Ejecutar todos los agentes
+          {isAnyRunning ? "Agentes en ejecución..." : "Ejecutar todos los agentes"}
         </Button>
       </div>
 
@@ -169,21 +206,22 @@ export function AgentsTab() {
           ) : !logs?.length ? (
             <p className="text-xs text-muted-foreground text-center py-6">Sin registros de sincronización</p>
           ) : (
-            <div className="divide-y divide-border/50 max-h-80 overflow-y-auto">
+            <div className="divide-y divide-border/50 max-h-60 sm:max-h-80 overflow-y-auto">
               {logs.map((log) => {
                 const meta = agentMeta[log.agent];
                 const Icon = meta?.icon || Bot;
                 return (
-                  <div key={log.id} className="flex items-center gap-3 py-2 text-xs">
-                    <Icon className={`h-3.5 w-3.5 ${meta?.color || "text-gray-500"}`} />
-                    <span className="font-medium w-20">{meta?.label || log.agent}</span>
+                  <div key={log.id} className="flex items-center gap-2 sm:gap-3 py-2 text-xs">
+                    <Icon className={`h-3.5 w-3.5 shrink-0 ${meta?.color || "text-gray-500"}`} />
+                    <span className="font-medium w-16 sm:w-20 truncate">{meta?.label || log.agent}</span>
                     <Badge
                       variant={log.status === "completed" ? "default" : log.status === "failed" ? "destructive" : "secondary"}
                       className="text-[9px]"
                     >
+                      {log.status === "running" && <Loader2 className="h-2.5 w-2.5 animate-spin mr-1" />}
                       {log.status}
                     </Badge>
-                    <span className="text-muted-foreground ml-auto">
+                    <span className="text-muted-foreground ml-auto text-[10px] sm:text-xs">
                       {new Date(log.started_at).toLocaleString("es-MX", {
                         day: "2-digit",
                         month: "short",
@@ -216,13 +254,13 @@ export function AgentsTab() {
           ) : !feed?.length ? (
             <p className="text-xs text-muted-foreground text-center py-6">Sin novedades. Ejecuta los agentes para generar contenido.</p>
           ) : (
-            <div className="divide-y divide-border/50 max-h-96 overflow-y-auto">
+            <div className="divide-y divide-border/50 max-h-72 sm:max-h-96 overflow-y-auto">
               {feed.map((item) => {
                 const FeedIcon = feedIcons[item.feed_type] || Bell;
                 return (
                   <div key={item.id} className={`py-3 ${item.is_read ? "opacity-60" : ""}`}>
                     <div className="flex items-start gap-2">
-                      <FeedIcon className="h-3.5 w-3.5 mt-0.5 text-primary" />
+                      <FeedIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium">{item.title}</p>
                         {item.summary && (
@@ -242,4 +280,14 @@ export function AgentsTab() {
       </Card>
     </div>
   );
+}
+
+function formatStats(log: KnowledgeSyncLog): string {
+  if (!log.stats) return "";
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(log.stats)) {
+    if (k === "details" || k === "skipped") continue;
+    parts.push(`${k.replace(/_/g, " ")}: ${v}`);
+  }
+  return parts.join(", ");
 }

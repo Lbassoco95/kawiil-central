@@ -112,8 +112,9 @@ export function ProjectsLearningTab() {
                     {ag.projects.length} proyecto{ag.projects.length > 1 ? "s" : ""}
                   </Badge>
                 </CardTitle>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">{ag.totalDocs} docs · {ag.totalChunks} chunks</span>
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <span className="text-[10px] sm:text-xs text-muted-foreground hidden sm:inline">{ag.totalDocs} docs · {ag.totalChunks} chunks</span>
+                  <span className="text-[10px] text-muted-foreground sm:hidden">{ag.totalChunks}c</span>
                   {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </div>
               </div>
@@ -155,15 +156,15 @@ function ProjectRow({
       className={`rounded-lg border p-3 transition-all cursor-pointer ${isExpanded ? "ring-1 ring-primary/20 bg-secondary/10" : "hover:bg-secondary/20"}`}
       onClick={onToggle}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FolderKanban className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-medium">{project.project_name}</span>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <FolderKanban className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="text-xs font-medium truncate">{project.project_name}</span>
           {project.client_name && (
-            <span className="text-[10px] text-muted-foreground">— {project.client_name}</span>
+            <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">— {project.client_name}</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-5 sm:ml-0">
           <Badge variant="outline" className="text-[9px]">
             {project.doc_count}d / {project.chunk_count}c
           </Badge>

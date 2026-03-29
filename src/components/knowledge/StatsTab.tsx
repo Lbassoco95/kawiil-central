@@ -86,7 +86,7 @@ export function StatsTab() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Global KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {statsLoading ? (
           <Skeleton className="col-span-full h-24 rounded-xl" />
         ) : (
@@ -137,7 +137,7 @@ export function StatsTab() {
               {clientCoverage.slice(0, 15).map((c) => (
                 <div key={c.name} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium truncate max-w-[200px]">{c.name}</span>
+                    <span className="font-medium truncate max-w-[120px] sm:max-w-[200px]">{c.name}</span>
                     <span className="text-muted-foreground">{c.chunks.toLocaleString()} chunks</span>
                   </div>
                   <Progress value={Math.round((c.chunks / maxClientChunks) * 100)} className="h-1.5" />
@@ -193,7 +193,7 @@ export function StatsTab() {
           ) : !projectStats?.length ? (
             <p className="text-xs text-muted-foreground text-center py-6">Sin datos de proyectos</p>
           ) : (
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
               <div>
                 <p className="text-2xl font-bold">{new Set(projectStats.map((p) => p.project_id)).size}</p>
                 <p className="text-xs text-muted-foreground">Proyectos activos</p>

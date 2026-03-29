@@ -66,7 +66,7 @@ export function ClientsLearningTab() {
 
   if (isLoading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {[1, 2, 3, 4, 5, 6].map((i) => (
           <Skeleton key={i} className="h-44 rounded-xl" />
         ))}
@@ -92,7 +92,7 @@ export function ClientsLearningTab() {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
       {groups.map((g, idx) => (
         <ClientCard
           key={g.client_id}
@@ -125,7 +125,7 @@ function ClientCard({
 
   return (
     <Card
-      className={`card-hover animate-fade-in stagger-${Math.min(stagger + 1, 8)} cursor-pointer transition-all ${isExpanded ? "md:col-span-2 lg:col-span-3 ring-1 ring-primary/20" : ""}`}
+      className={`card-hover animate-fade-in stagger-${Math.min(stagger + 1, 8)} cursor-pointer transition-all ${isExpanded ? "col-span-1 sm:col-span-2 lg:col-span-3 ring-1 ring-primary/20" : ""}`}
       onClick={onToggle}
     >
       <CardHeader className="pb-2">
@@ -135,8 +135,11 @@ function ClientCard({
             {group.client_name}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge variant="secondary" className="text-[10px] hidden sm:inline-flex">
               {group.totalDocs} docs · {group.totalChunks} chunks
+            </Badge>
+            <Badge variant="secondary" className="text-[10px] sm:hidden">
+              {group.totalChunks}c
             </Badge>
             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </div>
