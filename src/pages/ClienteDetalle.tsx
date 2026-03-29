@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Mail, Phone, MapPin, User, FileText,
-  CheckSquare, FolderOpen, Pencil, Shield,
+  CheckSquare, FolderOpen, Pencil, Shield, Building2,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
 import { DropboxFolderBrowser } from "@/components/clients/DropboxFolderBrowser";
+import { useClientGroupsForClient } from "@/hooks/useClientGroups";
 import type { Database } from "@/integrations/supabase/types";
 import { formatDateMX } from "@/lib/dateUtils";
 
@@ -53,6 +54,7 @@ const ClienteDetalle = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { client, isLoadingClient, projects, tasks, documents } = useClientDetail(id);
+  const { data: clientGroupsList } = useClientGroupsForClient(id);
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState<string>("general");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -163,6 +165,21 @@ const ClienteDetalle = () => {
                 )}
               </div>
             </section>
+
+            {clientGroupsList && clientGroupsList.length > 0 && (
+              <section>
+                <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5" /> Grupo empresarial
+                </h2>
+                <div className="flex flex-wrap gap-1.5">
+                  {clientGroupsList.map((g) => (
+                    <span key={g.id} className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full font-medium">
+                      {g.name}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section>
               <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">Servicios</h2>

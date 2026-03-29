@@ -31,6 +31,7 @@ import {
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useCreateClient } from "@/hooks/useClients";
 import { useOrgProfiles } from "@/hooks/useClients";
+import { useClientGroups, useCreateClientGroup, useAddClientToGroup } from "@/hooks/useClientGroups";
 import { DropboxFolderPicker } from "@/components/clients/DropboxFolderPicker";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -136,7 +137,12 @@ function computeServices(values: ClientFormValues): ServiceArea[] {
 export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) {
   const createClient = useCreateClient();
   const { data: profiles } = useOrgProfiles();
+  const { data: clientGroups } = useClientGroups();
+  const createGroup = useCreateClientGroup();
+  const addToGroup = useAddClientToGroup();
   const [dropboxPickerOpen, setDropboxPickerOpen] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [newGroupName, setNewGroupName] = useState("");
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -180,7 +186,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       form.setError("individual_services", { message: "Selecciona al menos un servicio" });
       return;
     }
-    await createClient.mutateAsync({
+    const newClient = await createClient.mutateAsync({
       name: values.name,
       client_type: values.client_type,
       rfc: values.rfc || null,
@@ -197,7 +203,21 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       dropbox_folder_path: values.dropbox_folder_path || null,
       payroll_type: values.payroll_type === "none" ? null : values.payroll_type,
     });
+
+    if (newClient) {
+      let groupId = selectedGroupId;
+      if (!groupId && newGroupName.trim()) {
+        const g = await createGroup.mutateAsync({ name: newGroupName.trim() });
+        groupId = g.id;
+      }
+      if (groupId) {
+        await addToGroup.mutateAsync({ groupId, clientId: newClient.id });
+      }
+    }
+
     form.reset();
+    setSelectedGroupId("");
+    setNewGroupName("");
     onOpenChange(false);
   };
 
@@ -350,6 +370,33 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                   </FormItem>
                 )}
               />
+            </div>
+
+            {/* Client Group */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Grupo empresarial (opcional)</label>
+              <Select value={selectedGroupId || "none"} onValueChange={(v) => { setSelectedGroupId(v === "none" ? "" : v); if (v !== "none") setNewGroupName(""); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin grupo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin grupo</SelectItem>
+                  {(clientGroups || []).map((g) => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!selectedGroupId && (
+                <Input
+                  placeholder="O escribe un nuevo grupo..."
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  className="text-sm"
+                />
+              )}
+              <p className="text-xs text-muted-foreground">
+                Agrupa clientes relacionados (ej. empresas del mismo corporativo).
+              </p>
             </div>
 
             {/* Service Package */}

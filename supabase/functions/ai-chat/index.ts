@@ -245,6 +245,47 @@ const anthropicTools = [
       required: ["title", "content"],
     },
   },
+  {
+    name: "create_project",
+    description: "Crea un nuevo proyecto en Kawiil. USA ESTA HERRAMIENTA cuando el usuario pida crear un proyecto, ya sea directamente o a partir de una minuta de reunión, un análisis o instrucciones. Puedes asociar el proyecto a un cliente existente y definir el área de servicio.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nombre del proyecto" },
+        description: { type: "string", description: "Descripción del proyecto" },
+        client_id: { type: "string", description: "UUID del cliente (opcional)" },
+        area: { type: "string", enum: ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento"], description: "Área/célula de servicio" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "create_tasks",
+    description: "Crea múltiples tareas de una sola vez. USA ESTA HERRAMIENTA cuando el usuario pida crear tareas para un proyecto, a partir de una minuta, o a partir de instrucciones. Puedes crear tareas con prioridad, área, fecha límite y asignarlas a un proyecto existente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string", description: "UUID del proyecto al que pertenecen (opcional)" },
+        client_id: { type: "string", description: "UUID del cliente (opcional)" },
+        area: { type: "string", description: "Área por defecto para las tareas" },
+        tasks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              description: { type: "string" },
+              priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
+              due_date: { type: "string", description: "YYYY-MM-DD" },
+            },
+            required: ["title"],
+          },
+          description: "Lista de tareas a crear",
+        },
+      },
+      required: ["tasks"],
+    },
+  },
 ];
 
 // ─── OpenAI-format tools for fallback gateway ───
@@ -679,6 +720,62 @@ async function executeTool(
       };
     }
 
+    case "create_project": {
+      const { data: project, error } = await supabase.from("projects").insert({
+        name: args.name,
+        description: args.description || null,
+        client_id: args.client_id || null,
+        area: args.area || null,
+        organization_id: orgId,
+        created_by: userId,
+        responsible_user_id: userId,
+        tax_obligations: [],
+      }).select("id, name, area, status").single();
+      if (error) return { error: error.message };
+
+      // Also save as template for future AI suggestions
+      const svcUrlT = Deno.env.get("SUPABASE_URL")!;
+      const svcKeyT = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const svcT = createClient(svcUrlT, svcKeyT);
+      await svcT.from("project_templates").insert({
+        name: args.name,
+        description: args.description || null,
+        area: args.area || null,
+        phases: [],
+        suggested_tasks: [],
+        is_ai_generated: true,
+        organization_id: orgId,
+        created_by: userId,
+      });
+
+      return { success: true, project, url: `/proyectos/${project.id}` };
+    }
+
+    case "create_tasks": {
+      const results: any[] = [];
+      for (const task of args.tasks || []) {
+        const { data, error } = await supabase.from("tasks").insert({
+          title: task.title,
+          description: task.description || null,
+          project_id: args.project_id || null,
+          client_id: args.client_id || null,
+          organization_id: orgId,
+          created_by: userId,
+          assigned_to: userId,
+          area: args.area || null,
+          priority: task.priority || "media",
+          due_date: task.due_date || null,
+          status: "pendiente",
+        }).select("id, title, priority, status").single();
+        if (error) {
+          results.push({ title: task.title, error: error.message });
+        } else {
+          results.push(data);
+        }
+      }
+      return { success: true, created: results.filter((r) => !r.error).length, tasks: results };
+    }
+
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
@@ -731,6 +828,13 @@ Ejemplos de tu estilo:
 - Usa create_artifact cuando el contenido generado supere ~500 palabras o sea un documento formal/estructurado.
 - El artifact debe estar completo y bien formateado en Markdown.
 - Después de crear un artifact, incluye un breve resumen en el chat de lo que generaste y por qué.
+
+### 5b. Creación de proyectos y tareas
+- **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto.
+- **USA create_tasks** cuando el usuario pida crear tareas, ya sea a partir de instrucciones directas, una minuta, un análisis, o fases de un proyecto. Puedes crear múltiples tareas de una vez.
+- Cuando el usuario comparta una minuta o notas de reunión, analiza el contenido y propón la creación del proyecto y tareas correspondientes. Confirma con el usuario antes de crearlos, a menos que el usuario diga explícitamente "crea las tareas".
+- Al crear proyectos, intenta identificar el cliente y área correctos basándote en el contexto.
+- Al crear tareas, asigna prioridades inteligentemente según la urgencia y la naturaleza de la tarea.
 
 ### 6. Comunicación profesional
 - Redacta correos, mensajes y documentos en español formal mexicano.

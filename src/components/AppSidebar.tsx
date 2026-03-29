@@ -68,7 +68,7 @@ const navGroups: NavGroup[] = [
     label: "Inteligencia",
     items: [
       { title: "Kawiil AI", url: "/asistente", icon: Sparkles, moduleKey: "ai" },
-      { title: "Conocimiento", url: "/conocimiento", icon: BookOpen, moduleKey: "ai" },
+      { title: "Conocimiento", url: "/conocimiento", icon: BookOpen, moduleKey: "conocimiento" },
     ],
   },
   {

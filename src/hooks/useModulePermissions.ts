@@ -5,6 +5,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 
 export const MODULE_KEYS = [
   "ai",
+  "conocimiento",
   "finanzas",
   "calendario",
   "correo",
@@ -17,6 +18,7 @@ export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   ai: "Kawiil AI",
+  conocimiento: "Conocimiento",
   finanzas: "Finanzas",
   calendario: "Calendario",
   correo: "Correo",

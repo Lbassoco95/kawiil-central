@@ -51,7 +51,7 @@ const App = () => (
             <Route path="/despacho" element={<Navigate to="/hub" replace />} />
             <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
             <Route path="/asistente" element={<ProtectedRoute><ModuleGate moduleKey="ai"><AsistenteIA /></ModuleGate></ProtectedRoute>} />
-            <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="ai"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
+            <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="conocimiento"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
             <Route path="/finanzas" element={<ProtectedRoute><ModuleGate moduleKey="finanzas"><Finanzas /></ModuleGate></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><ModuleGate moduleKey="admin"><Admin /></ModuleGate></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

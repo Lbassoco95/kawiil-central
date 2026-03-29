@@ -7,12 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus, AlertTriangle, BookTemplate, Sparkles } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useClients";
 import { useClientComplianceConfig } from "@/hooks/useCompliance";
+import { useProjectTemplates, useCreateProjectTemplate } from "@/hooks/useProjectTemplates";
 import { ComplianceTaskGeneratorModal } from "@/components/compliance/ComplianceTaskGeneratorModal";
 import { toast } from "sonner";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
@@ -37,10 +38,14 @@ export function ProjectFormDialog() {
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
   const [complianceGenOpen, setComplianceGenOpen] = useState(false);
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [taskLines, setTaskLines] = useState<string>("");
   const { user } = useAuth();
   const { data: clients } = useClients();
   const { areaOptions } = useAreaOptions();
   const queryClient = useQueryClient();
+  const { data: templates } = useProjectTemplates(area || undefined);
+  const createTemplate = useCreateProjectTemplate();
 
   const isCumplimiento = area === "cumplimiento";
   const isAccounting = area === "contabilidad" || area === "softlanding";
@@ -57,6 +62,17 @@ export function ProjectFormDialog() {
   const autoName = isCumplimiento && selectedClient
     ? `Cumplimiento — ${selectedClient.name}`
     : name;
+
+  const applyTemplate = (tplId: string) => {
+    setSelectedTemplateId(tplId);
+    const tpl = templates?.find((t) => t.id === tplId);
+    if (!tpl) return;
+    if (tpl.area && !area) setArea(tpl.area);
+    if (tpl.description && !description) setDescription(tpl.description);
+    if (tpl.suggested_tasks?.length) {
+      setTaskLines(tpl.suggested_tasks.map((t: any) => t.title || t).join("\n"));
+    }
+  };
 
   const toggleObligation = (key: string) => {
     setSelectedObligations((prev) =>
@@ -85,6 +101,23 @@ export function ProjectFormDialog() {
         .select()
         .single();
       if (error) throw error;
+
+      if (data && taskLines.trim()) {
+        const lines = taskLines.split("\n").map((l) => l.trim()).filter(Boolean);
+        for (const title of lines) {
+          await supabase.from("tasks").insert({
+            title,
+            project_id: data.id,
+            client_id: clientId || null,
+            organization_id: orgId!,
+            created_by: user!.id,
+            assigned_to: user!.id,
+            area: area || null,
+            priority: "media",
+            status: "pendiente",
+          } as any);
+        }
+      }
       return data;
     },
     onSuccess: (data) => {
@@ -111,6 +144,20 @@ export function ProjectFormDialog() {
     setArea("");
     setSelectedObligations([]);
     setCreatedProjectId(null);
+    setSelectedTemplateId("");
+    setTaskLines("");
+  };
+
+  const handleSaveAsTemplate = async () => {
+    const finalName = isCumplimiento ? autoName : name;
+    if (!finalName.trim()) return;
+    const tasks = taskLines.split("\n").map((l) => l.trim()).filter(Boolean).map((t) => ({ title: t }));
+    await createTemplate.mutateAsync({
+      name: finalName,
+      description: description || undefined,
+      area: area || undefined,
+      suggested_tasks: tasks,
+    });
   };
 
   return (
@@ -127,6 +174,32 @@ export function ProjectFormDialog() {
             <DialogTitle>Crear proyecto</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            {/* Template suggestions */}
+            {templates && templates.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <BookTemplate className="h-3.5 w-3.5" /> Plantilla
+                </Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {templates.map((tpl) => (
+                    <button
+                      type="button"
+                      key={tpl.id}
+                      onClick={() => applyTemplate(tpl.id)}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                        selectedTemplateId === tpl.id
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-secondary/40 hover:bg-secondary border-border"
+                      }`}
+                    >
+                      {tpl.is_ai_generated && <Sparkles className="h-3 w-3 inline mr-1" />}
+                      {tpl.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {!isCumplimiento && (
               <div className="space-y-2">
                 <Label htmlFor="project-name">Nombre *</Label>
@@ -225,21 +298,46 @@ export function ProjectFormDialog() {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancelar
-              </Button>
+            <div className="space-y-2">
+              <Label>Tareas iniciales (una por línea)</Label>
+              <Textarea
+                placeholder={"Revisión de documentos\nAnálisis fiscal\nEntrega de reporte"}
+                value={taskLines}
+                onChange={(e) => setTaskLines(e.target.value)}
+                rows={4}
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Se crearán automáticamente al crear el proyecto.</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2">
               <Button
-                onClick={() => createProject.mutate()}
-                disabled={
-                  (!isCumplimiento && !name.trim()) ||
-                  (isCumplimiento && (!clientId || !hasComplianceConfig)) ||
-                  createProject.isPending ||
-                  (isAccounting && selectedObligations.length === 0)
-                }
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleSaveAsTemplate}
+                disabled={(!name.trim() && !isCumplimiento) || createTemplate.isPending}
+                className="text-xs"
               >
-                {createProject.isPending ? "Creando..." : "Crear proyecto"}
+                <BookTemplate className="h-3.5 w-3.5 mr-1" />
+                {createTemplate.isPending ? "Guardando..." : "Guardar como plantilla"}
               </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => createProject.mutate()}
+                  disabled={
+                    (!isCumplimiento && !name.trim()) ||
+                    (isCumplimiento && (!clientId || !hasComplianceConfig)) ||
+                    createProject.isPending ||
+                    (isAccounting && selectedObligations.length === 0)
+                  }
+                >
+                  {createProject.isPending ? "Creando..." : "Crear proyecto"}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>

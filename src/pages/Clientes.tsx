@@ -9,8 +9,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Search, Users, Mail, Phone, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Search, Users, Mail, Phone, Trash2, ChevronDown, ChevronRight, Building2, Layers } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useClients, useDeleteClient } from "@/hooks/useClients";
+import { useClientGroups } from "@/hooks/useClientGroups";
 import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -36,15 +39,29 @@ const AREA_ORDER: ServiceArea[] = [
   "cumplimiento", "juicios", "gestoria", "constitucion_nacional",
 ];
 
+type GroupMode = "area" | "grupo";
+
 const Clientes = () => {
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [groupMode, setGroupMode] = useState<GroupMode>("area");
   const { data: clients, isLoading } = useClients();
+  const { data: clientGroups } = useClientGroups();
   const deleteClient = useDeleteClient();
   const { isAdminOrManager } = useUserRole();
+
+  const { data: allGroupMembers } = useQuery({
+    queryKey: ["all-client-group-members"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("client_group_members" as any).select("*");
+      if (error) return [];
+      return (data || []) as { group_id: string; client_id: string }[];
+    },
+    enabled: !!clients && groupMode === "grupo",
+  });
 
   const filtered = useMemo(() => {
     if (!clients) return [];
@@ -58,7 +75,7 @@ const Clientes = () => {
     );
   }, [clients, search]);
 
-  const grouped = useMemo(() => {
+  const groupedByArea = useMemo(() => {
     const groups: Record<string, typeof filtered> = {};
     const noService: typeof filtered = [];
 
@@ -88,6 +105,35 @@ const Clientes = () => {
     return result;
   }, [filtered]);
 
+  const groupedByEmpresa = useMemo(() => {
+    if (!clientGroups || !allGroupMembers) return groupedByArea;
+    const memberMap = new Map<string, string[]>();
+    for (const m of allGroupMembers) {
+      if (!memberMap.has(m.group_id)) memberMap.set(m.group_id, []);
+      memberMap.get(m.group_id)!.push(m.client_id);
+    }
+    const assignedClientIds = new Set(allGroupMembers.map((m) => m.client_id));
+    const filteredIds = new Set(filtered.map((c) => c.id));
+
+    const result: { key: string; label: string; clients: typeof filtered }[] = [];
+    for (const g of clientGroups) {
+      const memberIds = memberMap.get(g.id) || [];
+      const groupClients = filtered.filter((c) => memberIds.includes(c.id));
+      if (groupClients.length > 0) {
+        groupClients.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+        result.push({ key: g.id, label: g.name, clients: groupClients });
+      }
+    }
+    const ungrouped = filtered.filter((c) => !assignedClientIds.has(c.id));
+    if (ungrouped.length > 0) {
+      ungrouped.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+      result.push({ key: "sin_grupo", label: "Sin grupo empresarial", clients: ungrouped });
+    }
+    return result;
+  }, [filtered, clientGroups, allGroupMembers, groupedByArea]);
+
+  const grouped = groupMode === "area" ? groupedByArea : groupedByEmpresa;
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -110,7 +156,7 @@ const Clientes = () => {
           </Button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -119,6 +165,20 @@ const Clientes = () => {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setGroupMode("area")}
+              className={`tab-pill ${groupMode === "area" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1`}
+            >
+              <Layers className="h-3 w-3" /> Área
+            </button>
+            <button
+              onClick={() => setGroupMode("grupo")}
+              className={`tab-pill ${groupMode === "grupo" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1`}
+            >
+              <Building2 className="h-3 w-3" /> Grupo
+            </button>
           </div>
           <span className="text-xs text-muted-foreground">
             {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}
