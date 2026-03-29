@@ -3,6 +3,26 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+// Shared hook: resolve the user's organization_id from profiles table
+function useOrgId() {
+  const { user } = useAuth();
+  const { data: orgId } = useQuery({
+    queryKey: ["my-org-id", user?.id],
+    enabled: !!user,
+    staleTime: 1000 * 60 * 30,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .single();
+      if (error || !data) return null;
+      return data.organization_id as string;
+    },
+  });
+  return orgId ?? null;
+}
+
 // ── Types ──
 
 export interface KnowledgeSyncLog {
@@ -78,9 +98,8 @@ export interface CelulaKnowledgeStat {
 // ── Feed ──
 
 export function useKnowledgeFeed() {
-  const { profile } = useAuth();
+  const orgId = useOrgId();
   const qc = useQueryClient();
-  const orgId = profile?.organization_id;
 
   const { data: feed = [], isLoading } = useQuery({
     queryKey: ["knowledge-feed", orgId],
@@ -113,8 +132,7 @@ export function useKnowledgeFeed() {
 // ── Insights ──
 
 export function useKnowledgeInsights(clientId?: string | null, projectId?: string | null) {
-  const { profile } = useAuth();
-  const orgId = profile?.organization_id;
+  const orgId = useOrgId();
 
   return useQuery({
     queryKey: ["knowledge-insights", orgId, clientId, projectId],
@@ -139,8 +157,7 @@ export function useKnowledgeInsights(clientId?: string | null, projectId?: strin
 // ── Sync Logs (with conditional polling) ──
 
 export function useKnowledgeSyncLogs() {
-  const { profile } = useAuth();
-  const orgId = profile?.organization_id;
+  const orgId = useOrgId();
 
   const query = useQuery({
     queryKey: ["knowledge-sync-logs", orgId],
@@ -209,8 +226,7 @@ export function useRunKnowledgeSync() {
 // ── Client Knowledge Stats (RPC) ──
 
 export function useClientKnowledgeStats() {
-  const { profile } = useAuth();
-  const orgId = profile?.organization_id;
+  const orgId = useOrgId();
 
   return useQuery({
     queryKey: ["client-knowledge-stats", orgId],
@@ -228,8 +244,7 @@ export function useClientKnowledgeStats() {
 // ── Project Knowledge Stats (RPC) ──
 
 export function useProjectKnowledgeStats() {
-  const { profile } = useAuth();
-  const orgId = profile?.organization_id;
+  const orgId = useOrgId();
 
   return useQuery({
     queryKey: ["project-knowledge-stats", orgId],
@@ -247,8 +262,7 @@ export function useProjectKnowledgeStats() {
 // ── Celula Knowledge Stats (RPC) ──
 
 export function useCelulaKnowledgeStats() {
-  const { profile } = useAuth();
-  const orgId = profile?.organization_id;
+  const orgId = useOrgId();
 
   return useQuery({
     queryKey: ["celula-knowledge-stats", orgId],
@@ -278,8 +292,7 @@ export interface LearningProgress {
 }
 
 export function useLearningProgress() {
-  const { profile } = useAuth();
-  const orgId = profile?.organization_id;
+  const orgId = useOrgId();
 
   return useQuery({
     queryKey: ["learning-progress", orgId],
