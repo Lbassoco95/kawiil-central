@@ -1,0 +1,36 @@
+---
+description: Proteccion de configuracion Supabase - Kawiil Central
+globs: .env, src/integrations/supabase/client.ts, supabase/config.toml
+alwaysApply: true
+---
+
+# Configuracion de Supabase - NO MODIFICAR
+
+El proyecto Kawiil Central usa su propio Supabase independiente (NO el de Lovable).
+
+## Valores criticos que NO deben cambiar:
+
+- `.env`: `VITE_SUPABASE_PROJECT_ID="qppfampapbxdgednkofc"`
+- `.env`: `VITE_SUPABASE_URL="https://qppfampapbxdgednkofc.supabase.co"`
+- `supabase/config.toml`: `project_id = "qppfampapbxdgednkofc"`
+
+## Si Lovable regenera `src/integrations/supabase/client.ts`:
+
+El archivo usa `import.meta.env.VITE_SUPABASE_URL` que se lee del `.env`.
+Mientras el `.env` tenga los valores correctos, el cliente apuntara al proyecto correcto.
+Si Lovable cambia las URLs directamente en el archivo, revertir a usar variables de entorno.
+
+## Edge Functions - Flags de deploy:
+
+Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
+- microsoft-auth, microsoft-callback, microsoft-api
+- dropbox-token-exchange
+- auth-email-hook, activate-recovery-link
+- backup-data, process-document, generate-phrase
+- savio-webhook, slack-events
+
+## Si algo se rompe despues de publicar desde Lovable:
+
+1. Verificar que `.env` no fue modificado por Lovable
+2. Verificar que `supabase/config.toml` mantiene `project_id = "qppfampapbxdgednkofc"`
+3. Re-desplegar Edge Functions si es necesario
