@@ -7,22 +7,45 @@ const corsHeaders = {
 };
 
 const TABLES_TO_BACKUP = [
-  "clients",
-  "projects",
-  "tasks",
-  "documents",
+  "organizations",
   "profiles",
-  "accounting_periods",
-  "annual_declarations",
-  "task_comments",
-  "task_assignees",
-  "project_members",
   "user_roles",
   "celulas",
-  "catalog_tags",
+  "user_celulas",
+  "clients",
+  "client_compliance_config",
+  "projects",
+  "project_members",
+  "project_comments",
+  "tasks",
+  "task_assignees",
+  "task_comments",
+  "documents",
+  "document_types",
+  "extracted_documents",
+  "extraction_logs",
+  "accounting_periods",
+  "annual_declarations",
+  "compliance_entity_types",
+  "compliance_task_templates",
+  "tax_obligation_types",
   "activity_log",
   "integrations",
-  "client_compliance_config",
+  "catalog_tags",
+  "notifications",
+  "reminders",
+  "expenses",
+  "chat_conversations",
+  "chat_messages",
+  "internal_procedures",
+  "procedure_versions",
+  "procedure_comments",
+  "internal_comunicados",
+  "mood_checkins",
+  "personalized_phrases",
+  "user_preferences",
+  "microsoft_tokens",
+  "savio_webhook_events",
 ];
 
 Deno.serve(async (req) => {
@@ -35,6 +58,10 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+    let body: Record<string, unknown> = {};
+    try { body = await req.json(); } catch { /* no body is fine */ }
+    const includeData = body.include_data === true;
+
     const now = new Date();
     const timestamp = now.toISOString().replace(/[:.]/g, "-");
     const dateFolder = now.toISOString().split("T")[0];
@@ -42,7 +69,6 @@ Deno.serve(async (req) => {
     const backupData: Record<string, unknown[]> = {};
     const errors: string[] = [];
 
-    // Export each table
     for (const table of TABLES_TO_BACKUP) {
       let allRows: unknown[] = [];
       let from = 0;
@@ -68,7 +94,6 @@ Deno.serve(async (req) => {
       backupData[table] = allRows;
     }
 
-    // Create a single JSON backup file
     const backupJson = JSON.stringify(backupData, null, 2);
     const filePath = `${dateFolder}/backup-${timestamp}.json`;
 
@@ -80,28 +105,7 @@ Deno.serve(async (req) => {
       });
 
     if (uploadError) {
-      throw new Error(`Upload failed: ${uploadError.message}`);
-    }
-
-    // Clean up old backups (keep last 7 days)
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const { data: folders } = await supabase.storage.from("backups").list("", {
-      limit: 100,
-      sortBy: { column: "name", order: "asc" },
-    });
-
-    if (folders) {
-      for (const folder of folders) {
-        if (folder.name < sevenDaysAgo.toISOString().split("T")[0]) {
-          const { data: files } = await supabase.storage
-            .from("backups")
-            .list(folder.name);
-          if (files && files.length > 0) {
-            const filePaths = files.map((f) => `${folder.name}/${f.name}`);
-            await supabase.storage.from("backups").remove(filePaths);
-          }
-        }
-      }
+      errors.push(`Storage upload: ${uploadError.message}`);
     }
 
     const summary = {
@@ -115,6 +119,12 @@ Deno.serve(async (req) => {
     };
 
     console.log("Backup completed:", JSON.stringify(summary));
+
+    if (includeData) {
+      return new Response(JSON.stringify({ summary, data: backupData }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     return new Response(JSON.stringify(summary), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
