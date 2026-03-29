@@ -4,6 +4,7 @@ import {
   useKnowledgeFeed,
   useRunKnowledgeSync,
   useRunningAgents,
+  useLearningProgress,
   type KnowledgeSyncLog,
 } from "@/hooks/useKnowledge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import {
   Bot, Play, Loader2, CheckCircle2, XCircle,
   Clock, FileText, Lightbulb, Bell, AlertTriangle,
   Archive, Link, Sparkles, ChevronRight, Timer, AlertOctagon,
+  Database, Building2, FolderKanban, BrainCircuit,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -172,6 +174,91 @@ function LogDetailPanel({ log }: { log: KnowledgeSyncLog }) {
         </span>
       </div>
     </div>
+  );
+}
+
+function LearningProgressPanel() {
+  const { data: progress, isLoading } = useLearningProgress();
+
+  if (isLoading) {
+    return <Skeleton className="h-32 rounded-xl" />;
+  }
+
+  if (!progress) return null;
+
+  const clientCoverage = progress.totalClients > 0
+    ? Math.round((progress.clientsWithChunks / progress.totalClients) * 100)
+    : 0;
+  const projectCoverage = progress.totalProjects > 0
+    ? Math.round((progress.projectsWithChunks / progress.totalProjects) * 100)
+    : 0;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <BrainCircuit className="h-4 w-4 text-primary" /> Progreso de aprendizaje
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="text-center">
+            <p className="text-2xl font-bold">{progress.totalDocs}</p>
+            <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+              <FileText className="h-3 w-3" /> Documentos
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold">{progress.totalChunks.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+              <Database className="h-3 w-3" /> Chunks
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold">{progress.totalInsights}</p>
+            <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+              <Lightbulb className="h-3 w-3" /> Insights
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold">{progress.totalFeedItems}</p>
+            <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+              <Bell className="h-3 w-3" /> Novedades
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2.5">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5">
+                <Building2 className="h-3 w-3 text-blue-500" />
+                Clientes con conocimiento
+              </span>
+              <span className="font-medium">{progress.clientsWithChunks}/{progress.totalClients} ({clientCoverage}%)</span>
+            </div>
+            <Progress value={clientCoverage} className="h-2" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5">
+                <FolderKanban className="h-3 w-3 text-emerald-500" />
+                Proyectos con conocimiento
+              </span>
+              <span className="font-medium">{progress.projectsWithChunks}/{progress.totalProjects} ({projectCoverage}%)</span>
+            </div>
+            <Progress value={projectCoverage} className="h-2" />
+          </div>
+        </div>
+
+        {progress.lastSyncAt && (
+          <p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-1 border-t border-border/30">
+            <Clock className="h-2.5 w-2.5" />
+            Última sincronización: {new Date(progress.lastSyncAt).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -339,6 +426,9 @@ export function AgentsTab() {
           );
         })}
       </div>
+
+      {/* Learning progress */}
+      <LearningProgressPanel />
 
       {/* Run all button */}
       <div className="flex justify-center">

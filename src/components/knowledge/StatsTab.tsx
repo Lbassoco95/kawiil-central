@@ -19,7 +19,7 @@ export function StatsTab() {
       const orgRes = await supabase.rpc("get_user_org_id" as any, { _user_id: user!.id });
       const { data, error } = await supabase.rpc("embedding_stats" as any, { org_id: orgRes.data });
       if (error) throw error;
-      return data as { source_type: string; chunk_count: number; avg_tokens: number }[];
+      return data as { source_type: string; chunk_count: number; earliest: string | null; latest: string | null }[];
     },
     enabled: !!user,
   });
@@ -108,7 +108,11 @@ export function StatsTab() {
                     <span className="text-xs text-muted-foreground">{sourceLabel(s.source_type)}</span>
                   </div>
                   <p className="text-2xl font-bold">{s.chunk_count.toLocaleString()}</p>
-                  <p className="text-[10px] text-muted-foreground">~{Math.round(s.avg_tokens)} tokens/chunk</p>
+                  {s.latest && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Último: {new Date(s.latest).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             ))}

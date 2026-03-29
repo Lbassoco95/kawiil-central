@@ -262,3 +262,65 @@ export function useCelulaKnowledgeStats() {
     },
   });
 }
+
+// ── Learning Progress Summary ──
+
+export interface LearningProgress {
+  totalDocs: number;
+  totalChunks: number;
+  totalInsights: number;
+  totalFeedItems: number;
+  clientsWithChunks: number;
+  totalClients: number;
+  projectsWithChunks: number;
+  totalProjects: number;
+  lastSyncAt: string | null;
+}
+
+export function useLearningProgress() {
+  const { profile } = useAuth();
+  const orgId = profile?.organization_id;
+
+  return useQuery({
+    queryKey: ["learning-progress", orgId],
+    enabled: !!orgId,
+    queryFn: async () => {
+      const [docsRes, chunksRes, insightsRes, feedRes, clientsRes, projectsRes, logsRes] = await Promise.all([
+        (supabase as any).from("documents").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+        (supabase as any).from("document_chunks").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+        (supabase as any).from("knowledge_insights").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+        (supabase as any).from("knowledge_feed").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+        (supabase as any).from("clients").select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("status", "activo"),
+        (supabase as any).from("projects").select("id", { count: "exact", head: true }).eq("organization_id", orgId).in("status", ["activo", "pausado"]),
+        (supabase as any).from("knowledge_sync_logs").select("completed_at").eq("organization_id", orgId).eq("status", "completed").order("completed_at", { ascending: false }).limit(1),
+      ]);
+
+      const clientsWithChunksRes = await (supabase as any)
+        .from("document_chunks")
+        .select("client_id")
+        .eq("organization_id", orgId)
+        .not("client_id", "is", null);
+
+      const projectsWithChunksRes = await (supabase as any)
+        .from("document_chunks")
+        .select("project_id")
+        .eq("organization_id", orgId)
+        .not("project_id", "is", null);
+
+      const uniqueClients = new Set((clientsWithChunksRes.data || []).map((r: any) => r.client_id));
+      const uniqueProjects = new Set((projectsWithChunksRes.data || []).map((r: any) => r.project_id));
+
+      return {
+        totalDocs: docsRes.count ?? 0,
+        totalChunks: chunksRes.count ?? 0,
+        totalInsights: insightsRes.count ?? 0,
+        totalFeedItems: feedRes.count ?? 0,
+        clientsWithChunks: uniqueClients.size,
+        totalClients: clientsRes.count ?? 0,
+        totalProjects: projectsRes.count ?? 0,
+        projectsWithChunks: uniqueProjects.size,
+        lastSyncAt: logsRes.data?.[0]?.completed_at || null,
+      } as LearningProgress;
+    },
+  });
+}

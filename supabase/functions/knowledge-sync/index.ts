@@ -155,14 +155,27 @@ async function runArchivista(
           }),
         });
 
-        const result = await resp.json().catch(() => ({ indexed: 0 }));
-        const indexed = result.indexed || result.documents_indexed || 0;
+        if (!resp.ok) {
+          const errBody = await resp.text().catch(() => "");
+          clientResults.push({
+            client_id: client.id,
+            client_name: client.name,
+            error: `HTTP ${resp.status}: ${errBody.substring(0, 200)}`,
+          });
+          continue;
+        }
+
+        const result = await resp.json().catch(() => ({}));
+        const indexed = result.registered || result.new_files || result.indexed || 0;
+        const chunks = result.embedded_chunks || 0;
         totalDocs += indexed;
 
         clientResults.push({
           client_id: client.id,
           client_name: client.name,
           docs_indexed: indexed,
+          chunks_created: chunks,
+          already_indexed: result.already_indexed || 0,
         });
       } catch (e: any) {
         clientResults.push({
