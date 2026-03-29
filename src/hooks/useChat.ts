@@ -83,18 +83,32 @@ export function useChat() {
     qc.invalidateQueries({ queryKey: ["chat-conversations"] });
   }, [qc]);
 
-  // Save message to DB
+  // Save message to DB and trigger background embedding
   const saveMessage = useCallback(async (conversationId: string, role: string, content: string) => {
-    await supabase.from("chat_messages" as any).insert({
+    const { data: msgData } = await supabase.from("chat_messages" as any).insert({
       conversation_id: conversationId,
       role,
       content,
-    } as any);
-    // Update conversation timestamp
+    } as any).select("id").single();
+
     await supabase.from("chat_conversations" as any)
       .update({ updated_at: new Date().toISOString() } as any)
       .eq("id", conversationId);
-  }, []);
+
+    // Background: generate embedding for this message (non-blocking)
+    if (msgData && content.length > 30) {
+      const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
+      supabase.functions.invoke("generate-embeddings", {
+        body: {
+          texts: [`[${role}] ${content}`],
+          source_type: "chat_message",
+          source_id: (msgData as any).id,
+          organization_id: orgRes.data,
+          auto_chunk: false,
+        },
+      }).catch(() => { /* embedding failure is non-critical */ });
+    }
+  }, [user]);
 
   // Delete conversation
   const deleteConversation = useMutation({

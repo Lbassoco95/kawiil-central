@@ -213,6 +213,25 @@ const anthropicTools = [
       required: ["query"],
     },
   },
+  {
+    name: "semantic_search",
+    description: "Búsqueda semántica en la base de conocimiento de Kawiil usando embeddings vectoriales. Encuentra información relevante en documentos procesados, conversaciones anteriores, procedimientos internos y comunicados — incluso si no coinciden las palabras exactas. ÚSALA cuando el usuario pregunte sobre un tema, cliente, ley, procedimiento o concepto. Es más potente que search_across y search_past_conversations para encontrar contexto conceptual.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Pregunta o tema a buscar semánticamente" },
+        client_id: { type: "string", description: "Filtrar por cliente específico (UUID)" },
+        project_id: { type: "string", description: "Filtrar por proyecto específico (UUID)" },
+        source_types: {
+          type: "array",
+          items: { type: "string", enum: ["document", "extracted_data", "chat_message", "procedure", "comunicado"] },
+          description: "Filtrar por tipos de fuente. Omitir para buscar en todo.",
+        },
+        limit: { type: "number", description: "Máximo de resultados (default 8)" },
+      },
+      required: ["query"],
+    },
+  },
 ];
 
 // ─── OpenAI-format tools for fallback gateway ───
@@ -580,6 +599,73 @@ async function executeTool(
       };
     }
 
+    case "semantic_search": {
+      const openaiKey = Deno.env.get("OPENAI_API_KEY");
+      if (!openaiKey) return { error: "Búsqueda semántica no disponible: OPENAI_API_KEY no configurada" };
+
+      const queryText = args.query;
+      const limit = args.limit || 8;
+
+      // Generate embedding for the query
+      const embResp = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openaiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          input: queryText.replace(/\n+/g, " ").trim(),
+          model: "text-embedding-3-small",
+          dimensions: 1536,
+        }),
+      });
+
+      if (!embResp.ok) {
+        const err = await embResp.text();
+        console.error("OpenAI embedding error:", err);
+        return { error: "No se pudo generar el embedding para la búsqueda" };
+      }
+
+      const embData = await embResp.json();
+      const queryEmbedding = embData.data[0].embedding;
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const serviceClient = createClient(supabaseUrl, serviceKey);
+
+      const { data: results, error: rpcError } = await serviceClient.rpc("match_document_chunks", {
+        query_embedding: JSON.stringify(queryEmbedding),
+        match_count: limit,
+        filter_org_id: orgId,
+        filter_client_id: args.client_id || null,
+        filter_project_id: args.project_id || null,
+        filter_source_types: args.source_types || null,
+        similarity_threshold: 0.35,
+      });
+
+      if (rpcError) {
+        console.error("match_document_chunks RPC error:", rpcError);
+        return { error: rpcError.message };
+      }
+
+      if (!results?.length) {
+        return { results: [], message: "No se encontraron resultados semánticos relevantes." };
+      }
+
+      return {
+        results: results.map((r: any) => ({
+          contenido: r.content.length > 500 ? r.content.substring(0, 500) + "..." : r.content,
+          tipo_fuente: r.source_type,
+          similitud: Math.round(r.similarity * 100) + "%",
+          metadata: r.metadata,
+          client_id: r.client_id,
+          project_id: r.project_id,
+        })),
+        total: results.length,
+        query: queryText,
+      };
+    }
+
     default:
       return { error: `Herramienta desconocida: ${name}` };
   }
@@ -615,11 +701,15 @@ Ejemplos de tu estilo:
 - **USA get_extracted_documents** para consultar información fiscal extraída de documentos (CFDIs, declaraciones, etc.).
 - **USA search_across** cuando necesites encontrar cualquier entidad por nombre.
 
-### 4. Aprendizaje y memoria contextual
-- Al responder, SIEMPRE cruza la información de múltiples fuentes: comentarios + descripción + actividad.
+### 4. Memoria y base de conocimiento (RAG)
+- Tienes acceso a una **base de conocimiento vectorial** con documentos, conversaciones previas, procedimientos y comunicados.
+- **USA semantic_search PRIMERO** cuando el usuario pregunte sobre un tema, ley, procedimiento, cliente o concepto. Es tu herramienta más potente: encuentra información relevante incluso si las palabras exactas no coinciden.
+- Cuando busques sobre un cliente específico, pasa el client_id como filtro para resultados más precisos.
+- Si semantic_search no encuentra suficiente info, complementa con search_past_conversations (búsqueda exacta en conversaciones) y search_across (búsqueda en tareas/clientes/proyectos).
+- Al responder, SIEMPRE cruza la información de múltiples fuentes: conocimiento base + comentarios + descripción + actividad.
 - Si el usuario pregunta sobre una persona, consulta sus tareas Y la actividad reciente para dar un panorama completo.
 - Si pregunta sobre un cliente, consulta sus proyectos, tareas Y documentos extraídos.
-- **USA search_past_conversations** para buscar si en conversaciones anteriores (tuyas o de otros Kawiilers) se ha discutido el tema. Si encuentras información relevante de otra conversación, menciónalo: "En una conversación anterior se discutió que..." sin revelar datos personales del otro usuario a menos que sea información de trabajo compartida.
+- Si encuentras información de la base de conocimiento, cítala: "Según la documentación..." o "En un análisis anterior se encontró que..."
 - Aprende del contexto de la conversación para dar respuestas cada vez más relevantes.
 
 ### 5. Comunicación profesional

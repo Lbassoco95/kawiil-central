@@ -463,6 +463,55 @@ serve(async (req) => {
 
     console.log(`Document ${document_id} processed successfully in ${extractedFields.processing_time_ms}ms`);
 
+    // Auto-generate embeddings for the extracted content
+    try {
+      const openaiKey = Deno.env.get("OPENAI_API_KEY");
+      if (openaiKey && extractedFields.ai_summary) {
+        let textToEmbed = extractedFields.ai_summary;
+        if (extractedFields.document_type) textToEmbed = `[${extractedFields.document_type}] ${textToEmbed}`;
+        if (extractedFields.rfc_emisor) textToEmbed += ` | RFC Emisor: ${extractedFields.rfc_emisor}`;
+        if (extractedFields.rfc_receptor) textToEmbed += ` | RFC Receptor: ${extractedFields.rfc_receptor}`;
+        if (extractedFields.fiscal_period) textToEmbed += ` | Periodo: ${extractedFields.fiscal_period}`;
+
+        const embResp = await fetch("https://api.openai.com/v1/embeddings", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openaiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            input: textToEmbed.replace(/\n+/g, " ").trim(),
+            model: "text-embedding-3-small",
+            dimensions: 1536,
+          }),
+        });
+
+        if (embResp.ok) {
+          const embData = await embResp.json();
+          const embedding = embData.data[0].embedding;
+          await supabase.from("document_chunks").insert({
+            organization_id: document.organization_id,
+            document_id: document_id,
+            client_id: document.client_id || null,
+            project_id: document.project_id || null,
+            source_type: "extracted_data",
+            source_id: extractionId,
+            content: textToEmbed,
+            metadata: {
+              document_type: extractedFields.document_type,
+              rfc_emisor: extractedFields.rfc_emisor,
+              confidence: extractedFields.confidence_score,
+            },
+            embedding: JSON.stringify(embedding),
+            token_count: Math.ceil(textToEmbed.length / 3.5),
+          });
+          console.log(`Embedding generated for extraction ${extractionId}`);
+        }
+      }
+    } catch (embError) {
+      console.error("Auto-embedding failed (non-blocking):", embError);
+    }
+
     return new Response(JSON.stringify({
       status: "completed",
       id: extractionId,
