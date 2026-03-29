@@ -1,5 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// TODO: postMessage targetOrigin uses SITE_URL injected into HTML at render time.
+// If SITE_URL is not set, falls back to '*' (less secure).
+const postMessageOrigin = Deno.env.get('SITE_URL') || '*';
+
 Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
@@ -11,7 +15,7 @@ Deno.serve(async (req) => {
 
     if (error) {
       return new Response(
-        `<html><body><script>window.close(); window.opener?.postMessage({type:'microsoft-auth-error',error:'${error}'},'*');</script><p>Error: ${error}. Puedes cerrar esta ventana.</p></body></html>`,
+        `<html><body><script>window.close(); window.opener?.postMessage({type:'microsoft-auth-error',error:'${error}'},'${postMessageOrigin}');</script><p>Error: ${error}. Puedes cerrar esta ventana.</p></body></html>`,
         { headers: { "Content-Type": "text/html" } }
       );
     }
@@ -48,7 +52,7 @@ Deno.serve(async (req) => {
     if (!tokenResponse.ok) {
       console.error("Token exchange failed:", tokenData);
       return new Response(
-        `<html><body><script>window.opener?.postMessage({type:'microsoft-auth-error',error:'token_exchange_failed'},'*');window.close();</script><p>Error al obtener token. Puedes cerrar esta ventana.</p></body></html>`,
+        `<html><body><script>window.opener?.postMessage({type:'microsoft-auth-error',error:'token_exchange_failed'},'${postMessageOrigin}');window.close();</script><p>Error al obtener token. Puedes cerrar esta ventana.</p></body></html>`,
         { headers: { "Content-Type": "text/html" } }
       );
     }
@@ -79,7 +83,7 @@ Deno.serve(async (req) => {
     if (dbError) {
       console.error("DB error:", dbError);
       return new Response(
-        `<html><body><script>window.opener?.postMessage({type:'microsoft-auth-error',error:'db_error'},'*');window.close();</script><p>Error al guardar. Puedes cerrar esta ventana.</p></body></html>`,
+        `<html><body><script>window.opener?.postMessage({type:'microsoft-auth-error',error:'db_error'},'${postMessageOrigin}');window.close();</script><p>Error al guardar. Puedes cerrar esta ventana.</p></body></html>`,
         { headers: { "Content-Type": "text/html" } }
       );
     }
@@ -87,7 +91,7 @@ Deno.serve(async (req) => {
     console.log("Token saved successfully for user:", userId);
 
     return new Response(
-      `<html><body><script>window.opener?.postMessage({type:'microsoft-auth-success'},'*');window.close();</script><p>¡Conectado! Puedes cerrar esta ventana.</p></body></html>`,
+      `<html><body><script>window.opener?.postMessage({type:'microsoft-auth-success'},'${postMessageOrigin}');window.close();</script><p>¡Conectado! Puedes cerrar esta ventana.</p></body></html>`,
       { headers: { "Content-Type": "text/html" } }
     );
   } catch (err) {

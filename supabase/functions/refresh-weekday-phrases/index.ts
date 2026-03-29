@@ -4,7 +4,7 @@ const MX_TZ = "America/Mexico_City";
 const MIN_REFRESH_HOUR = 8;
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get('SITE_URL') || '*',
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 

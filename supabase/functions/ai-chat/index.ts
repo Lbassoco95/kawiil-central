@@ -2,13 +2,23 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": Deno.env.get('SITE_URL') || '*',
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+function escapePostgrestString(input: string): string {
+  return input
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/,/g, '\\,')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
 
 // ─── Anthropic tool definitions ───
 const anthropicTools = [
@@ -266,7 +276,7 @@ async function executeTool(
       let q = supabase.from("clients")
         .select("id, name, rfc, email, status, services, contact_name, phone, primary_area")
         .eq("organization_id", orgId);
-      if (args.search) q = q.or(`name.ilike.%${args.search}%,rfc.ilike.%${args.search}%`);
+      if (args.search) q = q.or(`name.ilike.%${escapePostgrestString(args.search)}%,rfc.ilike.%${escapePostgrestString(args.search)}%`);
       if (args.status) q = q.eq("status", args.status);
       if (args.service) q = q.contains("services", [args.service]);
       q = q.order("name").limit(args.limit || 100);
@@ -363,7 +373,7 @@ async function executeTool(
       let q = supabase.from("internal_procedures")
         .select("title, description, file_path, current_version, updated_at")
         .eq("organization_id", orgId).order("updated_at", { ascending: false });
-      if (args.search) q = q.or(`title.ilike.%${args.search}%,description.ilike.%${args.search}%`);
+      if (args.search) q = q.or(`title.ilike.%${escapePostgrestString(args.search)}%,description.ilike.%${escapePostgrestString(args.search)}%`);
       q = q.limit(10);
       const { data, error } = await q;
       if (error) return { error: error.message };
@@ -471,7 +481,7 @@ async function executeTool(
       const { data: tasks } = await supabase.from("tasks")
         .select("id, title, status, area")
         .eq("organization_id", orgId)
-        .ilike("title", `%${q}%`)
+        .ilike("title", `%${escapePostgrestString(q)}%`)
         .limit(5);
       for (const t of tasks || []) {
         results.push({ type: "task", id: t.id, name: t.title, extra: `${t.status} · ${t.area || ""}`, url: `/tareas` });
@@ -480,7 +490,7 @@ async function executeTool(
       const { data: clients } = await supabase.from("clients")
         .select("id, name, rfc, status")
         .eq("organization_id", orgId)
-        .or(`name.ilike.%${q}%,rfc.ilike.%${q}%`)
+        .or(`name.ilike.%${escapePostgrestString(q)}%,rfc.ilike.%${escapePostgrestString(q)}%`)
         .limit(5);
       for (const c of clients || []) {
         results.push({ type: "client", id: c.id, name: c.name, extra: c.rfc || c.status, url: `/clientes/${c.id}` });
@@ -489,7 +499,7 @@ async function executeTool(
       const { data: projects } = await supabase.from("projects")
         .select("id, name, status, area")
         .eq("organization_id", orgId)
-        .ilike("name", `%${q}%`)
+        .ilike("name", `%${escapePostgrestString(q)}%`)
         .limit(5);
       for (const p of projects || []) {
         results.push({ type: "project", id: p.id, name: p.name, extra: `${p.status} · ${p.area || ""}`, url: `/proyectos/${p.id}` });
@@ -515,7 +525,8 @@ async function executeTool(
       const searchQuery = args.query;
       const limit = args.limit || 10;
 
-      // Use service role to search across org conversations
+      // SECURITY: Uses service role client, bypassing RLS to search across all org conversations.
+      // TODO: Review if a scoped RLS policy per org would be safer than a full service-role bypass.
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const serviceClient = createClient(supabaseUrl, serviceKey);
@@ -535,7 +546,7 @@ async function executeTool(
       const { data: messages } = await serviceClient.from("chat_messages")
         .select("content, role, conversation_id, created_at")
         .in("conversation_id", convoIds)
-        .ilike("content", `%${searchQuery}%`)
+        .ilike("content", `%${escapePostgrestString(searchQuery)}%`)
         .order("created_at", { ascending: false })
         .limit(limit);
 
