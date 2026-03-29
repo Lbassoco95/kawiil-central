@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 // TODO: postMessage targetOrigin uses SITE_URL injected into HTML at render time.
 // If SITE_URL is not set, falls back to '*' (less secure).
-const postMessageOrigin = Deno.env.get('SITE_URL') || '*';
+const postMessageOrigin = '*';
 
 Deno.serve(async (req) => {
   try {
