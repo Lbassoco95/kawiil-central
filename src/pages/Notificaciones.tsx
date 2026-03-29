@@ -12,17 +12,21 @@ import { formatMX } from "@/lib/dateUtils";
 import {
   AlertTriangle, CalendarClock, Loader2, ArrowRight,
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
+  Bot, BrainCircuit, Settings,
 } from "lucide-react";
 
-type Tab = "menciones" | "actividad" | "vencimientos";
+type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
 const MENTION_TYPES = ["mention"];
 const ACTIVITY_TYPES = ["task_assigned", "task_reassigned", "expense_created", "expense_status_changed"];
+const KNOWN_TYPES = [...MENTION_TYPES, ...ACTIVITY_TYPES];
 
 function getNotificationIcon(type: string) {
   if (type === "task_assigned" || type === "task_reassigned") return <ClipboardList className="h-3.5 w-3.5 text-primary" />;
   if (type === "expense_created" || type === "expense_status_changed") return <DollarSign className="h-3.5 w-3.5 text-emerald-500" />;
-  return <AtSign className="h-3.5 w-3.5 text-primary" />;
+  if (type === "knowledge_sync") return <BrainCircuit className="h-3.5 w-3.5 text-violet-500" />;
+  if (type.startsWith("knowledge")) return <Bot className="h-3.5 w-3.5 text-violet-500" />;
+  return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
 export default function Notificaciones() {
@@ -35,8 +39,10 @@ export default function Notificaciones() {
 
   const mentions = allNotifications.filter((n) => MENTION_TYPES.includes(n.type));
   const activityItems = allNotifications.filter((n) => ACTIVITY_TYPES.includes(n.type));
+  const sistemaItems = allNotifications.filter((n) => !KNOWN_TYPES.includes(n.type));
   const unreadMentions = mentions.filter((m) => !m.is_read);
   const unreadActivity = activityItems.filter((a) => !a.is_read);
+  const unreadSistema = sistemaItems.filter((s) => !s.is_read);
 
   const hasOverdue =
     (alerts?.overdue?.length ?? 0) > 0 || (alerts?.stepsOverdue?.length ?? 0) > 0;
@@ -52,6 +58,8 @@ export default function Notificaciones() {
       navigate(`/tareas?taskId=${m.entity_id}`);
     } else if (m.entity_type === "expense") {
       navigate("/finanzas");
+    } else if (m.entity_type === "knowledge" || m.type === "knowledge_sync") {
+      navigate("/conocimiento");
     }
   };
 
@@ -69,12 +77,13 @@ export default function Notificaciones() {
 
   const isLoading = loadingAlerts || loadingMentions;
 
-  const currentList = tab === "menciones" ? mentions : tab === "actividad" ? activityItems : [];
-  const currentUnread = tab === "menciones" ? unreadMentions : unreadActivity;
+  const currentList = tab === "menciones" ? mentions : tab === "actividad" ? activityItems : tab === "sistema" ? sistemaItems : [];
+  const currentUnread = tab === "menciones" ? unreadMentions : tab === "actividad" ? unreadActivity : unreadSistema;
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { key: "menciones", label: "Menciones", icon: <AtSign className="h-3 w-3" />, badge: unreadMentions.length },
     { key: "actividad", label: "Actividad", icon: <Activity className="h-3 w-3" />, badge: unreadActivity.length },
+    { key: "sistema", label: "Sistema", icon: <BrainCircuit className="h-3 w-3" />, badge: unreadSistema.length },
     { key: "vencimientos", label: "Vencimientos", icon: <CalendarClock className="h-3 w-3" /> },
   ];
 
@@ -117,8 +126,8 @@ export default function Notificaciones() {
               ))}
             </div>
 
-            {/* Mentions & Activity lists */}
-            {(tab === "menciones" || tab === "actividad") && (
+            {/* Mentions, Activity & Sistema lists */}
+            {(tab === "menciones" || tab === "actividad" || tab === "sistema") && (
               <div className="space-y-4">
                 {currentUnread.length > 0 && (
                   <div className="flex justify-end">
@@ -142,11 +151,18 @@ export default function Notificaciones() {
                           Sin menciones aún. Cuando alguien te @mencione aparecerá aquí.
                         </p>
                       </>
-                    ) : (
+                    ) : tab === "actividad" ? (
                       <>
                         <Activity className="mx-auto h-10 w-10 text-muted-foreground/40" />
                         <p className="mt-3 text-sm text-muted-foreground">
                           Sin actividad reciente. Asignaciones de tareas y gastos aparecerán aquí.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <BrainCircuit className="mx-auto h-10 w-10 text-muted-foreground/40" />
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Sin notificaciones de sistema. Los agentes de conocimiento y otros procesos aparecerán aquí.
                         </p>
                       </>
                     )}
@@ -186,7 +202,7 @@ export default function Notificaciones() {
                           </div>
                           {m.body && (
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                              "{m.body}"
+                              {m.body}
                             </p>
                           )}
                           <span className="text-[11px] text-muted-foreground mt-1 block">

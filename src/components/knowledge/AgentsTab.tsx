@@ -80,11 +80,28 @@ export function AgentsTab() {
   }, [logs]);
 
   const handleRun = (agent?: string) => {
-    toast.info(agent ? `Iniciando agente ${agentMeta[agent]?.label}...` : "Iniciando todos los agentes...", {
-      description: "El procesamiento se ejecuta en segundo plano. Verás el progreso aquí.",
+    const label = agent ? agentMeta[agent]?.label : "todos los agentes";
+    toast.info(`Iniciando ${label}...`, {
+      description: "El procesamiento puede tardar unos minutos.",
     });
     runSync.mutate(agent ? { agent } : undefined, {
-      onError: (err: any) => toast.error(`Error al ejecutar: ${err.message}`),
+      onSuccess: (data: any) => {
+        if (data?.error) {
+          toast.error(`Error del servidor: ${data.error}`);
+        } else {
+          const completed = data?.results
+            ? Object.keys(data.results).map((k) => agentMeta[k]?.label || k).join(", ")
+            : label;
+          toast.success(`${completed} completado(s)`, {
+            description: "Revisa el historial para más detalles.",
+          });
+        }
+      },
+      onError: (err: any) => {
+        toast.error("Error al ejecutar agentes", {
+          description: err?.message || "No se pudo conectar con el servidor.",
+        });
+      },
     });
   };
 

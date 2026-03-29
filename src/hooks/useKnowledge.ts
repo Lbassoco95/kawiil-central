@@ -189,7 +189,8 @@ export function useRunKnowledgeSync() {
       const resp = await supabase.functions.invoke("knowledge-sync", {
         body: params || {},
       });
-      if (resp.error) throw resp.error;
+      if (resp.error) throw new Error(resp.error.message || "Error en Edge Function");
+      if (resp.data?.error) throw new Error(resp.data.error);
       return resp.data;
     },
     onSettled: () => {
@@ -199,6 +200,8 @@ export function useRunKnowledgeSync() {
       qc.invalidateQueries({ queryKey: ["client-knowledge-stats"] });
       qc.invalidateQueries({ queryKey: ["project-knowledge-stats"] });
       qc.invalidateQueries({ queryKey: ["celula-knowledge-stats"] });
+      qc.invalidateQueries({ queryKey: ["user-notifications"] });
+      qc.invalidateQueries({ queryKey: ["unread-notifications-count"] });
     },
   });
 }
