@@ -405,7 +405,7 @@ export function EmailView() {
 
       {/* Email list panel */}
       <div className={cn("flex flex-col border-r border-border bg-background transition-all duration-200",
-        isMobile ? "flex-1" : "w-[380px] shrink-0",
+        isMobile ? "flex-1" : "w-[320px] lg:w-[380px] shrink-0",
         selectedEmailId && isMobile && "hidden"
       )}>
         {/* Search & compose toolbar */}
@@ -509,15 +509,18 @@ export function EmailView() {
                       </div>
                     </div>
 
-                    {/* Quick actions on hover */}
-                    <div className="hidden group-hover:flex items-center gap-1 mt-1.5 ml-12">
+                    {/* Quick actions — always visible on mobile, hover on desktop */}
+                    <div className={cn(
+                      "items-center gap-1 mt-1.5 ml-12",
+                      isMobile ? "flex" : "hidden group-hover:flex"
+                    )}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
-                            className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                            className="p-1.5 sm:p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
                             onClick={(e) => { e.stopPropagation(); handleArchive(email.id); }}
                           >
-                            <Archive className="h-3.5 w-3.5" />
+                            <Archive className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                           </button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
@@ -525,10 +528,10 @@ export function EmailView() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
-                            className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-destructive transition-colors"
+                            className="p-1.5 sm:p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-destructive transition-colors"
                             onClick={(e) => { e.stopPropagation(); handleDelete(email.id); }}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                           </button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
@@ -537,10 +540,10 @@ export function EmailView() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                              className="p-1.5 sm:p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
                               onClick={(e) => { e.stopPropagation(); markUnread.mutate(email.id); }}
                             >
-                              <Mail className="h-3.5 w-3.5" />
+                              <Mail className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="text-xs">Marcar no leído (u)</TooltipContent>
@@ -601,7 +604,7 @@ export function EmailView() {
         ) : emailDetail ? (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Detail header */}
-            <div className="px-6 py-4 border-b border-border/50 shrink-0">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-border/50 shrink-0">
               {isMobile && (
                 <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-xs" onClick={() => setSelectedEmailId(null)}>
                   <ChevronRight className="h-3.5 w-3.5 mr-1 rotate-180" /> Volver
@@ -618,9 +621,9 @@ export function EmailView() {
                   {getInitials(emailDetail.from?.emailAddress?.name, emailDetail.from?.emailAddress?.address)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-foreground">{emailDetail.from?.emailAddress?.name}</span>
-                    <span className="text-xs text-muted-foreground">&lt;{emailDetail.from?.emailAddress?.address}&gt;</span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">&lt;{emailDetail.from?.emailAddress?.address}&gt;</span>
                   </div>
                   <p className="text-xs text-muted-foreground truncate">
                     Para: {emailDetail.toRecipients?.map((r: any) => r.emailAddress?.name || r.emailAddress?.address).join(", ")}
@@ -635,50 +638,50 @@ export function EmailView() {
             </div>
 
             {/* Action bar */}
-            <div className="flex items-center gap-1 px-4 py-1.5 border-b border-border/50 shrink-0 bg-muted/20 flex-wrap">
+            <div className="flex items-center gap-0.5 sm:gap-1 px-2 sm:px-4 py-1.5 border-b border-border/50 shrink-0 bg-muted/20 overflow-x-auto">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant={emailAction === "reply" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
+                  <Button variant={emailAction === "reply" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1 shrink-0"
                     onClick={() => emailAction === "reply" ? resetAction() : handleStartReply("reply")}>
-                    <Reply className="h-3.5 w-3.5" /> Responder
+                    <Reply className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Responder</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">r</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">Responder (r)</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant={emailAction === "reply-all" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
+                  <Button variant={emailAction === "reply-all" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1 shrink-0"
                     onClick={() => emailAction === "reply-all" ? resetAction() : handleStartReply("reply-all")}>
-                    <ReplyAll className="h-3.5 w-3.5" /> Todos
+                    <ReplyAll className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Todos</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">a</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">Responder a todos (a)</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant={emailAction === "forward" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
+                  <Button variant={emailAction === "forward" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1 shrink-0"
                     onClick={() => emailAction === "forward" ? resetAction() : handleStartReply("forward")}>
-                    <Forward className="h-3.5 w-3.5" /> Reenviar
+                    <Forward className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Reenviar</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">f</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">Reenviar (f)</TooltipContent>
               </Tooltip>
 
-              <div className="w-px h-5 bg-border mx-0.5" />
+              <div className="w-px h-5 bg-border mx-0.5 shrink-0" />
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" onClick={() => selectedEmailId && handleArchive(selectedEmailId)}>
-                    <Archive className="h-3.5 w-3.5" /> Archivar
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0" onClick={() => selectedEmailId && handleArchive(selectedEmailId)}>
+                    <Archive className="h-3.5 w-3.5" /> <span className="hidden md:inline">Archivar</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">e</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
               </Tooltip>
 
               <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5">
-                    <FolderInput className="h-3.5 w-3.5" /> Mover
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0">
+                    <FolderInput className="h-3.5 w-3.5" /> <span className="hidden md:inline">Mover</span>
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-48 p-1" align="start">
@@ -701,18 +704,18 @@ export function EmailView() {
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5"
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0"
                     onClick={() => selectedEmailId && markUnread.mutate(selectedEmailId)}>
-                    <MailX className="h-3.5 w-3.5" /> No leído
+                    <MailX className="h-3.5 w-3.5" /> <span className="hidden lg:inline">No leído</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">u</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">No leído (u)</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="sm"
-                    className="h-8 text-xs gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="h-8 text-xs gap-1 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => selectedEmailId && handleDelete(selectedEmailId)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -720,27 +723,42 @@ export function EmailView() {
                 <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
               </Tooltip>
 
-              <div className="w-px h-5 bg-border mx-0.5" />
+              <div className="w-px h-5 bg-border mx-0.5 shrink-0 hidden sm:block" />
 
-              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5"
-                onClick={() => setQuickAIPrompt("Resume los puntos clave de este correo en viñetas.")}>
-                <ListChecks className="h-3.5 w-3.5" /> Resumir
-              </Button>
-              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5"
-                onClick={() => setQuickAIPrompt("Traduce este correo al inglés manteniendo el tono profesional.")}>
-                <Languages className="h-3.5 w-3.5" /> Traducir
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0 hidden sm:flex"
+                    onClick={() => setQuickAIPrompt("Resume los puntos clave de este correo en viñetas.")}>
+                    <ListChecks className="h-3.5 w-3.5" /> <span className="hidden lg:inline">Resumir</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Resumir con IA</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0 hidden sm:flex"
+                    onClick={() => setQuickAIPrompt("Traduce este correo al inglés manteniendo el tono profesional.")}>
+                    <Languages className="h-3.5 w-3.5" /> <span className="hidden lg:inline">Traducir</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Traducir con IA</TooltipContent>
+              </Tooltip>
 
-              <div className="ml-auto">
-                <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateTaskOpen(true)}>
-                  <ClipboardList className="h-3.5 w-3.5" /> Tarea
-                </Button>
+              <div className="ml-auto shrink-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setCreateTaskOpen(true)}>
+                      <ClipboardList className="h-3.5 w-3.5" /> <span className="hidden md:inline">Tarea</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">Crear tarea desde correo</TooltipContent>
+                </Tooltip>
               </div>
             </div>
 
             {/* Quick AI result */}
             {quickAIPrompt && (
-              <div className="px-6 py-3 border-b border-border/50 shrink-0 bg-primary/[0.03]">
+              <div className="px-3 sm:px-6 py-3 border-b border-border/50 shrink-0 bg-primary/[0.03]">
                 <EmailAIAssistant
                   mode="quick"
                   emailSubject={emailDetail.subject || ""}
@@ -754,7 +772,7 @@ export function EmailView() {
 
             {/* Email body + thread */}
             <ScrollArea className="flex-1">
-              <div className="px-6 py-5 space-y-5">
+              <div className="px-3 sm:px-6 py-4 sm:py-5 space-y-5">
                 {emailDetail.body?.contentType === "html" ? (
                   <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
                 ) : (
@@ -812,7 +830,7 @@ export function EmailView() {
 
             {/* Reply/Forward form */}
             {emailAction && (
-              <div className="border-t border-border p-5 shrink-0 space-y-3 bg-muted/20 max-h-[45%] overflow-y-auto">
+              <div className="border-t border-border p-3 sm:p-5 shrink-0 space-y-3 bg-muted/20 max-h-[45%] overflow-y-auto">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium text-foreground">
                     {emailAction === "reply" ? "Responder" : emailAction === "reply-all" ? "Responder a todos" : "Reenviar"}

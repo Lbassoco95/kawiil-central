@@ -39,9 +39,9 @@ const Microsoft365Correo = () => {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-3 ml-auto">
-              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              <p className="text-xs font-medium text-foreground capitalize">
+            <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground hidden sm:block" />
+              <p className="text-xs font-medium text-foreground capitalize hidden sm:block">
                 {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
               </p>
               <span className="text-xs text-muted-foreground">
