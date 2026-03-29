@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const siteUrl = Deno.env.get("SITE_URL") || "https://kawiil-core-hub.lovable.app";
+    const siteUrl = Deno.env.get("SITE_URL") || "";
 
     const expectedSig = await signPayload(serviceRoleKey, email, String(ts));
     if (!safeEqual(expectedSig, String(sig))) {

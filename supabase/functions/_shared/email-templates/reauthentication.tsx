@@ -24,7 +24,7 @@ export const ReauthenticationEmail = ({ token }: ReauthenticationEmailProps) => 
     <Body style={main}>
       <Container style={container}>
         <div style={logoContainer}>
-          <Img src="https://apfjafxiykkiydepmswk.supabase.co/storage/v1/object/public/email-assets/kawiil-logo.png" alt="Kawiil" width="56" height="56" style={logoImg} />
+          <Img src="https://qppfampapbxdgednkofc.supabase.co/storage/v1/object/public/email-assets/kawiil-logo.png" alt="Kawiil" width="56" height="56" style={logoImg} />
         </div>
         <Heading style={h1}>Código de verificación</Heading>
         <Text style={text}>Usa el siguiente código para confirmar tu identidad:</Text>

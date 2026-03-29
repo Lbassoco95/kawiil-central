@@ -51,7 +51,8 @@ function toBase64Url(bytes: Uint8Array): string {
 }
 
 async function signRecoveryActivation(email: string, timestamp: string): Promise<string> {
-  const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('LOVABLE_API_KEY') || 'fallback-secret'
+  const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('LOVABLE_API_KEY')
+  if (!secret) throw new Error('Missing signing secret')
   const key = await crypto.subtle.importKey(
     'raw',
     textEncoder.encode(secret),
@@ -76,7 +77,7 @@ async function buildActivationRecoveryLink(siteUrl: string, email: string): Prom
 // The sample email uses a fixed placeholder (RFC 6761 .test TLD) so the Go backend
 // can always find-and-replace it with the actual recipient when sending test emails,
 // even if the project's domain has changed since the template was scaffolded.
-const SAMPLE_PROJECT_URL = "https://kawiil-core-hub.lovable.app"
+const SAMPLE_PROJECT_URL = Deno.env.get('SITE_URL') || ''
 const SAMPLE_EMAIL = "user@example.test"
 const SAMPLE_DATA: Record<string, object> = {
   signup: {
@@ -247,7 +248,7 @@ async function handleWebhook(req: Request): Promise<Response> {
     )
   }
 
-  const siteUrl = `https://kawiil-core-hub.lovable.app`
+  const siteUrl = Deno.env.get('SITE_URL') || ''
 
   let redirectTarget = ''
   if (typeof payload.data.redirect_to === 'string') {

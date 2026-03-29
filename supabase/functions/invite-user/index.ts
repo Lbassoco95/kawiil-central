@@ -44,7 +44,7 @@ serve(async (req) => {
     const { data: orgId } = await adminClient.rpc('get_user_org_id', { _user_id: callerUser.id });
     if (!orgId) throw new Error('Could not determine organization');
 
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://kawiil-core-hub.lovable.app';
+    const siteUrl = Deno.env.get('SITE_URL') || '';
 
     // Robust first-access flow: create confirmed user + send recovery link for password setup.
     const { data: createData, error: createError } = await adminClient.auth.admin.createUser({

@@ -1,3 +1,7 @@
+-- Seed default organization (needed for seed data below)
+INSERT INTO public.organizations (id, name, slug) VALUES
+  ('a0000000-0000-0000-0000-000000000001', 'Kawiil', 'kawiil')
+ON CONFLICT (id) DO NOTHING;
 
 -- Areas table
 CREATE TABLE public.areas (

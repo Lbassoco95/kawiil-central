@@ -432,7 +432,7 @@ CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON public.documents FOR
 CREATE TRIGGER update_integrations_updated_at BEFORE UPDATE ON public.integrations FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- Storage bucket for documents
-INSERT INTO storage.buckets (id, name, public) VALUES ('documents', 'documents', false);
+INSERT INTO storage.buckets (id, name, public) VALUES ('documents', 'documents', false) ON CONFLICT (id) DO NOTHING;
 
 CREATE POLICY "Org users can upload documents" ON storage.objects
   FOR INSERT TO authenticated

@@ -103,7 +103,6 @@ serve(async (req) => {
     }
 
     const payload: PhraseRequest = await req.json().catch(() => ({}));
-    const token = authHeader.replace("Bearer ", "").trim();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -114,28 +113,16 @@ serve(async (req) => {
     });
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const isServiceRequest = token === serviceRoleKey;
-    let userId = payload.user_id;
-
-    if (!isServiceRequest) {
-      const { data: claimsData, error: claimsErr } = await requesterClient.auth.getClaims(token);
-      if (claimsErr || !claimsData?.claims?.sub) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      userId = claimsData.claims.sub as string;
-    }
-
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "Missing user_id" }), {
-        status: 400,
+    const { data: { user }, error: userErr } = await requesterClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const dbClient = isServiceRequest ? adminClient : requesterClient;
+    const userId = user.id;
+    const dbClient = requesterClient;
     const moodScore = payload.mood_score ?? null;
     const forceRegenerate = payload.force_regenerate ?? false;
     const timeOfDay = payload.time_of_day === "afternoon" ? "afternoon" : "morning";

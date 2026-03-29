@@ -25,3 +25,8 @@ dist-ssr
 backups/
 scripts/
 supabase/.temp/
+
+# Environment files
+.env
+.env.local
+.env.*.local
