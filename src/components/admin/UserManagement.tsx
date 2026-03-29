@@ -10,6 +10,7 @@ import { formatMX } from "@/lib/dateUtils";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
+import { useUserModulePermissions, MODULE_LABELS, MODULE_KEYS, type ModuleKey } from "@/hooks/useModulePermissions";
 import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
 import { useAreaOptions, formatCelulaLabel } from "@/hooks/useAreaOptions";
 import { gradoLabel, gradoBadgeClass } from "@/lib/gradoLabels";
@@ -61,6 +62,22 @@ function UserCelulaBadges({ userId, fallbackArea, areaLabelMap }: { userId: stri
         </Badge>
       ))}
     </>
+  );
+}
+
+function UserModuleBadges({ userId }: { userId: string }) {
+  const { data: modules = {}, isLoading } = useUserModulePermissions(userId);
+  if (isLoading) return null;
+  const active = MODULE_KEYS.filter((k) => modules[k]);
+  if (!active.length) return <span className="text-[10px] text-muted-foreground italic">Sin módulos</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {active.map((k) => (
+        <Badge key={k} variant="secondary" className="text-[9px] px-1.5 py-0 bg-primary/10 text-primary border-primary/20">
+          {MODULE_LABELS[k]}
+        </Badge>
+      ))}
+    </div>
   );
 }
 
@@ -289,6 +306,10 @@ export function UserManagement() {
                           <Badge variant="outline" className="text-xs mt-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                             Activo
                           </Badge>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="text-xs text-muted-foreground block mb-1">Módulos</span>
+                          <UserModuleBadges userId={user.user_id} />
                         </div>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2 pt-1 border-t">

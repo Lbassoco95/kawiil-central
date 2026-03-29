@@ -536,6 +536,105 @@ export function useMoveEmail() {
   });
 }
 
+export function useSendNewEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      to,
+      cc,
+      subject,
+      bodyHtml,
+    }: {
+      to: string[];
+      cc?: string[];
+      subject: string;
+      bodyHtml: string;
+    }) => {
+      const message: any = {
+        subject,
+        body: { contentType: "HTML", content: bodyHtml },
+        toRecipients: to.map((e) => ({ emailAddress: { address: e.trim() } })),
+      };
+      if (cc?.length) {
+        message.ccRecipients = cc.map((e) => ({ emailAddress: { address: e.trim() } }));
+      }
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "send-email", params: { message } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      toast.success("Correo enviado");
+    },
+    onError: (err: Error) => toast.error("Error al enviar correo: " + err.message),
+  });
+}
+
+export function useDeleteEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "delete-email", params: { messageId } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onMutate: async (messageId) => {
+      await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
+      const previousQueries = queryClient.getQueriesData({ queryKey: ["outlook-emails"] });
+      queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((e: any) => e.id !== messageId);
+      });
+      return { previousQueries };
+    },
+    onError: (_err: Error, _vars, context) => {
+      if (context?.previousQueries) {
+        for (const [key, data] of context.previousQueries) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      toast.error("Error al eliminar correo");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      toast.success("Correo eliminado");
+    },
+  });
+}
+
+export function useEmailAttachments(messageId: string | undefined) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["email-attachments", messageId],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "email-attachments", params: { messageId } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return (data?.value || []) as Array<{
+        id: string;
+        name: string;
+        contentType: string;
+        size: number;
+        contentBytes?: string;
+      }>;
+    },
+    enabled: !!user && !!messageId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useUnreadEmailCount() {
   const { user } = useAuth();
 

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ModuleGate } from "@/components/ModuleGate";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
@@ -43,16 +44,16 @@ const App = () => (
             <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
             <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
             <Route path="/microsoft365" element={<Navigate to="/microsoft365/calendario" replace />} />
-            <Route path="/microsoft365/calendario" element={<ProtectedRoute><Microsoft365Calendario /></ProtectedRoute>} />
-            <Route path="/microsoft365/correo" element={<ProtectedRoute><Microsoft365Correo /></ProtectedRoute>} />
-            <Route path="/documentos" element={<ProtectedRoute><Documentos /></ProtectedRoute>} />
-            <Route path="/hub" element={<ProtectedRoute><Hub /></ProtectedRoute>} />
+            <Route path="/microsoft365/calendario" element={<ProtectedRoute><ModuleGate moduleKey="calendario"><Microsoft365Calendario /></ModuleGate></ProtectedRoute>} />
+            <Route path="/microsoft365/correo" element={<ProtectedRoute><ModuleGate moduleKey="correo"><Microsoft365Correo /></ModuleGate></ProtectedRoute>} />
+            <Route path="/documentos" element={<ProtectedRoute><ModuleGate moduleKey="documentos"><Documentos /></ModuleGate></ProtectedRoute>} />
+            <Route path="/hub" element={<ProtectedRoute><ModuleGate moduleKey="hub"><Hub /></ModuleGate></ProtectedRoute>} />
             <Route path="/despacho" element={<Navigate to="/hub" replace />} />
             <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
-            <Route path="/asistente" element={<ProtectedRoute><AsistenteIA /></ProtectedRoute>} />
-            <Route path="/conocimiento" element={<ProtectedRoute><BaseConocimiento /></ProtectedRoute>} />
-            <Route path="/finanzas" element={<ProtectedRoute><Finanzas /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+            <Route path="/asistente" element={<ProtectedRoute><ModuleGate moduleKey="ai"><AsistenteIA /></ModuleGate></ProtectedRoute>} />
+            <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="ai"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
+            <Route path="/finanzas" element={<ProtectedRoute><ModuleGate moduleKey="finanzas"><Finanzas /></ModuleGate></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><ModuleGate moduleKey="admin"><Admin /></ModuleGate></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

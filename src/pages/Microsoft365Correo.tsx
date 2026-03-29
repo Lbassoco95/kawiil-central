@@ -8,7 +8,7 @@ import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { nowMX } from "@/lib/dateUtils";
-import { Loader2, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import { useState, useEffect } from "react";
 
 const Microsoft365Correo = () => {
@@ -68,12 +68,14 @@ const Microsoft365Correo = () => {
               </div>
             </div>
           ) : !isConnected ? (
-            <div className="p-6">
+            <div className="p-6 animate-scale-in">
               <MicrosoftConnectCard onConnect={connect} isConnecting={isConnecting} />
             </div>
           ) : (
             <ErrorBoundary>
-              <EmailView />
+              <div className="h-full animate-fade-in">
+                <EmailView />
+              </div>
             </ErrorBoundary>
           )}
         </div>

@@ -24,6 +24,7 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUnreadCount } from "@/hooks/useMentionNotifications";
 import { useUnreadEmailCount } from "@/hooks/useMicrosoft";
 import {
@@ -33,9 +34,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+type NavItem = { title: string; url: string; icon: any; moduleKey?: string };
 type NavGroup = {
   label: string;
-  items: { title: string; url: string; icon: any }[];
+  items: NavItem[];
 };
 
 const navGroups: NavGroup[] = [
@@ -57,24 +59,24 @@ const navGroups: NavGroup[] = [
   {
     label: "Integraciones",
     items: [
-      { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar },
-      { title: "Correo", url: "/microsoft365/correo", icon: Mail },
+      { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar, moduleKey: "calendario" },
+      { title: "Correo", url: "/microsoft365/correo", icon: Mail, moduleKey: "correo" },
       { title: "Notificaciones", url: "/notificaciones", icon: Bell },
     ],
   },
   {
     label: "Inteligencia",
     items: [
-      { title: "Kawiil AI", url: "/asistente", icon: Sparkles },
-      { title: "Conocimiento", url: "/conocimiento", icon: BookOpen },
+      { title: "Kawiil AI", url: "/asistente", icon: Sparkles, moduleKey: "ai" },
+      { title: "Conocimiento", url: "/conocimiento", icon: BookOpen, moduleKey: "ai" },
     ],
   },
   {
     label: "Gestión",
     items: [
-      { title: "Hub", url: "/hub", icon: Building2 },
-      { title: "Finanzas", url: "/finanzas", icon: Wallet },
-      { title: "Administración", url: "/admin", icon: Settings },
+      { title: "Hub", url: "/hub", icon: Building2, moduleKey: "hub" },
+      { title: "Finanzas", url: "/finanzas", icon: Wallet, moduleKey: "finanzas" },
+      { title: "Administración", url: "/admin", icon: Settings, moduleKey: "admin" },
     ],
   },
 ];
@@ -100,12 +102,16 @@ export function AppSidebar() {
   const { signOut, user } = useAuth();
   const isMobile = useIsMobile();
   const { isAdminOrManager } = useUserRole();
+  const { hasModule } = useModulePermissions();
   const { data: unreadCount = 0 } = useUnreadCount();
   const { data: unreadEmailCount = 0 } = useUnreadEmailCount();
 
   const visibleGroups = navGroups.map((g) => ({
     ...g,
-    items: g.items.filter((item) => item.url !== "/admin" || isAdminOrManager),
+    items: g.items.filter((item) => {
+      if (item.moduleKey && !hasModule(item.moduleKey)) return false;
+      return true;
+    }),
   })).filter((g) => g.items.length > 0);
 
   useEffect(() => {

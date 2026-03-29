@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { useCelulas } from "@/hooks/useCatalogs";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,6 +36,13 @@ import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
 import type { AppGrado } from "@/lib/gradoLabels";
 import { useEffect, useState } from "react";
 import { useUserCelulas, useSyncUserCelulas } from "@/hooks/useUserCelulas";
+import {
+  MODULE_KEYS,
+  MODULE_LABELS,
+  useUserModulePermissions,
+  useSyncModulePermissions,
+  type ModuleKey,
+} from "@/hooks/useModulePermissions";
 
 
 const editSchema = z.object({
@@ -99,6 +107,9 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
   const syncCelulas = useSyncUserCelulas();
   const { data: userCelulas = [] } = useUserCelulas(user?.user_id);
   const [selectedCelulaIds, setSelectedCelulaIds] = useState<string[]>([]);
+  const { data: userModules = {} } = useUserModulePermissions(user?.user_id);
+  const syncModules = useSyncModulePermissions();
+  const [moduleState, setModuleState] = useState<Record<string, boolean>>({});
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
@@ -119,8 +130,11 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
         role: (user.role as AppGrado) || "ejecutor",
       });
       setSelectedCelulaIds(userCelulas.map((uc) => uc.celula_id));
+      const ms: Record<string, boolean> = {};
+      for (const k of MODULE_KEYS) ms[k] = !!userModules[k];
+      setModuleState(ms);
     }
-  }, [user, open, form, userCelulas]);
+  }, [user, open, form, userCelulas, userModules]);
 
   const toggleCelula = (celulaId: string) => {
     setSelectedCelulaIds((prev) =>
@@ -160,7 +174,12 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
         celulaIds: selectedCelulaIds,
         organizationId: profile.organization_id,
       });
-      toast.success("Células actualizadas");
+
+      await syncModules.mutateAsync({
+        userId: user.user_id,
+        organizationId: profile.organization_id,
+        modules: moduleState,
+      });
     }
 
     onOpenChange(false);
@@ -258,6 +277,23 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                 </FormItem>
               )}
             />
+
+            <div>
+              <label className="text-sm font-medium">Módulos habilitados</label>
+              <div className="space-y-2 border rounded-md p-2 mt-1.5">
+                {MODULE_KEYS.map((key) => (
+                  <label key={key} className="flex items-center justify-between gap-2 text-sm">
+                    <span>{MODULE_LABELS[key]}</span>
+                    <Switch
+                      checked={!!moduleState[key]}
+                      onCheckedChange={(checked) =>
+                        setModuleState((prev) => ({ ...prev, [key]: checked }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
 
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

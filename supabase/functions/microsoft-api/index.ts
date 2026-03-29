@@ -563,6 +563,24 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "delete-email": {
+        const messageId = params?.messageId;
+        if (!messageId) throw new Error("messageId required");
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${messageId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        result = { success: res.ok };
+        break;
+      }
+
+      case "email-attachments": {
+        const messageId = params?.messageId;
+        if (!messageId) throw new Error("messageId required");
+        result = await graphRequest(accessToken, `/me/messages/${messageId}/attachments`);
+        break;
+      }
+
       case "create-mail-folder": {
         const displayName = params?.displayName;
         if (!displayName) throw new Error("displayName required");

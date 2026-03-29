@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs replaced with custom tab-pill classes for view mode
 import {
   useCalendarEvents,
   useCreateCalendarEvent,
@@ -106,6 +106,7 @@ export function CalendarView() {
     location: "",
     description: "",
     isOnlineMeeting: true,
+    isAllDay: false,
     categories: [] as string[],
   });
 
@@ -317,11 +318,20 @@ export function CalendarView() {
         type: "required",
       }));
 
-    const baseEvent: any = {
-      subject: newEvent.subject,
-      start: { dateTime: `${dateStr}T${newEvent.startTime}:00`, timeZone: CDMX_TZ },
-      end: { dateTime: `${dateStr}T${newEvent.endTime}:00`, timeZone: CDMX_TZ },
-    };
+    const nextDayStr = format(addDays(selectedDate, 1), "yyyy-MM-dd");
+
+    const baseEvent: any = newEvent.isAllDay
+      ? {
+          subject: newEvent.subject,
+          isAllDay: true,
+          start: { dateTime: `${dateStr}T00:00:00`, timeZone: CDMX_TZ },
+          end: { dateTime: `${nextDayStr}T00:00:00`, timeZone: CDMX_TZ },
+        }
+      : {
+          subject: newEvent.subject,
+          start: { dateTime: `${dateStr}T${newEvent.startTime}:00`, timeZone: CDMX_TZ },
+          end: { dateTime: `${dateStr}T${newEvent.endTime}:00`, timeZone: CDMX_TZ },
+        };
 
     if (newEvent.description.trim()) {
       baseEvent.body = {
@@ -362,6 +372,7 @@ export function CalendarView() {
             location: "",
             description: "",
             isOnlineMeeting: true,
+            isAllDay: false,
             categories: [],
           });
         },
@@ -457,7 +468,7 @@ export function CalendarView() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fade-in">
       {/* Toolbar */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
@@ -472,14 +483,17 @@ export function CalendarView() {
           {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
         <div className="flex items-center gap-2">
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-            <TabsList className="h-8">
-              <TabsTrigger value="day" className="text-xs px-3 h-7">Día</TabsTrigger>
-              <TabsTrigger value="3days" className="text-xs px-3 h-7">3 Días</TabsTrigger>
-              <TabsTrigger value="week" className="text-xs px-3 h-7">Semana</TabsTrigger>
-              <TabsTrigger value="month" className="text-xs px-3 h-7">Mes</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex gap-1 bg-secondary/30 rounded-full p-0.5">
+            {(["day", "3days", "week", "month"] as const).map((v) => (
+              <button
+                key={v}
+                className={`tab-pill ${viewMode === v ? "tab-pill-active" : "tab-pill-inactive"}`}
+                onClick={() => setViewMode(v)}
+              >
+                {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}
+              </button>
+            ))}
+          </div>
           <Button size="sm" onClick={() => { setSelectedDate(new Date()); setShowCreate(true); }}>
             <Plus className="mr-1 h-4 w-4" /> Evento
           </Button>
@@ -677,7 +691,7 @@ export function CalendarView() {
                             onDragEnd={() => setDraggedEvent(null)}
                           >
                             <div
-                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm cursor-grab active:cursor-grabbing"
+                              className="h-full bg-primary/20 text-primary rounded px-1.5 py-0.5 text-xs truncate mb-0.5 group relative shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 hover:shadow-md hover:bg-primary/25"
                               title={`${startStr}${endStr ? " - " + endStr : ""} ${event.subject}`}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -773,7 +787,7 @@ export function CalendarView() {
                         return (
                           <div
                             key={event.id}
-                            className="bg-primary/15 text-primary rounded px-1 py-0.5 text-[10px] truncate cursor-pointer"
+                            className="bg-primary/15 text-primary rounded px-1 py-0.5 text-[10px] truncate cursor-pointer transition-all duration-150 hover:bg-primary/25 hover:shadow-sm"
                             title={`${time} ${event.subject}`}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -814,24 +828,35 @@ export function CalendarView() {
                 placeholder="Nombre del evento..."
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Hora inicio (CDMX)</Label>
-                <Input
-                  type="time"
-                  value={newEvent.startTime}
-                  onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Hora fin (CDMX)</Label>
-                <Input
-                  type="time"
-                  value={newEvent.endTime}
-                  onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
-                />
-              </div>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-sm">Día completo</Label>
+              <Switch
+                checked={newEvent.isAllDay}
+                onCheckedChange={(checked) =>
+                  setNewEvent({ ...newEvent, isAllDay: checked })
+                }
+              />
             </div>
+            {!newEvent.isAllDay && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Hora inicio (CDMX)</Label>
+                  <Input
+                    type="time"
+                    value={newEvent.startTime}
+                    onChange={(e) => setNewEvent({ ...newEvent, startTime: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Hora fin (CDMX)</Label>
+                  <Input
+                    type="time"
+                    value={newEvent.endTime}
+                    onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Invitados (correos separados por coma)</Label>
               <Input

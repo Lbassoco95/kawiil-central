@@ -31,6 +31,8 @@ import {
   useSendDraft,
   useCreateMailFolder,
   useMoveEmail,
+  useDeleteEmail,
+  useEmailAttachments,
 } from "@/hooks/useMicrosoft";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
@@ -43,6 +45,7 @@ import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
 import { RichTextEditor } from "./RichTextEditor";
+import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { cn } from "@/lib/utils";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
@@ -119,6 +122,7 @@ export function EmailView() {
   const [newFolderName, setNewFolderName] = useState("");
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data: folders = [] } = useMailFolders();
@@ -132,6 +136,10 @@ export function EmailView() {
   const sendDraft = useSendDraft();
   const createMailFolder = useCreateMailFolder();
   const moveEmail = useMoveEmail();
+  const deleteEmail = useDeleteEmail();
+  const { data: attachments = [] } = useEmailAttachments(
+    emailDetail?.hasAttachments ? selectedEmailId ?? undefined : undefined
+  );
 
   const sortedFolders = sortFolders(folders);
 
@@ -368,7 +376,10 @@ export function EmailView() {
       {/* Panel 2: Email list */}
       <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
         <div className="flex flex-col h-full">
-          <div className="p-2 border-b border-border">
+          <div className="p-2 border-b border-border space-y-1.5">
+            <Button size="sm" className="w-full h-8 text-xs" onClick={() => setComposeOpen(true)}>
+              <Send className="mr-1.5 h-3.5 w-3.5" /> Redactar correo
+            </Button>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -543,6 +554,24 @@ export function EmailView() {
                   </PopoverContent>
                 </Popover>
 
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    if (selectedEmailId && confirm("¿Eliminar este correo?")) {
+                      const id = selectedEmailId;
+                      const idx = emails.findIndex((e: any) => e.id === id);
+                      const next = emails[idx + 1] || emails[idx - 1];
+                      setSelectedEmailId(next?.id || null);
+                      resetAction();
+                      deleteEmail.mutate(id);
+                    }
+                  }}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" /> Eliminar
+                </Button>
+
                 <div className="w-px h-5 bg-border mx-1" />
 
                 <Button variant="ghost" size="sm" className="h-7 text-xs"
@@ -585,6 +614,44 @@ export function EmailView() {
                     <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
                   ) : (
                     <pre className="whitespace-pre-wrap text-sm p-2">{emailDetail.body?.content}</pre>
+                  )}
+
+                  {attachments.length > 0 && (
+                    <div className="border rounded-lg p-3 space-y-2 bg-muted/20">
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Paperclip className="h-3.5 w-3.5" /> {attachments.length} adjunto{attachments.length > 1 ? "s" : ""}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {attachments.map((att: any) => (
+                          <button
+                            key={att.id}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-background hover:bg-secondary/40 text-xs transition-colors"
+                            onClick={() => {
+                              if (att.contentBytes) {
+                                const byteChars = atob(att.contentBytes);
+                                const byteNums = new Array(byteChars.length);
+                                for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+                                const blob = new Blob([new Uint8Array(byteNums)], { type: att.contentType });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = att.name;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }
+                            }}
+                          >
+                            <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate max-w-[140px]">{att.name}</span>
+                            <span className="text-muted-foreground">
+                              {att.size > 1024 * 1024
+                                ? `${(att.size / 1024 / 1024).toFixed(1)} MB`
+                                : `${Math.round(att.size / 1024)} KB`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
 
                   {/* Thread / previous emails */}
@@ -684,6 +751,7 @@ export function EmailView() {
         bodyPreview={emailDetail?.bodyPreview}
         receivedDate={emailDetail?.receivedDateTime ? formatDistanceToNow(parseISO(emailDetail.receivedDateTime), { addSuffix: true, locale: es }) : undefined}
       />
+      <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} />
     </ResizablePanelGroup>
   );
 }
