@@ -14,6 +14,7 @@ export interface ChatConversation {
   id: string;
   title: string;
   folder: string | null;
+  ai_project_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,6 +27,7 @@ export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeAiProjectId, setActiveAiProjectId] = useState<string | null>(null);
 
   // List conversations
   const { data: conversations, isLoading: loadingConversations } = useQuery({
@@ -42,7 +44,7 @@ export function useChat() {
     enabled: !!user,
   });
 
-  // Load conversation messages
+  // Load conversation messages and restore project context
   const loadConversation = useCallback(async (conversationId: string) => {
     const { data, error } = await supabase
       .from("chat_messages" as any)
@@ -52,6 +54,16 @@ export function useChat() {
     if (error) { toast.error("Error al cargar mensajes"); return; }
     setMessages((data as unknown as ChatMessage[]) || []);
     setActiveConversationId(conversationId);
+
+    // Restore ai_project_id from the conversation
+    const { data: conv } = await supabase
+      .from("chat_conversations" as any)
+      .select("ai_project_id")
+      .eq("id", conversationId)
+      .single();
+    if (conv) {
+      setActiveAiProjectId((conv as any).ai_project_id || null);
+    }
   }, []);
 
   // Create new conversation
@@ -59,13 +71,19 @@ export function useChat() {
     const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
     const { data, error } = await supabase
       .from("chat_conversations" as any)
-      .insert({ user_id: user!.id, organization_id: orgRes.data, title, folder: folder || null } as any)
+      .insert({
+        user_id: user!.id,
+        organization_id: orgRes.data,
+        title,
+        folder: folder || null,
+        ai_project_id: activeAiProjectId || null,
+      } as any)
       .select()
       .single();
     if (error) throw error;
     qc.invalidateQueries({ queryKey: ["chat-conversations"] });
     return (data as any).id as string;
-  }, [user, qc]);
+  }, [user, qc, activeAiProjectId]);
 
   // Update conversation folder
   const updateConversationFolder = useCallback(async (conversationId: string, folder: string | null) => {
@@ -161,6 +179,7 @@ export function useChat() {
         body: JSON.stringify({
           messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
           conversationId: convId,
+          ai_project_id: activeAiProjectId || undefined,
         }),
       });
 
@@ -249,9 +268,15 @@ export function useChat() {
     } finally {
       setIsStreaming(false);
     }
-  }, [messages, isStreaming, activeConversationId, createConversation, saveMessage, qc]);
+  }, [messages, isStreaming, activeConversationId, activeAiProjectId, createConversation, saveMessage, qc]);
 
   const startNewChat = useCallback(() => {
+    setActiveConversationId(null);
+    setMessages([]);
+  }, []);
+
+  const setAiProject = useCallback((projectId: string | null) => {
+    setActiveAiProjectId(projectId);
     setActiveConversationId(null);
     setMessages([]);
   }, []);
@@ -262,11 +287,13 @@ export function useChat() {
     conversations: conversations ?? [],
     loadingConversations,
     activeConversationId,
+    activeAiProjectId,
     sendMessage,
     loadConversation,
     startNewChat,
     deleteConversation: deleteConversation.mutate,
     updateConversationFolder,
     renameConversation,
+    setAiProject,
   };
 }

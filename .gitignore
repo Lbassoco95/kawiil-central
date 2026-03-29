@@ -26,6 +26,11 @@ backups/
 scripts/
 supabase/.temp/
 
+# Deno cache
+.deno/
+.deno_cache/
+deno.lock
+
 # Environment files
 .env
 .env.local

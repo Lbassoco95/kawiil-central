@@ -9,6 +9,83 @@ const corsHeaders = {
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
+let _cachedDropboxToken: string | null = null;
+let _cachedDropboxExpiry = 0;
+let _dbxAdminId: string | null = null;
+let _dbxRootNs: string | null = null;
+
+async function getDropboxAccessToken(): Promise<string | null> {
+  if (_cachedDropboxToken && Date.now() < _cachedDropboxExpiry - 60_000) {
+    return _cachedDropboxToken;
+  }
+
+  let refreshToken = Deno.env.get("DROPBOX_REFRESH_TOKEN");
+  const appKey = Deno.env.get("DROPBOX_APP_KEY");
+  const appSecret = Deno.env.get("DROPBOX_APP_SECRET");
+
+  if (!refreshToken || refreshToken.length < 50) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && serviceKey) {
+      const sb = createClient(supabaseUrl, serviceKey);
+      const { data } = await sb.from("integrations").select("config").eq("provider", "dropbox").eq("is_active", true).single();
+      if (data?.config?.refresh_token) refreshToken = data.config.refresh_token;
+    }
+  }
+
+  if (refreshToken && appKey && appSecret && refreshToken.length > 50) {
+    const resp = await fetch("https://api.dropboxapi.com/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${btoa(`${appKey}:${appSecret}`)}`,
+      },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      _cachedDropboxToken = data.access_token;
+      _cachedDropboxExpiry = Date.now() + data.expires_in * 1000;
+      return _cachedDropboxToken;
+    }
+  }
+
+  const staticToken = Deno.env.get("DROPBOX_ACCESS_TOKEN");
+  return staticToken || null;
+}
+
+async function initDropboxTeam(token: string): Promise<void> {
+  if (_dbxAdminId && _dbxRootNs) return;
+  try {
+    const mr = await fetch("https://api.dropboxapi.com/2/team/members/list_v2", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ limit: 50 }),
+    });
+    if (mr.ok) {
+      const d = await mr.json();
+      const admin = (d?.members || []).find((m: any) => m?.role?.[".tag"] === "team_admin");
+      _dbxAdminId = admin?.profile?.team_member_id || (d?.members?.[0]?.profile?.team_member_id) || null;
+    }
+  } catch {}
+  try {
+    const h: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (_dbxAdminId) h["Dropbox-API-Select-Admin"] = _dbxAdminId;
+    const ar = await fetch("https://api.dropboxapi.com/2/users/get_current_account", { method: "POST", headers: h });
+    if (ar.ok) { _dbxRootNs = (await ar.json())?.root_info?.root_namespace_id || null; }
+  } catch {}
+}
+
+function dropboxDownloadHeaders(token: string, path: string): Record<string, string> {
+  const h: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "Dropbox-API-Arg": JSON.stringify({ path }),
+  };
+  if (_dbxAdminId) h["Dropbox-API-Select-Admin"] = _dbxAdminId;
+  if (_dbxRootNs) h["Dropbox-API-Path-Root"] = JSON.stringify({ ".tag": "root", root: _dbxRootNs });
+  return h;
+}
+
 // Tool definitions for structured extraction
 const extractionTools = [
   {
@@ -209,11 +286,33 @@ async function getDocumentContent(supabase: any, document: any): Promise<{ conte
     return { content: base64, mimeType: document.mime_type || "application/pdf" };
   }
 
-  // For Dropbox documents - we'd need the Dropbox API to download
-  // For now, skip external documents
-  if (document.source === "dropbox") {
-    console.log("Dropbox documents not yet supported for extraction");
-    return null;
+  if (document.source === "dropbox" && document.external_path) {
+    try {
+      const accessToken = await getDropboxAccessToken();
+      if (!accessToken) {
+        console.error("No Dropbox credentials available for document download");
+        return null;
+      }
+      await initDropboxTeam(accessToken);
+
+      const downloadResp = await fetch("https://content.dropboxapi.com/2/files/download", {
+        method: "POST",
+        headers: dropboxDownloadHeaders(accessToken, document.external_path),
+      });
+
+      if (!downloadResp.ok) {
+        console.error("Dropbox download failed:", downloadResp.status, await downloadResp.text());
+        return null;
+      }
+
+      const arrayBuffer = await downloadResp.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      console.log(`Downloaded Dropbox file: ${document.external_path} (${arrayBuffer.byteLength} bytes)`);
+      return { content: base64, mimeType: document.mime_type || "application/pdf" };
+    } catch (err) {
+      console.error("Dropbox download error:", err);
+      return null;
+    }
   }
 
   return null;

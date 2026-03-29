@@ -224,12 +224,25 @@ const anthropicTools = [
         project_id: { type: "string", description: "Filtrar por proyecto específico (UUID)" },
         source_types: {
           type: "array",
-          items: { type: "string", enum: ["document", "extracted_data", "chat_message", "procedure", "comunicado"] },
+          items: { type: "string", enum: ["document", "extracted_data", "chat_message", "procedure", "comunicado", "memory", "artifact"] },
           description: "Filtrar por tipos de fuente. Omitir para buscar en todo.",
         },
         limit: { type: "number", description: "Máximo de resultados (default 8)" },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "create_artifact",
+    description: "Crea un documento/artifact estructurado (manual, reporte, análisis, matriz, guía, plantilla). USA ESTA HERRAMIENTA cuando el usuario pida generar un documento largo, manual, reporte o cualquier contenido que merezca su propia vista. El artifact aparecerá en un panel lateral para que el usuario lo vea, copie o descargue.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Título del documento" },
+        content: { type: "string", description: "Contenido completo en Markdown" },
+        content_type: { type: "string", enum: ["markdown", "code", "html", "csv"], description: "Tipo de contenido (default: markdown)" },
+      },
+      required: ["title", "content"],
     },
   },
 ];
@@ -702,17 +715,24 @@ Ejemplos de tu estilo:
 - **USA search_across** cuando necesites encontrar cualquier entidad por nombre.
 
 ### 4. Memoria y base de conocimiento (RAG)
-- Tienes acceso a una **base de conocimiento vectorial** con documentos, conversaciones previas, procedimientos y comunicados.
+- Tienes acceso a una **base de conocimiento vectorial** con documentos, conversaciones previas, procedimientos, comunicados y **memorias persistentes**.
 - **USA semantic_search PRIMERO** cuando el usuario pregunte sobre un tema, ley, procedimiento, cliente o concepto. Es tu herramienta más potente: encuentra información relevante incluso si las palabras exactas no coinciden.
 - Cuando busques sobre un cliente específico, pasa el client_id como filtro para resultados más precisos.
 - Si semantic_search no encuentra suficiente info, complementa con search_past_conversations (búsqueda exacta en conversaciones) y search_across (búsqueda en tareas/clientes/proyectos).
-- Al responder, SIEMPRE cruza la información de múltiples fuentes: conocimiento base + comentarios + descripción + actividad.
+- Al responder, SIEMPRE cruza la información de múltiples fuentes: conocimiento base + memorias + comentarios + descripción + actividad.
 - Si el usuario pregunta sobre una persona, consulta sus tareas Y la actividad reciente para dar un panorama completo.
-- Si pregunta sobre un cliente, consulta sus proyectos, tareas Y documentos extraídos.
-- Si encuentras información de la base de conocimiento, cítala: "Según la documentación..." o "En un análisis anterior se encontró que..."
-- Aprende del contexto de la conversación para dar respuestas cada vez más relevantes.
+- Si pregunta sobre un cliente, consulta sus proyectos, tareas, documentos extraídos Y memorias guardadas.
+- Si encuentras información de la base de conocimiento o memorias, cítala: "Según mis notas..." o "En un análisis anterior guardé que..."
+- **GUARDA en memoria** todo insight valioso: conclusiones de análisis, datos clave de clientes, estrategias discutidas, decisiones tomadas. Esto construye conocimiento real que perdura entre conversaciones.
 
-### 5. Comunicación profesional
+### 5. Generación de documentos (Artifacts)
+- Cuando el usuario pida generar un **documento largo** (manual, reporte, análisis, matriz, guía, plantilla, procedimiento), USA la herramienta **create_artifact** en lugar de poner el contenido directamente en el chat.
+- Los artifacts aparecen en un panel lateral donde el usuario puede verlos completos, copiarlos o descargarlos.
+- Usa create_artifact cuando el contenido generado supere ~500 palabras o sea un documento formal/estructurado.
+- El artifact debe estar completo y bien formateado en Markdown.
+- Después de crear un artifact, incluye un breve resumen en el chat de lo que generaste y por qué.
+
+### 6. Comunicación profesional
 - Redacta correos, mensajes y documentos en español formal mexicano.
 - Adapta el tono: formal para clientes/SAT, cercano para comunicación interna.
 
@@ -787,8 +807,68 @@ serve(async (req) => {
 
     const orgId = profile?.organization_id;
     const body = await req.json();
-    const { messages, simple, searchMode, searchQuery } = body;
-    const systemPrompt = buildSystemPrompt(profile);
+    const { messages, simple, searchMode, searchQuery, ai_project_id } = body;
+
+    // Load AI Project context + memories
+    let projectContext = "";
+    const svcUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const svc = createClient(svcUrl, serviceKey);
+
+    if (ai_project_id) {
+      const { data: aiProject } = await svc.from("ai_projects")
+        .select("name, description, instructions, client_id, project_id")
+        .eq("id", ai_project_id)
+        .single();
+
+      if (aiProject) {
+        projectContext = `\n\n## PROYECTO DE IA ACTIVO: ${aiProject.name}`;
+        if (aiProject.description) projectContext += `\nDescripción: ${aiProject.description}`;
+        if (aiProject.instructions) projectContext += `\n\n### Instrucciones del proyecto:\n${aiProject.instructions}`;
+        if (aiProject.client_id) projectContext += `\n- Filtrar búsquedas semánticas por client_id: ${aiProject.client_id}`;
+        if (aiProject.project_id) projectContext += `\n- Filtrar búsquedas semánticas por project_id: ${aiProject.project_id}`;
+
+        const { data: projDocs } = await svc.from("ai_project_documents")
+          .select("name, source, dropbox_path")
+          .eq("ai_project_id", ai_project_id);
+
+        if (projDocs?.length) {
+          projectContext += `\n\n### Documentos vinculados al proyecto (${projDocs.length}):`;
+          for (const d of projDocs) {
+            projectContext += `\n- ${d.name} (${d.source})`;
+          }
+          projectContext += `\nUsa semantic_search para buscar en estos documentos cuando sea relevante.`;
+        }
+      }
+    }
+
+    // Load existing memories for this context
+    let memQuery = svc.from("ai_project_memories")
+      .select("path, content, updated_at")
+      .eq("user_id", user.id)
+      .eq("organization_id", orgId);
+    if (ai_project_id) memQuery = memQuery.eq("ai_project_id", ai_project_id);
+    else memQuery = memQuery.is("ai_project_id", null);
+    const { data: memories } = await memQuery.order("path");
+
+    projectContext += `\n\n### Memoria persistente (Memory Tool)
+- Tienes acceso a la herramienta **memory** para guardar y consultar notas, aprendizajes, análisis y decisiones importantes.
+- **USA memory PROACTIVAMENTE**: cuando descubras información valiosa sobre un cliente, proyecto, ley, o estrategia, guárdala en /memories/ para futuras conversaciones.
+- Organiza las memorias en archivos temáticos: /memories/cliente_X.md, /memories/analisis_pld.md, /memories/estrategias.md, etc.
+- Al inicio de cada conversación, consulta tus memorias con 'view /memories' si el tema lo amerita.
+- Cuando actualices información existente, usa 'str_replace' en lugar de recrear el archivo completo.`;
+
+    if (memories?.length) {
+      projectContext += `\n\n**Memorias existentes (${memories.length} archivos):**`;
+      for (const m of memories) {
+        const preview = m.content.substring(0, 120).replace(/\n/g, " ");
+        projectContext += `\n- \`${m.path}\` — ${preview}…`;
+      }
+    } else {
+      projectContext += `\n\nAún no hay memorias guardadas. Empieza a construir conocimiento persistente guardando insights importantes.`;
+    }
+
+    const systemPrompt = buildSystemPrompt(profile) + projectContext;
 
     // ─── Direct search mode (structured results + optional AI summary) ───
     if (searchMode && searchQuery) {
@@ -896,9 +976,20 @@ serve(async (req) => {
     // ─── Main chat with tools (Claude primary) ───
     if (ANTHROPIC_API_KEY) {
       try {
-        return await handleClaudeChat(ANTHROPIC_API_KEY, systemPrompt, messages, supabase, user.id, orgId);
+        return await handleClaudeChat(ANTHROPIC_API_KEY, systemPrompt, messages, supabase, user.id, orgId, ai_project_id || null);
       } catch (e) {
-        console.warn("Claude chat failed, falling back to gateway:", e instanceof Error ? e.message : e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn("Claude chat failed:", errMsg);
+        // If it's a rate limit, try gateway; otherwise return the error directly
+        if (!errMsg.includes("RATE_LIMIT_429")) {
+          // ─── Fallback: Lovable AI Gateway (OpenAI format) ───
+          if (LOVABLE_API_KEY) {
+            return await handleGatewayChat(LOVABLE_API_KEY, systemPrompt, messages, supabase, user.id, orgId);
+          }
+          return new Response(JSON.stringify({ error: errMsg }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
     }
 
@@ -918,13 +1009,311 @@ serve(async (req) => {
   }
 });
 
+// ─── Artifact Tool handler ───
+async function handleCreateArtifact(
+  input: any, userId: string, orgId: string, aiProjectId: string | null,
+): Promise<string> {
+  const svcUrlA = Deno.env.get("SUPABASE_URL")!;
+  const serviceKeyA = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const svc = createClient(svcUrlA, serviceKeyA);
+
+  const { title, content, content_type } = input;
+  if (!title || !content) return JSON.stringify({ error: "title and content are required" });
+
+  const { data: artifact, error } = await svc.from("ai_artifacts").insert({
+    ai_project_id: aiProjectId || null,
+    user_id: userId,
+    organization_id: orgId,
+    title,
+    content,
+    content_type: content_type || "markdown",
+  }).select("id").single();
+
+  if (error) {
+    console.error("Artifact insert error:", error);
+    return JSON.stringify({ error: error.message });
+  }
+
+  // Auto-embed the artifact content
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (openaiKey && content.length > 30) {
+    try {
+      const textToEmbed = `[Artifact: ${title}] ${content}`.replace(/\n+/g, " ").trim().substring(0, 8000);
+      const embResp = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ input: textToEmbed, model: "text-embedding-3-small", dimensions: 1536 }),
+      });
+      if (embResp.ok) {
+        const embData = await embResp.json();
+        await svc.from("document_chunks").insert({
+          organization_id: orgId,
+          source_type: "artifact",
+          source_id: artifact.id,
+          content: `[Artifact: ${title}] ${content}`.substring(0, 4000),
+          metadata: { title, ai_project_id: aiProjectId, content_type: content_type || "markdown" },
+          embedding: JSON.stringify(embData.data[0].embedding),
+          token_count: Math.ceil(textToEmbed.length / 3.5),
+        });
+      }
+    } catch (e) {
+      console.error("Artifact embedding failed (non-blocking):", e);
+    }
+  }
+
+  return JSON.stringify({
+    artifact_id: artifact.id,
+    title,
+    content_type: content_type || "markdown",
+    message: `Artifact "${title}" creado exitosamente.`,
+  });
+}
+
+// ─── Memory Tool handler (backed by Supabase) ───
+async function handleMemoryToolCall(
+  input: any, userId: string, orgId: string, aiProjectId: string | null,
+): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const svc = createClient(supabaseUrl, serviceKey);
+
+  const { command, path: memPath, content, old_str, new_str, view_range } = input;
+
+  switch (command) {
+    case "view": {
+      if (!memPath || memPath === "/memories" || memPath === "/memories/") {
+        let query = svc.from("ai_project_memories")
+          .select("path, updated_at, content")
+          .eq("user_id", userId)
+          .eq("organization_id", orgId);
+        if (aiProjectId) query = query.eq("ai_project_id", aiProjectId);
+        else query = query.is("ai_project_id", null);
+        const { data: files } = await query.order("path");
+
+        if (!files?.length) return "El directorio /memories está vacío. Puedes crear archivos con el comando 'create'.";
+        const listing = files.map((f) => {
+          const sizeKB = (new TextEncoder().encode(f.content).length / 1024).toFixed(1);
+          return `${sizeKB}K\t${f.path}`;
+        }).join("\n");
+        return `Here're the files and directories up to 2 levels deep in /memories:\n${listing}`;
+      }
+
+      let query = svc.from("ai_project_memories")
+        .select("content")
+        .eq("user_id", userId)
+        .eq("path", memPath);
+      if (aiProjectId) query = query.eq("ai_project_id", aiProjectId);
+      else query = query.is("ai_project_id", null);
+      const { data: file } = await query.single();
+
+      if (!file) return `The path ${memPath} does not exist. Please provide a valid path.`;
+
+      let lines = file.content.split("\n");
+      if (view_range && Array.isArray(view_range) && view_range.length === 2) {
+        const [start, end] = view_range;
+        lines = lines.slice(Math.max(0, start - 1), end);
+      }
+      const numbered = lines.map((l: string, i: number) => `${String(i + 1).padStart(6)} \t${l}`).join("\n");
+      return `Here's the content of ${memPath} with line numbers:\n${numbered}`;
+    }
+
+    case "create": {
+      if (!memPath || !content) return "Error: path and content are required for create.";
+      const normalizedPath = memPath.startsWith("/memories/") ? memPath : `/memories/${memPath}`;
+      const { data: existing } = await svc.from("ai_project_memories")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("path", normalizedPath)
+        .maybeSingle();
+
+      if (existing) {
+        await svc.from("ai_project_memories")
+          .update({ content, updated_at: new Date().toISOString() })
+          .eq("id", existing.id);
+      } else {
+        await svc.from("ai_project_memories").insert({
+          ai_project_id: aiProjectId || null,
+          user_id: userId,
+          organization_id: orgId,
+          path: normalizedPath,
+          content,
+        });
+      }
+
+      // Auto-embed the memory
+      await embedMemory(svc, normalizedPath, content, userId, orgId, aiProjectId);
+      return `Successfully wrote to ${normalizedPath} (${content.split("\n").length} lines)`;
+    }
+
+    case "str_replace": {
+      if (!memPath || !old_str || !new_str) return "Error: path, old_str, and new_str are required.";
+      let query = svc.from("ai_project_memories")
+        .select("id, content")
+        .eq("user_id", userId)
+        .eq("path", memPath);
+      if (aiProjectId) query = query.eq("ai_project_id", aiProjectId);
+      else query = query.is("ai_project_id", null);
+      const { data: file } = await query.single();
+
+      if (!file) return `The path ${memPath} does not exist.`;
+      if (!file.content.includes(old_str)) return `old_str not found in ${memPath}.`;
+
+      const updated = file.content.replace(old_str, new_str);
+      await svc.from("ai_project_memories")
+        .update({ content: updated, updated_at: new Date().toISOString() })
+        .eq("id", file.id);
+
+      await embedMemory(svc, memPath, updated, userId, orgId, aiProjectId);
+      return `Successfully replaced text in ${memPath}`;
+    }
+
+    case "insert": {
+      if (!memPath || !content) return "Error: path and content are required for insert.";
+      const insertLine = input.insert_line ?? 0;
+      let query = svc.from("ai_project_memories")
+        .select("id, content")
+        .eq("user_id", userId)
+        .eq("path", memPath);
+      if (aiProjectId) query = query.eq("ai_project_id", aiProjectId);
+      else query = query.is("ai_project_id", null);
+      const { data: file } = await query.single();
+
+      if (!file) return `The path ${memPath} does not exist.`;
+      const lines = file.content.split("\n");
+      lines.splice(insertLine, 0, content);
+      const updated = lines.join("\n");
+      await svc.from("ai_project_memories")
+        .update({ content: updated, updated_at: new Date().toISOString() })
+        .eq("id", file.id);
+
+      await embedMemory(svc, memPath, updated, userId, orgId, aiProjectId);
+      return `Successfully inserted text at line ${insertLine} in ${memPath}`;
+    }
+
+    case "delete": {
+      if (!memPath) return "Error: path is required for delete.";
+      let query = svc.from("ai_project_memories")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("path", memPath);
+      if (aiProjectId) query = query.eq("ai_project_id", aiProjectId);
+      else query = query.is("ai_project_id", null);
+      const { data: file } = await query.single();
+
+      if (!file) return `The path ${memPath} does not exist.`;
+
+      await svc.from("ai_project_memories").delete().eq("id", file.id);
+      await svc.from("document_chunks")
+        .delete()
+        .eq("source_type", "memory")
+        .eq("source_id", file.id);
+      return `Successfully deleted ${memPath}`;
+    }
+
+    case "rename": {
+      if (!memPath || !input.new_path) return "Error: path and new_path are required.";
+      const newNorm = input.new_path.startsWith("/memories/") ? input.new_path : `/memories/${input.new_path}`;
+      let query = svc.from("ai_project_memories")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("path", memPath);
+      if (aiProjectId) query = query.eq("ai_project_id", aiProjectId);
+      else query = query.is("ai_project_id", null);
+      const { data: file } = await query.single();
+
+      if (!file) return `The path ${memPath} does not exist.`;
+      await svc.from("ai_project_memories")
+        .update({ path: newNorm, updated_at: new Date().toISOString() })
+        .eq("id", file.id);
+      return `Successfully renamed ${memPath} to ${newNorm}`;
+    }
+
+    default:
+      return `Unknown memory command: ${command}`;
+  }
+}
+
+async function embedMemory(
+  svc: any, path: string, content: string,
+  userId: string, orgId: string, aiProjectId: string | null,
+): Promise<void> {
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!openaiKey || content.length < 20) return;
+
+  try {
+    const { data: mem } = await svc.from("ai_project_memories")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("path", path)
+      .single();
+    if (!mem) return;
+
+    // Delete old chunks for this memory
+    await svc.from("document_chunks")
+      .delete()
+      .eq("source_type", "memory")
+      .eq("source_id", mem.id);
+
+    const textToEmbed = `[Memoria: ${path}] ${content}`;
+    const embResp = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: textToEmbed.replace(/\n+/g, " ").trim().substring(0, 8000), model: "text-embedding-3-small", dimensions: 1536 }),
+    });
+
+    if (!embResp.ok) return;
+    const embData = await embResp.json();
+    const embedding = embData.data[0].embedding;
+
+    await svc.from("document_chunks").insert({
+      organization_id: orgId,
+      client_id: null,
+      project_id: null,
+      source_type: "memory",
+      source_id: mem.id,
+      content: textToEmbed.substring(0, 4000),
+      metadata: { path, ai_project_id: aiProjectId, user_id: userId },
+      embedding: JSON.stringify(embedding),
+      token_count: Math.ceil(textToEmbed.length / 3.5),
+    });
+    console.log(`Embedded memory: ${path}`);
+  } catch (e) {
+    console.error("Memory embedding failed (non-blocking):", e);
+  }
+}
+
 // ─── Claude (Anthropic) handler ───
 async function handleClaudeChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
-  supabase: any, userId: string, orgId: string,
+  supabase: any, userId: string, orgId: string, aiProjectId: string | null,
 ): Promise<Response> {
   let anthropicMsgs = toAnthropicMessages(userMessages);
-  const MAX_ROUNDS = 5;
+  const MAX_ROUNDS = 8;
+  const createdArtifacts: { id: string; title: string; content_type: string }[] = [];
+
+  // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
+  const memoryToolDef = {
+    name: "memory",
+    description: "Herramienta de memoria persistente. Permite guardar, leer, actualizar y eliminar notas/archivos en /memories/. Usa esta herramienta para construir conocimiento que persiste entre conversaciones. COMANDOS: 'view' (ver directorio o archivo), 'create' (crear/sobrescribir archivo), 'str_replace' (reemplazar texto en archivo), 'insert' (insertar texto en linea), 'delete' (eliminar archivo), 'rename' (renombrar archivo).",
+    input_schema: {
+      type: "object",
+      properties: {
+        command: { type: "string", enum: ["view", "create", "str_replace", "insert", "delete", "rename"], description: "Comando a ejecutar" },
+        path: { type: "string", description: "Ruta del archivo, ej: /memories/cliente_x.md" },
+        content: { type: "string", description: "Contenido del archivo (para create/insert)" },
+        old_str: { type: "string", description: "Texto a reemplazar (para str_replace)" },
+        new_str: { type: "string", description: "Nuevo texto (para str_replace)" },
+        new_path: { type: "string", description: "Nueva ruta (para rename)" },
+        insert_line: { type: "number", description: "Numero de linea donde insertar (para insert)" },
+        view_range: { type: "array", items: { type: "number" }, description: "Rango de lineas [inicio, fin] (para view)" },
+      },
+      required: ["command"],
+    },
+  };
+  const allTools: any[] = [
+    ...anthropicTools,
+    memoryToolDef,
+  ];
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const isLastChance = round === MAX_ROUNDS - 1;
@@ -941,14 +1330,13 @@ async function handleClaudeChat(
         max_tokens: 4096,
         system: systemPrompt,
         messages: anthropicMsgs,
-        tools: isLastChance ? undefined : anthropicTools,
+        tools: isLastChance ? undefined : allTools,
         stream: false,
       }),
     });
 
     if (!resp.ok) {
       const errText = await resp.text();
-      // On 429, throw so the main handler catches and falls back to gateway
       if (resp.status === 429) {
         console.warn("Claude 429 rate limit, will fallback to gateway");
         throw new Error("RATE_LIMIT_429");
@@ -967,22 +1355,47 @@ async function handleClaudeChat(
 
       const toolResults: any[] = [];
       for (const tu of toolUseBlocks) {
-        console.log(`Tool [Claude]: ${tu.name}`, tu.input);
-        const result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId);
+        let result: any;
+
+        if (tu.name === "memory") {
+          console.log(`Memory Tool: ${tu.input?.command} ${tu.input?.path || ""}`);
+          const memResult = await handleMemoryToolCall(tu.input || {}, userId, orgId, aiProjectId);
+          result = memResult;
+        } else if (tu.name === "create_artifact") {
+          console.log(`Artifact Tool: ${tu.input?.title}`);
+          result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
+          try {
+            const parsed = JSON.parse(result);
+            if (parsed.artifact_id) {
+              createdArtifacts.push({ id: parsed.artifact_id, title: parsed.title, content_type: parsed.content_type || "markdown" });
+            }
+          } catch {}
+        } else {
+          console.log(`Tool [Claude]: ${tu.name}`, tu.input);
+          result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId);
+        }
+
         toolResults.push({
           type: "tool_result",
           tool_use_id: tu.id,
-          content: JSON.stringify(result),
+          content: typeof result === "string" ? result : JSON.stringify(result),
         });
       }
       anthropicMsgs.push({ role: "user", content: toolResults });
       continue;
     }
 
-    const textContent = contentBlocks
+    let textContent = contentBlocks
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
       .join("");
+
+    if (createdArtifacts.length > 0) {
+      const markers = createdArtifacts.map(
+        (a) => `[artifact:${a.id}|${a.title}|${a.content_type}]`
+      ).join("\n");
+      textContent = textContent + "\n\n" + markers;
+    }
 
     return streamTextAsSSE(textContent);
   }

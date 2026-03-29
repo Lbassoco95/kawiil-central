@@ -20,6 +20,7 @@ import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Hub from "./pages/Hub";
 import Notificaciones from "./pages/Notificaciones";
 import AsistenteIA from "./pages/AsistenteIA";
+import BaseConocimiento from "./pages/BaseConocimiento";
 import Finanzas from "./pages/Finanzas";
 import NotFound from "./pages/NotFound";
 
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/despacho" element={<Navigate to="/hub" replace />} />
             <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
             <Route path="/asistente" element={<ProtectedRoute><AsistenteIA /></ProtectedRoute>} />
+            <Route path="/conocimiento" element={<ProtectedRoute><BaseConocimiento /></ProtectedRoute>} />
             <Route path="/finanzas" element={<ProtectedRoute><Finanzas /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

@@ -18,6 +18,7 @@ import {
   Bell,
   Sparkles,
   Wallet,
+  BookOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,7 @@ const navItems = [
   { title: "Notificaciones", url: "/notificaciones", icon: Bell },
   { title: "Hub", url: "/hub", icon: Building2 },
   { title: "Kawiil AI", url: "/asistente", icon: Sparkles },
+  { title: "Conocimiento", url: "/conocimiento", icon: BookOpen },
   { title: "Finanzas", url: "/finanzas", icon: Wallet },
   { title: "Administración", url: "/admin", icon: Settings },
 ];
