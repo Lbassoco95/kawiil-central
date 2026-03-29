@@ -164,11 +164,18 @@ async function runArchivista(
 
     const { count: chunkCount } = await supabase
       .from("document_chunks")
-      .select("id", { count: "exact", head: true });
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId);
+
+    const { count: docCount } = await supabase
+      .from("documents")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId);
 
     await completeLog(supabase, logId, {
       clients_scanned: (clients || []).length,
       docs_indexed: totalDocs,
+      total_docs: docCount || 0,
       total_chunks: chunkCount || 0,
       details: clientResults,
     });
@@ -217,12 +224,16 @@ async function runIntegrador(
     let insightsCreated = 0;
 
     for (const client of clients || []) {
-      const { data: recentChunks } = await supabase
+      let chunkQuery = supabase
         .from("document_chunks")
         .select("id, content, source_type, metadata")
-        .or(`metadata->>client_id.eq.${client.id},metadata->client_id.eq.${client.id}`)
-        .gte("created_at", since)
-        .limit(50);
+        .eq("client_id", client.id);
+
+      if (since !== "2020-01-01T00:00:00Z") {
+        chunkQuery = chunkQuery.gte("created_at", since);
+      }
+
+      const { data: recentChunks } = await chunkQuery.limit(50);
 
       if (!recentChunks?.length) continue;
 
@@ -278,7 +289,7 @@ Responde en formato JSON:
               source_chunks: recentChunks.map((c: any) => c.id),
               updated_at: new Date().toISOString(),
             },
-            { onConflict: "organization_id, client_id, insight_type", ignoreDuplicates: false },
+            { onConflict: "organization_id,client_id,insight_type", ignoreDuplicates: false },
           );
           insightsCreated++;
         }
@@ -305,12 +316,16 @@ Responde en formato JSON:
       .in("status", ["activo", "pausado"]);
 
     for (const project of projects || []) {
-      const { data: projChunks } = await supabase
+      let projChunkQuery = supabase
         .from("document_chunks")
         .select("id, content, source_type")
-        .or(`metadata->>project_id.eq.${project.id},metadata->project_id.eq.${project.id}`)
-        .gte("created_at", since)
-        .limit(30);
+        .eq("project_id", project.id);
+
+      if (since !== "2020-01-01T00:00:00Z") {
+        projChunkQuery = projChunkQuery.gte("created_at", since);
+      }
+
+      const { data: projChunks } = await projChunkQuery.limit(30);
 
       if (!projChunks?.length) continue;
 
@@ -356,7 +371,7 @@ ${chunkText}`,
               source_chunks: projChunks.map((c: any) => c.id),
               updated_at: new Date().toISOString(),
             },
-            { onConflict: "organization_id, project_id, insight_type", ignoreDuplicates: false },
+            { onConflict: "organization_id,project_id,insight_type", ignoreDuplicates: false },
           );
           insightsCreated++;
         }
@@ -376,13 +391,13 @@ ${chunkText}`,
 // ────────────── NUTRITOR ──────────────
 async function runNutritor(supabase: any, orgId: string, anthropicKey: string | undefined, logId: string) {
   try {
-    const yesterday = new Date(Date.now() - 86400000).toISOString();
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
     const { data: recentInsights } = await supabase
       .from("knowledge_insights")
       .select("id, title, content, insight_type, client_id, project_id, clients(name), projects(name)")
       .eq("organization_id", orgId)
-      .gte("updated_at", yesterday)
+      .gte("updated_at", sevenDaysAgo)
       .order("updated_at", { ascending: false })
       .limit(30);
 
@@ -390,7 +405,7 @@ async function runNutritor(supabase: any, orgId: string, anthropicKey: string | 
       .from("documents")
       .select("id, name, client_id, project_id, document_type, created_at")
       .eq("organization_id", orgId)
-      .gte("created_at", yesterday)
+      .gte("created_at", sevenDaysAgo)
       .order("created_at", { ascending: false })
       .limit(20);
 
@@ -423,20 +438,52 @@ async function runNutritor(supabase: any, orgId: string, anthropicKey: string | 
       }
     }
 
-    if (anthropicKey && (recentInsights?.length || recentDocs?.length)) {
-      const summaryInput = [
-        ...(recentDocs || []).map((d: any) => `- Doc nuevo: ${d.name}`),
-        ...(recentInsights || []).map((i: any) => `- Insight (${i.insight_type}): ${i.title}`),
-      ].join("\n");
+    // Generate briefing with Claude if we have any data
+    if (anthropicKey) {
+      let summaryInput = "";
+
+      if ((recentDocs?.length || 0) > 0 || (recentInsights?.length || 0) > 0) {
+        summaryInput = [
+          ...(recentDocs || []).map((d: any) => `- Doc nuevo: ${d.name} (tipo: ${d.document_type || "general"})`),
+          ...(recentInsights || []).map((i: any) => `- Insight (${i.insight_type}): ${i.title}`),
+        ].join("\n");
+      } else {
+        // No recent data: fetch global stats to generate a status briefing
+        const { count: totalDocs } = await supabase
+          .from("documents")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId);
+        const { count: totalChunks } = await supabase
+          .from("document_chunks")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId);
+        const { count: totalClients } = await supabase
+          .from("clients")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId)
+          .eq("status", "activo");
+        const { count: totalProjects } = await supabase
+          .from("projects")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId)
+          .in("status", ["activo", "pausado"]);
+
+        summaryInput = `Estado actual de la base de conocimiento:
+- ${totalDocs || 0} documentos registrados
+- ${totalChunks || 0} fragmentos indexados con embeddings
+- ${totalClients || 0} clientes activos
+- ${totalProjects || 0} proyectos activos/pausados
+- No se detectaron novedades en los últimos 7 días`;
+      }
 
       const briefing = await callClaude(anthropicKey, [
         {
           role: "user",
-          content: `Genera un briefing ejecutivo diario de máximo 5 párrafos para el equipo de un despacho contable y legal. Resume las novedades del día:
+          content: `Genera un briefing ejecutivo de máximo 5 párrafos para el equipo de un despacho contable y legal mexicano. Resume el estado actual y novedades:
 
 ${summaryInput}
 
-Responde en markdown, tono profesional y conciso.`,
+Responde en markdown, tono profesional y conciso. Si no hay novedades recientes, da un resumen del estado general y sugiere acciones para mejorar la base de conocimiento.`,
         },
       ]);
 
@@ -444,8 +491,8 @@ Responde en markdown, tono profesional y conciso.`,
         await supabase.from("knowledge_feed").insert({
           organization_id: orgId,
           feed_type: "insight",
-          title: `Briefing diario — ${new Date().toLocaleDateString("es-MX")}`,
-          summary: "Resumen ejecutivo del aprendizaje del día",
+          title: `Briefing — ${new Date().toLocaleDateString("es-MX")}`,
+          summary: "Resumen ejecutivo del aprendizaje reciente",
           detail: briefing,
         });
         feedItems++;
