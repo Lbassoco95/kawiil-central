@@ -126,6 +126,51 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /* ── Design system: interactive cards ── */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .card-hover-subtle {
+    @apply transition-all duration-200 hover:shadow-sm hover:bg-secondary/30;
+  }
+
+  .row-hover {
+    @apply transition-all duration-150 hover:bg-secondary/40 hover:translate-x-0.5;
+  }
+
+  /* ── Stagger animation delays for lists ── */
+  .stagger-1 { animation-delay: 50ms; }
+  .stagger-2 { animation-delay: 100ms; }
+  .stagger-3 { animation-delay: 150ms; }
+  .stagger-4 { animation-delay: 200ms; }
+  .stagger-5 { animation-delay: 250ms; }
+  .stagger-6 { animation-delay: 300ms; }
+  .stagger-7 { animation-delay: 350ms; }
+  .stagger-8 { animation-delay: 400ms; }
+
+  /* ── KPI stat card ── */
+  .stat-card {
+    @apply rounded-xl border bg-card p-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  /* ── Priority left border ── */
+  .priority-bar-urgent { @apply border-l-[3px]; border-left-color: hsl(var(--priority-urgent)); }
+  .priority-bar-high { @apply border-l-[3px]; border-left-color: hsl(var(--priority-high)); }
+  .priority-bar-medium { @apply border-l-[3px]; border-left-color: hsl(var(--priority-medium)); }
+  .priority-bar-low { @apply border-l-[3px]; border-left-color: hsl(var(--priority-low)); }
+
+  /* ── Active tab pill indicator ── */
+  .tab-pill {
+    @apply px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200;
+  }
+  .tab-pill-active {
+    @apply bg-primary text-primary-foreground shadow-sm;
+  }
+  .tab-pill-inactive {
+    @apply text-muted-foreground hover:text-foreground hover:bg-secondary/60;
+  }
 }
 
 /* Mobile responsive overrides */

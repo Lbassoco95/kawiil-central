@@ -3,6 +3,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { Search, FolderKanban, Scale, Trash2 } from "lucide-react";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
@@ -117,51 +118,67 @@ const Proyectos = () => {
         </div>
 
         {isLoading ? (
-          <p className="text-center text-muted-foreground py-12 text-sm">Cargando...</p>
+          <div className="space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-20 rounded-xl bg-secondary/30 animate-pulse" />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <FolderKanban className="mx-auto h-10 w-10 text-muted-foreground/40" />
-            <h3 className="mt-3 text-sm font-medium text-foreground">
+          <div className="text-center py-16 animate-scale-in">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+              <FolderKanban className="h-8 w-8 text-primary/60" />
+            </div>
+            <h3 className="text-sm font-medium text-foreground">
               {search || selectedArea !== "all" ? "Sin resultados" : "Sin proyectos aún"}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
               {search || selectedArea !== "all" ? "Intenta con otro filtro." : "Crea tu primer proyecto para organizar tareas."}
             </p>
-            {!search && selectedArea === "all" && <div className="mt-3"><ProjectFormDialog /></div>}
+            {!search && selectedArea === "all" && <div className="mt-4"><ProjectFormDialog /></div>}
           </div>
         ) : (
-          <div className="divide-y divide-border/60">
-            {filtered.map((project) => (
+          <div className="space-y-2">
+            {filtered.map((project, i) => (
               <div
                 key={project.id}
-                className="flex items-center justify-between gap-3 py-3 px-1 hover:bg-secondary/30 rounded-lg transition-colors cursor-pointer -mx-1"
+                className={cn(
+                  "flex items-center gap-4 py-3 px-4 rounded-xl border bg-card card-hover cursor-pointer animate-fade-in",
+                  (project as any).delay_category && "bg-warning/[0.03] border-warning/20"
+                )}
+                style={{ animationDelay: `${Math.min(i, 10) * 30}ms`, animationFillMode: "both" }}
                 onClick={() => navigate(`/proyectos/${project.id}`)}
               >
-                <div className="min-w-0 flex-1 flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground shrink-0 w-28 truncate">
-                    {(project as any).clients?.name ?? "Interno"}
-                  </span>
-                  <span className="text-[13px] font-medium text-foreground truncate">
-                    {project.name}
-                  </span>
-                  {selectedArea === "all" && project.area && (
-                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
-                      {getAreaLabel(project.area)}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {(project as any).clients?.name ?? "Interno"}
                     </span>
-                  )}
+                    {selectedArea === "all" && project.area && (
+                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                        {getAreaLabel(project.area)}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-medium text-foreground truncate">{project.name}</h3>
+                  {/* Inline progress bar */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden max-w-[200px]">
+                      <div
+                        className="h-full bg-accent rounded-full transition-all duration-500"
+                        style={{ width: `${project.status === "completado" ? 100 : project.status === "activo" ? 50 : project.status === "en_pausa" ? 30 : 10}%` }}
+                      />
+                    </div>
+                    <Badge variant="outline" className={cn("text-[10px] border-0 px-1.5 py-0", STATUS_STYLES[project.status])}>
+                      {STATUS_LABELS[project.status]}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {(project as any).criticality_level === "critico" && <span title="Crítico">🔴</span>}
                   {(project as any).criticality_level === "atencion" && <span title="Atención">🟡</span>}
-                  {(project as any).delay_category && (
-                    <Badge variant="outline" className="text-[9px] px-1 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>
-                  )}
-                  <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[project.status]}`}>
-                    {STATUS_LABELS[project.status]}
-                  </Badge>
                   {isAdminOrManager && (
                     <button
-                      className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                      className="p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
                       onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: project.id, name: project.name }); }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />

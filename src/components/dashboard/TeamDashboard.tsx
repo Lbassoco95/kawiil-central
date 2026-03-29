@@ -262,21 +262,26 @@ INSTRUCCIONES:
   const tabClass = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Stats cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat, i) => (
           <button
             key={stat.label}
             onClick={() => navigate(stat.href)}
-            className={`flex items-center gap-3 rounded-xl px-4 py-3.5 text-left transition-colors hover:bg-secondary/80 ${
-              stat.highlight ? "bg-destructive/5 hover:bg-destructive/10" : "bg-secondary/50"
+            className={`stat-card flex items-center gap-3 text-left animate-fade-in ${
+              stat.highlight ? "border-destructive/20 bg-destructive/5" : ""
             }`}
+            style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
           >
-            <stat.icon className={`h-4 w-4 shrink-0 ${stat.highlight ? "text-destructive" : "text-primary"}`} />
+            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+              stat.highlight ? "bg-destructive/10" : "bg-primary/10"
+            }`}>
+              <stat.icon className={`h-4 w-4 ${stat.highlight ? "text-destructive" : "text-primary"}`} />
+            </div>
             <div className="min-w-0">
-              <div className="text-xl font-semibold text-foreground leading-none">{stat.value}</div>
-              <div className="text-[11px] text-muted-foreground mt-1">{stat.label}</div>
+              <div className="text-2xl font-semibold text-foreground leading-none animate-count-up">{stat.value}</div>
+              <div className="text-xs text-muted-foreground mt-1">{stat.label}</div>
             </div>
           </button>
         ))}
@@ -301,7 +306,7 @@ INSTRUCCIONES:
         </div>
 
         {/* Resumen */}
-        <TabsContent value="resumen" className="mt-6 space-y-6">
+        <TabsContent value="resumen" className="mt-6 space-y-6 animate-fade-in">
           <AISummaryCard
             cacheKey={`team-dashboard-${user?.id}`}
             contextPrompt={teamSummaryPrompt}
@@ -354,7 +359,7 @@ INSTRUCCIONES:
         </TabsContent>
 
         {/* Células */}
-        <TabsContent value="celulas" className="mt-6">
+        <TabsContent value="celulas" className="mt-6 animate-fade-in">
           {areaStats.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6">Sin datos de células</p>
           ) : (
@@ -366,7 +371,7 @@ INSTRUCCIONES:
               />
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-4">
                 {areaStats.map((a) => (
-                  <div key={a.area} className="rounded-xl bg-secondary/30 p-4">
+                  <div key={a.area} className="rounded-xl bg-secondary/30 p-4 card-hover">
                     <div className="flex items-center justify-between mb-2.5">
                       <div className="flex items-center gap-2">
                         <div className={`h-2 w-2 rounded-full shrink-0 ${statusDot(a.status)}`} />
@@ -403,8 +408,8 @@ INSTRUCCIONES:
                   {teamWorkload.map((m) => (
                     <div
                       key={m.userId}
-                      className={`rounded-xl p-4 transition-colors ${
-                        m.overdue > 0 ? "bg-destructive/5" : m.pending > 8 ? "bg-warning/5" : "bg-secondary/30"
+                      className={`rounded-xl p-4 card-hover ${
+                        m.overdue > 0 ? "bg-destructive/5 border border-destructive/10" : m.pending > 8 ? "bg-warning/5 border border-warning/10" : "bg-secondary/30 border border-transparent"
                       } ${m.isMe ? "ring-1 ring-primary/20" : ""}`}
                     >
                       <div className="flex items-center justify-between mb-2">

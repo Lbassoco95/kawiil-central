@@ -71,7 +71,7 @@ export default function Hub() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Hub</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Manuales, procedimientos y comunicados</p>
@@ -86,10 +86,8 @@ export default function Hub() {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                tab === t.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className={`tab-pill inline-flex items-center gap-1.5 ${
+                tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
               }`}
             >
               <t.icon className="h-3 w-3" />
@@ -110,21 +108,26 @@ export default function Hub() {
               )}
             </div>
             {proceduresLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-16 rounded-xl bg-secondary/30 animate-pulse" />
+                ))}
               </div>
             ) : procedures.length === 0 ? (
-              <div className="text-center py-16">
-                <FileText className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                <h3 className="mt-3 text-sm font-medium text-foreground">Sin procedimientos aún</h3>
+              <div className="text-center py-16 animate-scale-in">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                  <FileText className="h-8 w-8 text-primary/60" />
+                </div>
+                <h3 className="text-sm font-medium text-foreground">Sin procedimientos aún</h3>
                 <p className="mt-1 text-xs text-muted-foreground">Los administradores pueden subir manuales aquí.</p>
               </div>
             ) : (
-              <div className="divide-y divide-border/40">
-                {procedures.map((proc: any) => (
+              <div className="space-y-2">
+                {procedures.map((proc: any, i: number) => (
                   <div
                     key={proc.id}
-                    className="flex items-center justify-between gap-3 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer group"
+                    className="flex items-center justify-between gap-3 py-3 px-4 rounded-xl border bg-card card-hover cursor-pointer group animate-fade-in"
+                    style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}
                     onClick={() => setSelectedProcedure(proc)}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -169,19 +172,23 @@ export default function Hub() {
               )}
             </div>
             {comunicadosLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-20 rounded-xl bg-secondary/30 animate-pulse" />
+                ))}
               </div>
             ) : comunicados.length === 0 ? (
-              <div className="text-center py-16">
-                <Megaphone className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                <h3 className="mt-3 text-sm font-medium text-foreground">Sin comunicados</h3>
+              <div className="text-center py-16 animate-scale-in">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                  <Megaphone className="h-8 w-8 text-primary/60" />
+                </div>
+                <h3 className="text-sm font-medium text-foreground">Sin comunicados</h3>
                 <p className="mt-1 text-xs text-muted-foreground">Los administradores pueden publicar comunicados aquí.</p>
               </div>
             ) : (
-              <div className="divide-y divide-border/40">
-                {comunicados.map((com: any) => (
-                  <div key={com.id} className="py-3 px-2 -mx-2 group">
+              <div className="space-y-2">
+                {comunicados.map((com: any, i: number) => (
+                  <div key={com.id} className="py-3 px-4 rounded-xl border bg-card card-hover group animate-fade-in" style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

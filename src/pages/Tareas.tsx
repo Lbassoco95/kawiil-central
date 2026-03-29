@@ -113,9 +113,28 @@ INSTRUCCIONES:
 6. Máximo 120 palabras. Usa markdown.`;
   }, [tasks, assignedSteps, areaLabelMap]);
 
+  const getDateColor = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const weekFromNow = new Date();
+    weekFromNow.setDate(weekFromNow.getDate() + 7);
+    if (d < now) return "text-destructive font-medium";
+    if (d <= weekFromNow) return "text-warning font-medium";
+    return "text-muted-foreground";
+  };
+
+  const getPriorityBar = (priority: string) => {
+    switch (priority) {
+      case "urgente": return "priority-bar-urgent";
+      case "alta": return "priority-bar-high";
+      case "media": return "priority-bar-medium";
+      default: return "priority-bar-low";
+    }
+  };
+
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold text-foreground">Tareas</h1>
@@ -126,7 +145,6 @@ INSTRUCCIONES:
           </Button>
         </div>
 
-        {/* AI Tasks Summary */}
         <AISummaryCard
           cacheKey={`tasks-${user?.id}-${area}`}
           contextPrompt={tasksSummaryPrompt}
@@ -135,37 +153,36 @@ INSTRUCCIONES:
           userId={user?.id}
         />
 
-        {/* Assigned project steps */}
         {assignedSteps.length > 0 && (
-          <section>
+          <section className="animate-fade-in">
             <div className="flex items-center gap-2 mb-3">
               <ClipboardList className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Mis pasos de proyecto asignados</h2>
-              <span className="text-[10px] text-muted-foreground">{assignedSteps.length}</span>
+              <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{assignedSteps.length}</span>
             </div>
-            <div className="space-y-px">
+            <div className="space-y-1">
               {assignedSteps.slice(0, 10).map((step) => {
                 const isOverdue = step.dueDate && new Date(step.dueDate) < new Date();
                 return (
                   <div
                     key={step.id}
                     className={cn(
-                      "flex items-center gap-3 text-sm cursor-pointer hover:bg-secondary/40 rounded-lg px-3 py-2.5 transition-colors",
-                      isOverdue && "bg-destructive/5"
+                      "flex items-center gap-3 text-sm cursor-pointer rounded-lg px-3 py-2.5 card-hover-subtle border border-transparent",
+                      isOverdue && "bg-destructive/5 border-destructive/10"
                     )}
                     onClick={() => navigate(`/proyectos/${step.projectId}?tab=${step.sourceType === "contabilidad" ? "contabilidad" : step.sourceType === "declaracion_anual" ? "declaracion_anual" : step.sourceType === "juicio" ? "juicio" : step.sourceType === "gestoria" ? "gestoria" : "general"}&step=${step.stepKey}`)}
                   >
                     <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">{step.sourceLabel}</span>
-                    <span className="flex-1 truncate text-[13px] font-medium text-foreground">{step.stepLabel}</span>
+                    <span className="flex-1 truncate text-sm font-medium text-foreground">{step.stepLabel}</span>
                     {step.isCollaborator && (
                       <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">Colaborador</span>
                     )}
                     {step.clientName && (
-                      <span className="text-[11px] text-muted-foreground shrink-0">{step.clientName}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{step.clientName}</span>
                     )}
                     {step.dueDate && (
                       <span className={cn(
-                        "text-[11px] shrink-0 flex items-center gap-1",
+                        "text-xs shrink-0 flex items-center gap-1",
                         isOverdue ? "text-destructive font-medium" : "text-muted-foreground"
                       )}>
                         <Calendar className="h-3 w-3" />
@@ -180,7 +197,7 @@ INSTRUCCIONES:
                 );
               })}
               {assignedSteps.length > 10 && (
-                <p className="text-[11px] text-muted-foreground text-center py-1">
+                <p className="text-xs text-muted-foreground text-center py-1">
                   +{assignedSteps.length - 10} pasos más
                 </p>
               )}
@@ -205,63 +222,82 @@ INSTRUCCIONES:
         </div>
 
         {isLoading ? (
-          <p className="text-center text-muted-foreground py-12 text-sm">Cargando tareas...</p>
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-16 rounded-xl bg-secondary/30 animate-pulse" />
+            ))}
+          </div>
         ) : activeTasks.length > 0 ? (
-          <div className="divide-y divide-border/40">
-            {activeTasks.map((task) => (
+          <div className="space-y-2">
+            {activeTasks.map((task, i) => (
               <div
                 key={task.id}
-                className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
+                className={cn(
+                  "flex items-center gap-4 py-3 px-4 rounded-xl border bg-card card-hover cursor-pointer animate-fade-in",
+                  getPriorityBar(task.priority),
+                  (task as any).delay_category && "bg-warning/[0.03]"
+                )}
+                style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
                 onClick={() => setSelectedTaskId(task.id)}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <h3 className="text-[13px] font-medium text-foreground truncate">{task.title}</h3>
-                    <Badge className={`text-[10px] border-0 px-1.5 py-0 ${priorityColors[task.priority]}`} variant="secondary">{task.priority}</Badge>
-                    <Badge className={`text-[10px] border-0 px-1.5 py-0 ${statusLabels[task.status]?.color}`} variant="secondary">{statusLabels[task.status]?.label}</Badge>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-sm font-medium text-foreground truncate">{task.title}</h3>
                     {(task as any).criticality_level === "critico" && <span className="text-[10px]" title="Crítico">🔴</span>}
                     {(task as any).criticality_level === "atencion" && <span className="text-[10px]" title="Atención">🟡</span>}
-                    {(task as any).delay_category && <Badge variant="outline" className="text-[9px] px-1 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>}
                   </div>
-                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                    {task.area && <span>{getCelulaLabel(task.area)}</span>}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge className={cn("text-[10px] border-0 px-1.5 py-0", statusLabels[task.status]?.color)} variant="secondary">
+                      {statusLabels[task.status]?.label}
+                    </Badge>
+                    {task.area && (
+                      <span className="text-xs text-muted-foreground">{getCelulaLabel(task.area)}</span>
+                    )}
                     {task.assigned_to && profileMap.get(task.assigned_to) ? (
-                      <span className="flex items-center gap-1"><User className="h-3 w-3" />{profileMap.get(task.assigned_to)}</span>
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <User className="h-3 w-3" />{profileMap.get(task.assigned_to)}
+                      </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-destructive/70 font-medium">⚠ Sin responsable</span>
+                      <span className="flex items-center gap-1 text-xs text-destructive/70 font-medium">Sin responsable</span>
                     )}
                     {(task as any).clients?.name && (
-                      <span className="flex items-center gap-1 text-muted-foreground/70">{(task as any).clients.name}</span>
+                      <span className="text-xs text-muted-foreground/70">{(task as any).clients.name}</span>
                     )}
-                    {(task as any).projects?.name && <span>{(task as any).projects.name}</span>}
-                    {task.due_date && (
-                      <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>
-                    )}
+                    {(task as any).projects?.name && <span className="text-xs text-muted-foreground">{(task as any).projects.name}</span>}
                   </div>
                 </div>
-                {canDeleteTasks && (
-                  <button
-                    className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {task.due_date && (
+                    <span className={cn("text-xs flex items-center gap-1", getDateColor(task.due_date))}>
+                      <Calendar className="h-3 w-3" />
+                      {formatMX(task.due_date, "dd MMM")}
+                    </span>
+                  )}
+                  {canDeleteTasks && (
+                    <button
+                      className="p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-16">
-            <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
-            <h3 className="mt-3 text-sm font-medium text-foreground">Sin tareas aún</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Crea tu primera tarea para comenzar a organizar el trabajo.</p>
-            <Button className="mt-3" size="sm" onClick={() => setShowCreate(true)}>
+          <div className="text-center py-16 animate-scale-in">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+              <CheckSquare className="h-8 w-8 text-primary/60" />
+            </div>
+            <h3 className="text-sm font-medium text-foreground">Sin tareas aún</h3>
+            <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">Crea tu primera tarea para comenzar a organizar el trabajo del equipo.</p>
+            <Button className="mt-4" size="sm" onClick={() => setShowCreate(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
             </Button>
           </div>
         )}
 
-        {/* Canceled tasks section */}
         {canceledTasks.length > 0 && (
           <div className="mt-4">
             <button
@@ -272,19 +308,16 @@ INSTRUCCIONES:
               {showCanceled ? "Ocultar" : "Mostrar"} canceladas ({canceledTasks.length})
             </button>
             {showCanceled && (
-              <div className="divide-y divide-border/40 mt-2 opacity-50">
+              <div className="space-y-1 mt-2 opacity-50">
                 {canceledTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between gap-4 py-3 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
+                    className="flex items-center gap-4 py-2.5 px-4 rounded-xl border bg-card/50 cursor-pointer hover:bg-secondary/30 transition-all"
                     onClick={() => setSelectedTaskId(task.id)}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <h3 className="text-[13px] font-medium text-foreground truncate line-through">{task.title}</h3>
-                        <Badge className={`text-[10px] border-0 px-1.5 py-0 ${statusLabels[task.status]?.color}`} variant="secondary">{statusLabels[task.status]?.label}</Badge>
-                      </div>
-                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <h3 className="text-sm font-medium text-foreground truncate line-through">{task.title}</h3>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                         {task.area && <span>{getCelulaLabel(task.area)}</span>}
                         {task.due_date && (
                           <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>

@@ -75,7 +75,7 @@ const Admin = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Administración</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Gestión de Kawiilers, grados y catálogos</p>
@@ -83,17 +83,12 @@ const Admin = () => {
 
         <div className="flex gap-1.5">
           {tabs.map((t) => {
-            // Only show Permisos tab to Transformadores
             if (t.key === "permisos" && !isTransformador) return null;
             return (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  tab === t.key
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                }`}
+                className={`tab-pill ${tab === t.key ? "tab-pill-active" : "tab-pill-inactive"}`}
               >
                 {t.label}
               </button>
@@ -101,10 +96,12 @@ const Admin = () => {
           })}
         </div>
 
-        {tab === "usuarios" && <UserManagement />}
-        {tab === "celulas" && <CelulaManagement />}
-        {tab === "catalogos" && <CatalogManagement />}
-        {tab === "permisos" && <PermissionsTab />}
+        <div className="animate-fade-in" key={tab}>
+          {tab === "usuarios" && <UserManagement />}
+          {tab === "celulas" && <CelulaManagement />}
+          {tab === "catalogos" && <CatalogManagement />}
+          {tab === "permisos" && <PermissionsTab />}
+        </div>
       </div>
     </AppLayout>
   );

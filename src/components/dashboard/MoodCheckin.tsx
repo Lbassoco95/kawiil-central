@@ -3,13 +3,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Heart } from "lucide-react";
 
 const MOODS = [
-  { value: 1, emoji: "😞" },
-  { value: 2, emoji: "😕" },
-  { value: 3, emoji: "😐" },
-  { value: 4, emoji: "🙂" },
-  { value: 5, emoji: "😄" },
+  { value: 1, emoji: "😞", label: "Difícil" },
+  { value: 2, emoji: "😕", label: "Regular" },
+  { value: 3, emoji: "😐", label: "Normal" },
+  { value: 4, emoji: "🙂", label: "Bien" },
+  { value: 5, emoji: "😄", label: "Genial" },
 ];
 
 interface MoodCheckinProps {
@@ -24,25 +25,16 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
   const now = new Date();
   const currentHour = now.getHours();
 
-  // Morning window: 09:00 – 14:59 (check_date = today, time_of_day = "morning")
-  // Afternoon window: 15:00 – 23:59 today + 00:00 – 08:59 next day
-  //   If hour >= 15: check_date = today, time_of_day = "afternoon"
-  //   If hour < 9: check_date = yesterday, time_of_day = "afternoon" (still the same afternoon slot)
-  //   If hour >= 9 && hour < 15: time_of_day = "morning", check_date = today
-
   let timeOfDay: "morning" | "afternoon";
   let checkDate: string;
 
   if (currentHour >= 9 && currentHour < 15) {
-    // Morning slot
     timeOfDay = "morning";
     checkDate = now.toISOString().split("T")[0];
   } else if (currentHour >= 15) {
-    // Afternoon slot (same day)
     timeOfDay = "afternoon";
     checkDate = now.toISOString().split("T")[0];
   } else {
-    // Before 9am — still the previous day's afternoon slot
     timeOfDay = "afternoon";
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -67,6 +59,35 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
     enabled: !!user,
   });
 
+  const { data: streakCount } = useQuery({
+    queryKey: ["mood-streak", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("mood_checkins" as any)
+        .select("check_date")
+        .eq("user_id", user!.id)
+        .order("check_date", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      if (!data || data.length === 0) return 0;
+      const dates = [...new Set((data as any[]).map((d: any) => d.check_date))].sort().reverse();
+      let streak = 0;
+      const today = new Date();
+      for (let i = 0; i < dates.length; i++) {
+        const expected = new Date(today);
+        expected.setDate(expected.getDate() - i);
+        const expectedStr = expected.toISOString().split("T")[0];
+        if (dates[i] === expectedStr) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+      return streak;
+    },
+    enabled: !!user,
+  });
+
   const submitMood = useMutation({
     mutationFn: async (mood: number) => {
       const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
@@ -84,39 +105,55 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mood-checkin"] });
       qc.invalidateQueries({ queryKey: ["mood-history"] });
+      qc.invalidateQueries({ queryKey: ["mood-streak"] });
       toast.success("Registrado");
       setSelectedMood(null);
     },
     onError: () => toast.error("Error al guardar"),
   });
 
-  // Don't show before 9am if yesterday's afternoon was already checked
-  // (the query handles this — existingCheckin will be truthy)
-
   if (existingCheckin) {
     const mood = MOODS.find((m) => m.value === (existingCheckin as any).mood);
     return (
-      <p className="text-[13px] text-muted-foreground">
-        Hoy ({timeLabel}): {mood?.emoji}
-      </p>
+      <div className="rounded-xl bg-gradient-to-r from-primary/5 to-accent/5 border border-border/50 p-3 flex items-center gap-3 animate-fade-in">
+        <span className="text-2xl">{mood?.emoji}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-foreground font-medium">
+            Tu {timeLabel}: {mood?.label}
+          </p>
+          {(streakCount ?? 0) > 1 && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Heart className="h-3 w-3 text-accent" />
+              {streakCount} días consecutivos registrando
+            </p>
+          )}
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-[13px] text-muted-foreground">¿Cómo va tu {timeLabel}?</span>
-      <div className="flex gap-1">
+    <div className="rounded-xl bg-gradient-to-r from-primary/5 to-accent/5 border border-border/50 p-4 animate-scale-in">
+      <p className="text-sm font-medium text-foreground mb-3">¿Cómo va tu {timeLabel}?</p>
+      <div className="flex gap-2 justify-center">
         {MOODS.map((m) => (
           <button
             key={m.value}
             onClick={() => submitMood.mutate(m.value)}
             disabled={submitMood.isPending}
-            className="text-lg hover:scale-125 transition-transform px-0.5"
+            className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg hover:bg-white/60 dark:hover:bg-white/5 hover:scale-110 transition-all duration-200"
           >
-            {m.emoji}
+            <span className="text-2xl">{m.emoji}</span>
+            <span className="text-[10px] text-muted-foreground">{m.label}</span>
           </button>
         ))}
       </div>
+      {(streakCount ?? 0) > 1 && (
+        <p className="text-xs text-muted-foreground text-center mt-2 flex items-center justify-center gap-1">
+          <Heart className="h-3 w-3 text-accent" />
+          {streakCount} días consecutivos
+        </p>
+      )}
     </div>
   );
 }

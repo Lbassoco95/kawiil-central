@@ -333,45 +333,47 @@ const ProyectoDetalle = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-start gap-3">
-          <button onClick={() => navigate("/proyectos")} className="mt-1 p-1 rounded-lg hover:bg-secondary/60 transition-colors">
-            <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-semibold text-foreground truncate">{project.name}</h1>
-              <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[project.status]}`}>
-                {STATUS_LABELS[project.status]}
-              </Badge>
-              {project.area && (
-                <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
-                  {SERVICE_LABELS[project.area]}
-                </span>
+      <div className="space-y-6 animate-fade-in">
+        {/* Hero header */}
+        <div className="rounded-xl bg-gradient-to-r from-primary/5 via-accent/5 to-transparent border border-border/50 p-5">
+          <div className="flex items-start gap-3">
+            <button onClick={() => navigate("/proyectos")} className="mt-0.5 p-1.5 rounded-lg hover:bg-white/60 dark:hover:bg-white/5 transition-colors">
+              <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl font-semibold text-foreground truncate">{project.name}</h1>
+                <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[project.status]}`}>
+                  {STATUS_LABELS[project.status]}
+                </Badge>
+                {project.area && (
+                  <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                    {SERVICE_LABELS[project.area]}
+                  </span>
+                )}
+                {(project as any).criticality_level === "critico" && <span title="Crítico">🔴</span>}
+                {(project as any).criticality_level === "atencion" && <span title="Atención">🟡</span>}
+                {(project as any).delay_category && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-warning/50 text-warning">Atraso</Badge>
+                )}
+              </div>
+              {clientName && (
+                <p className="text-sm text-muted-foreground mt-0.5">Cliente: {clientName}</p>
               )}
-              {(project as any).criticality_level === "critico" && <span title="Crítico">🔴</span>}
-              {(project as any).criticality_level === "atencion" && <span title="Atención">🟡</span>}
-              {(project as any).delay_category && (
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-warning/50 text-warning">⚠ Atraso</Badge>
+              {project.description && (
+                <p className="text-sm text-muted-foreground mt-0.5">{project.description}</p>
               )}
             </div>
-            {clientName && (
-              <p className="text-sm text-muted-foreground mt-0.5">Cliente: {clientName}</p>
-            )}
-            {project.description && (
-              <p className="text-sm text-muted-foreground mt-0.5">{project.description}</p>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => setShowMinutesDialog(true)}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Subir minuta</span>
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5"
-            onClick={() => setShowMinutesDialog(true)}
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Subir minuta</span>
-          </Button>
         </div>
 
         {/* Tab pills */}
@@ -382,10 +384,8 @@ const ProyectoDetalle = () => {
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  tab === t.key
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className={`tab-pill inline-flex items-center gap-1.5 ${
+                  tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
                 }`}
               >
                 {Icon && <Icon className="h-3 w-3" />}

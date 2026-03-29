@@ -82,11 +82,11 @@ export default function Finanzas() {
 
   return (
     <AppLayout>
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Wallet className="h-5 w-5 text-primary" />
-            <h1 className="text-xl font-bold text-foreground">Finanzas</h1>
+            <h1 className="text-xl font-semibold text-foreground">Finanzas</h1>
           </div>
           <Button size="sm" onClick={() => setShowForm(true)}>
             <Plus className="h-4 w-4 mr-1" /> Nueva solicitud
@@ -97,42 +97,34 @@ export default function Finanzas() {
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <Clock className="h-3.5 w-3.5" /> Pendientes
-                  </div>
-                  <p className="text-lg font-bold">${totals.pending.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-                  <p className="text-xs text-muted-foreground">{totals.pendingCount} solicitudes</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <CheckCircle className="h-3.5 w-3.5" /> Aprobados
-                  </div>
-                  <p className="text-lg font-bold text-green-600">${totals.approved.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-                  <p className="text-xs text-muted-foreground">{totals.approvedCount} por pagar</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <DollarSign className="h-3.5 w-3.5" /> Pagados
-                  </div>
-                  <p className="text-lg font-bold text-purple-600">${totals.paid.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-                  <p className="text-xs text-muted-foreground">{totals.paidCount} pagos</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                    <XCircle className="h-3.5 w-3.5" /> Rechazados
-                  </div>
-                  <p className="text-lg font-bold text-destructive">{totals.rejected}</p>
-                  <p className="text-xs text-muted-foreground">solicitudes</p>
-                </CardContent>
-              </Card>
+              <div className="stat-card animate-fade-in stagger-1" style={{ animationFillMode: "both" }}>
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <Clock className="h-3.5 w-3.5" /> Pendientes
+                </div>
+                <p className="text-lg font-semibold">${totals.pending.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs text-muted-foreground">{totals.pendingCount} solicitudes</p>
+              </div>
+              <div className="stat-card animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <CheckCircle className="h-3.5 w-3.5" /> Aprobados
+                </div>
+                <p className="text-lg font-semibold text-green-600">${totals.approved.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs text-muted-foreground">{totals.approvedCount} por pagar</p>
+              </div>
+              <div className="stat-card animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <DollarSign className="h-3.5 w-3.5" /> Pagados
+                </div>
+                <p className="text-lg font-semibold text-purple-600">${totals.paid.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
+                <p className="text-xs text-muted-foreground">{totals.paidCount} pagos</p>
+              </div>
+              <div className="stat-card animate-fade-in stagger-4" style={{ animationFillMode: "both" }}>
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+                  <XCircle className="h-3.5 w-3.5" /> Rechazados
+                </div>
+                <p className="text-lg font-semibold text-destructive">{totals.rejected}</p>
+                <p className="text-xs text-muted-foreground">solicitudes</p>
+              </div>
             </div>
 
             {/* Filters */}

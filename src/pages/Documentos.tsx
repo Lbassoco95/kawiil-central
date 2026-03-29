@@ -689,7 +689,7 @@ function OrganizedView({
 // ─── File row component ───────────────────────────────────────
 function FileRow({ doc, onPreview, onDelete }: { doc: any; onPreview: () => void; onDelete: () => void }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer group" onClick={onPreview}>
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 hover:shadow-sm transition-all duration-150 cursor-pointer group rounded-lg" onClick={onPreview}>
       <div className="shrink-0">{getFileIcon(doc.name, doc.source)}</div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate text-foreground">{doc.name}</p>
@@ -731,7 +731,7 @@ const Documentos = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -756,10 +756,8 @@ const Documentos = () => {
               <button
                 key={t.key}
                 onClick={() => setViewMode(t.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  viewMode === t.key
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className={`tab-pill inline-flex items-center gap-1.5 ${
+                  viewMode === t.key ? "tab-pill-active" : "tab-pill-inactive"
                 }`}
               >
                 <t.icon className="h-3 w-3" />

@@ -210,38 +210,79 @@ export function PersonalDashboard() {
     }
   };
 
+  const greetingByHour = () => {
+    const h = today.getHours();
+    if (h < 12) return "Buenos días";
+    if (h < 19) return "Buenas tardes";
+    return "Buenas noches";
+  };
+
+  const dueThisWeek = myTasks?.filter((t) => {
+    if (!t.due_date) return false;
+    const d = new Date(t.due_date);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    return d >= today && d <= weekEnd;
+  }).length ?? 0;
+
+  const urgentCount = myTasks?.filter((t) => t.priority === "urgente" || t.priority === "alta").length ?? 0;
+
+  const nextAction = myTasks?.[0] ?? null;
+
+  const dailyTotal = totalPending + (completedToday ?? 0);
+  const dailyProgress = dailyTotal > 0 ? Math.round(((completedToday ?? 0) / dailyTotal) * 100) : 0;
+
   return (
     <div className="max-w-3xl space-y-6 min-w-0">
-      {/* Greeting (no date/time — now in AppLayout) */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-semibold text-foreground tracking-tight">
-          {firstName ? `Hola, ${firstName}` : "Hola"} 👋
+      {/* Warm greeting */}
+      <div className="animate-fade-in">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
+          {greetingByHour()}, {firstName || "Kawiiler"}
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {totalPending} pendiente{totalPending !== 1 ? "s" : ""}
-          {overdueTasks > 0 && (
-            <span className="text-destructive"> · {overdueTasks} vencida{overdueTasks !== 1 ? "s" : ""}</span>
-          )}
-          {(completedToday ?? 0) > 0 && (
-            <span className="text-accent"> · {completedToday} completada{(completedToday ?? 0) !== 1 ? "s" : ""} hoy</span>
-          )}
-        </p>
-
-        {/* Personalized phrase */}
         {personalPhrase ? (
-          <p className="text-[13px] text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-3">
+          <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-2 animate-fade-in">
             {personalPhrase}
           </p>
         ) : phraseLoading ? (
-          <p className="text-[13px] text-muted-foreground italic border-l-2 border-border pl-3 mt-3 animate-pulse">
+          <p className="text-sm text-muted-foreground italic border-l-2 border-border pl-3 mt-2 animate-pulse">
             Preparando tu frase del día...
           </p>
         ) : null}
       </div>
 
+      {/* Day progress bar */}
+      <div className="animate-fade-in stagger-1" style={{ animationFillMode: "both" }}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-medium text-muted-foreground">Progreso del día</span>
+          <span className="text-xs font-medium text-foreground">{completedToday ?? 0} de {dailyTotal} tareas</span>
+        </div>
+        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-700 ease-out"
+            style={{ width: `${dailyProgress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* KPI grid */}
+      <div className="grid grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
+        <div className={`stat-card ${urgentCount > 0 ? "border-destructive/30 bg-destructive/5" : ""}`}>
+          <p className="text-2xl font-semibold text-foreground animate-count-up">{urgentCount}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Urgentes</p>
+        </div>
+        <div className={`stat-card ${dueThisWeek > 0 ? "border-warning/30 bg-warning/5" : ""}`}>
+          <p className="text-2xl font-semibold text-foreground animate-count-up">{dueThisWeek}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Esta semana</p>
+        </div>
+        <div className={`stat-card ${(completedToday ?? 0) > 0 ? "border-accent/30 bg-accent/5" : ""}`}>
+          <p className="text-2xl font-semibold text-foreground animate-count-up">{completedToday ?? 0}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Completadas hoy</p>
+        </div>
+      </div>
+
       {/* Questionnaire reminder */}
       {showQuestionnaireReminder && (
-        <div className="flex flex-wrap items-center gap-3 px-3 sm:px-4 py-3 rounded-lg bg-primary/5 border border-primary/15">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/15 animate-scale-in">
           <Sparkles className="h-5 w-5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
@@ -259,8 +300,39 @@ export function PersonalDashboard() {
         </div>
       )}
 
-      {/* Mood — inline */}
+      {/* Mood — card */}
       <MoodCheckin userCelula={userCelula} />
+
+      {/* Next action */}
+      {nextAction && (
+        <div className="animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Siguiente acción</h3>
+          <button
+            onClick={() => navigate(nextAction.project_id ? `/proyectos/${nextAction.project_id}?tab=tareas&taskId=${nextAction.id}` : `/tareas?taskId=${nextAction.id}`)}
+            className="w-full text-left rounded-xl border-2 border-primary/20 bg-primary/[0.03] p-4 card-hover group"
+          >
+            <div className="flex items-start gap-3">
+              <span className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${priorityDot(nextAction.priority)}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{nextAction.title}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  {nextAction.area && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {(SERVICE_LABELS as any)[nextAction.area] || nextAction.area}
+                    </Badge>
+                  )}
+                  {nextAction.due_date && (
+                    <span className={`text-xs ${new Date(nextAction.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      {formatDateMX(nextAction.due_date)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Tabs for sections */}
       <Tabs defaultValue="resumen" className="w-full min-w-0">
@@ -268,31 +340,31 @@ export function PersonalDashboard() {
           <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
             <TabsTrigger
               value="resumen"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
             >
               Resumen
             </TabsTrigger>
             <TabsTrigger
               value="tareas"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
             >
               Tareas ({totalPending})
             </TabsTrigger>
             <TabsTrigger
               value="clientes"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
             >
               Clientes ({myClients?.length ?? 0})
             </TabsTrigger>
             <TabsTrigger
               value="recordatorios"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
             >
               Recordatorios ({pendingReminders.length})
             </TabsTrigger>
             <TabsTrigger
               value="rendimiento"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
             >
               Rendimiento
             </TabsTrigger>
@@ -300,7 +372,7 @@ export function PersonalDashboard() {
         </div>
 
         {/* Resumen */}
-        <TabsContent value="resumen" className="mt-6 space-y-6">
+        <TabsContent value="resumen" className="mt-6 space-y-6 animate-fade-in">
           <DailyBriefing
             tasksCount={totalPending}
             completedToday={completedToday ?? 0}
@@ -308,21 +380,21 @@ export function PersonalDashboard() {
             remindersCount={pendingReminders.length}
           />
 
-          {/* Quick glance: top 5 tasks */}
           {myTasks && myTasks.length > 0 && (
             <div>
-              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Próximas tareas</h3>
-              <div className="divide-y divide-border/40">
-                {myTasks.slice(0, 5).map((t) => (
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Próximas tareas</h3>
+              <div className="space-y-1">
+                {myTasks.slice(0, 5).map((t, i) => (
                   <button
                     key={t.id}
-                    className="flex items-center gap-3 w-full py-2 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                    className="flex items-center gap-3 w-full py-2 text-left row-hover px-2 rounded-lg"
+                    style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
                     onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
                     <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
                     {t.due_date && (
-                      <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                      <span className={`text-xs shrink-0 ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                         {formatDateMX(t.due_date)}
                       </span>
                     )}
@@ -332,16 +404,15 @@ export function PersonalDashboard() {
             </div>
           )}
 
-          {/* Quick glance: clients */}
           {myClients && myClients.length > 0 && (
             <div>
-              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Mis clientes</h3>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Mis clientes</h3>
               <div className="flex flex-wrap gap-2">
                 {myClients.slice(0, 8).map((c: any) => (
                   <button
                     key={c.id}
                     onClick={() => navigate(`/clientes/${c.id}`)}
-                    className="text-sm px-3 py-1.5 rounded-md bg-secondary/50 hover:bg-secondary text-foreground transition-colors"
+                    className="text-sm px-3 py-1.5 rounded-lg bg-secondary/50 hover:bg-secondary hover:shadow-sm text-foreground transition-all duration-200"
                   >
                     {c.name}
                   </button>
@@ -349,7 +420,7 @@ export function PersonalDashboard() {
                 {myClients.length > 8 && (
                   <button
                     onClick={() => navigate("/clientes")}
-                    className="text-sm px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-sm px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
                   >
                     +{myClients.length - 8} más
                   </button>
@@ -360,9 +431,9 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Tareas */}
-        <TabsContent value="tareas" className="mt-6">
+        <TabsContent value="tareas" className="mt-6 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Tareas pendientes
             </h3>
             <button
@@ -373,16 +444,19 @@ export function PersonalDashboard() {
             </button>
           </div>
           {!myTasks?.length ? (
-            <p className="text-sm text-muted-foreground py-4">Sin tareas pendientes 🎉</p>
+            <div className="text-center py-8">
+              <p className="text-4xl mb-2">🎉</p>
+              <p className="text-sm text-muted-foreground">Sin tareas pendientes</p>
+            </div>
           ) : (
-            <div className="divide-y divide-border/40">
-              {myTasks.map((t) => (
+            <div className="space-y-1">
+              {myTasks.map((t, i) => (
                 <button
                   key={t.id}
-                  className="flex items-center gap-3 w-full py-2.5 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                  className="flex items-center gap-3 w-full py-2.5 text-left row-hover px-2 rounded-lg"
                   onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
                 >
-                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
                   <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
                   {t.area && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
@@ -390,7 +464,7 @@ export function PersonalDashboard() {
                     </Badge>
                   )}
                   {t.due_date && (
-                    <span className={`text-[11px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                    <span className={`text-xs shrink-0 ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                       {formatDateMX(t.due_date)}
                     </span>
                   )}
@@ -401,9 +475,9 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Mis Clientes */}
-        <TabsContent value="clientes" className="mt-6">
+        <TabsContent value="clientes" className="mt-6 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Clientes asignados
             </h3>
             <button
@@ -416,11 +490,11 @@ export function PersonalDashboard() {
           {!myClients?.length ? (
             <p className="text-sm text-muted-foreground py-4">Sin clientes asignados</p>
           ) : (
-            <div className="divide-y divide-border/40">
+            <div className="space-y-1">
               {myClients.map((c: any) => (
                 <button
                   key={c.id}
-                  className="flex items-center gap-3 w-full py-3 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
+                  className="flex items-center gap-3 w-full py-3 text-left row-hover px-2 rounded-lg"
                   onClick={() => navigate(`/clientes/${c.id}`)}
                 >
                   <span className="text-sm text-foreground truncate flex-1">{c.name}</span>
@@ -438,7 +512,7 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Recordatorios */}
-        <TabsContent value="recordatorios" className="mt-6">
+        <TabsContent value="recordatorios" className="mt-6 animate-fade-in">
           <div className="flex items-center gap-2 mb-4">
             <Input
               placeholder="Agregar recordatorio..."
@@ -448,7 +522,7 @@ export function PersonalDashboard() {
               className="text-sm h-9"
             />
             {newReminder.trim() && (
-              <button onClick={handleAddReminder} className="text-muted-foreground hover:text-foreground">
+              <button onClick={handleAddReminder} className="text-muted-foreground hover:text-foreground transition-colors">
                 <Plus className="h-4 w-4" />
               </button>
             )}
@@ -459,7 +533,7 @@ export function PersonalDashboard() {
           ) : (
             <div className="space-y-0.5">
               {pendingReminders.map((r) => (
-                <div key={r.id} className="flex items-center gap-3 py-2 group">
+                <div key={r.id} className="flex items-center gap-3 py-2 group row-hover px-2 rounded-lg">
                   <Checkbox
                     checked={false}
                     onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
@@ -467,7 +541,7 @@ export function PersonalDashboard() {
                   />
                   <span className="text-sm text-foreground flex-1 truncate">{r.title}</span>
                   {r.due_date && (
-                    <span className={`text-[11px] ${new Date(r.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
+                    <span className={`text-xs ${new Date(r.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
                       {formatDateMX(r.due_date)}
                     </span>
                   )}
@@ -480,8 +554,8 @@ export function PersonalDashboard() {
                 </div>
               ))}
               {completedReminders.length > 0 && (
-                <div className="pt-3 border-t border-border/40 mt-3">
-                  <p className="text-[11px] text-muted-foreground mb-2">Completados</p>
+                <div className="pt-3 border-t border-border/50 mt-3">
+                  <p className="text-xs text-muted-foreground mb-2">Completados</p>
                   {completedReminders.slice(0, 5).map((r) => (
                     <div key={r.id} className="flex items-center gap-3 py-1.5 opacity-40 group">
                       <Checkbox
@@ -505,7 +579,7 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Rendimiento */}
-        <TabsContent value="rendimiento" className="mt-6 space-y-8">
+        <TabsContent value="rendimiento" className="mt-6 space-y-8 animate-fade-in">
           <PerformanceChart />
           <MonthlyPerformance />
         </TabsContent>

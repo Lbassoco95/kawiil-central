@@ -80,7 +80,7 @@ export default function Notificaciones() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
         <div>
           <h1 className="text-xl font-semibold text-foreground">Notificaciones</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -89,8 +89,10 @@ export default function Notificaciones() {
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-16 rounded-xl bg-secondary/30 animate-pulse" />
+            ))}
           </div>
         ) : (
           <>
@@ -100,16 +102,14 @@ export default function Notificaciones() {
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    tab === t.key
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  className={`tab-pill inline-flex items-center gap-1.5 ${
+                    tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
                   }`}
                 >
                   {t.icon}
                   {t.label}
                   {(t.badge ?? 0) > 0 && (
-                    <span className="bg-primary-foreground/20 text-[10px] rounded-full px-1.5 font-bold">
+                    <span className="bg-primary-foreground/20 text-[10px] rounded-full px-1.5 font-bold animate-pulse-soft">
                       {t.badge}
                     </span>
                   )}
@@ -152,13 +152,16 @@ export default function Notificaciones() {
                     )}
                   </div>
                 ) : (
-                  <div className="divide-y divide-border/40">
-                    {currentList.map((m) => (
+                  <div className="space-y-1">
+                    {currentList.map((m, i) => (
                       <div
                         key={m.id}
-                        className={`flex items-start gap-3 py-3 px-2 -mx-2 rounded-lg cursor-pointer transition-colors ${
-                          m.is_read ? "hover:bg-secondary/30" : "hover:bg-primary/5"
+                        className={`flex items-start gap-3 py-3 px-3 rounded-xl cursor-pointer transition-all duration-200 border animate-fade-in ${
+                          m.is_read
+                            ? "hover:bg-secondary/30 border-transparent"
+                            : "bg-primary/[0.03] border-primary/10 hover:bg-primary/[0.06]"
                         }`}
+                        style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
                         onClick={() => handleNotificationClick(m)}
                       >
                         {tab === "menciones" ? (
@@ -200,7 +203,7 @@ export default function Notificaciones() {
 
             {/* Due dates */}
             {tab === "vencimientos" && (
-              <div className="space-y-8">
+              <div className="space-y-8 animate-fade-in">
                 <section>
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="h-3.5 w-3.5 text-destructive" />

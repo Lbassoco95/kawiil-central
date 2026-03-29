@@ -126,77 +126,74 @@ const Clientes = () => {
         </div>
 
         {isLoading ? (
-          <p className="text-center text-muted-foreground py-12 text-sm">Cargando...</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-28 rounded-xl bg-secondary/30 animate-pulse" />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <Users className="mx-auto h-10 w-10 text-muted-foreground/40" />
-            <h3 className="mt-3 text-sm font-medium text-foreground">
+          <div className="text-center py-16 animate-scale-in">
+            <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+              <Users className="h-8 w-8 text-primary/60" />
+            </div>
+            <h3 className="text-sm font-medium text-foreground">
               {search ? "Sin resultados" : "Sin clientes aún"}
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
               {search ? "Intenta con otro término de búsqueda." : "Agrega tu primer cliente para comenzar."}
             </p>
             {!search && (
-              <Button className="mt-3" size="sm" onClick={() => setDialogOpen(true)}>
+              <Button className="mt-4" size="sm" onClick={() => setDialogOpen(true)}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Agregar cliente
               </Button>
             )}
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-fade-in">
             {grouped.map((group) => {
               const isCollapsed = collapsedGroups.has(group.key);
               return (
                 <Collapsible key={group.key} open={!isCollapsed} onOpenChange={() => toggleGroup(group.key)}>
                   <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-1.5 group">
                     {isCollapsed ? (
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
                     ) : (
-                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
                     )}
                     <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</h2>
-                    <span className="text-[10px] text-muted-foreground/60">{group.clients.length}</span>
+                    <span className="text-[10px] bg-secondary/60 text-muted-foreground px-1.5 py-0.5 rounded-full">{group.clients.length}</span>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="mt-1 divide-y divide-border/40">
-                      {group.clients.map((client) => (
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {group.clients.map((client, i) => (
                         <div
                           key={client.id}
-                          className="flex items-center justify-between gap-4 py-2.5 px-2 -mx-2 rounded-lg hover:bg-secondary/30 transition-colors cursor-pointer"
+                          className="rounded-xl border bg-card p-4 card-hover cursor-pointer animate-fade-in group/card"
+                          style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}
                           onClick={() => navigate(`/clientes/${client.id}`)}
                         >
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <h3 className="text-[13px] font-medium text-foreground truncate">
-                                  {client.name}
-                                </h3>
-                                <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[client.status]}`}>
-                                  {STATUS_LABELS[client.status]}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
-                                <span>
-                                  {client.client_type === "persona_moral" ? "PM" : "PF"}
-                                  {client.rfc && ` · ${client.rfc}`}
-                                </span>
-                                {client.email && (
-                                  <span className="flex items-center gap-1">
-                                    <Mail className="h-3 w-3" />
-                                    {client.email}
-                                  </span>
-                                )}
-                                {client.phone && (
-                                  <span className="flex items-center gap-1">
-                                    <Phone className="h-3 w-3" />
-                                    {client.phone}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <h3 className="text-sm font-medium text-foreground truncate group-hover/card:text-primary transition-colors">
+                              {client.name}
+                            </h3>
+                            <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 shrink-0 ${STATUS_STYLES[client.status]}`}>
+                              {STATUS_LABELS[client.status]}
+                            </Badge>
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              {client.client_type === "persona_moral" ? "Persona Moral" : "Persona Física"}
+                              {client.rfc && ` · ${client.rfc}`}
+                            </p>
+                            {client.email && (
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                {client.email}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                             {client.services?.filter((s) => s !== group.key).map((s) => (
                               <span key={s} className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
                                 {SERVICE_LABELS[s as ServiceArea] || s}
@@ -204,7 +201,7 @@ const Clientes = () => {
                             ))}
                             {isAdminOrManager && (
                               <button
-                                className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                                className="ml-auto p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
                                 onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: client.id, name: client.name }); }}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />

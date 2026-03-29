@@ -32,7 +32,7 @@ const Microsoft365Correo = () => {
           <div className="flex items-center gap-3">
             {!isMobile && <GlobalAISearch />}
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold text-foreground">Correo</h1>
+              <h1 className="text-sm font-medium text-foreground">Correo</h1>
               {profile && (
                 <span className="text-xs text-muted-foreground">
                   · {profile.displayName || profile.mail || ""}
@@ -55,7 +55,17 @@ const Microsoft365Correo = () => {
         <div className="flex-1 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <div className="space-y-3 w-full max-w-md px-6">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex gap-3 animate-pulse">
+                    <div className="h-10 w-10 rounded-full bg-secondary/40 shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-secondary/40 rounded w-3/4" />
+                      <div className="h-3 bg-secondary/30 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : !isConnected ? (
             <div className="p-6">
