@@ -276,13 +276,41 @@ Deno.serve(async (req) => {
       }
 
       case "emails": {
-        const top = params?.top || 20;
+        const top = params?.top || 25;
+        const skip = params?.skip || 0;
         const folder = params?.folder || "inbox";
         const search = params?.search ? `&$search="${params.search}"` : "";
+        const skipParam = skip > 0 ? `&$skip=${skip}` : "";
         result = await graphRequest(
           accessToken,
-          `/me/mailFolders/${folder}/messages?$top=${top}&$orderby=receivedDateTime desc${search}`
+          `/me/mailFolders/${folder}/messages?$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${search}`
         );
+        break;
+      }
+
+      case "mark-unread": {
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ isRead: false }),
+        });
+        result = res.ok ? { success: true } : await res.json();
+        break;
+      }
+
+      case "archive-email": {
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/move`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ destinationId: "archive" }),
+        });
+        result = await res.json();
         break;
       }
 

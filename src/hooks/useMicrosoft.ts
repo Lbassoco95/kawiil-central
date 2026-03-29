@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -277,20 +277,99 @@ export function useOutlookCategories() {
 
 export function useOutlookEmails(folderId = "inbox", search?: string) {
   const { user } = useAuth();
+  const PAGE_SIZE = 25;
 
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["outlook-emails", folderId, search],
-    queryFn: async () => {
+    queryFn: async ({ pageParam = 0 }) => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "emails", params: { folder: folderId, search, top: 30 } },
+        body: { action: "emails", params: { folder: folderId, search, top: PAGE_SIZE, skip: pageParam } },
       });
-      if (isNotConnectedError(data, error)) return [];
+      if (isNotConnectedError(data, error)) return { emails: [], nextSkip: null, totalCount: 0 };
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      return data?.value || [];
+      const emails = data?.value || [];
+      const totalCount = data?.["@odata.count"] ?? null;
+      const hasMore = emails.length === PAGE_SIZE;
+      return {
+        emails,
+        nextSkip: hasMore ? pageParam + PAGE_SIZE : null,
+        totalCount,
+      };
     },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextSkip,
     enabled: !!user,
     refetchInterval: 60000,
+  });
+}
+
+export function useMarkEmailUnread() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "mark-unread", params: { messageId } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onMutate: async (messageId) => {
+      await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
+      queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            emails: page.emails.map((e: any) => (e.id === messageId ? { ...e, isRead: false } : e)),
+          })),
+        };
+      });
+      queryClient.setQueryData(["unread-email-count"], (old: any) =>
+        typeof old === "number" ? old + 1 : 1
+      );
+    },
+    onSuccess: () => {
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+        queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      }, 2000);
+    },
+  });
+}
+
+export function useArchiveEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "archive-email", params: { messageId } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onMutate: async (messageId) => {
+      await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
+      queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            emails: page.emails.filter((e: any) => e.id !== messageId),
+          })),
+        };
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+    },
   });
 }
 
@@ -422,17 +501,20 @@ export function useMarkEmailRead() {
       return data;
     },
     onMutate: async (messageId) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
       await queryClient.cancelQueries({ queryKey: ["unread-email-count"] });
 
-      // Optimistically update email list
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
-        if (!Array.isArray(old)) return old;
-        return old.map((e: any) => (e.id === messageId ? { ...e, isRead: true } : e));
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            emails: page.emails.map((e: any) => (e.id === messageId ? { ...e, isRead: true } : e)),
+          })),
+        };
       });
 
-      // Optimistically decrement unread count
       queryClient.setQueryData(["unread-email-count"], (old: any) => {
         return typeof old === "number" && old > 0 ? old - 1 : 0;
       });
@@ -514,8 +596,14 @@ export function useMoveEmail() {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
       const previousQueries = queryClient.getQueriesData({ queryKey: ["outlook-emails"] });
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
-        if (!Array.isArray(old)) return old;
-        return old.filter((e: any) => e.id !== messageId);
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            emails: page.emails.filter((e: any) => e.id !== messageId),
+          })),
+        };
       });
       return { previousQueries };
     },
@@ -590,8 +678,14 @@ export function useDeleteEmail() {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
       const previousQueries = queryClient.getQueriesData({ queryKey: ["outlook-emails"] });
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
-        if (!Array.isArray(old)) return old;
-        return old.filter((e: any) => e.id !== messageId);
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            emails: page.emails.filter((e: any) => e.id !== messageId),
+          })),
+        };
       });
       return { previousQueries };
     },

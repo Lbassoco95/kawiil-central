@@ -1,30 +1,32 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   useOutlookEmails,
   useEmailDetail,
   useReplyEmail,
   useForwardEmail,
   useMarkEmailRead,
+  useMarkEmailUnread,
+  useArchiveEmail,
   useMailFolders,
   useEmailConversation,
   useCreateReplyDraft,
@@ -38,42 +40,28 @@ import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
   ClipboardList, Sparkles, Languages, ListChecks, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
-  FolderPlus, X, Check, FolderInput,
+  FolderPlus, X, Check, FolderInput, Archive, MailX, Star, MoreHorizontal,
+  Keyboard, ArrowDown,
 } from "lucide-react";
-import { formatDistanceToNow, parseISO, format } from "date-fns";
+import { formatDistanceToNow, parseISO, format, isToday, isYesterday } from "date-fns";
 import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
 import { RichTextEditor } from "./RichTextEditor";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
-const FOLDER_ICONS: Record<string, any> = {
-  inbox: Inbox,
-  sentitems: SendHorizonal,
-  drafts: FileText,
-  deleteditems: Trash2,
-  junkemail: AlertCircle,
-};
-
-const FOLDER_LABELS: Record<string, string> = {
-  inbox: "Bandeja de entrada",
-  sentitems: "Enviados",
-  drafts: "Borradores",
-  deleteditems: "Eliminados",
-  junkemail: "Spam",
-};
-
 function getFolderIcon(displayName: string) {
   const key = displayName.toLowerCase().replace(/\s/g, "");
-  // Map well-known folder display names
   if (key.includes("inbox") || key.includes("bandeja")) return Inbox;
   if (key.includes("sent") || key.includes("enviado")) return SendHorizonal;
   if (key.includes("draft") || key.includes("borrador")) return FileText;
   if (key.includes("deleted") || key.includes("eliminad")) return Trash2;
   if (key.includes("junk") || key.includes("spam") || key.includes("correo no deseado")) return AlertCircle;
+  if (key.includes("archive") || key.includes("archiv")) return Archive;
   return FolderOpen;
 }
 
@@ -84,6 +72,7 @@ function getFolderLabel(displayName: string) {
   if (key.includes("drafts") || key.includes("borradores")) return "Borradores";
   if (key.includes("deleteditems") || key.includes("elementoseliminados")) return "Eliminados";
   if (key.includes("junkemail") || key.includes("correonodeseado")) return "Spam";
+  if (key.includes("archive") || key.includes("archiv")) return "Archivo";
   return displayName;
 }
 
@@ -106,6 +95,36 @@ function sortFolders(folders: any[]) {
   return [...wellKnown, ...custom];
 }
 
+function formatEmailDate(dateStr: string) {
+  try {
+    const date = parseISO(dateStr);
+    if (isToday(date)) return format(date, "HH:mm");
+    if (isYesterday(date)) return "Ayer";
+    return format(date, "d MMM", { locale: es });
+  } catch {
+    return "";
+  }
+}
+
+function getInitials(name?: string, email?: string): string {
+  const source = name || email || "?";
+  const parts = source.split(/[\s@.]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return source.substring(0, 2).toUpperCase();
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-purple-500",
+  "bg-pink-500", "bg-sky-500", "bg-rose-500", "bg-teal-500",
+];
+
+function getAvatarColor(email?: string): string {
+  if (!email) return AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = (hash + email.charCodeAt(i)) % 2147483647;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
 export function EmailView() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -123,15 +142,19 @@ export function EmailView() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [showFolders, setShowFolders] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   const { data: folders = [] } = useMailFolders();
-  const { data: emails = [], isLoading } = useOutlookEmails(selectedFolderId, debouncedSearch || undefined);
+  const emailsQuery = useOutlookEmails(selectedFolderId, debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
   const { data: threadEmails = [] } = useEmailConversation(emailDetail?.conversationId || null);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
   const markRead = useMarkEmailRead();
+  const markUnread = useMarkEmailUnread();
+  const archiveEmail = useArchiveEmail();
   const createReplyDraft = useCreateReplyDraft();
   const sendDraft = useSendDraft();
   const createMailFolder = useCreateMailFolder();
@@ -141,21 +164,30 @@ export function EmailView() {
     emailDetail?.hasAttachments ? selectedEmailId ?? undefined : undefined
   );
 
+  const allEmails = useMemo(() => {
+    if (!emailsQuery.data?.pages) return [];
+    return emailsQuery.data.pages.flatMap((p) => p.emails);
+  }, [emailsQuery.data]);
+
+  const isLoading = emailsQuery.isLoading;
+  const hasNextPage = emailsQuery.hasNextPage;
+  const isFetchingNextPage = emailsQuery.isFetchingNextPage;
+
   const sortedFolders = sortFolders(folders);
 
   const handleMoveEmail = useCallback((messageId: string, destinationId: string) => {
     moveEmail.mutate({ messageId, destinationId }, {
       onSuccess: () => {
         if (selectedEmailId === messageId) {
-          const idx = emails.findIndex((e: any) => e.id === messageId);
-          const next = emails[idx + 1] || emails[idx - 1];
+          const idx = allEmails.findIndex((e: any) => e.id === messageId);
+          const next = allEmails[idx + 1] || allEmails[idx - 1];
           setSelectedEmailId(next?.id || null);
           resetAction();
         }
         setMovePopoverOpen(false);
       },
     });
-  }, [moveEmail, selectedEmailId, emails]);
+  }, [moveEmail, selectedEmailId, allEmails]);
 
   const handleOpenEmail = useCallback((email: any) => {
     setSelectedEmailId(email.id);
@@ -177,9 +209,7 @@ export function EmailView() {
     setShowFullAI(false);
     setDraftId(null);
     setDraftHtml("");
-
     if (action === "forward") return;
-
     try {
       const draft = await createReplyDraft.mutateAsync({
         messageId: selectedEmailId,
@@ -189,43 +219,27 @@ export function EmailView() {
         setDraftId(draft.id);
         setDraftHtml(draft.body?.content || "");
       }
-    } catch {
-      // Fallback: just open textarea
-    }
+    } catch { /* fallback */ }
   };
 
   const handleSendReply = async () => {
     if (!selectedEmailId) return;
-
     if (emailAction === "forward") {
       if (!forwardTo.trim()) return;
       forwardEmail.mutate(
-        {
-          messageId: selectedEmailId,
-          comment: stripTags(draftHtml),
-          toRecipients: forwardTo.split(",").map((s) => s.trim()),
-        },
+        { messageId: selectedEmailId, comment: stripTags(draftHtml), toRecipients: forwardTo.split(",").map((s) => s.trim()) },
         { onSuccess: resetAction }
       );
       return;
     }
-
     if (draftId) {
       sendDraft.mutate(
-        {
-          draftId,
-          body: { contentType: "HTML", content: draftHtml },
-        },
+        { draftId, body: { contentType: "HTML", content: draftHtml } },
         { onSuccess: resetAction }
       );
     } else {
-      // Fallback to simple reply
       replyEmail.mutate(
-        {
-          messageId: selectedEmailId,
-          comment: stripTags(draftHtml),
-          replyAll: emailAction === "reply-all",
-        },
+        { messageId: selectedEmailId, comment: stripTags(draftHtml), replyAll: emailAction === "reply-all" },
         { onSuccess: resetAction }
       );
     }
@@ -239,509 +253,622 @@ export function EmailView() {
     setShowFullAI(false);
   };
 
-  // Keyboard navigation
+  const handleArchive = useCallback((emailId: string) => {
+    const idx = allEmails.findIndex((e: any) => e.id === emailId);
+    const next = allEmails[idx + 1] || allEmails[idx - 1];
+    if (selectedEmailId === emailId) {
+      setSelectedEmailId(next?.id || null);
+      resetAction();
+    }
+    archiveEmail.mutate(emailId);
+  }, [archiveEmail, allEmails, selectedEmailId]);
+
+  const handleDelete = useCallback((emailId: string) => {
+    const idx = allEmails.findIndex((e: any) => e.id === emailId);
+    const next = allEmails[idx + 1] || allEmails[idx - 1];
+    if (selectedEmailId === emailId) {
+      setSelectedEmailId(next?.id || null);
+      resetAction();
+    }
+    deleteEmail.mutate(emailId);
+  }, [deleteEmail, allEmails, selectedEmailId]);
+
+  // Keyboard navigation (Superhuman style)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!emails.length) return;
+      if (!allEmails.length) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
-      const currentIdx = emails.findIndex((em: any) => em.id === selectedEmailId);
+      const currentIdx = allEmails.findIndex((em: any) => em.id === selectedEmailId);
       if (e.key === "ArrowDown" || e.key === "j") {
         e.preventDefault();
-        const next = Math.min(currentIdx + 1, emails.length - 1);
-        handleOpenEmail(emails[next]);
+        const next = Math.min(currentIdx + 1, allEmails.length - 1);
+        handleOpenEmail(allEmails[next]);
       } else if (e.key === "ArrowUp" || e.key === "k") {
         e.preventDefault();
         const prev = Math.max(currentIdx - 1, 0);
-        handleOpenEmail(emails[prev]);
+        handleOpenEmail(allEmails[prev]);
       } else if (e.key === "r" && !emailAction) {
         e.preventDefault();
         handleStartReply("reply");
+      } else if (e.key === "a" && !emailAction) {
+        e.preventDefault();
+        handleStartReply("reply-all");
+      } else if (e.key === "f" && !emailAction) {
+        e.preventDefault();
+        handleStartReply("forward");
+      } else if (e.key === "e" && selectedEmailId && !emailAction) {
+        e.preventDefault();
+        handleArchive(selectedEmailId);
+      } else if (e.key === "u" && selectedEmailId && !emailAction) {
+        e.preventDefault();
+        markUnread.mutate(selectedEmailId);
+      } else if (e.key === "#" && selectedEmailId && !emailAction) {
+        e.preventDefault();
+        handleDelete(selectedEmailId);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [emails, selectedEmailId, handleOpenEmail, emailAction]);
+  }, [allEmails, selectedEmailId, handleOpenEmail, emailAction, handleArchive, handleDelete]);
 
   const isSending = replyEmail.isPending || forwardEmail.isPending || sendDraft.isPending;
-
-  // Thread emails excluding the current one
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
 
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full border-t border-border overflow-hidden bg-background">
-      {/* Panel 1: Folders */}
-      <ResizablePanel defaultSize={15} minSize={10} maxSize={25} className="bg-muted/20">
-        <div className="flex flex-col h-full">
-          <ScrollArea className="flex-1">
-            <div className="py-2">
-              {sortedFolders.map((folder: any) => {
-                const Icon = getFolderIcon(folder.displayName);
-                const label = getFolderLabel(folder.displayName);
-                const isActive = selectedFolderId === folder.id;
-                return (
-                  <button
-                    key={folder.id}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-accent/50 text-left",
-                      isActive && "bg-accent text-accent-foreground font-medium",
-                      dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary"
-                    )}
-                    onClick={() => {
-                      setSelectedFolderId(folder.id);
-                      setSelectedEmailId(null);
-                      resetAction();
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.dataTransfer.dropEffect = "move";
-                      setDragOverFolderId(folder.id);
-                    }}
-                    onDragLeave={() => setDragOverFolderId(null)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setDragOverFolderId(null);
-                      const messageId = e.dataTransfer.getData("text/email-id");
-                      if (messageId && folder.id !== selectedFolderId) {
-                        handleMoveEmail(messageId, folder.id);
-                      }
-                    }}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate flex-1">{label}</span>
-                    {folder.unreadItemCount > 0 && (
-                      <Badge variant="destructive" className="h-4 px-1.5 text-[10px] font-semibold">
-                        {folder.unreadItemCount}
-                      </Badge>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </ScrollArea>
-          {/* Create folder */}
-          <div className="shrink-0 border-t border-border p-2">
-            {creatingFolder ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  autoFocus
-                  placeholder="Nombre..."
-                  className="h-7 text-xs flex-1"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newFolderName.trim()) {
-                      createMailFolder.mutate(newFolderName.trim(), {
-                        onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); },
-                      });
-                    }
-                    if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
-                  }}
-                />
-                <Button
-                  variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+    <div className="flex h-full overflow-hidden bg-background">
+      {/* Folder sidebar — collapsible on mobile */}
+      <div className={cn(
+        "shrink-0 border-r border-border bg-muted/30 flex flex-col transition-all duration-200",
+        isMobile ? (showFolders ? "w-56 absolute z-30 h-full shadow-xl" : "w-0 overflow-hidden") : "w-52"
+      )}>
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carpetas</span>
+          {isMobile && (
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowFolders(false)}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="py-1">
+            {sortedFolders.map((folder: any) => {
+              const Icon = getFolderIcon(folder.displayName);
+              const label = getFolderLabel(folder.displayName);
+              const isActive = selectedFolderId === folder.id;
+              return (
+                <button
+                  key={folder.id}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-all hover:bg-accent/60 text-left rounded-none",
+                    isActive && "bg-accent text-accent-foreground font-medium border-l-2 border-primary",
+                    dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary"
+                  )}
                   onClick={() => {
-                    if (newFolderName.trim()) {
-                      createMailFolder.mutate(newFolderName.trim(), {
-                        onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); },
-                      });
-                    }
+                    setSelectedFolderId(folder.id);
+                    setSelectedEmailId(null);
+                    resetAction();
+                    if (isMobile) setShowFolders(false);
                   }}
-                  disabled={createMailFolder.isPending}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolderId(folder.id); }}
+                  onDragLeave={() => setDragOverFolderId(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOverFolderId(null);
+                    const messageId = e.dataTransfer.getData("text/email-id");
+                    if (messageId && folder.id !== selectedFolderId) handleMoveEmail(messageId, folder.id);
+                  }}
                 >
-                  {createMailFolder.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                </Button>
-                <Button
-                  variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                  onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <Button
-                variant="ghost" size="sm" className="w-full h-7 text-xs justify-start gap-2"
-                onClick={() => setCreatingFolder(true)}
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate flex-1 text-sm">{label}</span>
+                  {folder.unreadItemCount > 0 && (
+                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold bg-primary/15 text-primary">
+                      {folder.unreadItemCount}
+                    </Badge>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </ScrollArea>
+        <div className="shrink-0 border-t border-border p-2">
+          {creatingFolder ? (
+            <div className="flex items-center gap-1">
+              <Input
+                autoFocus placeholder="Nombre..." className="h-7 text-xs flex-1"
+                value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newFolderName.trim()) {
+                    createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } });
+                  }
+                  if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
+                }}
+              />
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                onClick={() => { if (newFolderName.trim()) createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } }); }}
+                disabled={createMailFolder.isPending}
               >
-                <FolderPlus className="h-3.5 w-3.5" /> Nueva carpeta
+                {createMailFolder.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : (
+            <Button variant="ghost" size="sm" className="w-full h-7 text-xs justify-start gap-2" onClick={() => setCreatingFolder(true)}>
+              <FolderPlus className="h-3.5 w-3.5" /> Nueva carpeta
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Email list panel */}
+      <div className={cn("flex flex-col border-r border-border bg-background transition-all duration-200",
+        isMobile ? "flex-1" : "w-[380px] shrink-0",
+        selectedEmailId && isMobile && "hidden"
+      )}>
+        {/* Search & compose toolbar */}
+        <div className="p-3 border-b border-border/50 space-y-2">
+          <div className="flex items-center gap-2">
+            {isMobile && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setShowFolders(true)}>
+                <FolderOpen className="h-4 w-4" />
               </Button>
             )}
-          </div>
-        </div>
-      </ResizablePanel>
-
-      <ResizableHandle />
-
-      {/* Panel 2: Email list */}
-      <ResizablePanel defaultSize={30} minSize={20} maxSize={45}>
-        <div className="flex flex-col h-full">
-          <div className="p-2 border-b border-border space-y-1.5">
-            <Button size="sm" className="w-full h-8 text-xs" onClick={() => setComposeOpen(true)}>
-              <Send className="mr-1.5 h-3.5 w-3.5" /> Redactar correo
-            </Button>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar correos..."
-                className="pl-8 h-8 text-sm"
+                className="pl-9 h-9 text-sm bg-muted/40 border-0 focus-visible:ring-1"
                 value={search}
                 onChange={(e) => handleSearch(e.target.value)}
               />
             </div>
+            <Button size="sm" className="h-9 px-4 gap-2 shrink-0" onClick={() => setComposeOpen(true)}>
+              <Send className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Redactar</span>
+            </Button>
           </div>
+        </div>
 
-          <ScrollArea className="flex-1" ref={listRef}>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        {/* Email list */}
+        <ScrollArea className="flex-1" ref={listRef}>
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="flex gap-3 animate-pulse">
+                  <div className="h-10 w-10 rounded-full bg-secondary/40 shrink-0" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-3.5 bg-secondary/40 rounded w-3/4" />
+                    <div className="h-3 bg-secondary/30 rounded w-full" />
+                    <div className="h-2.5 bg-secondary/20 rounded w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : allEmails.length === 0 ? (
+            <div className="p-8 text-center">
+              <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-muted/50 mb-3">
+                <Mail className="h-7 w-7 text-muted-foreground/50" />
               </div>
-            ) : emails.length === 0 ? (
-              <div className="p-6 text-center">
-                <Mail className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
-                <p className="text-xs text-muted-foreground">Sin correos</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {emails.map((email: any) => (
+              <p className="text-sm font-medium text-muted-foreground">Sin correos</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Esta carpeta está vacía</p>
+            </div>
+          ) : (
+            <div>
+              {allEmails.map((email: any) => {
+                const isActive = selectedEmailId === email.id;
+                const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address || "Desconocido";
+                const senderEmail = email.from?.emailAddress?.address || "";
+                return (
                   <div
                     key={email.id}
                     draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/email-id", email.id);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
+                    onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
-                      "px-3 py-2 cursor-pointer transition-colors hover:bg-accent/50",
-                      selectedEmailId === email.id && "bg-accent",
-                      !email.isRead && "bg-primary/5"
+                      "group px-3 py-3 cursor-pointer transition-all duration-150 border-b border-border/30 hover:bg-accent/40",
+                      isActive && "bg-primary/8 border-l-2 border-l-primary",
+                      !email.isRead && !isActive && "bg-primary/[0.03]"
                     )}
                     onClick={() => handleOpenEmail(email)}
                   >
-                    <div className="flex items-start gap-2">
-                      <div className="pt-0.5 shrink-0">
-                        {email.isRead ? (
-                          <MailOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                        ) : (
-                          <Mail className="h-3.5 w-3.5 text-primary" />
-                        )}
+                    <div className="flex items-start gap-3">
+                      {/* Avatar */}
+                      <div className={cn(
+                        "h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 mt-0.5",
+                        getAvatarColor(senderEmail)
+                      )}>
+                        {getInitials(senderName, senderEmail)}
                       </div>
+
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1 mb-0.5">
-                          <span className={cn("text-xs truncate", !email.isRead ? "font-semibold text-foreground" : "text-foreground")}>
-                            {email.from?.emailAddress?.name || email.from?.emailAddress?.address || "Desconocido"}
+                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                          <span className={cn("text-sm truncate", !email.isRead ? "font-semibold text-foreground" : "text-foreground/80")}>
+                            {senderName}
                           </span>
-                          <span className="text-[10px] text-muted-foreground shrink-0">
-                            {formatDistanceToNow(parseISO(email.receivedDateTime), { addSuffix: false, locale: es })}
+                          <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                            {formatEmailDate(email.receivedDateTime)}
                           </span>
                         </div>
-                        <p className={cn("text-xs truncate", !email.isRead ? "font-medium text-foreground" : "text-muted-foreground")}>
+                        <p className={cn("text-sm truncate leading-snug", !email.isRead ? "font-medium text-foreground" : "text-muted-foreground")}>
                           {email.subject || "(sin asunto)"}
                         </p>
-                        <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">
-                          {email.bodyPreview?.substring(0, 80)}
+                        <p className="text-xs text-muted-foreground/60 truncate mt-0.5 leading-relaxed">
+                          {email.bodyPreview?.substring(0, 100)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                        {email.hasAttachments && <Paperclip className="h-3 w-3 text-muted-foreground" />}
+
+                      {/* Indicators */}
+                      <div className="flex flex-col items-center gap-1 shrink-0 pt-1">
+                        {!email.isRead && (
+                          <div className="h-2 w-2 rounded-full bg-primary" />
+                        )}
+                        {email.hasAttachments && <Paperclip className="h-3.5 w-3.5 text-muted-foreground/50" />}
                         {email.importance === "high" && <div className="h-2 w-2 rounded-full bg-destructive" />}
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-      </ResizablePanel>
 
-      <ResizableHandle />
-
-      {/* Panel 3: Detail */}
-      <ResizablePanel defaultSize={55} minSize={30}>
-        <div className="flex flex-col h-full min-w-0">
-          {!selectedEmailId ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <Mail className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
-                <p className="text-sm text-muted-foreground">Selecciona un correo para leerlo</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Usa ↑↓ o j/k para navegar · r para responder</p>
-              </div>
-            </div>
-          ) : detailLoading ? (
-            <div className="flex-1 flex items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : emailDetail ? (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Header */}
-              <div className="p-4 border-b border-border shrink-0">
-                <h2 className="text-base font-semibold text-foreground leading-tight mb-2">
-                  {emailDetail.subject || "(sin asunto)"}
-                </h2>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="text-xs text-muted-foreground space-y-0.5 min-w-0">
-                    <p className="truncate">
-                      <span className="font-medium text-foreground">{emailDetail.from?.emailAddress?.name}</span>{" "}
-                      &lt;{emailDetail.from?.emailAddress?.address}&gt;
-                    </p>
-                    <p className="truncate">
-                      Para: {emailDetail.toRecipients?.map((r: any) => r.emailAddress?.name || r.emailAddress?.address).join(", ")}
-                    </p>
-                  </div>
-                  <span className="text-[11px] text-muted-foreground shrink-0">
-                    {emailDetail.receivedDateTime
-                      ? format(parseISO(emailDetail.receivedDateTime), "d MMM yyyy, HH:mm", { locale: es })
-                      : ""}
-                  </span>
-                </div>
-              </div>
-
-              {/* Action bar */}
-              <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border shrink-0 flex-wrap">
-                <Button
-                  variant={emailAction === "reply" ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => emailAction === "reply" ? resetAction() : handleStartReply("reply")}
-                >
-                  <Reply className="mr-1 h-3 w-3" /> Responder
-                </Button>
-                <Button
-                  variant={emailAction === "reply-all" ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => emailAction === "reply-all" ? resetAction() : handleStartReply("reply-all")}
-                >
-                  <ReplyAll className="mr-1 h-3 w-3" /> Todos
-                </Button>
-                <Button
-                  variant={emailAction === "forward" ? "default" : "ghost"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => emailAction === "forward" ? resetAction() : handleStartReply("forward")}
-                >
-                  <Forward className="mr-1 h-3 w-3" /> Reenviar
-                </Button>
-
-                <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs">
-                      <FolderInput className="mr-1 h-3 w-3" /> Mover a
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-48 p-1" align="start">
-                    <ScrollArea className="max-h-64">
-                      {sortedFolders
-                        .filter((f: any) => f.id !== selectedFolderId)
-                        .map((folder: any) => {
-                          const Icon = getFolderIcon(folder.displayName);
-                          const label = getFolderLabel(folder.displayName);
-                          return (
+                    {/* Quick actions on hover */}
+                    <div className="hidden group-hover:flex items-center gap-1 mt-1.5 ml-12">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={(e) => { e.stopPropagation(); handleArchive(email.id); }}
+                          >
+                            <Archive className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-destructive transition-colors"
+                            onClick={(e) => { e.stopPropagation(); handleDelete(email.id); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
+                      </Tooltip>
+                      {email.isRead ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
                             <button
-                              key={folder.id}
-                              className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent rounded-sm text-left"
-                              onClick={() => {
-                                if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
-                              }}
+                              className="p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                              onClick={(e) => { e.stopPropagation(); markUnread.mutate(email.id); }}
                             >
-                              <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                              <span className="truncate">{label}</span>
+                              <Mail className="h-3.5 w-3.5" />
                             </button>
-                          );
-                        })}
-                    </ScrollArea>
-                  </PopoverContent>
-                </Popover>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">Marcar no leído (u)</TooltipContent>
+                        </Tooltip>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => {
-                    if (selectedEmailId && confirm("¿Eliminar este correo?")) {
-                      const id = selectedEmailId;
-                      const idx = emails.findIndex((e: any) => e.id === id);
-                      const next = emails[idx + 1] || emails[idx - 1];
-                      setSelectedEmailId(next?.id || null);
-                      resetAction();
-                      deleteEmail.mutate(id);
-                    }
-                  }}
-                >
-                  <Trash2 className="mr-1 h-3 w-3" /> Eliminar
-                </Button>
-
-                <div className="w-px h-5 bg-border mx-1" />
-
-                <Button variant="ghost" size="sm" className="h-7 text-xs"
-                  onClick={() => setQuickAIPrompt("Resume los puntos clave de este correo en viñetas.")}
-                >
-                  <ListChecks className="mr-1 h-3 w-3" /> Resumir
-                </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-xs"
-                  onClick={() => setQuickAIPrompt("Traduce este correo al inglés manteniendo el tono profesional.")}
-                >
-                  <Languages className="mr-1 h-3 w-3" /> Traducir
-                </Button>
-
-                <div className="ml-auto">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setCreateTaskOpen(true)}>
-                    <ClipboardList className="mr-1 h-3 w-3" /> Tarea
+              {/* Load more button */}
+              {hasNextPage && (
+                <div className="p-4 text-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => emailsQuery.fetchNextPage()}
+                    disabled={isFetchingNextPage}
+                  >
+                    {isFetchingNextPage ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    )}
+                    {isFetchingNextPage ? "Cargando..." : "Cargar más correos"}
                   </Button>
                 </div>
-              </div>
+              )}
+            </div>
+          )}
+        </ScrollArea>
+      </div>
 
-              {/* Quick AI result */}
-              {quickAIPrompt && (
-                <div className="px-4 py-2 border-b border-border shrink-0">
+      {/* Detail panel */}
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 bg-background",
+        !selectedEmailId && isMobile && "hidden"
+      )}>
+        {!selectedEmailId ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center max-w-xs">
+              <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-muted/40 mb-4">
+                <Mail className="h-9 w-9 text-muted-foreground/30" />
+              </div>
+              <p className="text-base font-medium text-muted-foreground mb-2">Selecciona un correo</p>
+              <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground/50">
+                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">j</kbd><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">k</kbd> navegar</span>
+                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">r</kbd> responder</span>
+                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">e</kbd> archivar</span>
+              </div>
+            </div>
+          </div>
+        ) : detailLoading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : emailDetail ? (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Detail header */}
+            <div className="px-6 py-4 border-b border-border/50 shrink-0">
+              {isMobile && (
+                <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-xs" onClick={() => setSelectedEmailId(null)}>
+                  <ChevronRight className="h-3.5 w-3.5 mr-1 rotate-180" /> Volver
+                </Button>
+              )}
+              <h2 className="text-lg font-semibold text-foreground leading-tight mb-3">
+                {emailDetail.subject || "(sin asunto)"}
+              </h2>
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  "h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0",
+                  getAvatarColor(emailDetail.from?.emailAddress?.address)
+                )}>
+                  {getInitials(emailDetail.from?.emailAddress?.name, emailDetail.from?.emailAddress?.address)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">{emailDetail.from?.emailAddress?.name}</span>
+                    <span className="text-xs text-muted-foreground">&lt;{emailDetail.from?.emailAddress?.address}&gt;</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    Para: {emailDetail.toRecipients?.map((r: any) => r.emailAddress?.name || r.emailAddress?.address).join(", ")}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0 pt-1">
+                  {emailDetail.receivedDateTime
+                    ? format(parseISO(emailDetail.receivedDateTime), "d MMM yyyy, HH:mm", { locale: es })
+                    : ""}
+                </span>
+              </div>
+            </div>
+
+            {/* Action bar */}
+            <div className="flex items-center gap-1 px-4 py-1.5 border-b border-border/50 shrink-0 bg-muted/20 flex-wrap">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant={emailAction === "reply" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
+                    onClick={() => emailAction === "reply" ? resetAction() : handleStartReply("reply")}>
+                    <Reply className="h-3.5 w-3.5" /> Responder
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">r</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant={emailAction === "reply-all" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
+                    onClick={() => emailAction === "reply-all" ? resetAction() : handleStartReply("reply-all")}>
+                    <ReplyAll className="h-3.5 w-3.5" /> Todos
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">a</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant={emailAction === "forward" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
+                    onClick={() => emailAction === "forward" ? resetAction() : handleStartReply("forward")}>
+                    <Forward className="h-3.5 w-3.5" /> Reenviar
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">f</TooltipContent>
+              </Tooltip>
+
+              <div className="w-px h-5 bg-border mx-0.5" />
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" onClick={() => selectedEmailId && handleArchive(selectedEmailId)}>
+                    <Archive className="h-3.5 w-3.5" /> Archivar
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">e</TooltipContent>
+              </Tooltip>
+
+              <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5">
+                    <FolderInput className="h-3.5 w-3.5" /> Mover
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-1" align="start">
+                  <ScrollArea className="max-h-64">
+                    {sortedFolders.filter((f: any) => f.id !== selectedFolderId).map((folder: any) => {
+                      const Icon = getFolderIcon(folder.displayName);
+                      const label = getFolderLabel(folder.displayName);
+                      return (
+                        <button key={folder.id}
+                          className="w-full flex items-center gap-2 px-2.5 py-2 text-sm hover:bg-accent rounded-md text-left transition-colors"
+                          onClick={() => { if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id); }}>
+                          <Icon className="h-4 w-4 text-muted-foreground" />
+                          <span className="truncate">{label}</span>
+                        </button>
+                      );
+                    })}
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5"
+                    onClick={() => selectedEmailId && markUnread.mutate(selectedEmailId)}>
+                    <MailX className="h-3.5 w-3.5" /> No leído
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">u</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm"
+                    className="h-8 text-xs gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => selectedEmailId && handleDelete(selectedEmailId)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
+              </Tooltip>
+
+              <div className="w-px h-5 bg-border mx-0.5" />
+
+              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5"
+                onClick={() => setQuickAIPrompt("Resume los puntos clave de este correo en viñetas.")}>
+                <ListChecks className="h-3.5 w-3.5" /> Resumir
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5"
+                onClick={() => setQuickAIPrompt("Traduce este correo al inglés manteniendo el tono profesional.")}>
+                <Languages className="h-3.5 w-3.5" /> Traducir
+              </Button>
+
+              <div className="ml-auto">
+                <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setCreateTaskOpen(true)}>
+                  <ClipboardList className="h-3.5 w-3.5" /> Tarea
+                </Button>
+              </div>
+            </div>
+
+            {/* Quick AI result */}
+            {quickAIPrompt && (
+              <div className="px-6 py-3 border-b border-border/50 shrink-0 bg-primary/[0.03]">
+                <EmailAIAssistant
+                  mode="quick"
+                  emailSubject={emailDetail.subject || ""}
+                  emailBody={emailDetail.body?.content || ""}
+                  senderName={emailDetail.from?.emailAddress?.name}
+                  autoPrompt={quickAIPrompt}
+                  onClose={() => setQuickAIPrompt(null)}
+                />
+              </div>
+            )}
+
+            {/* Email body + thread */}
+            <ScrollArea className="flex-1">
+              <div className="px-6 py-5 space-y-5">
+                {emailDetail.body?.contentType === "html" ? (
+                  <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
+                ) : (
+                  <pre className="whitespace-pre-wrap text-sm p-2 leading-relaxed">{emailDetail.body?.content}</pre>
+                )}
+
+                {attachments.length > 0 && (
+                  <div className="rounded-xl border border-border/50 p-4 space-y-2.5 bg-muted/20">
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <Paperclip className="h-3.5 w-3.5" /> {attachments.length} adjunto{attachments.length > 1 ? "s" : ""}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {attachments.map((att: any) => (
+                        <button
+                          key={att.id}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background hover:bg-secondary/40 text-sm transition-all hover:shadow-sm"
+                          onClick={() => {
+                            if (att.contentBytes) {
+                              const byteChars = atob(att.contentBytes);
+                              const byteNums = new Array(byteChars.length);
+                              for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+                              const blob = new Blob([new Uint8Array(byteNums)], { type: att.contentType });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = url; a.download = att.name; a.click();
+                              URL.revokeObjectURL(url);
+                            }
+                          }}
+                        >
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="truncate max-w-[180px]">{att.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {att.size > 1024 * 1024 ? `${(att.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(att.size / 1024)} KB`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {otherThreadEmails.length > 0 && (
+                  <div className="border-t border-border/50 pt-5">
+                    <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
+                      {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} anterior{otherThreadEmails.length > 1 ? "es" : ""}
+                    </p>
+                    <div className="space-y-1.5">
+                      {otherThreadEmails.map((threadEmail: any) => (
+                        <ThreadEmailItem key={threadEmail.id} email={threadEmail} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            {/* Reply/Forward form */}
+            {emailAction && (
+              <div className="border-t border-border p-5 shrink-0 space-y-3 bg-muted/20 max-h-[45%] overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-foreground">
+                    {emailAction === "reply" ? "Responder" : emailAction === "reply-all" ? "Responder a todos" : "Reenviar"}
+                  </Label>
+                  <Button variant={showFullAI ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
+                    onClick={() => setShowFullAI(!showFullAI)}>
+                    <Sparkles className="h-3.5 w-3.5" /> Kawiil AI
+                  </Button>
+                </div>
+
+                {showFullAI && (
                   <EmailAIAssistant
-                    mode="quick"
+                    mode="full"
                     emailSubject={emailDetail.subject || ""}
                     emailBody={emailDetail.body?.content || ""}
                     senderName={emailDetail.from?.emailAddress?.name}
-                    autoPrompt={quickAIPrompt}
-                    onClose={() => setQuickAIPrompt(null)}
+                    onInsertText={(text) => setDraftHtml((prev) => `<p>${text.replace(/\n/g, "<br>")}</p>${prev}`)}
+                    onClose={() => setShowFullAI(false)}
                   />
-                </div>
-              )}
+                )}
 
-              {/* Email body + thread */}
-              <ScrollArea className="flex-1">
-                <div className="p-4 space-y-4">
-                  {/* Current email */}
-                  {emailDetail.body?.contentType === "html" ? (
-                    <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
-                  ) : (
-                    <pre className="whitespace-pre-wrap text-sm p-2">{emailDetail.body?.content}</pre>
-                  )}
+                {emailAction === "forward" && (
+                  <Input
+                    placeholder="Para (separar con coma): correo@ejemplo.com"
+                    value={forwardTo}
+                    onChange={(e) => setForwardTo(e.target.value)}
+                    className="text-sm h-9"
+                  />
+                )}
 
-                  {attachments.length > 0 && (
-                    <div className="border rounded-lg p-3 space-y-2 bg-muted/20">
-                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Paperclip className="h-3.5 w-3.5" /> {attachments.length} adjunto{attachments.length > 1 ? "s" : ""}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {attachments.map((att: any) => (
-                          <button
-                            key={att.id}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-md border bg-background hover:bg-secondary/40 text-xs transition-colors"
-                            onClick={() => {
-                              if (att.contentBytes) {
-                                const byteChars = atob(att.contentBytes);
-                                const byteNums = new Array(byteChars.length);
-                                for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
-                                const blob = new Blob([new Uint8Array(byteNums)], { type: att.contentType });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement("a");
-                                a.href = url;
-                                a.download = att.name;
-                                a.click();
-                                URL.revokeObjectURL(url);
-                              }
-                            }}
-                          >
-                            <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className="truncate max-w-[140px]">{att.name}</span>
-                            <span className="text-muted-foreground">
-                              {att.size > 1024 * 1024
-                                ? `${(att.size / 1024 / 1024).toFixed(1)} MB`
-                                : `${Math.round(att.size / 1024)} KB`}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Thread / previous emails */}
-                  {otherThreadEmails.length > 0 && (
-                    <div className="border-t border-border pt-4">
-                      <p className="text-xs font-medium text-muted-foreground mb-2">
-                        {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} anterior{otherThreadEmails.length > 1 ? "es" : ""}
-                      </p>
-                      <div className="space-y-1">
-                        {otherThreadEmails.map((threadEmail: any) => (
-                          <ThreadEmailItem key={threadEmail.id} email={threadEmail} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-
-              {/* Reply/Forward form with rich text */}
-              {emailAction && (
-                <div className="border-t border-border p-4 shrink-0 space-y-3 bg-muted/20 max-h-[45%] overflow-y-auto">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-medium text-muted-foreground">
-                      {emailAction === "reply" ? "Responder" : emailAction === "reply-all" ? "Responder a todos" : "Reenviar"}
-                    </Label>
-                    <Button
-                      variant={showFullAI ? "default" : "ghost"}
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => setShowFullAI(!showFullAI)}
-                    >
-                      <Sparkles className="mr-1 h-3 w-3" /> Kawiil AI
-                    </Button>
+                {createReplyDraft.isPending ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Preparando respuesta con firma...
                   </div>
+                ) : (
+                  <RichTextEditor
+                    key={draftId || "new"}
+                    initialHtml={draftHtml}
+                    placeholder={emailAction === "forward" ? "Mensaje al reenviar..." : "Escribe tu respuesta..."}
+                    onHtmlChange={setDraftHtml}
+                  />
+                )}
 
-                  {showFullAI && (
-                    <EmailAIAssistant
-                      mode="full"
-                      emailSubject={emailDetail.subject || ""}
-                      emailBody={emailDetail.body?.content || ""}
-                      senderName={emailDetail.from?.emailAddress?.name}
-                      onInsertText={(text) => setDraftHtml((prev) => `<p>${text.replace(/\n/g, "<br>")}</p>${prev}`)}
-                      onClose={() => setShowFullAI(false)}
-                    />
-                  )}
-
-                  {emailAction === "forward" && (
-                    <Input
-                      placeholder="Para (separar con coma): correo@ejemplo.com"
-                      value={forwardTo}
-                      onChange={(e) => setForwardTo(e.target.value)}
-                      className="text-sm h-8"
-                    />
-                  )}
-
-                  {createReplyDraft.isPending ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Preparando respuesta con firma...
-                    </div>
-                  ) : (
-                    <RichTextEditor
-                      key={draftId || "new"}
-                      initialHtml={draftHtml}
-                      placeholder={emailAction === "forward" ? "Mensaje al reenviar..." : "Escribe tu respuesta..."}
-                      onHtmlChange={setDraftHtml}
-                    />
-                  )}
-
-                  <div className="flex justify-between items-center">
-                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={resetAction}>
-                      Cancelar
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={handleSendReply}
-                      disabled={isSending || !draftHtml.trim()}
-                    >
-                      {isSending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Send className="mr-1 h-3 w-3" />}
-                      {emailAction === "forward" ? "Reenviar" : "Enviar"}
-                    </Button>
-                  </div>
+                <div className="flex justify-between items-center pt-1">
+                  <Button variant="ghost" size="sm" className="text-sm h-8" onClick={resetAction}>Cancelar</Button>
+                  <Button size="sm" className="h-8 text-sm gap-1.5" onClick={handleSendReply} disabled={isSending || !draftHtml.trim()}>
+                    {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    {emailAction === "forward" ? "Reenviar" : "Enviar"}
+                  </Button>
                 </div>
-              )}
-            </div>
-          ) : null}
-        </div>
-      </ResizablePanel>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
 
-      {/* Create task dialog */}
       <CreateTaskFromEmailDialog
         open={createTaskOpen}
         onOpenChange={setCreateTaskOpen}
@@ -752,36 +879,36 @@ export function EmailView() {
         receivedDate={emailDetail?.receivedDateTime ? formatDistanceToNow(parseISO(emailDetail.receivedDateTime), { addSuffix: true, locale: es }) : undefined}
       />
       <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} />
-    </ResizablePanelGroup>
+    </div>
   );
 }
 
-// Collapsible thread email item
 function ThreadEmailItem({ email }: { email: any }) {
   const [open, setOpen] = useState(false);
+  const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address;
+  const senderEmail = email.from?.emailAddress?.address || "";
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent/50 rounded-md transition-colors text-left">
-          {open ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
-          <span className="font-medium text-foreground truncate">
-            {email.from?.emailAddress?.name || email.from?.emailAddress?.address}
-          </span>
-          <span className="text-muted-foreground truncate flex-1">
-            — {email.bodyPreview?.substring(0, 60)}
-          </span>
-          <span className="text-[10px] text-muted-foreground shrink-0">
+        <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-accent/50 rounded-lg transition-colors text-left">
+          <div className={cn("h-7 w-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0", getAvatarColor(senderEmail))}>
+            {getInitials(senderName, senderEmail)}
+          </div>
+          {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+          <span className="font-medium text-foreground truncate">{senderName}</span>
+          <span className="text-muted-foreground truncate flex-1">— {email.bodyPreview?.substring(0, 60)}</span>
+          <span className="text-xs text-muted-foreground shrink-0">
             {email.receivedDateTime ? format(parseISO(email.receivedDateTime), "d MMM, HH:mm", { locale: es }) : ""}
           </span>
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="ml-5 mr-2 mb-2 border border-border rounded-md overflow-hidden">
+        <div className="ml-10 mr-2 mb-2 border border-border/50 rounded-lg overflow-hidden">
           {email.body?.contentType === "html" ? (
             <AutoResizeIframe html={email.body.content} title="Thread email" minH={100} />
           ) : (
-            <pre className="whitespace-pre-wrap text-xs p-3 text-muted-foreground">{email.body?.content}</pre>
+            <pre className="whitespace-pre-wrap text-sm p-3 text-muted-foreground">{email.body?.content}</pre>
           )}
         </div>
       </CollapsibleContent>
@@ -789,7 +916,6 @@ function ThreadEmailItem({ email }: { email: any }) {
   );
 }
 
-// Auto-resize iframe for email content
 function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: string; minH?: number }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(minH);
@@ -809,9 +935,9 @@ function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: st
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;margin:0;padding:12px;word-wrap:break-word;line-height:1.5;overflow:hidden;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}table{max-width:100%;border-collapse:collapse;}blockquote{border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#666;}</style></head><body>${html}</body></html>`}
+      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;margin:0;padding:12px;word-wrap:break-word;line-height:1.6;overflow:hidden;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}table{max-width:100%;border-collapse:collapse;}blockquote{border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#666;}</style></head><body>${html}</body></html>`}
       sandbox="allow-same-origin"
-      className="w-full border-0 bg-background"
+      className="w-full border-0 bg-background rounded-lg"
       style={{ height: `${height}px` }}
       title={title}
       onLoad={resizeIframe}

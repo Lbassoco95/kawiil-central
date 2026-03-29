@@ -37,12 +37,14 @@ const Microsoft365Calendario = () => {
   return (
     <AppLayout>
       <ErrorBoundary>
-        <div className="space-y-6 animate-fade-in">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Calendario</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Outlook · {profile?.displayName || profile?.mail || ""}
-            </p>
+        <div className="space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">Calendario</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Outlook · {profile?.displayName || profile?.mail || ""} — con tareas de Kawiil
+              </p>
+            </div>
           </div>
           <CalendarView />
         </div>

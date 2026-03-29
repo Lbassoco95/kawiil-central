@@ -46,6 +46,31 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
   });
 }
 
+export function useTasksForCalendar(startDate?: string, endDate?: string) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["tasks-calendar", startDate, endDate],
+    queryFn: async () => {
+      let query = supabase
+        .from("tasks")
+        .select("id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)")
+        .not("due_date", "is", null)
+        .neq("status", "completada" as any)
+        .neq("status", "cancelada" as any)
+        .order("due_date", { ascending: true });
+
+      if (startDate) query = query.gte("due_date", startDate);
+      if (endDate) query = query.lte("due_date", endDate);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as (Pick<Task, "id" | "title" | "due_date" | "status" | "priority" | "area" | "client_id" | "project_id" | "assigned_to"> & { clients?: { name: string } | null; projects?: { name: string } | null })[];
+    },
+    enabled: !!user && !!startDate && !!endDate,
+  });
+}
+
 export function useTaskDetail(taskId: string | undefined) {
   const { user } = useAuth();
 
