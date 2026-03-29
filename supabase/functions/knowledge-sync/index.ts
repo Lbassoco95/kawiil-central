@@ -1,0 +1,485 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const targetAgent: string | undefined = body.agent;
+    const targetClientId: string | undefined = body.client_id;
+
+    const { data: orgs } = await supabase.from("organizations").select("id");
+    if (!orgs?.length) {
+      return json({ message: "No organizations found" });
+    }
+
+    const orgId = orgs[0].id;
+    const results: Record<string, any> = {};
+
+    if (!targetAgent || targetAgent === "archivista") {
+      results.archivista = await runArchivista(supabase, supabaseUrl, serviceKey, orgId, targetClientId);
+    }
+    if (!targetAgent || targetAgent === "integrador") {
+      results.integrador = await runIntegrador(supabase, orgId, anthropicKey, targetClientId);
+    }
+    if (!targetAgent || targetAgent === "nutritor") {
+      results.nutritor = await runNutritor(supabase, orgId, anthropicKey);
+    }
+
+    return json({ success: true, results });
+  } catch (err: any) {
+    console.error("knowledge-sync error:", err);
+    return json({ error: err.message }, 500);
+  }
+});
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ────────────── ARCHIVISTA ──────────────
+async function runArchivista(
+  supabase: any,
+  supabaseUrl: string,
+  serviceKey: string,
+  orgId: string,
+  targetClientId?: string,
+) {
+  const logId = await startLog(supabase, orgId, "archivista");
+
+  try {
+    let query = supabase
+      .from("clients")
+      .select("id, name, dropbox_folder_path")
+      .eq("organization_id", orgId)
+      .not("dropbox_folder_path", "is", null);
+
+    if (targetClientId) {
+      query = query.eq("id", targetClientId);
+    }
+
+    const { data: clients } = await query;
+    let totalDocs = 0;
+    let totalChunks = 0;
+    const clientResults: any[] = [];
+
+    for (const client of clients || []) {
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/index-dropbox`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            folder_path: client.dropbox_folder_path,
+            client_id: client.id,
+            organization_id: orgId,
+          }),
+        });
+
+        const result = await resp.json().catch(() => ({ indexed: 0 }));
+        const indexed = result.indexed || result.documents_indexed || 0;
+        totalDocs += indexed;
+
+        clientResults.push({
+          client_id: client.id,
+          client_name: client.name,
+          docs_indexed: indexed,
+        });
+      } catch (e: any) {
+        clientResults.push({
+          client_id: client.id,
+          client_name: client.name,
+          error: e.message,
+        });
+      }
+    }
+
+    const { count: chunkCount } = await supabase
+      .from("document_chunks")
+      .select("id", { count: "exact", head: true });
+    totalChunks = chunkCount || 0;
+
+    await completeLog(supabase, logId, {
+      clients_scanned: (clients || []).length,
+      docs_indexed: totalDocs,
+      total_chunks: totalChunks,
+      details: clientResults,
+    });
+
+    return { clients_scanned: (clients || []).length, docs_indexed: totalDocs };
+  } catch (err: any) {
+    await failLog(supabase, logId, err.message);
+    return { error: err.message };
+  }
+}
+
+// ────────────── INTEGRADOR ──────────────
+async function runIntegrador(
+  supabase: any,
+  orgId: string,
+  anthropicKey?: string,
+  targetClientId?: string,
+) {
+  const logId = await startLog(supabase, orgId, "integrador");
+
+  try {
+    if (!anthropicKey) {
+      await completeLog(supabase, logId, { skipped: true, reason: "No ANTHROPIC_API_KEY" });
+      return { skipped: true };
+    }
+
+    const { data: lastSync } = await supabase
+      .from("knowledge_sync_logs")
+      .select("completed_at")
+      .eq("organization_id", orgId)
+      .eq("agent", "integrador")
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    const since = lastSync?.completed_at || "2020-01-01T00:00:00Z";
+
+    let clientQuery = supabase
+      .from("clients")
+      .select("id, name, primary_area, services")
+      .eq("organization_id", orgId)
+      .eq("status", "activo");
+
+    if (targetClientId) {
+      clientQuery = clientQuery.eq("id", targetClientId);
+    }
+
+    const { data: clients } = await clientQuery;
+    let insightsCreated = 0;
+
+    for (const client of clients || []) {
+      const { data: recentChunks } = await supabase
+        .from("document_chunks")
+        .select("id, content, source_type, metadata")
+        .or(`metadata->>client_id.eq.${client.id},metadata->client_id.eq.${client.id}`)
+        .gte("created_at", since)
+        .limit(50);
+
+      if (!recentChunks?.length) continue;
+
+      const chunkSummary = recentChunks
+        .map((c: any, i: number) => `[${i + 1}] (${c.source_type}) ${c.content?.substring(0, 500)}`)
+        .join("\n---\n");
+
+      const claudeResp = await callClaude(anthropicKey, [
+        {
+          role: "user",
+          content: `Eres un analista de un despacho contable y legal. Analiza los siguientes fragmentos de documentos del cliente "${client.name}" y genera:
+1. Un perfil de conocimiento actualizado del cliente (qué sabemos, en qué áreas tenemos información)
+2. Patrones detectados (documentos faltantes, vencimientos, cambios significativos)
+3. Recomendaciones de acción
+
+Los servicios del cliente son: ${(client.services || []).join(", ") || "no especificados"}
+Área principal: ${client.primary_area || "no especificada"}
+
+Fragmentos recientes:
+${chunkSummary}
+
+Responde en formato JSON:
+{
+  "profile": "texto markdown con el perfil",
+  "patterns": ["patron1", "patron2"],
+  "recommendations": ["recomendacion1", "recomendacion2"]
+}`,
+        },
+      ]);
+
+      if (claudeResp) {
+        let parsed: any;
+        try {
+          const jsonMatch = claudeResp.match(/\{[\s\S]*\}/);
+          parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+        } catch {
+          parsed = null;
+        }
+
+        if (parsed?.profile) {
+          await supabase.from("knowledge_insights").upsert(
+            {
+              organization_id: orgId,
+              client_id: client.id,
+              insight_type: "client_profile",
+              title: `Perfil de conocimiento: ${client.name}`,
+              content: parsed.profile,
+              metadata: {
+                patterns: parsed.patterns || [],
+                recommendations: parsed.recommendations || [],
+                chunks_analyzed: recentChunks.length,
+              },
+              source_chunks: recentChunks.map((c: any) => c.id),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "organization_id, client_id, insight_type", ignoreDuplicates: false },
+          );
+          insightsCreated++;
+        }
+
+        for (const pattern of parsed?.patterns || []) {
+          await supabase.from("knowledge_insights").insert({
+            organization_id: orgId,
+            client_id: client.id,
+            insight_type: "pattern",
+            title: `Patrón: ${client.name}`,
+            content: pattern,
+            metadata: {},
+          });
+          insightsCreated++;
+        }
+      }
+    }
+
+    // Project-level insights
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id, name, area, client_id, clients(name)")
+      .eq("organization_id", orgId)
+      .in("status", ["activo", "pausado"]);
+
+    for (const project of projects || []) {
+      const { data: projChunks } = await supabase
+        .from("document_chunks")
+        .select("id, content, source_type")
+        .or(`metadata->>project_id.eq.${project.id},metadata->project_id.eq.${project.id}`)
+        .gte("created_at", since)
+        .limit(30);
+
+      if (!projChunks?.length) continue;
+
+      const chunkText = projChunks
+        .map((c: any, i: number) => `[${i + 1}] (${c.source_type}) ${c.content?.substring(0, 400)}`)
+        .join("\n---\n");
+
+      const resp = await callClaude(anthropicKey, [
+        {
+          role: "user",
+          content: `Analiza los fragmentos del proyecto "${project.name}" (área: ${project.area || "general"}, cliente: ${project.clients?.name || "N/A"}) y genera un resumen del estado de conocimiento en formato JSON:
+{
+  "summary": "resumen markdown breve del conocimiento disponible para este proyecto",
+  "gaps": ["información faltante 1", "..."],
+  "next_steps": ["acción recomendada 1", "..."]
+}
+
+Fragmentos:
+${chunkText}`,
+        },
+      ]);
+
+      if (resp) {
+        let parsed: any;
+        try {
+          const m = resp.match(/\{[\s\S]*\}/);
+          parsed = m ? JSON.parse(m[0]) : null;
+        } catch {
+          parsed = null;
+        }
+
+        if (parsed?.summary) {
+          await supabase.from("knowledge_insights").upsert(
+            {
+              organization_id: orgId,
+              project_id: project.id,
+              client_id: project.client_id,
+              area: project.area || null,
+              insight_type: "project_profile",
+              title: `Conocimiento: ${project.name}`,
+              content: parsed.summary,
+              metadata: { gaps: parsed.gaps || [], next_steps: parsed.next_steps || [] },
+              source_chunks: projChunks.map((c: any) => c.id),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "organization_id, project_id, insight_type", ignoreDuplicates: false },
+          );
+          insightsCreated++;
+        }
+      }
+    }
+
+    await completeLog(supabase, logId, {
+      clients_analyzed: (clients || []).length,
+      projects_analyzed: (projects || []).length,
+      insights_created: insightsCreated,
+    });
+
+    return { clients_analyzed: (clients || []).length, insights_created: insightsCreated };
+  } catch (err: any) {
+    await failLog(supabase, logId, err.message);
+    return { error: err.message };
+  }
+}
+
+// ────────────── NUTRITOR ──────────────
+async function runNutritor(supabase: any, orgId: string, anthropicKey?: string) {
+  const logId = await startLog(supabase, orgId, "nutritor");
+
+  try {
+    const yesterday = new Date(Date.now() - 86400000).toISOString();
+
+    const { data: recentInsights } = await supabase
+      .from("knowledge_insights")
+      .select("id, title, content, insight_type, client_id, project_id, clients(name), projects(name)")
+      .eq("organization_id", orgId)
+      .gte("updated_at", yesterday)
+      .order("updated_at", { ascending: false })
+      .limit(30);
+
+    const { data: recentDocs } = await supabase
+      .from("documents")
+      .select("id, name, client_id, project_id, document_type, created_at")
+      .eq("organization_id", orgId)
+      .gte("created_at", yesterday)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    let feedItems = 0;
+
+    for (const doc of recentDocs || []) {
+      await supabase.from("knowledge_feed").insert({
+        organization_id: orgId,
+        feed_type: "new_document",
+        title: `Nuevo documento: ${doc.name}`,
+        summary: `Tipo: ${doc.document_type || "general"}. Indexado automáticamente.`,
+        related_client_id: doc.client_id,
+        related_project_id: doc.project_id,
+      });
+      feedItems++;
+    }
+
+    for (const insight of recentInsights || []) {
+      if (insight.insight_type === "pattern" || insight.insight_type === "recommendation") {
+        await supabase.from("knowledge_feed").insert({
+          organization_id: orgId,
+          feed_type: insight.insight_type === "pattern" ? "alert" : "recommendation",
+          title: insight.title,
+          summary: insight.content?.substring(0, 200),
+          detail: insight.content,
+          related_client_id: insight.client_id,
+          related_project_id: insight.project_id,
+        });
+        feedItems++;
+      }
+    }
+
+    if (anthropicKey && (recentInsights?.length || recentDocs?.length)) {
+      const summaryInput = [
+        ...(recentDocs || []).map((d: any) => `- Doc nuevo: ${d.name}`),
+        ...(recentInsights || []).map((i: any) => `- Insight (${i.insight_type}): ${i.title}`),
+      ].join("\n");
+
+      const briefing = await callClaude(anthropicKey, [
+        {
+          role: "user",
+          content: `Genera un briefing ejecutivo diario de máximo 5 párrafos para el equipo de un despacho contable y legal. Resume las novedades del día:
+
+${summaryInput}
+
+Responde en markdown, tono profesional y conciso.`,
+        },
+      ]);
+
+      if (briefing) {
+        await supabase.from("knowledge_feed").insert({
+          organization_id: orgId,
+          feed_type: "insight",
+          title: `Briefing diario — ${new Date().toLocaleDateString("es-MX")}`,
+          summary: "Resumen ejecutivo del aprendizaje del día",
+          detail: briefing,
+        });
+        feedItems++;
+      }
+    }
+
+    await completeLog(supabase, logId, {
+      feed_items_created: feedItems,
+      recent_insights: (recentInsights || []).length,
+      recent_docs: (recentDocs || []).length,
+    });
+
+    return { feed_items_created: feedItems };
+  } catch (err: any) {
+    await failLog(supabase, logId, err.message);
+    return { error: err.message };
+  }
+}
+
+// ────────────── HELPERS ──────────────
+async function startLog(supabase: any, orgId: string, agent: string): Promise<string> {
+  const { data } = await supabase
+    .from("knowledge_sync_logs")
+    .insert({ organization_id: orgId, agent, status: "running" })
+    .select("id")
+    .single();
+  return data?.id;
+}
+
+async function completeLog(supabase: any, logId: string, stats: any) {
+  if (!logId) return;
+  await supabase
+    .from("knowledge_sync_logs")
+    .update({ status: "completed", completed_at: new Date().toISOString(), stats })
+    .eq("id", logId);
+}
+
+async function failLog(supabase: any, logId: string, error: string) {
+  if (!logId) return;
+  await supabase
+    .from("knowledge_sync_logs")
+    .update({ status: "failed", completed_at: new Date().toISOString(), error_message: error })
+    .eq("id", logId);
+}
+
+async function callClaude(apiKey: string, messages: any[]): Promise<string | null> {
+  try {
+    const resp = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2048,
+        messages,
+      }),
+    });
+
+    if (!resp.ok) {
+      console.error("Claude error:", resp.status, await resp.text());
+      return null;
+    }
+
+    const data = await resp.json();
+    const textBlock = data.content?.find((b: any) => b.type === "text");
+    return textBlock?.text || null;
+  } catch (e: any) {
+    console.error("callClaude error:", e.message);
+    return null;
+  }
+}
