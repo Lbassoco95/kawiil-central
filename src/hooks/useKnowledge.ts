@@ -151,7 +151,7 @@ export function useKnowledgeSyncLogs() {
         .select("*")
         .eq("organization_id", orgId)
         .order("started_at", { ascending: false })
-        .limit(20);
+        .limit(50);
       if (error) throw error;
       return data as KnowledgeSyncLog[];
     },
