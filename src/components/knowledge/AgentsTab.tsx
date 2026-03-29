@@ -80,12 +80,17 @@ export function AgentsTab() {
   }, [logs]);
 
   const handleRun = (agent?: string) => {
+    toast.info(agent ? `Iniciando agente ${agentMeta[agent]?.label}...` : "Iniciando todos los agentes...", {
+      description: "El procesamiento se ejecuta en segundo plano. Verás el progreso aquí.",
+    });
     runSync.mutate(agent ? { agent } : undefined, {
-      onError: (err: any) => toast.error(`Error: ${err.message}`),
+      onError: (err: any) => toast.error(`Error al ejecutar: ${err.message}`),
     });
   };
 
+  const isMutationPending = runSync.isPending;
   const isAgentRunning = (agent: string) => running.includes(agent);
+  const isAnythingActive = isAnyRunning || isMutationPending;
 
   const lastRunByAgent = (agent: string) => {
     return logs?.find((l) => l.agent === agent);
@@ -157,15 +162,15 @@ export function AgentsTab() {
                   size="sm"
                   variant="outline"
                   className="w-full"
-                  disabled={isAnyRunning}
+                  disabled={isAnythingActive}
                   onClick={() => handleRun(agent)}
                 >
-                  {isRunning ? (
+                  {isRunning || (isMutationPending && !isAnyRunning) ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
                   ) : (
                     <Play className="h-3.5 w-3.5 mr-2" />
                   )}
-                  {isRunning ? "En progreso..." : "Ejecutar"}
+                  {isRunning ? "En progreso..." : isMutationPending ? "Iniciando..." : "Ejecutar"}
                 </Button>
               </CardContent>
             </Card>
@@ -177,15 +182,15 @@ export function AgentsTab() {
       <div className="flex justify-center">
         <Button
           onClick={() => handleRun()}
-          disabled={isAnyRunning}
+          disabled={isAnythingActive}
           className="gap-2"
         >
-          {isAnyRunning ? (
+          {isAnythingActive ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Bot className="h-4 w-4" />
           )}
-          {isAnyRunning ? "Agentes en ejecución..." : "Ejecutar todos los agentes"}
+          {isAnythingActive ? "Agentes en ejecución..." : "Ejecutar todos los agentes"}
         </Button>
       </div>
 

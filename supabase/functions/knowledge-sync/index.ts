@@ -30,47 +30,28 @@ serve(async (req: Request) => {
     }
 
     const orgId = orgs[0].id;
+    const results: Record<string, any> = {};
 
-    const agents: string[] = targetAgent
-      ? [targetAgent]
-      : ["archivista", "integrador", "nutritor"];
-
-    const logIds: Record<string, string> = {};
-    for (const agent of agents) {
-      logIds[agent] = await startLog(supabase, orgId, agent);
+    if (!targetAgent || targetAgent === "archivista") {
+      const logId = await startLog(supabase, orgId, "archivista");
+      await runArchivista(supabase, supabaseUrl, serviceKey, orgId, logId, targetClientId);
+      await notifyCompletion(supabase, orgId, "Archivista", "completó el escaneo de documentos");
+      results.archivista = "completed";
+    }
+    if (!targetAgent || targetAgent === "integrador") {
+      const logId = await startLog(supabase, orgId, "integrador");
+      await runIntegrador(supabase, orgId, anthropicKey, logId, targetClientId);
+      await notifyCompletion(supabase, orgId, "Integrador", "generó perfiles de conocimiento");
+      results.integrador = "completed";
+    }
+    if (!targetAgent || targetAgent === "nutritor") {
+      const logId = await startLog(supabase, orgId, "nutritor");
+      await runNutritor(supabase, orgId, anthropicKey, logId);
+      await notifyCompletion(supabase, orgId, "Nutritor", "actualizó el feed de novedades");
+      results.nutritor = "completed";
     }
 
-    // Fire background work, respond immediately
-    const bgWork = (async () => {
-      try {
-        if (agents.includes("archivista")) {
-          await runArchivista(supabase, supabaseUrl, serviceKey, orgId, logIds.archivista, targetClientId);
-          await notifyCompletion(supabase, orgId, "Archivista", "completó el escaneo de documentos");
-        }
-        if (agents.includes("integrador")) {
-          await runIntegrador(supabase, orgId, anthropicKey, logIds.integrador, targetClientId);
-          await notifyCompletion(supabase, orgId, "Integrador", "generó perfiles de conocimiento");
-        }
-        if (agents.includes("nutritor")) {
-          await runNutritor(supabase, orgId, anthropicKey, logIds.nutritor);
-          await notifyCompletion(supabase, orgId, "Nutritor", "actualizó el feed de novedades");
-        }
-      } catch (err) {
-        console.error("Background agent error:", err);
-      }
-    })();
-
-    // Keep the background work alive in Deno edge runtime
-    // @ts-ignore - EdgeRuntime may not be typed
-    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
-      // @ts-ignore
-      EdgeRuntime.waitUntil(bgWork);
-    } else {
-      // Fallback: just let the promise float (Deno will keep it alive)
-      bgWork.catch((e) => console.error("bgWork error:", e));
-    }
-
-    return json({ started: true, agents, log_ids: logIds });
+    return json({ success: true, results });
   } catch (err: any) {
     console.error("knowledge-sync error:", err);
     return json({ error: err.message }, 500);

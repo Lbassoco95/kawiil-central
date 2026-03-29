@@ -192,8 +192,13 @@ export function useRunKnowledgeSync() {
       if (resp.error) throw resp.error;
       return resp.data;
     },
-    onSuccess: () => {
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ["knowledge-sync-logs"] });
+      qc.invalidateQueries({ queryKey: ["knowledge-feed"] });
+      qc.invalidateQueries({ queryKey: ["knowledge-insights"] });
+      qc.invalidateQueries({ queryKey: ["client-knowledge-stats"] });
+      qc.invalidateQueries({ queryKey: ["project-knowledge-stats"] });
+      qc.invalidateQueries({ queryKey: ["celula-knowledge-stats"] });
     },
   });
 }
