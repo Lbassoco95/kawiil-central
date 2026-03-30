@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { nowMX } from "@/lib/dateUtils";
+import { useMexicoToday } from "@/hooks/useMexicoToday";
+import { toDateStringMX } from "@/lib/dateUtils";
 
 interface DailyBriefingProps {
   tasksCount: number;
@@ -19,7 +20,8 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(true);
-  const today = useMemo(() => nowMX(), []);
+  const today = useMexicoToday();
+  const todayKey = toDateStringMX(today);
 
   const { data: taskDetails } = useQuery({
     queryKey: ["briefing-tasks", user?.id],
@@ -38,14 +40,14 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
   });
 
   const { data: teamDeadlines } = useQuery({
-    queryKey: ["briefing-team-deadlines"],
+    queryKey: ["briefing-team-deadlines", todayKey],
     queryFn: async () => {
       const futureDate = new Date(today.getTime() + 3 * 86400000);
       const { data, error } = await supabase
         .from("tasks")
         .select("title, priority, due_date, assigned_to")
         .in("status", ["pendiente", "en_progreso"])
-        .gte("due_date", today.toISOString().split("T")[0])
+        .gte("due_date", todayKey)
         .lte("due_date", futureDate.toISOString().split("T")[0])
         .order("due_date", { ascending: true })
         .limit(10);
@@ -141,7 +143,7 @@ INSTRUCCIONES:
         try {
           localStorage.setItem(
             `kawiil-briefing-${user.id}`,
-            JSON.stringify({ date: today.toISOString().split("T")[0], content: fullContent })
+            JSON.stringify({ date: todayKey, content: fullContent })
           );
         } catch {}
       }
@@ -159,14 +161,15 @@ INSTRUCCIONES:
       const cached = localStorage.getItem(`kawiil-briefing-${user.id}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.date === today.toISOString().split("T")[0]) {
+        if (parsed.date === todayKey) {
           setBriefing(parsed.content);
           return;
         }
       }
     } catch {}
     generateBriefing();
-  }, [user?.id, taskDetails !== undefined]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- regenerar si cambia el día civil
+  }, [user?.id, taskDetails !== undefined, todayKey]);
 
   return (
     <section>

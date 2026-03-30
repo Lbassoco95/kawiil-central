@@ -27,7 +27,8 @@ import {
   Moon,
   Sunrise,
 } from "lucide-react";
-import { formatDateMX, nowMX, toDateStringMX } from "@/lib/dateUtils";
+import { formatDateMX, toDateStringMX } from "@/lib/dateUtils";
+import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useNavigate } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +40,7 @@ export function PersonalDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const today = useMemo(() => nowMX(), []);
+  const today = useMexicoToday();
   const { data: orgUsers } = useOrgUsers();
   const userCelula = useMemo(() => {
     if (!orgUsers || !user) return null;
@@ -154,7 +155,7 @@ export function PersonalDashboard() {
 
   // My completed today
   const { data: completedToday } = useQuery({
-    queryKey: ["personal-completed-today", user?.id],
+    queryKey: ["personal-completed-today", user?.id, toDateStringMX(today)],
     queryFn: async () => {
       const todayStr = toDateStringMX(today);
       const { count, error } = await supabase
@@ -271,7 +272,7 @@ export function PersonalDashboard() {
   })();
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 min-w-0">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(280px,340px)] gap-6 min-w-0">
       {/* ═══ LEFT COLUMN ═══ */}
       <div className="space-y-6 min-w-0">
 
@@ -285,7 +286,7 @@ export function PersonalDashboard() {
             {greetingByHour()}, {firstName || "Kawiiler"}
           </h1>
           {personalPhrase ? (
-            <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-3 animate-fade-in leading-relaxed">
+            <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-3 animate-fade-in leading-relaxed max-w-prose whitespace-pre-line break-words">
               {personalPhrase}
             </p>
           ) : phraseLoading ? (
@@ -627,7 +628,7 @@ export function PersonalDashboard() {
       </div>{/* end left column */}
 
       {/* ═══ RIGHT COLUMN (sidebar widgets) ═══ */}
-      <div className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+      <div className="space-y-5 md:sticky md:top-24 md:self-start">
         {/* Day progress */}
         <div className="glass-card p-5 animate-fade-in stagger-1" style={{ animationFillMode: "both" }}>
           <div className="flex items-center justify-between mb-3">
