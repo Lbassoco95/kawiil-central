@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useClientKnowledgeStats, useKnowledgeInsights, type ClientKnowledgeStat } from "@/hooks/useKnowledge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Building2, FileText, Scale, ShieldCheck, BookOpen,
+  Building2, FileText, Scale, ShieldCheck, BookOpen, ExternalLink,
   ChevronDown, ChevronRight, Layers, Clock, Lightbulb,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -120,6 +121,7 @@ function ClientCard({
   onToggle: () => void;
   stagger: number;
 }) {
+  const navigate = useNavigate();
   const { data: insights } = useKnowledgeInsights(isExpanded ? group.client_id : undefined);
   const coverage = Math.min(100, Math.round((group.totalChunks / maxChunks) * 100));
 
@@ -135,6 +137,14 @@ function ClientCard({
             {group.client_name}
           </CardTitle>
           <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/clientes/${group.client_id}`); }}
+              className="text-[10px] text-primary hover:text-primary/80 flex items-center gap-0.5 transition-colors"
+              title="Ir al cliente"
+            >
+              <ExternalLink className="h-3 w-3" />
+              <span className="hidden sm:inline">Ver cliente</span>
+            </button>
             <Badge variant="secondary" className="text-[10px] hidden sm:inline-flex">
               {group.totalDocs} docs · {group.totalChunks} chunks
             </Badge>

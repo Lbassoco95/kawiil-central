@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   useKnowledgeSyncLogs,
   useKnowledgeFeed,
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   Bot, Play, Loader2, CheckCircle2, XCircle,
-  Clock, FileText, Lightbulb, Bell, AlertTriangle,
+  Clock, FileText, Lightbulb, Bell, AlertTriangle, ArrowRight,
   Archive, Link, Sparkles, ChevronRight, Timer, AlertOctagon,
   Database, Building2, FolderKanban, BrainCircuit,
 } from "lucide-react";
@@ -281,6 +282,7 @@ function LearningProgressPanel() {
 }
 
 export function AgentsTab() {
+  const navigate = useNavigate();
   const { data: logs, isLoading: logsLoading } = useKnowledgeSyncLogs();
   const { feed, isLoading: feedLoading } = useKnowledgeFeed();
   const runSync = useRunKnowledgeSync();
@@ -616,8 +618,16 @@ export function AgentsTab() {
             <div className="divide-y divide-border/50 max-h-72 sm:max-h-96 overflow-y-auto">
               {feed.map((item) => {
                 const FeedIcon = feedIcons[item.feed_type] || Bell;
+                const hasLink = !!(item.related_client_id || item.related_project_id);
                 return (
-                  <div key={item.id} className={`py-3 ${item.is_read ? "opacity-60" : ""}`}>
+                  <div
+                    key={item.id}
+                    className={`py-3 ${item.is_read ? "opacity-60" : ""} ${hasLink ? "cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors" : ""}`}
+                    onClick={() => {
+                      if (item.related_project_id) navigate(`/proyectos/${item.related_project_id}`);
+                      else if (item.related_client_id) navigate(`/clientes/${item.related_client_id}`);
+                    }}
+                  >
                     <div className="flex items-start gap-2">
                       <FeedIcon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
                       <div className="flex-1 min-w-0">
@@ -629,6 +639,7 @@ export function AgentsTab() {
                           {new Date(item.created_at).toLocaleString("es-MX")}
                         </p>
                       </div>
+                      {hasLink && <ArrowRight className="h-3 w-3 text-muted-foreground/40 shrink-0 mt-1" />}
                     </div>
                   </div>
                 );

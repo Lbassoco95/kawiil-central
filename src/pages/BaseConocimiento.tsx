@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,8 @@ import { StatsTab } from "@/components/knowledge/StatsTab";
 
 type TabKey = "clientes" | "proyectos" | "celulas" | "agentes" | "estadisticas";
 
+const VALID_TABS: TabKey[] = ["clientes", "proyectos", "celulas", "agentes", "estadisticas"];
+
 const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
   { key: "clientes", label: "Por Cliente", icon: Building2 },
   { key: "proyectos", label: "Por Proyecto", icon: FolderKanban },
@@ -21,7 +24,16 @@ const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
 ];
 
 const BaseConocimiento = () => {
-  const [activeTab, setActiveTab] = useState<TabKey>("clientes");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab") as TabKey | null;
+  const [activeTab, setActiveTabState] = useState<TabKey>(
+    urlTab && VALID_TABS.includes(urlTab) ? urlTab : "clientes"
+  );
+
+  const setActiveTab = useCallback((key: TabKey) => {
+    setActiveTabState(key);
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set("tab", key); return p; }, { replace: true });
+  }, [setSearchParams]);
 
   return (
     <AppLayout>

@@ -266,18 +266,27 @@ export function PersonalDashboard() {
 
       {/* KPI grid */}
       <div className="grid grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
-        <div className={`stat-card ${urgentCount > 0 ? "border-destructive/30 bg-destructive/5" : ""}`}>
+        <button
+          onClick={() => navigate("/tareas?priority=urgente")}
+          className={`stat-card text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${urgentCount > 0 ? "border-destructive/30 bg-destructive/5" : ""}`}
+        >
           <p className="text-2xl font-semibold text-foreground animate-count-up">{urgentCount}</p>
           <p className="text-xs text-muted-foreground mt-0.5">Urgentes</p>
-        </div>
-        <div className={`stat-card ${dueThisWeek > 0 ? "border-warning/30 bg-warning/5" : ""}`}>
+        </button>
+        <button
+          onClick={() => navigate("/tareas?due=week")}
+          className={`stat-card text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${dueThisWeek > 0 ? "border-warning/30 bg-warning/5" : ""}`}
+        >
           <p className="text-2xl font-semibold text-foreground animate-count-up">{dueThisWeek}</p>
           <p className="text-xs text-muted-foreground mt-0.5">Esta semana</p>
-        </div>
-        <div className={`stat-card ${(completedToday ?? 0) > 0 ? "border-accent/30 bg-accent/5" : ""}`}>
+        </button>
+        <button
+          onClick={() => navigate("/tareas?status=completada")}
+          className={`stat-card text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${(completedToday ?? 0) > 0 ? "border-accent/30 bg-accent/5" : ""}`}
+        >
           <p className="text-2xl font-semibold text-foreground animate-count-up">{completedToday ?? 0}</p>
           <p className="text-xs text-muted-foreground mt-0.5">Completadas hoy</p>
-        </div>
+        </button>
       </div>
 
       {/* Questionnaire reminder */}

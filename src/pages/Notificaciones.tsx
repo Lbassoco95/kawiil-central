@@ -58,8 +58,14 @@ export default function Notificaciones() {
       navigate(`/tareas?taskId=${m.entity_id}`);
     } else if (m.entity_type === "expense") {
       navigate("/finanzas");
-    } else if (m.entity_type === "knowledge" || m.type === "knowledge_sync") {
-      navigate("/conocimiento");
+    } else if (m.type === "knowledge_sync") {
+      navigate("/conocimiento?tab=agentes");
+    } else if (m.entity_type === "knowledge") {
+      navigate("/conocimiento?tab=clientes");
+    } else if (m.type === "task_assigned" || m.type === "task_reassigned") {
+      navigate("/tareas");
+    } else if (m.type === "expense_created" || m.type === "expense_status_changed") {
+      navigate("/finanzas");
     }
   };
 

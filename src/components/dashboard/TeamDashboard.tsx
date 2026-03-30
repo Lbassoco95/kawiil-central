@@ -319,14 +319,18 @@ INSTRUCCIONES:
           {areaStats.length > 0 && (
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
               {areaStats.slice(0, 8).map((a) => (
-                <div key={a.area} className="rounded-xl bg-secondary/30 p-3">
+                <button
+                  key={a.area}
+                  onClick={() => navigate(`/tareas?area=${a.area}`)}
+                  className="rounded-xl bg-secondary/30 p-3 text-left hover:ring-1 hover:ring-primary/30 transition-all cursor-pointer"
+                >
                   <div className="flex items-center gap-2 mb-2">
                     <div className={`h-2 w-2 rounded-full shrink-0 ${statusDot(a.status)}`} />
                     <span className="text-[13px] font-medium text-foreground truncate">{a.label}</span>
                     <span className={`text-[13px] font-semibold ml-auto ${progressColor(a.pct)}`}>{a.pct}%</span>
                   </div>
                   <Progress value={a.pct} className="h-1" />
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -340,7 +344,7 @@ INSTRUCCIONES:
                   <button
                     key={t.id}
                     className="flex items-center gap-3 w-full py-2 text-left hover:bg-secondary/30 -mx-2 px-2 rounded-md transition-colors"
-                    onClick={() => navigate("/tareas")}
+                    onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
                   >
                     <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
                     {t.due_date && (
@@ -371,7 +375,11 @@ INSTRUCCIONES:
               />
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-4">
                 {areaStats.map((a) => (
-                  <div key={a.area} className="rounded-xl bg-secondary/30 p-4 card-hover">
+                  <button
+                    key={a.area}
+                    onClick={() => navigate(`/tareas?area=${a.area}`)}
+                    className="rounded-xl bg-secondary/30 p-4 card-hover text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all"
+                  >
                     <div className="flex items-center justify-between mb-2.5">
                       <div className="flex items-center gap-2">
                         <div className={`h-2 w-2 rounded-full shrink-0 ${statusDot(a.status)}`} />
@@ -385,7 +393,7 @@ INSTRUCCIONES:
                       <span>{a.pending} pendientes</span>
                       {a.overdue > 0 && <span className="text-destructive font-medium">{a.overdue} vencidas</span>}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </>
@@ -406,9 +414,10 @@ INSTRUCCIONES:
                 />
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-4">
                   {teamWorkload.map((m) => (
-                    <div
+                    <button
                       key={m.userId}
-                      className={`rounded-xl p-4 card-hover ${
+                      onClick={() => navigate(m.area ? `/tareas?area=${m.area}` : "/tareas")}
+                      className={`rounded-xl p-4 card-hover text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${
                         m.overdue > 0 ? "bg-destructive/5 border border-destructive/10" : m.pending > 8 ? "bg-warning/5 border border-warning/10" : "bg-secondary/30 border border-transparent"
                       } ${m.isMe ? "ring-1 ring-primary/20" : ""}`}
                     >
@@ -428,7 +437,7 @@ INSTRUCCIONES:
                         <span>{m.completed} hechas</span>
                         {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </>
@@ -536,7 +545,7 @@ INSTRUCCIONES:
                 <button
                   key={t.id}
                   className="flex items-center justify-between w-full rounded-lg px-3 py-2.5 text-sm hover:bg-secondary/60 transition-colors text-left"
-                  onClick={() => navigate("/tareas")}
+                  onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
                 >
                   <span className="truncate flex-1 mr-3 text-foreground">{t.title}</span>
                   <div className="flex items-center gap-2 shrink-0">

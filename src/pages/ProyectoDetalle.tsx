@@ -202,7 +202,7 @@ function TaskListGrouped({ tasks, selectionMode, selectedTaskIds, toggleTaskSele
 
 const ProyectoDetalle = () => {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { data: project, isLoading } = useProjectDetail(id);
   const { user } = useAuth();
@@ -286,7 +286,7 @@ const ProyectoDetalle = () => {
 
   const initialTab = searchParams.get("tab");
 
-  const [tab, setTab] = useState<string>(() => {
+  const [tab, setTabState] = useState<string>(() => {
     if (initialTab) return initialTab;
     if (isCumplimiento) return "cumplimiento";
     if (isGestoria) return "gestoria";
@@ -296,12 +296,25 @@ const ProyectoDetalle = () => {
     return "general";
   });
 
-  // Handle deep-link to specific task
+  const setTab = useCallback((newTab: string) => {
+    setTabState(newTab);
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.set("tab", newTab);
+      return p;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  // Handle deep-link to specific task or tab change from URL
   useEffect(() => {
     const taskId = searchParams.get("taskId");
     if (taskId) {
-      setTab("tareas");
+      setTabState("tareas");
       setSelectedTaskId(taskId);
+    }
+    const urlTab = searchParams.get("tab");
+    if (urlTab && urlTab !== tab) {
+      setTabState(urlTab);
     }
   }, [searchParams]);
 

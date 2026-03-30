@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useProjectKnowledgeStats, useKnowledgeInsights, type ProjectKnowledgeStat } from "@/hooks/useKnowledge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  FolderKanban, ChevronDown, ChevronRight, Lightbulb,
+  FolderKanban, ChevronDown, ChevronRight, Lightbulb, ExternalLink,
   FileText, Scale, ShieldCheck, Layers, Clock, AlertTriangle,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -149,6 +150,7 @@ function ProjectRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const navigate = useNavigate();
   const { data: insights } = useKnowledgeInsights(undefined, isExpanded ? project.project_id : undefined);
 
   return (
@@ -165,6 +167,14 @@ function ProjectRow({
           )}
         </div>
         <div className="flex items-center gap-2 ml-5 sm:ml-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(`/proyectos/${project.project_id}`); }}
+            className="text-[10px] text-primary hover:text-primary/80 flex items-center gap-0.5 transition-colors"
+            title="Ir al proyecto"
+          >
+            <ExternalLink className="h-3 w-3" />
+            <span className="hidden sm:inline">Ver</span>
+          </button>
           <Badge variant="outline" className="text-[9px]">
             {project.doc_count}d / {project.chunk_count}c
           </Badge>

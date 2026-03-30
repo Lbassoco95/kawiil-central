@@ -39,11 +39,12 @@ const Tareas = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   useTasksRealtime();
-  const [area, setArea] = useState("todas");
+  const [area, setArea] = useState(() => searchParams.get("area") || "todas");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [showAllSteps, setShowAllSteps] = useState(false);
   const deleteTask = useDeleteTask();
   const { isAdminOrManager, canDeleteTasks } = useUserRole();
   const { areaOptions, areaLabelMap, getCelulaLabel } = useAreaOptions();
@@ -59,7 +60,20 @@ const Tareas = () => {
     if (urlTaskId && urlTaskId !== selectedTaskId) {
       setSelectedTaskId(urlTaskId);
     }
+    const urlArea = searchParams.get("area");
+    if (urlArea && urlArea !== area) {
+      setArea(urlArea);
+    }
   }, [searchParams]);
+
+  const openTask = (id: string) => {
+    setSelectedTaskId(id);
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set("taskId", id); return p; });
+  };
+  const closeTask = () => {
+    setSelectedTaskId(null);
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.delete("taskId"); return p; });
+  };
 
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
@@ -167,7 +181,7 @@ INSTRUCCIONES:
               <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{assignedSteps.length}</span>
             </div>
             <div className="space-y-1">
-              {assignedSteps.slice(0, 10).map((step) => {
+              {assignedSteps.slice(0, showAllSteps ? undefined : 10).map((step) => {
                 const isOverdue = step.dueDate && new Date(step.dueDate) < new Date();
                 return (
                   <div
@@ -202,10 +216,21 @@ INSTRUCCIONES:
                   </div>
                 );
               })}
-              {assignedSteps.length > 10 && (
-                <p className="text-xs text-muted-foreground text-center py-1">
-                  +{assignedSteps.length - 10} pasos más
-                </p>
+              {assignedSteps.length > 10 && !showAllSteps && (
+                <button
+                  onClick={() => setShowAllSteps(true)}
+                  className="text-xs text-primary hover:text-primary/80 text-center py-1 w-full transition-colors"
+                >
+                  +{assignedSteps.length - 10} pasos más — ver todos
+                </button>
+              )}
+              {showAllSteps && assignedSteps.length > 10 && (
+                <button
+                  onClick={() => setShowAllSteps(false)}
+                  className="text-xs text-muted-foreground hover:text-foreground text-center py-1 w-full transition-colors"
+                >
+                  Mostrar menos
+                </button>
               )}
             </div>
           </section>
@@ -244,7 +269,7 @@ INSTRUCCIONES:
                   (task as any).delay_category && "bg-warning/[0.03]"
                 )}
                 style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
-                onClick={() => setSelectedTaskId(task.id)}
+                onClick={() => openTask(task.id)}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
@@ -319,7 +344,7 @@ INSTRUCCIONES:
                   <div
                     key={task.id}
                     className="flex items-center gap-4 py-2.5 px-4 rounded-xl border bg-card/50 cursor-pointer hover:bg-secondary/30 transition-all"
-                    onClick={() => setSelectedTaskId(task.id)}
+                    onClick={() => openTask(task.id)}
                   >
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-medium text-foreground truncate line-through">{task.title}</h3>
@@ -339,7 +364,7 @@ INSTRUCCIONES:
       </div>
 
       <TaskFormDialog open={showCreate} onOpenChange={setShowCreate} />
-      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <TaskDetailDialog taskId={selectedTaskId} onClose={closeTask} />
       <DeleteConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
