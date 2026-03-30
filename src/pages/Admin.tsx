@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useOrgSettings, useUpdateOrgSettings } from "@/hooks/useOrgSettings";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Shield } from "lucide-react";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 const tabs = [
   { key: "usuarios", label: "Kawiilers" },
@@ -76,19 +77,19 @@ const Admin = () => {
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Administración</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Gestión de Kawiilers, grados y catálogos</p>
-        </div>
+        <PageHeader
+          title="Administración"
+          description="Gestión de Kawiilers, grados y catálogos"
+        />
 
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
           {tabs.map((t) => {
             if (t.key === "permisos" && !isTransformador) return null;
             return (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`tab-pill ${tab === t.key ? "tab-pill-active" : "tab-pill-inactive"}`}
+                className={`tab-pill shrink-0 whitespace-nowrap ${tab === t.key ? "tab-pill-active" : "tab-pill-inactive"}`}
               >
                 {t.label}
               </button>

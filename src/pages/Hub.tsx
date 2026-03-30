@@ -31,6 +31,7 @@ import {
   Pin,
   Loader2,
 } from "lucide-react";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 export default function Hub() {
   const { isAdminOrManager } = useUserRole();
@@ -72,10 +73,10 @@ export default function Hub() {
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Hub</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Manuales, procedimientos y comunicados</p>
-        </div>
+        <PageHeader
+          title="Hub"
+          description="Manuales, procedimientos y comunicados"
+        />
 
         {/* Tab pills */}
         <div className="flex gap-1.5">
@@ -126,7 +127,7 @@ export default function Hub() {
                 {procedures.map((proc: any, i: number) => (
                   <div
                     key={proc.id}
-                    className="flex items-center justify-between gap-3 py-3 px-4 rounded-xl border bg-card card-hover cursor-pointer group animate-fade-in"
+                    className="flex items-center justify-between gap-3 py-3 px-4 page-list-card cursor-pointer group animate-fade-in"
                     style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}
                     onClick={() => setSelectedProcedure(proc)}
                   >
@@ -188,7 +189,7 @@ export default function Hub() {
             ) : (
               <div className="space-y-2">
                 {comunicados.map((com: any, i: number) => (
-                  <div key={com.id} className="py-3 px-4 rounded-xl border bg-card card-hover group animate-fade-in" style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}>
+                  <div key={com.id} className="py-3 px-4 page-list-card group animate-fade-in" style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

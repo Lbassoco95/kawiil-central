@@ -4,7 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles, Trash2, AlertTriangle, CircleAlert } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
@@ -213,33 +213,38 @@ const ProyectoDetalle = () => {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         {/* Hero header */}
-        <div className="rounded-xl bg-gradient-to-r from-primary/5 via-accent/5 to-transparent border border-border/50 p-5">
-          <div className="flex items-start gap-3">
+        <div className="glass-card relative overflow-hidden p-5">
+          <div className="absolute inset-0 opacity-[0.07] bg-gradient-to-br from-primary to-accent pointer-events-none" />
+          <div className="relative flex items-start gap-3">
             <button onClick={() => navigate("/proyectos")} className="mt-0.5 p-1.5 rounded-lg hover:bg-white/60 dark:hover:bg-white/5 transition-colors">
               <ArrowLeft className="h-4 w-4 text-muted-foreground" />
             </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-semibold text-foreground truncate">{project.name}</h1>
+                <h1 className="text-xl font-bold tracking-tight gradient-text truncate">{project.name}</h1>
                 <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[project.status]}`}>
                   {STATUS_LABELS[project.status]}
                 </Badge>
                 {project.area && (
-                  <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded-md">
                     {SERVICE_LABELS[project.area]}
                   </span>
                 )}
-                {(project as any).criticality_level === "critico" && <span title="Crítico">🔴</span>}
-                {(project as any).criticality_level === "atencion" && <span title="Atención">🟡</span>}
+                {(project as any).criticality_level === "critico" && (
+                  <span title="Crítico" className="text-destructive"><AlertTriangle className="h-3.5 w-3.5" /></span>
+                )}
+                {(project as any).criticality_level === "atencion" && (
+                  <span title="Atención" className="text-warning"><CircleAlert className="h-3.5 w-3.5" /></span>
+                )}
                 {(project as any).delay_category && (
                   <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-warning/50 text-warning">Atraso</Badge>
                 )}
               </div>
               {clientName && (
-                <p className="text-sm text-muted-foreground mt-0.5">Cliente: {clientName}</p>
+                <p className="text-sm text-muted-foreground mt-1">Cliente: {clientName}</p>
               )}
               {project.description && (
-                <p className="text-sm text-muted-foreground mt-0.5">{project.description}</p>
+                <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">{project.description}</p>
               )}
             </div>
             <Button
@@ -255,14 +260,14 @@ const ProyectoDetalle = () => {
         </div>
 
         {/* Tab pills */}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 flex-nowrap">
           {projectTabs.map((t) => {
             const Icon = t.icon;
             return (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`tab-pill inline-flex items-center gap-1.5 ${
+                className={`tab-pill inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap ${
                   tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
                 }`}
               >
@@ -321,7 +326,7 @@ const ProyectoDetalle = () => {
         {tab === "tareas" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Tareas del proyecto</h3>
+              <h3 className="text-sm font-medium text-muted-foreground">Tareas del proyecto</h3>
               <div className="flex items-center gap-2">
                 {canDeleteTasks && tasks.length > 0 && (
                   <Button
@@ -375,7 +380,7 @@ const ProyectoDetalle = () => {
 
             {/* Bulk action bar */}
             {selectionMode && selectedTaskIds.size > 0 && (
-              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-background border border-border shadow-lg rounded-full px-5 py-2.5 flex items-center gap-4">
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 glass-card rounded-full px-5 py-2.5 flex items-center gap-4 shadow-xl border-primary/15">
                 <span className="text-sm font-medium">{selectedTaskIds.size} tarea{selectedTaskIds.size > 1 ? "s" : ""} seleccionada{selectedTaskIds.size > 1 ? "s" : ""}</span>
                 <Button
                   size="sm"
@@ -408,7 +413,7 @@ const ProyectoDetalle = () => {
         {tab === "firmas" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide">Solicitudes de firma</h3>
+              <h3 className="text-sm font-medium text-muted-foreground">Solicitudes de firma</h3>
               <Button
                 variant="outline"
                 size="sm"

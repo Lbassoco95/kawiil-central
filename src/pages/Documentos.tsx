@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { AppLayout } from "@/components/AppLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -732,19 +733,21 @@ const Documentos = () => {
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Documentos</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {viewMode === "dropbox" ? "Explorador de archivos en Dropbox" : "Documentos registrados en la aplicación"}
-            </p>
-          </div>
-          <Button size="sm" onClick={() => setFormOpen(true)}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Nuevo documento
-          </Button>
-        </div>
+        <PageHeader
+          title="Documentos"
+          description={
+            viewMode === "dropbox"
+              ? "Explorador de archivos en Dropbox"
+              : "Documentos registrados en la aplicación"
+          }
+          icon={<FileText className="h-6 w-6" />}
+          actions={
+            <Button size="sm" onClick={() => setFormOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Nuevo documento
+            </Button>
+          }
+        />
 
         {/* View toggle + filters */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -785,12 +788,13 @@ const Documentos = () => {
           )}
         </div>
 
-        {/* Content */}
-        {viewMode === "dropbox" ? (
-          <DropboxLiveBrowser />
-        ) : (
-          <OrganizedView documents={documents} isLoading={isLoading} search={search} onFormOpen={() => setFormOpen(true)} />
-        )}
+        <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">
+          {viewMode === "dropbox" ? (
+            <DropboxLiveBrowser />
+          ) : (
+            <OrganizedView documents={documents} isLoading={isLoading} search={search} onFormOpen={() => setFormOpen(true)} />
+          )}
+        </div>
       </div>
 
       <DocumentFormDialog open={formOpen} onOpenChange={setFormOpen} />

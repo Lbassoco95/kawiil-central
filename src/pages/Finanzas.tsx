@@ -14,6 +14,7 @@ import { useFinanceAccess } from "@/hooks/useFinanceAccess";
 import { ExpenseFormDialog } from "@/components/finanzas/ExpenseFormDialog";
 import { ExpenseTable } from "@/components/finanzas/ExpenseTable";
 import { ExpenseReviewDialog } from "@/components/finanzas/ExpenseReviewDialog";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 const STATUS_FILTERS = [
   { value: "todos", label: "Todos" },
@@ -82,21 +83,22 @@ export default function Finanzas() {
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-primary" />
-            <h1 className="text-xl font-semibold text-foreground">Finanzas</h1>
-          </div>
-          <Button size="sm" onClick={() => setShowForm(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Nueva solicitud
-          </Button>
-        </div>
+        <PageHeader
+          title="Finanzas"
+          description="Solicitudes, aprobaciones y pagos"
+          icon={<Wallet className="h-6 w-6" />}
+          actions={
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Nueva solicitud
+            </Button>
+          }
+        />
 
         {isLoading ? (
           <div className="space-y-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-24 rounded-xl" />
+                <Skeleton key={i} className="h-24 rounded-2xl" />
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -104,7 +106,7 @@ export default function Finanzas() {
               <Skeleton className="h-8 w-36 rounded-md" />
               <Skeleton className="h-8 w-40 rounded-md" />
             </div>
-            <Skeleton className="h-[280px] w-full rounded-xl" />
+            <Skeleton className="h-[280px] w-full rounded-2xl" />
           </div>
         ) : hasFinanceAccess ? (
           <>
@@ -170,11 +172,13 @@ export default function Finanzas() {
               </Select>
             </div>
 
-            <ExpenseTable
-              expenses={filteredAll}
-              onSelect={setSelectedExpense}
-              showRequester
-            />
+            <div className="glass-card overflow-hidden p-0 border-border/50">
+              <ExpenseTable
+                expenses={filteredAll}
+                onSelect={setSelectedExpense}
+                showRequester
+              />
+            </div>
           </>
         ) : (
           <div className="space-y-4">
@@ -183,7 +187,7 @@ export default function Finanzas() {
             </p>
             {/* Personal summary cards */}
             <div className="grid grid-cols-3 gap-3">
-              <Card>
+              <Card variant="glass">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <Clock className="h-3.5 w-3.5" /> Pendientes
@@ -193,7 +197,7 @@ export default function Finanzas() {
                   </p>
                 </CardContent>
               </Card>
-              <Card>
+              <Card variant="glass">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <CheckCircle className="h-3.5 w-3.5" /> Aprobados
@@ -203,7 +207,7 @@ export default function Finanzas() {
                   </p>
                 </CardContent>
               </Card>
-              <Card>
+              <Card variant="glass">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                     <DollarSign className="h-3.5 w-3.5" /> Pagados
@@ -215,10 +219,12 @@ export default function Finanzas() {
               </Card>
             </div>
             <h2 className="text-sm font-medium text-muted-foreground">Mis solicitudes</h2>
-            <ExpenseTable
-              expenses={myExpenses}
-              onSelect={setSelectedExpense}
-            />
+            <div className="glass-card overflow-hidden p-0 border-border/50">
+              <ExpenseTable
+                expenses={myExpenses}
+                onSelect={setSelectedExpense}
+              />
+            </div>
           </div>
         )}
       </div>

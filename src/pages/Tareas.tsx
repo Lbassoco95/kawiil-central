@@ -18,6 +18,7 @@ import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { QuickTaskInput } from "@/components/tasks/QuickTaskInput";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatMX } from "@/lib/dateUtils";
 
@@ -145,15 +146,15 @@ INSTRUCCIONES:
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Tareas</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Gestión de tareas y actividades internas</p>
-          </div>
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
-          </Button>
-        </div>
+        <PageHeader
+          title="Tareas"
+          description="Gestión de tareas y actividades internas"
+          actions={
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
+            </Button>
+          }
+        />
 
         <QuickTaskInput
           area={area !== "todas" ? area : undefined}
@@ -169,7 +170,7 @@ INSTRUCCIONES:
         />
 
         {assignedSteps.length > 0 && (
-          <section className="animate-fade-in">
+          <section className="animate-fade-in glass-card p-4">
             <div className="flex items-center gap-2 mb-3">
               <ClipboardList className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Mis pasos de proyecto asignados</h2>
@@ -250,7 +251,7 @@ INSTRUCCIONES:
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-16 rounded-xl bg-secondary/30 animate-pulse" />
+              <div key={i} className="h-16 rounded-2xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
         ) : activeTasks.length > 0 ? (
@@ -259,7 +260,7 @@ INSTRUCCIONES:
               <div
                 key={task.id}
                 className={cn(
-                  "flex items-center gap-4 py-3 px-4 rounded-xl border bg-card card-hover cursor-pointer animate-fade-in",
+                  "flex items-center gap-4 py-3 px-4 page-list-card cursor-pointer animate-fade-in",
                   getPriorityBar(task.priority),
                   (task as any).delay_category && "bg-warning/[0.03]"
                 )}
@@ -338,7 +339,7 @@ INSTRUCCIONES:
                 {canceledTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center gap-4 py-2.5 px-4 rounded-xl border bg-card/50 cursor-pointer hover:bg-secondary/30 transition-all"
+                    className="flex items-center gap-4 py-2.5 px-4 page-list-card cursor-pointer opacity-70 hover:opacity-100"
                     onClick={() => openTask(task.id)}
                   >
                     <div className="flex-1 min-w-0">

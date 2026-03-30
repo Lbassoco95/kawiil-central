@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/AppLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CalendarView } from "@/components/microsoft/CalendarView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
@@ -38,14 +39,11 @@ const Microsoft365Calendario = () => {
     <AppLayout>
       <ErrorBoundary>
         <div className="space-y-4 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">Calendario</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Outlook · {profile?.displayName || profile?.mail || ""} — con tareas de Kawiil
-              </p>
-            </div>
-          </div>
+          <PageHeader
+            title="Calendario"
+            description={`Outlook · ${profile?.displayName || profile?.mail || ""} — con tareas de Kawiil`}
+            icon={<Calendar className="h-6 w-6" />}
+          />
           <CalendarView />
         </div>
       </ErrorBoundary>

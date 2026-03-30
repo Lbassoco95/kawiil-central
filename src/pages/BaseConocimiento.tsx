@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
   BookOpen, Building2, FolderKanban, Bot, BarChart3, Users,
@@ -38,16 +39,11 @@ const BaseConocimiento = () => {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
-        {/* Header */}
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold flex items-center gap-2">
-            <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-            Conocimiento
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1 hidden sm:block">
-            Dashboard de inteligencia: monitorea qué está aprendiendo el sistema, por cliente, proyecto y célula
-          </p>
-        </div>
+        <PageHeader
+          title="Conocimiento"
+          description="Dashboard de inteligencia: monitorea qué está aprendiendo el sistema, por cliente, proyecto y célula"
+          icon={<BookOpen className="h-6 w-6" />}
+        />
 
         {/* Tabs */}
         <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
@@ -69,8 +65,7 @@ const BaseConocimiento = () => {
           })}
         </div>
 
-        {/* Tab content */}
-        <div className="animate-fade-in">
+        <div key={activeTab} className="animate-fade-in">
           {activeTab === "clientes" && <ClientsLearningTab />}
           {activeTab === "proyectos" && <ProjectsLearningTab />}
           {activeTab === "celulas" && <CelulasLearningTab />}

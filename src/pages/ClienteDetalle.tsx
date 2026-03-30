@@ -86,19 +86,20 @@ const ClienteDetalle = () => {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         {/* Hero header */}
-        <div className="rounded-xl bg-gradient-to-r from-primary/5 via-accent/5 to-transparent border border-border/50 p-5">
-          <div className="flex items-start gap-3">
+        <div className="glass-card relative overflow-hidden p-5">
+          <div className="absolute inset-0 opacity-[0.07] bg-gradient-to-br from-primary to-accent pointer-events-none" />
+          <div className="relative flex items-start gap-3">
             <button onClick={() => navigate("/clientes")} className="mt-0.5 p-1.5 rounded-lg hover:bg-white/60 dark:hover:bg-white/5 transition-colors">
               <ArrowLeft className="h-4 w-4 text-muted-foreground" />
             </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-semibold text-foreground truncate">{client.name}</h1>
+                <h1 className="text-xl font-bold tracking-tight gradient-text truncate">{client.name}</h1>
                 <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${STATUS_STYLES[client.status]}`}>
                   {STATUS_LABELS[client.status]}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground mt-0.5">
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
                 {client.client_type === "persona_moral" ? "Persona Moral" : "Persona Física"}
                 {client.rfc && ` · RFC: ${client.rfc}`}
               </p>
@@ -111,7 +112,7 @@ const ClienteDetalle = () => {
         </div>
 
         {/* Tab pills */}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 flex-nowrap">
           {tabs.map((t) => {
             const count = t.key === "proyectos" ? projects.length
               : t.key === "tareas" ? activeTasks.length
@@ -120,7 +121,7 @@ const ClienteDetalle = () => {
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`tab-pill ${tab === t.key ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1.5`}
+                className={`tab-pill ${tab === t.key ? "tab-pill-active" : "tab-pill-inactive"} inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap`}
               >
                 {t.icon && <t.icon className="h-3 w-3" />}
                 {t.label}
@@ -133,8 +134,8 @@ const ClienteDetalle = () => {
         {/* General Tab */}
         {tab === "general" && (
           <div className="grid gap-6 md:grid-cols-2 animate-fade-in">
-            <section>
-              <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">Contacto</h2>
+            <section className="glass-card p-5">
+              <h2 className="text-sm font-medium text-muted-foreground mb-3">Contacto</h2>
               <div className="space-y-2.5">
                 {client.email && (
                   <div className="flex items-center gap-2 text-sm">
@@ -167,8 +168,8 @@ const ClienteDetalle = () => {
             </section>
 
             {clientGroupsList && clientGroupsList.length > 0 && (
-              <section>
-                <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              <section className="glass-card p-5">
+                <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
                   <Building2 className="h-3.5 w-3.5" /> Grupo empresarial
                 </h2>
                 <div className="flex flex-wrap gap-1.5">
@@ -181,8 +182,8 @@ const ClienteDetalle = () => {
               </section>
             )}
 
-            <section>
-              <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">Servicios</h2>
+            <section className="glass-card p-5">
+              <h2 className="text-sm font-medium text-muted-foreground mb-3">Servicios</h2>
               {client.services && client.services.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {client.services.map((s) => (
@@ -201,8 +202,8 @@ const ClienteDetalle = () => {
               )}
             </section>
 
-            <section className="md:col-span-2">
-              <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <section className="md:col-span-2 glass-card p-5">
+              <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
                 <FolderOpen className="h-3.5 w-3.5" />
                 Carpeta Dropbox
               </h2>
@@ -214,8 +215,8 @@ const ClienteDetalle = () => {
             </section>
 
             {client.notes && (
-              <section>
-                <h2 className="text-[13px] font-medium text-muted-foreground uppercase tracking-wide mb-3">Notas</h2>
+              <section className="glass-card p-5 md:col-span-2">
+                <h2 className="text-sm font-medium text-muted-foreground mb-3">Notas</h2>
                 <p className="text-[13px] whitespace-pre-wrap text-foreground">{client.notes}</p>
               </section>
             )}
@@ -233,9 +234,9 @@ const ClienteDetalle = () => {
               <p className="mt-3 text-sm text-muted-foreground">Sin tareas pendientes.</p>
             </div>
           ) : (
-            <div className="divide-y divide-border/40">
+            <div className="glass-card divide-y divide-border/30 overflow-hidden">
               {activeTasks.map((t) => (
-                <div key={t.id} onClick={() => setSelectedTaskId(t.id)} className="flex items-center justify-between gap-3 py-3 px-1 cursor-pointer hover:bg-secondary/30 rounded-md transition-colors">
+                <div key={t.id} onClick={() => setSelectedTaskId(t.id)} className="flex items-center justify-between gap-3 py-3 px-4 cursor-pointer hover:bg-secondary/20 transition-colors duration-200">
                   <div className="min-w-0">
                     <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
                     {t.due_date && (
@@ -264,9 +265,9 @@ const ClienteDetalle = () => {
               <p className="mt-3 text-sm text-muted-foreground">Sin documentos asociados.</p>
             </div>
           ) : (
-            <div className="divide-y divide-border/40">
+            <div className="glass-card divide-y divide-border/30 overflow-hidden">
               {documents.map((d) => (
-                <div key={d.id} className="flex items-center justify-between gap-3 py-3 px-1">
+                <div key={d.id} className="flex items-center justify-between gap-3 py-3 px-4">
                   <div className="flex items-center gap-2 min-w-0">
                     <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="text-[13px] font-medium text-foreground truncate">{d.name}</span>

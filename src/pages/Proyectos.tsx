@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Search, FolderKanban, Scale, Trash2, Sparkles } from "lucide-react";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { ProjectCreationDialog } from "@/components/projects/ProjectCreationDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
@@ -81,26 +82,26 @@ const Proyectos = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Proyectos</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Proyectos por cliente o internos</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setMinutesOpen(true)}>
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Desde minuta</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setLawsuitOpen(true)}>
-              <Scale className="mr-1.5 h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Nuevo juicio</span>
-            </Button>
-            <ProjectCreationDialog />
-          </div>
-          <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
-          <MeetingMinutesDialog open={minutesOpen} onOpenChange={setMinutesOpen} />
-        </div>
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader
+          title="Proyectos"
+          description="Proyectos por cliente o internos"
+          actions={
+            <>
+              <Button variant="outline" size="sm" onClick={() => setMinutesOpen(true)}>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Desde minuta</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setLawsuitOpen(true)}>
+                <Scale className="mr-1.5 h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Nuevo juicio</span>
+              </Button>
+              <ProjectCreationDialog />
+            </>
+          }
+        />
+        <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
+        <MeetingMinutesDialog open={minutesOpen} onOpenChange={setMinutesOpen} />
 
         <ScrollableFilterTabs
           options={["all", ...availableAreas].map((area) => ({
@@ -127,7 +128,7 @@ const Proyectos = () => {
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-20 rounded-xl bg-secondary/30 animate-pulse" />
+              <div key={i} className="h-20 rounded-2xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -149,7 +150,7 @@ const Proyectos = () => {
               <div
                 key={project.id}
                 className={cn(
-                  "flex items-center gap-4 py-3 px-4 rounded-xl border bg-card card-hover cursor-pointer animate-fade-in",
+                  "flex items-center gap-4 py-3 px-4 page-list-card cursor-pointer animate-fade-in",
                   (project as any).delay_category && "bg-warning/[0.03] border-warning/20"
                 )}
                 style={{ animationDelay: `${Math.min(i, 10) * 30}ms`, animationFillMode: "both" }}

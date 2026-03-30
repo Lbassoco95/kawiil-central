@@ -14,6 +14,7 @@ import {
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
   Bot, BrainCircuit, Settings,
 } from "lucide-react";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
@@ -96,17 +97,15 @@ export default function Notificaciones() {
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Notificaciones</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Menciones, actividad del equipo y alertas de vencimiento
-          </p>
-        </div>
+        <PageHeader
+          title="Notificaciones"
+          description="Menciones, actividad del equipo y alertas de vencimiento"
+        />
 
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-16 rounded-xl bg-secondary/30 animate-pulse" />
+              <div key={i} className="h-16 rounded-2xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
         ) : (
@@ -178,10 +177,10 @@ export default function Notificaciones() {
                     {currentList.map((m, i) => (
                       <div
                         key={m.id}
-                        className={`flex items-start gap-3 py-3 px-3 rounded-xl cursor-pointer transition-all duration-200 border animate-fade-in ${
+                        className={`flex items-start gap-3 py-3 px-3 rounded-2xl cursor-pointer transition-all duration-300 border border-border/40 backdrop-blur-sm animate-fade-in hover:shadow-md hover:-translate-y-0.5 ${
                           m.is_read
-                            ? "hover:bg-secondary/30 border-transparent"
-                            : "bg-primary/[0.03] border-primary/10 hover:bg-primary/[0.06]"
+                            ? "bg-card/60 hover:bg-card/80"
+                            : "bg-primary/[0.04] border-primary/15 hover:bg-primary/[0.07]"
                         }`}
                         style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
                         onClick={() => handleNotificationClick(m)}

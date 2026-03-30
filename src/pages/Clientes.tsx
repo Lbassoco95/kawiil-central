@@ -16,6 +16,7 @@ import { useClients, useDeleteClient } from "@/hooks/useClients";
 import { useClientGroups } from "@/hooks/useClientGroups";
 import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { useUserRole } from "@/hooks/useUserRole";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -144,17 +145,17 @@ const Clientes = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Clientes</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Gestión de clientes y empresas</p>
-          </div>
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Nuevo cliente
-          </Button>
-        </div>
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader
+          title="Clientes"
+          description="Gestión de clientes y empresas"
+          actions={
+            <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Nuevo cliente
+            </Button>
+          }
+        />
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-sm">
@@ -188,7 +189,7 @@ const Clientes = () => {
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-28 rounded-xl bg-secondary/30 animate-pulse" />
+              <div key={i} className="h-28 rounded-2xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -229,7 +230,7 @@ const Clientes = () => {
                       {group.clients.map((client, i) => (
                         <div
                           key={client.id}
-                          className="rounded-xl border bg-card p-4 card-hover cursor-pointer animate-fade-in group/card"
+                          className="glass-card-hover p-4 cursor-pointer animate-fade-in group/card"
                           style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}
                           onClick={() => navigate(`/clientes/${client.id}`)}
                         >
