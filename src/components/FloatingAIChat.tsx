@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import { useChat } from "@/hooks/useChat";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, Send, Loader2, X, Minus, Plus, FileText } from "lucide-react";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
+import { ChatProcessingPanel } from "@/components/ai/ChatProcessingPanel";
 import { cn } from "@/lib/utils";
 import { useLocation } from "react-router-dom";
 
@@ -20,6 +21,7 @@ export function FloatingAIChat() {
   const {
     messages,
     isStreaming,
+    streamProgressSteps,
     sendMessage,
     startNewChat,
   } = useChat();
@@ -127,57 +129,118 @@ export function FloatingAIChat() {
           </div>
         ) : (
           <div className="space-y-3">
-            {messages.map((msg, i) => (
-              <div key={msg.id || i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
-                {msg.role === "assistant" && (
-                  <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                  </div>
-                )}
-                <div
-                  className={cn(
-                    "rounded-xl px-3 py-2 max-w-[85%] text-[13px]",
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary/40"
-                  )}
-                >
-                  {msg.role === "assistant" ? (
-                    <div className="prose prose-sm max-w-none text-foreground [&_p]:my-0.5 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_code]:text-xs [&_code]:bg-secondary/60 [&_code]:px-1 [&_code]:rounded text-[13px]">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+            {messages.map((msg, i) => {
+              const showProgressBeforeAssistant =
+                isStreaming &&
+                msg.role === "assistant" &&
+                i === messages.length - 1 &&
+                streamProgressSteps.length > 0;
+              return (
+                <Fragment key={msg.id || `fm-${i}`}>
+                  {showProgressBeforeAssistant && (
+                    <div className="flex gap-2 justify-start">
+                      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <Loader2 className="h-3 w-3 text-primary animate-spin" />
+                      </div>
+                      <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0 text-[11px]" />
                     </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                      {msg.attachments && msg.attachments.length > 0 && (
-                        <div className="flex flex-wrap gap-0.5">
-                          {msg.attachments.map((a, idx) => (
-                            <span key={idx} className="inline-flex items-center gap-0.5 text-[9px] bg-primary-foreground/15 rounded px-1">
-                              <FileText className="h-2.5 w-2.5" />
-                              <span className="truncate max-w-[100px]">{a.name}</span>
-                            </span>
-                          ))}
+                  )}
+                  <div
+                    className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}
+                  >
+                    {msg.role === "assistant" && (
+                      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <Sparkles className="h-3 w-3 text-primary" />
+                      </div>
+                    )}
+                    <div
+                      className={cn(
+                        "rounded-xl px-3 py-2 max-w-[85%] text-[13px]",
+                        msg.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : msg.isError
+                            ? "bg-destructive/10 border border-destructive/25"
+                            : "bg-secondary/40"
+                      )}
+                    >
+                      {msg.role === "assistant" ? (
+                        <div
+                          className={cn(
+                            "prose prose-sm max-w-none [&_p]:my-0.5 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_code]:text-xs [&_code]:bg-secondary/60 [&_code]:px-1 [&_code]:rounded text-[13px]",
+                            msg.isError
+                              ? "text-destructive prose-headings:text-destructive"
+                              : "text-foreground"
+                          )}
+                        >
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          {msg.attachments && msg.attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-0.5">
+                              {msg.attachments.map((a, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-0.5 text-[9px] bg-primary-foreground/15 rounded px-1"
+                                >
+                                  <FileText className="h-2.5 w-2.5" />
+                                  <span className="truncate max-w-[100px]">{a.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
+                      {msg.role === "assistant" &&
+                        msg.activityLog &&
+                        msg.activityLog.length > 0 && (
+                          <details className="mt-2 text-[9px] text-muted-foreground border-t border-border/30 pt-1.5">
+                            <summary className="cursor-pointer select-none">Pasos</summary>
+                            <ol className="mt-1 list-decimal pl-3 space-y-0.5">
+                              {msg.activityLog.map((line, j) => (
+                                <li key={j}>{line}</li>
+                              ))}
+                            </ol>
+                          </details>
+                        )}
                     </div>
-                  )}
+                  </div>
+                </Fragment>
+              );
+            })}
+            {isStreaming &&
+              messages[messages.length - 1]?.role === "user" &&
+              (streamProgressSteps.length > 0 ? (
+                <div className="flex gap-2 justify-start">
+                  <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                    <Loader2 className="h-3 w-3 text-primary animate-spin" />
+                  </div>
+                  <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0" />
                 </div>
-              </div>
-            ))}
-            {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-              <div className="flex gap-2">
-                <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                  <Loader2 className="h-3 w-3 text-primary animate-spin" />
-                </div>
-                <div className="rounded-xl bg-secondary/40 px-3 py-2">
-                  <div className="flex gap-1">
-                    <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+              ) : (
+                <div className="flex gap-2">
+                  <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                    <Loader2 className="h-3 w-3 text-primary animate-spin" />
+                  </div>
+                  <div className="rounded-xl bg-secondary/40 px-3 py-2">
+                    <div className="flex gap-1">
+                      <div
+                        className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce"
+                        style={{ animationDelay: "0ms" }}
+                      />
+                      <div
+                        className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce"
+                        style={{ animationDelay: "150ms" }}
+                      />
+                      <div
+                        className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce"
+                        style={{ animationDelay: "300ms" }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              ))}
             <div ref={messagesEndRef} />
           </div>
         )}

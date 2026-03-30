@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useChat } from "@/hooks/useChat";
@@ -29,6 +29,7 @@ import { KnowledgePanel } from "@/components/ai/KnowledgePanel";
 import { ArtifactCard } from "@/components/ai/ArtifactCard";
 import { ProjectPreviewCard } from "@/components/ai/ProjectPreviewCard";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
+import { ChatProcessingPanel } from "@/components/ai/ChatProcessingPanel";
 import {
   MAX_CHAT_ATTACHMENT_BATCH_BYTES,
   MAX_CHAT_ATTACHMENT_BYTES_PER_FILE,
@@ -55,7 +56,7 @@ const AsistenteIA = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const {
-    messages, isStreaming, conversations, activeConversationId, activeAiProjectId,
+    messages, isStreaming, streamProgressSteps, conversations, activeConversationId, activeAiProjectId,
     sendMessage, loadConversation, startNewChat, deleteConversation,
     updateConversationFolder, renameConversation, setAiProject,
   } = useChat();
@@ -245,8 +246,16 @@ const AsistenteIA = () => {
   const renderMessageContent = (
     content: string,
     role: string,
-    attachments?: { name: string; mime_type?: string }[]
+    attachments?: { name: string; mime_type?: string }[],
+    options?: { isError?: boolean }
   ) => {
+    if (role === "assistant" && options?.isError) {
+      return (
+        <div className="text-sm prose prose-sm max-w-none prose-p:text-destructive prose-headings:text-destructive [&_strong]:text-destructive">
+          <ReactMarkdown>{content}</ReactMarkdown>
+        </div>
+      );
+    }
     if (role === "user") {
       return (
         <div className="space-y-2">
@@ -450,37 +459,94 @@ const AsistenteIA = () => {
               </div>
             ) : (
               <div className="max-w-3xl mx-auto space-y-6">
-                {messages.map((msg, i) => (
-                  <div key={msg.id || i} className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}>
-                    {msg.role === "assistant" && (
-                      <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                        <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        "rounded-2xl px-4 py-3 max-w-[85%]",
-                        msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary/40"
+                {messages.map((msg, i) => {
+                  const showProgressBeforeAssistant =
+                    isStreaming &&
+                    msg.role === "assistant" &&
+                    i === messages.length - 1 &&
+                    streamProgressSteps.length > 0;
+                  return (
+                    <Fragment key={msg.id || `m-${i}`}>
+                      {showProgressBeforeAssistant && (
+                        <div className="flex gap-3 justify-start">
+                          <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                          </div>
+                          <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0" />
+                        </div>
                       )}
-                    >
-                      {renderMessageContent(msg.content, msg.role, msg.attachments)}
+                      <div
+                        className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
+                      >
+                        {msg.role === "assistant" && (
+                          <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <Sparkles className="h-3.5 w-3.5 text-primary" />
+                          </div>
+                        )}
+                        <div
+                          className={cn(
+                            "rounded-2xl px-4 py-3 max-w-[85%]",
+                            msg.role === "user"
+                              ? "bg-primary text-primary-foreground"
+                              : msg.isError
+                                ? "bg-destructive/10 border border-destructive/25 text-foreground"
+                                : "bg-secondary/40"
+                          )}
+                        >
+                          {renderMessageContent(msg.content, msg.role, msg.attachments, {
+                            isError: msg.isError,
+                          })}
+                          {msg.role === "assistant" &&
+                            msg.activityLog &&
+                            msg.activityLog.length > 0 && (
+                              <details className="mt-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2">
+                                <summary className="cursor-pointer select-none font-medium text-foreground/70">
+                                  Pasos del proceso
+                                </summary>
+                                <ol className="mt-1.5 list-decimal pl-4 space-y-0.5">
+                                  {msg.activityLog.map((line, j) => (
+                                    <li key={j}>{line}</li>
+                                  ))}
+                                </ol>
+                              </details>
+                            )}
+                        </div>
+                      </div>
+                    </Fragment>
+                  );
+                })}
+                {isStreaming &&
+                  messages[messages.length - 1]?.role === "user" &&
+                  (streamProgressSteps.length > 0 ? (
+                    <div className="flex gap-3 justify-start">
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                      </div>
+                      <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0" />
                     </div>
-                  </div>
-                ))}
-                {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-                  <div className="flex gap-3">
-                    <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
-                    </div>
-                    <div className="rounded-2xl bg-secondary/40 px-4 py-3">
-                      <div className="flex gap-1">
-                        <div className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "0ms" }} />
-                        <div className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <div className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  ) : (
+                    <div className="flex gap-3">
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                      </div>
+                      <div className="rounded-2xl bg-secondary/40 px-4 py-3">
+                        <div className="flex gap-1">
+                          <div
+                            className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce"
+                            style={{ animationDelay: "0ms" }}
+                          />
+                          <div
+                            className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce"
+                            style={{ animationDelay: "150ms" }}
+                          />
+                          <div
+                            className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce"
+                            style={{ animationDelay: "300ms" }}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  ))}
                 <div ref={messagesEndRef} />
               </div>
             )}

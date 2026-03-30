@@ -1362,6 +1362,21 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(profile) + projectContext;
 
+    const sseProgressPreamble: { phase: string; message: string }[] = [];
+    const nAtt = Array.isArray(attachmentRefs) ? attachmentRefs.length : 0;
+    if (nAtt > 0) {
+      sseProgressPreamble.push({
+        phase: "attachments",
+        message: `Integrando ${nAtt} adjunto(s) en el mensaje (extracción según tipo de archivo)…`,
+      });
+    }
+    sseProgressPreamble.push({
+      phase: "context",
+      message: ai_project_id
+        ? "Cargando instrucciones, proyecto de IA, memorias y herramientas…"
+        : "Cargando instrucciones del asistente y herramientas de Kawiil…",
+    });
+
     // ─── Direct search mode (structured results + optional AI summary) ───
     if (searchMode && searchQuery) {
       const results = await executeTool("search_across", { query: searchQuery }, supabase, user.id, orgId);
@@ -1468,7 +1483,16 @@ serve(async (req) => {
     // ─── Main chat with tools (Claude primary) ───
     if (ANTHROPIC_API_KEY) {
       try {
-        return await handleClaudeChat(ANTHROPIC_API_KEY, systemPrompt, forClaude, supabase, user.id, orgId, ai_project_id || null);
+        return await handleClaudeChat(
+          ANTHROPIC_API_KEY,
+          systemPrompt,
+          forClaude,
+          supabase,
+          user.id,
+          orgId!,
+          ai_project_id || null,
+          sseProgressPreamble,
+        );
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         console.warn("Claude chat failed:", errMsg);
@@ -1476,7 +1500,15 @@ serve(async (req) => {
         if (!errMsg.includes("RATE_LIMIT_429")) {
           // ─── Fallback: Lovable AI Gateway (OpenAI format) ───
           if (LOVABLE_API_KEY) {
-            return await handleGatewayChat(LOVABLE_API_KEY, systemPrompt, forGateway, supabase, user.id, orgId);
+            return await handleGatewayChat(
+              LOVABLE_API_KEY,
+              systemPrompt,
+              forGateway,
+              supabase,
+              user.id,
+              orgId!,
+              sseProgressPreamble,
+            );
           }
           return new Response(JSON.stringify({ error: errMsg }), {
             status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1487,7 +1519,15 @@ serve(async (req) => {
 
     // ─── Fallback: Lovable AI Gateway (OpenAI format) ───
     if (LOVABLE_API_KEY) {
-      return await handleGatewayChat(LOVABLE_API_KEY, systemPrompt, forGateway, supabase, user.id, orgId);
+      return await handleGatewayChat(
+        LOVABLE_API_KEY,
+        systemPrompt,
+        forGateway,
+        supabase,
+        user.id,
+        orgId!,
+        sseProgressPreamble,
+      );
     }
 
     return new Response(JSON.stringify({ error: "No AI provider available" }), {
@@ -1980,6 +2020,7 @@ async function embedSharedMemory(
 async function handleClaudeChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
   supabase: any, userId: string, orgId: string, aiProjectId: string | null,
+  progressPreamble: Array<{ phase: string; message: string }>,
 ): Promise<Response> {
   let anthropicMsgs = toAnthropicMessages(userMessages);
   const MAX_ROUNDS = 8;
@@ -2091,7 +2132,7 @@ async function handleClaudeChat(
       textContent = textContent + "\n\n" + markers;
     }
 
-    return streamTextAsSSE(textContent);
+    return streamProgressAndText(progressPreamble, textContent);
   }
 
   return new Response(JSON.stringify({ error: "Demasiadas consultas internas" }), {
@@ -2103,6 +2144,7 @@ async function handleClaudeChat(
 async function handleGatewayChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
   supabase: any, userId: string, orgId: string,
+  progressPreamble: Array<{ phase: string; message: string }>,
 ): Promise<Response> {
   let aiMessages: any[] = [{ role: "system", content: systemPrompt }, ...userMessages];
   const MAX_ROUNDS = 5;
@@ -2151,7 +2193,7 @@ async function handleGatewayChat(
       continue;
     }
 
-    return streamTextAsSSE(msg.content || "");
+    return streamProgressAndText(progressPreamble, msg.content || "");
   }
 
   return new Response(JSON.stringify({ error: "Demasiadas consultas internas" }), {
@@ -2159,15 +2201,36 @@ async function handleGatewayChat(
   });
 }
 
-// ─── Stream text as OpenAI-compatible SSE ───
-function streamTextAsSSE(text: string): Response {
+// ─── SSE: pasos de progreso (cliente) + texto tipo OpenAI ───
+function streamProgressAndText(
+  preamble: Array<{ phase: string; message: string }>,
+  text: string,
+): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     start(controller) {
-      const chunkSize = 20;
+      for (const p of preamble) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "kawiil_progress", phase: p.phase, message: p.message })}\n\n`,
+          ),
+        );
+      }
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            type: "kawiil_progress",
+            phase: "response",
+            message: "Generando la respuesta final…",
+          })}\n\n`,
+        ),
+      );
+      const chunkSize = 24;
       for (let i = 0; i < text.length; i += chunkSize) {
         const chunk = text.slice(i, i + chunkSize);
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`));
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`),
+        );
       }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       controller.close();

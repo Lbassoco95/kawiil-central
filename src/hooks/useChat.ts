@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
+import type { ChatProgressStep } from "@/components/ai/ChatProcessingPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +23,10 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   attachments?: ChatAttachmentMeta[];
+  /** Resumen de pasos (subida, servidor, modelo) tras una respuesta exitosa */
+  activityLog?: string[];
+  /** Mensaje de error visible en el hilo */
+  isError?: boolean;
 }
 
 export interface ChatConversation {
@@ -46,6 +51,8 @@ export function useChat() {
   const qc = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamProgressSteps, setStreamProgressSteps] = useState<ChatProgressStep[]>([]);
+  const progressStepsRef = useRef<ChatProgressStep[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeAiProjectId, setActiveAiProjectId] = useState<string | null>(null);
 
@@ -147,16 +154,18 @@ export function useChat() {
         payload.attachments = attachments;
       }
 
-      const { data: msgData } = await supabase
+      const { data: msgData, error: insertErr } = await supabase
         .from("chat_messages" as any)
         .insert(payload as any)
         .select("id")
         .single();
+      if (insertErr) throw insertErr;
 
-      await supabase
+      const { error: convErr } = await supabase
         .from("chat_conversations" as any)
         .update({ updated_at: new Date().toISOString() } as any)
         .eq("id", conversationId);
+      if (convErr) throw convErr;
 
       const embedText =
         content +
@@ -202,6 +211,13 @@ export function useChat() {
       const text = input.trim() || (files.length ? "(Archivos adjuntos)" : "");
       if ((!text && !files.length) || isStreaming) return;
 
+      progressStepsRef.current = [];
+      const pushProgress = (phase: string, message: string) => {
+        const step: ChatProgressStep = { phase, message };
+        progressStepsRef.current = [...progressStepsRef.current, step];
+        setStreamProgressSteps([...progressStepsRef.current]);
+      };
+
       let convId = activeConversationId;
       if (!convId) {
         const title = text.length > 50 ? text.substring(0, 50) + "..." : text;
@@ -218,6 +234,12 @@ export function useChat() {
       if (files.length > 0 && !orgId) {
         toast.error("Tu cuenta no tiene organización; no se pueden subir adjuntos.");
         return;
+      }
+
+      if (files.length) {
+        pushProgress("upload", `Subiendo ${files.length} archivo(s) al almacenamiento seguro…`);
+      } else {
+        pushProgress("send", "Preparando tu mensaje…");
       }
 
       const savedMeta: ChatAttachmentMeta[] = [];
@@ -260,7 +282,13 @@ export function useChat() {
 
       if (!text.trim() && files.length && savedMeta.length === 0) {
         toast.error("No se pudo subir ningún archivo");
+        setStreamProgressSteps([]);
+        progressStepsRef.current = [];
         return;
+      }
+
+      if (savedMeta.length > 0) {
+        pushProgress("upload_ok", `${savedMeta.length} archivo(s) listo(s) en el chat.`);
       }
 
       const userMsg: ChatMessage = {
@@ -272,7 +300,21 @@ export function useChat() {
       setMessages(allMessages);
       setIsStreaming(true);
 
-      await saveMessage(convId, "user", text, savedMeta.length ? savedMeta : null);
+      pushProgress("persist", "Guardando el mensaje en tu conversación…");
+
+      try {
+        await saveMessage(convId, "user", text, savedMeta.length ? savedMeta : null);
+      } catch (persistErr: any) {
+        console.error(persistErr);
+        toast.error(persistErr?.message || "No se pudo guardar el mensaje");
+        setIsStreaming(false);
+        setStreamProgressSteps([]);
+        progressStepsRef.current = [];
+        setMessages((prev) => prev.slice(0, -1));
+        return;
+      }
+
+      pushProgress("ai_connect", "Conectando con Kawiil AI y procesando contexto…");
 
       let assistantContent = "";
 
@@ -295,17 +337,60 @@ export function useChat() {
           }),
         });
 
+        const ct = resp.headers.get("content-type") || "";
+
         if (!resp.ok) {
           const errorData = await resp.json().catch(() => ({}));
           throw new Error((errorData as any).error || `Error ${resp.status}`);
         }
 
-        if (!resp.body) throw new Error("No stream body");
+        if (ct.includes("application/json") && !ct.includes("event-stream")) {
+          const j = await resp.json().catch(() => ({}));
+          if ((j as any).error) throw new Error(String((j as any).error));
+          const plain = typeof (j as any).content === "string" ? (j as any).content : "";
+          if (plain) {
+            assistantContent = plain;
+            const log = progressStepsRef.current.map((s) => s.message);
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", content: plain, activityLog: log.length ? log : undefined },
+            ]);
+            await saveMessage(convId, "assistant", assistantContent, null);
+            qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+          } else {
+            throw new Error("El servidor respondió sin contenido de texto.");
+          }
+          return;
+        }
+
+        if (!resp.body) throw new Error("El servidor no devolvió datos (stream vacío). Revisa la función ai-chat.");
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let textBuffer = "";
         let streamDone = false;
+
+        const handleParsedLine = (parsed: Record<string, unknown>) => {
+          if (parsed.type === "kawiil_progress") {
+            const phase = String(parsed.phase || "step");
+            const message = String(parsed.message || "");
+            if (message) pushProgress(phase, message);
+            return;
+          }
+          const content = (parsed as any).choices?.[0]?.delta?.content as string | undefined;
+          if (content) {
+            assistantContent += content;
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "assistant") {
+                return prev.map((m, i) =>
+                  i === prev.length - 1 ? { ...m, content: assistantContent, isError: false } : m
+                );
+              }
+              return [...prev, { role: "assistant", content: assistantContent }];
+            });
+          }
+        };
 
         while (!streamDone) {
           const { done, value } = await reader.read();
@@ -328,20 +413,8 @@ export function useChat() {
             }
 
             try {
-              const parsed = JSON.parse(jsonStr);
-              const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-              if (content) {
-                assistantContent += content;
-                setMessages((prev) => {
-                  const last = prev[prev.length - 1];
-                  if (last?.role === "assistant") {
-                    return prev.map((m, i) =>
-                      i === prev.length - 1 ? { ...m, content: assistantContent } : m
-                    );
-                  }
-                  return [...prev, { role: "assistant", content: assistantContent }];
-                });
-              }
+              const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+              handleParsedLine(parsed);
             } catch {
               textBuffer = line + "\n" + textBuffer;
               break;
@@ -357,9 +430,8 @@ export function useChat() {
             const jsonStr = raw.slice(6).trim();
             if (jsonStr === "[DONE]") continue;
             try {
-              const parsed = JSON.parse(jsonStr);
-              const c = parsed.choices?.[0]?.delta?.content;
-              if (c) assistantContent += c;
+              const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+              handleParsedLine(parsed);
             } catch {
               /* ignore */
             }
@@ -377,15 +449,47 @@ export function useChat() {
           }
         }
 
-        if (assistantContent) {
+        const trimmed = assistantContent.trim();
+        if (trimmed) {
+          const log = progressStepsRef.current.map((s) => s.message);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant" && log.length) {
+              return prev.map((m, i) =>
+                i === prev.length - 1 ? { ...m, activityLog: log } : m
+              );
+            }
+            return prev;
+          });
           await saveMessage(convId, "assistant", assistantContent, null);
           qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+        } else {
+          const errText =
+            "**No se recibió respuesta del modelo.** Suele ocurrir si los adjuntos son demasiado pesados para el proveedor de IA, si hubo un corte de red o un fallo temporal. Prueba con menos archivos, archivos más livianos o reintenta en unos minutos.";
+          pushProgress("error", "Sin texto en la respuesta del servidor");
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: errText, isError: true },
+          ]);
+          toast.error("La IA no devolvió texto. Revisa adjuntos y conexión.");
         }
       } catch (e: any) {
         console.error("Chat error:", e);
-        toast.error(e.message || "Error al enviar mensaje");
+        const msg = e?.message || "Error al enviar mensaje";
+        pushProgress("error", msg);
+        toast.error(msg);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `**No se pudo completar la respuesta.**\n\n${msg}\n\nSi el problema continúa, revisa que la función **ai-chat** esté desplegada y que haya créditos del proveedor de IA.`,
+            isError: true,
+          },
+        ]);
       } finally {
         setIsStreaming(false);
+        setStreamProgressSteps([]);
+        progressStepsRef.current = [];
       }
     },
     [messages, isStreaming, activeConversationId, activeAiProjectId, createConversation, saveMessage, qc, user]
@@ -416,5 +520,6 @@ export function useChat() {
     updateConversationFolder,
     renameConversation,
     setAiProject,
+    streamProgressSteps,
   };
 }
