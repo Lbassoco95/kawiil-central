@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2, Sparkles } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { useCreateTask } from "@/hooks/useTasks";
 import { toast } from "sonner";
 

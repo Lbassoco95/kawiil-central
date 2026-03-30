@@ -24,18 +24,18 @@ export function ScrollableFilterTabs({ options, value, onChange, className }: Sc
               key={opt.value}
               onClick={() => onChange(opt.value)}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all whitespace-nowrap",
-                isActive
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                "tab-pill inline-flex items-center gap-1.5 whitespace-nowrap",
+                isActive ? "tab-pill-active" : "tab-pill-inactive"
               )}
             >
               {opt.label}
               {opt.count !== undefined && (
-                <span className={cn(
-                  "text-[10px] tabular-nums",
-                  isActive ? "text-muted-foreground" : "opacity-50"
-                )}>
+                <span
+                  className={cn(
+                    "text-[10px] tabular-nums",
+                    isActive ? "text-primary-foreground/75" : "opacity-50"
+                  )}
+                >
                   {opt.count}
                 </span>
               )}

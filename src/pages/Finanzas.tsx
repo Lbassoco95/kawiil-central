@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -14,7 +14,6 @@ import { useFinanceAccess } from "@/hooks/useFinanceAccess";
 import { ExpenseFormDialog } from "@/components/finanzas/ExpenseFormDialog";
 import { ExpenseTable } from "@/components/finanzas/ExpenseTable";
 import { ExpenseReviewDialog } from "@/components/finanzas/ExpenseReviewDialog";
-import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 
 const STATUS_FILTERS = [
   { value: "todos", label: "Todos" },
@@ -93,7 +92,21 @@ export default function Finanzas() {
           </Button>
         </div>
 
-        {hasFinanceAccess ? (
+        {isLoading ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-24 rounded-xl" />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Skeleton className="h-8 w-48 rounded-md" />
+              <Skeleton className="h-8 w-36 rounded-md" />
+              <Skeleton className="h-8 w-40 rounded-md" />
+            </div>
+            <Skeleton className="h-[280px] w-full rounded-xl" />
+          </div>
+        ) : hasFinanceAccess ? (
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

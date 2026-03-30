@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <AlertTitle>Algo salió mal</AlertTitle>
           <AlertDescription>
             <p className="mb-2">{this.state.error.message}</p>
-            <Button variant="outline" size="sm" onClick={this.handleReset} className="border-white/30 text-white hover:bg-white/10">
+            <Button variant="destructive" size="sm" onClick={this.handleReset}>
               Reintentar
             </Button>
           </AlertDescription>

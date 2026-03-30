@@ -100,13 +100,19 @@ function getCategoryClasses(name?: string | null) {
 }
 
 export function CalendarView() {
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const isMobile = useIsMobile();
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"
+  );
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
-  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (isMobile) setViewMode("day");
+  }, [isMobile]);
   const [newEvent, setNewEvent] = useState({
     subject: "", startTime: "09:00", endTime: "10:00", attendees: "",
     location: "", description: "", isOnlineMeeting: true, isAllDay: false, categories: [] as string[],
@@ -348,10 +354,88 @@ export function CalendarView() {
     }
   };
 
+  const todayAgendaCard = (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Hoy</h3>
+          <span className="text-xs text-muted-foreground ml-auto">{format(new Date(), "d MMM", { locale: es })}</span>
+        </div>
+        {todayEvents.length === 0 && todayTasks.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">Sin eventos ni tareas para hoy</p>
+        ) : (
+          <div className="space-y-1.5">
+            {todayEvents.filter((e: any) => !e._isAllDay).slice(0, 5).map((event: any) => {
+              const time = formatMX(event._parsedStart, "HH:mm");
+              return (
+                <button key={event.id} className="w-full flex items-start gap-2 p-2 rounded-lg hover:bg-accent/50 text-left transition-colors"
+                  onClick={() => setSelectedEventId(event.id)}>
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-foreground truncate">{event.subject}</p>
+                    <p className="text-[11px] text-muted-foreground">{time}</p>
+                  </div>
+                </button>
+              );
+            })}
+            {todayTasks.slice(0, 5).map((task: any) => (
+              <div key={task.id} className="flex items-start gap-2 p-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10">
+                <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
+                  {task.clients?.name && <p className="text-[11px] text-muted-foreground">{task.clients.name}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const upcomingTasksCard =
+    showKawiilTasks && upcomingTasks.length > 0 ? (
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckSquare className="h-4 w-4 text-amber-600" />
+            <h3 className="text-sm font-semibold text-foreground">Próximos vencimientos</h3>
+          </div>
+          <div className="space-y-1.5">
+            {upcomingTasks.map((task: any) => {
+              const daysLeft = differenceInDays(parseISO(task.due_date), new Date());
+              const urgencyColor = daysLeft === 0 ? "text-red-600" : daysLeft <= 2 ? "text-amber-600" : "text-muted-foreground";
+              return (
+                <div key={task.id} className="flex items-start gap-2 py-1.5">
+                  <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
+                    <div className="flex items-center gap-2">
+                      {task.clients?.name && <span className="text-[11px] text-muted-foreground truncate">{task.clients.name}</span>}
+                      <span className={cn("text-[11px] shrink-0", urgencyColor)}>
+                        {daysLeft === 0 ? "Hoy" : daysLeft === 1 ? "Mañana" : `${daysLeft}d`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    ) : null;
+
   return (
     <div className="flex gap-4 animate-fade-in h-full">
       {/* Main calendar area */}
       <div className="flex-1 min-w-0 space-y-4 overflow-y-auto pb-4">
+        {isMobile && (
+          <div className="space-y-3">
+            {todayAgendaCard}
+            {upcomingTasksCard}
+          </div>
+        )}
         {/* Toolbar */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -573,76 +657,8 @@ export function CalendarView() {
       {/* Right sidebar — Agenda / Kawiil tasks */}
       {!isMobile && (
         <div className="w-72 shrink-0 space-y-4 overflow-y-auto pb-4">
-          {/* Today's agenda mini-card */}
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-semibold text-foreground">Hoy</h3>
-                <span className="text-xs text-muted-foreground ml-auto">{format(new Date(), "d MMM", { locale: es })}</span>
-              </div>
-              {todayEvents.length === 0 && todayTasks.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">Sin eventos ni tareas para hoy</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {todayEvents.filter((e: any) => !e._isAllDay).slice(0, 5).map((event: any) => {
-                    const time = formatMX(event._parsedStart, "HH:mm");
-                    return (
-                      <button key={event.id} className="w-full flex items-start gap-2 p-2 rounded-lg hover:bg-accent/50 text-left transition-colors"
-                        onClick={() => setSelectedEventId(event.id)}>
-                        <div className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-foreground truncate">{event.subject}</p>
-                          <p className="text-[11px] text-muted-foreground">{time}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {todayTasks.slice(0, 5).map((task: any) => (
-                    <div key={task.id} className="flex items-start gap-2 p-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10">
-                      <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
-                        {task.clients?.name && <p className="text-[11px] text-muted-foreground">{task.clients.name}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Upcoming tasks */}
-          {showKawiilTasks && upcomingTasks.length > 0 && (
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <CheckSquare className="h-4 w-4 text-amber-600" />
-                  <h3 className="text-sm font-semibold text-foreground">Próximos vencimientos</h3>
-                </div>
-                <div className="space-y-1.5">
-                  {upcomingTasks.map((task: any) => {
-                    const daysLeft = differenceInDays(parseISO(task.due_date), new Date());
-                    const urgencyColor = daysLeft === 0 ? "text-red-600" : daysLeft <= 2 ? "text-amber-600" : "text-muted-foreground";
-                    return (
-                      <div key={task.id} className="flex items-start gap-2 py-1.5">
-                        <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
-                          <div className="flex items-center gap-2">
-                            {task.clients?.name && <span className="text-[11px] text-muted-foreground truncate">{task.clients.name}</span>}
-                            <span className={cn("text-[11px] shrink-0", urgencyColor)}>
-                              {daysLeft === 0 ? "Hoy" : daysLeft === 1 ? "Mañana" : `${daysLeft}d`}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {todayAgendaCard}
+          {upcomingTasksCard}
         </div>
       )}
 

@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, EyeOff } from "lucide-react";
 import { useTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -22,11 +21,7 @@ import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatMX } from "@/lib/dateUtils";
 
-import { TASK_STATUS_CONFIG, PRIORITY_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
-
-const priorityColors: Record<string, string> = Object.fromEntries(
-  Object.entries(PRIORITY_CONFIG).map(([k, v]) => [k, v.color])
-);
+import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
 const statusLabels = TASK_STATUS_CONFIG;
 
@@ -46,7 +41,7 @@ const Tareas = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [showAllSteps, setShowAllSteps] = useState(false);
   const deleteTask = useDeleteTask();
-  const { isAdminOrManager, canDeleteTasks } = useUserRole();
+  const { canDeleteTasks } = useUserRole();
   const { areaOptions, areaLabelMap, getCelulaLabel } = useAreaOptions();
   const { data: assignedSteps = [] } = useAssignedSteps();
   const { data: profiles = [] } = useProfiles();

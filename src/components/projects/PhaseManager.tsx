@@ -49,7 +49,7 @@ function TaskRow({
   selectionMode?: boolean; isSelected?: boolean; onToggle?: () => void;
   showCleanTitle?: boolean;
 }) {
-  const title = showCleanTitle && task.phase_key ? task.title : task.title;
+  const title = showCleanTitle && task.phase_key ? task.title.replace(/^\[[^\]]+\]\s*/, "") : task.title;
   return (
     <div
       className={`flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isSelected ? "bg-primary/5" : ""}`}

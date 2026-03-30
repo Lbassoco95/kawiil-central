@@ -46,3 +46,15 @@ export function formatDateMX(date: string | Date): string {
 export function nowMX(): Date {
   return toMXDate(new Date());
 }
+
+/**
+ * Retorna la fecha actual en zona CDMX como string YYYY-MM-DD.
+ * Usa para comparar contra columnas date en BD sin desfase UTC.
+ */
+export function toDateStringMX(date?: Date): string {
+  const d = date ?? nowMX();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}

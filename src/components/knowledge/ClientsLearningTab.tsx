@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Building2, FileText, Scale, ShieldCheck, BookOpen, ExternalLink,
+  Building2, FileText, Scale, ShieldCheck, ExternalLink,
   ChevronDown, ChevronRight, Layers, Clock, Lightbulb,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -176,6 +176,14 @@ function ClientCard({
           <Clock className="h-3 w-3" />
           {timeAgo(group.lastActivity)}
         </div>
+
+        {isExpanded && !insights && (
+          <div className="mt-4 border-t pt-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </div>
+        )}
 
         {isExpanded && insights && (
           <div className="mt-4 border-t pt-4 space-y-3" onClick={(e) => e.stopPropagation()}>

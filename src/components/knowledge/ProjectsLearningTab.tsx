@@ -184,6 +184,14 @@ function ProjectRow({
         </div>
       </div>
 
+      {isExpanded && !insights && (
+        <div className="mt-3 border-t pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-14 w-full rounded-md" />
+          <Skeleton className="h-14 w-full rounded-md" />
+        </div>
+      )}
+
       {isExpanded && insights && (
         <div className="mt-3 border-t pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
           {insights.length === 0 ? (

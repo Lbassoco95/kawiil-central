@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Heart } from "lucide-react";
+import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 
 const MOODS = [
   { value: 1, emoji: "😞", label: "Difícil" },
@@ -22,7 +23,7 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
   const qc = useQueryClient();
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
 
-  const now = new Date();
+  const now = nowMX();
   const currentHour = now.getHours();
 
   let timeOfDay: "morning" | "afternoon";
@@ -30,15 +31,15 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
 
   if (currentHour >= 9 && currentHour < 15) {
     timeOfDay = "morning";
-    checkDate = now.toISOString().split("T")[0];
+    checkDate = toDateStringMX(now);
   } else if (currentHour >= 15) {
     timeOfDay = "afternoon";
-    checkDate = now.toISOString().split("T")[0];
+    checkDate = toDateStringMX(now);
   } else {
     timeOfDay = "afternoon";
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    checkDate = yesterday.toISOString().split("T")[0];
+    checkDate = toDateStringMX(yesterday);
   }
 
   const timeLabel = timeOfDay === "morning" ? "mañana" : "tarde";
@@ -72,11 +73,11 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
       if (!data || data.length === 0) return 0;
       const dates = [...new Set((data as any[]).map((d: any) => d.check_date))].sort().reverse();
       let streak = 0;
-      const today = new Date();
+      const todayMX = nowMX();
       for (let i = 0; i < dates.length; i++) {
-        const expected = new Date(today);
+        const expected = new Date(todayMX);
         expected.setDate(expected.getDate() - i);
-        const expectedStr = expected.toISOString().split("T")[0];
+        const expectedStr = toDateStringMX(expected);
         if (dates[i] === expectedStr) {
           streak++;
         } else {

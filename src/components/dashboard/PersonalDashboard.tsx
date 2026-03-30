@@ -21,7 +21,7 @@ import {
   Sparkles,
   Clock,
 } from "lucide-react";
-import { formatDateMX, nowMX } from "@/lib/dateUtils";
+import { formatDateMX, nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { useNavigate } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
 
@@ -125,7 +125,7 @@ export function PersonalDashboard() {
   const { data: completedToday } = useQuery({
     queryKey: ["personal-completed-today", user?.id],
     queryFn: async () => {
-      const todayStr = today.toISOString().split("T")[0];
+      const todayStr = toDateStringMX(today);
       const { count, error } = await supabase
         .from("tasks")
         .select("id", { count: "exact", head: true })
@@ -265,7 +265,7 @@ export function PersonalDashboard() {
       </div>
 
       {/* KPI grid */}
-      <div className="grid grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
         <button
           onClick={() => navigate("/tareas?priority=urgente")}
           className={`stat-card text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${urgentCount > 0 ? "border-destructive/30 bg-destructive/5" : ""}`}

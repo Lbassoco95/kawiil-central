@@ -47,6 +47,7 @@ export function ProjectSidebar({
   const [renameValue, setRenameValue] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [editInstructions, setEditInstructions] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
@@ -61,7 +62,7 @@ export function ProjectSidebar({
     return groups;
   })();
 
-  const folders = Object.keys(groupedConversations).filter(f => f !== "__none__").sort();
+  const folders = [...new Set([...Object.keys(groupedConversations).filter(f => f !== "__none__"), ...customFolders])].sort();
 
   const toggleFolder = (f: string) => {
     setExpandedFolders((prev) => {
@@ -120,7 +121,7 @@ export function ProjectSidebar({
           <DropdownMenuSub>
             <DropdownMenuSubTrigger><FolderInput className="h-3 w-3 mr-2" /> Mover a...</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              {FOLDER_PRESETS.map((f) => (
+              {[...new Set([...FOLDER_PRESETS, ...customFolders])].map((f) => (
                 <DropdownMenuItem key={f} onClick={(e) => { e.stopPropagation(); onMoveConversation(c.id, f); }}>
                   {f}
                 </DropdownMenuItem>
@@ -292,7 +293,7 @@ export function ProjectSidebar({
             placeholder="Nombre de carpeta..."
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && newFolderName.trim()) { setShowNewFolder(false); setNewFolderName(""); } if (e.key === "Escape") setShowNewFolder(false); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && newFolderName.trim()) { const name = newFolderName.trim(); setCustomFolders((prev) => prev.includes(name) ? prev : [...prev, name]); setExpandedFolders((prev) => new Set([...prev, name])); setShowNewFolder(false); setNewFolderName(""); } if (e.key === "Escape") setShowNewFolder(false); }}
             className="h-7 text-xs"
             autoFocus
           />

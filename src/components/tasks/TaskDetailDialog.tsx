@@ -23,7 +23,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  MessageSquare, Paperclip, Link, Calendar, User, Flag, Clock,
+  MessageSquare, Paperclip, Link, Calendar, User, Clock,
   Upload, ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
   Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2
 } from "lucide-react";

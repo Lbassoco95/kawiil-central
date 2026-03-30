@@ -10,7 +10,7 @@ import {
 } from "@/hooks/useMentionNotifications";
 import { formatMX } from "@/lib/dateUtils";
 import {
-  AlertTriangle, CalendarClock, Loader2, ArrowRight,
+  AlertTriangle, CalendarClock, ArrowRight,
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
   Bot, BrainCircuit, Settings,
 } from "lucide-react";
@@ -112,12 +112,12 @@ export default function Notificaciones() {
         ) : (
           <>
             {/* Tab pills */}
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 overflow-x-auto flex-nowrap pb-1 -mx-1 px-1 scrollbar-hide">
               {tabs.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key)}
-                  className={`tab-pill inline-flex items-center gap-1.5 ${
+                  className={`tab-pill inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap ${
                     tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
                   }`}
                 >

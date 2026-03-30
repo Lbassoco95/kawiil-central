@@ -59,9 +59,9 @@ export function StatsTab() {
   // Client coverage
   const clientCoverage = (() => {
     if (!clientStats?.length) return [];
-    const map = new Map<string, { name: string; chunks: number }>();
+    const map = new Map<string, { client_id: string; name: string; chunks: number }>();
     for (const r of clientStats) {
-      const g = map.get(r.client_id) || { name: r.client_name, chunks: 0 };
+      const g = map.get(r.client_id) || { client_id: r.client_id, name: r.client_name, chunks: 0 };
       g.chunks += r.chunk_count;
       map.set(r.client_id, g);
     }
@@ -138,8 +138,8 @@ export function StatsTab() {
             <p className="text-xs text-muted-foreground text-center py-6">Sin datos</p>
           ) : (
             <div className="space-y-3">
-              {clientCoverage.slice(0, 15).map((c) => (
-                <div key={c.name} className="space-y-1">
+              {clientCoverage.slice(0, 15).map((c, i) => (
+                <div key={c.client_id || i} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium truncate max-w-[120px] sm:max-w-[200px]">{c.name}</span>
                     <span className="text-muted-foreground">{c.chunks.toLocaleString()} chunks</span>

@@ -99,7 +99,7 @@ export function KnowledgePanel({
           {([
             { key: "docs", label: "Docs", icon: FileText, count: projectDocs.length },
             { key: "memories", label: "Memoria", icon: BookOpen, count: memories.length },
-            { key: "artifacts", label: "Artifacts", icon: Sparkles, count: artifacts.length },
+            { key: "artifacts", label: "Artefactos", icon: Sparkles, count: artifacts.length },
           ] as const).map((t) => (
             <button
               key={t.key}

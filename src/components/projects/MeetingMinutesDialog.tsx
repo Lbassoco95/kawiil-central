@@ -20,6 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { PRIORITY_CONFIG } from "@/lib/statusStyles";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { toast } from "sonner";
@@ -63,13 +65,6 @@ interface MeetingMinutesDialogProps {
   area?: string | null;
   projectName?: string;
 }
-
-const PRIORITY_STYLES: Record<string, string> = {
-  urgente: "bg-destructive/10 text-destructive border-destructive/20",
-  alta: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200",
-  media: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200",
-  baja: "bg-muted text-muted-foreground border-border",
-};
 
 export function MeetingMinutesDialog({
   open,
@@ -547,10 +542,13 @@ export function MeetingMinutesDialog({
                               {task.title || <span className="text-muted-foreground italic">Sin título</span>}
                             </h4>
                             <Badge
-                              variant="outline"
-                              className={`text-[10px] px-1.5 py-0 shrink-0 ${PRIORITY_STYLES[task.priority] || ""}`}
+                              variant="secondary"
+                              className={cn(
+                                "text-[10px] px-1.5 py-0 shrink-0 border-0",
+                                PRIORITY_CONFIG[task.priority]?.color ?? "bg-muted text-muted-foreground"
+                              )}
                             >
-                              {task.priority}
+                              {PRIORITY_CONFIG[task.priority]?.label ?? task.priority}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">

@@ -20,10 +20,9 @@ import {
   Wallet,
   BookOpen,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useUserRole } from "@/hooks/useUserRole";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUnreadCount } from "@/hooks/useMentionNotifications";
 import { useUnreadEmailCount } from "@/hooks/useMicrosoft";
@@ -101,7 +100,6 @@ export function AppSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { signOut, user } = useAuth();
   const isMobile = useIsMobile();
-  const { isAdminOrManager } = useUserRole();
   const { hasModule } = useModulePermissions();
   const { data: unreadCount = 0 } = useUnreadCount();
   const { data: unreadEmailCount = 0 } = useUnreadEmailCount();
@@ -113,10 +111,6 @@ export function AppSidebar() {
       return true;
     }),
   })).filter((g) => g.items.length > 0);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, []);
 
   const getBadge = (url: string, showFull: boolean) => {
     if (url === "/notificaciones" && unreadCount > 0) {

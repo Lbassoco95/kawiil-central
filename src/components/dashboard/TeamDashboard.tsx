@@ -11,9 +11,6 @@ import {
   FolderKanban,
   AlertTriangle,
   ArrowRight,
-  Clock,
-  TrendingUp,
-  UserCheck,
 } from "lucide-react";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";

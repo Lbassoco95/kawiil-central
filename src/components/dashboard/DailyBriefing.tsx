@@ -17,6 +17,7 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
   const { user } = useAuth();
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const today = useMemo(() => nowMX(), []);
 
@@ -70,6 +71,7 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
   const generateBriefing = async () => {
     if (!user || !taskDetails) return;
     setLoading(true);
+    setError(false);
 
     const firstName = profile?.full_name?.split(" ")[0] || "Kawiiler";
     const todayStr = today.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
@@ -145,6 +147,7 @@ INSTRUCCIONES:
       }
     } catch (e: any) {
       console.error("Briefing error:", e);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -181,6 +184,19 @@ INSTRUCCIONES:
         <div className="mt-3 pl-7">
           {loading && !briefing && (
             <p className="text-sm text-muted-foreground">Generando...</p>
+          )}
+
+          {error && !loading && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 space-y-2">
+              <p className="text-sm text-destructive">No se pudo generar el briefing. Intenta de nuevo.</p>
+              <button
+                type="button"
+                onClick={() => generateBriefing()}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Reintentar
+              </button>
+            </div>
           )}
 
           {briefing && (
