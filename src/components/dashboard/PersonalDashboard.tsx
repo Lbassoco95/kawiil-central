@@ -30,9 +30,14 @@ import {
 import { formatDateMX, nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { useNavigate } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
+import { useToast } from "@/hooks/use-toast";
+
+const PHRASE_FALLBACK =
+  "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results";
 
 export function PersonalDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
   const today = useMemo(() => nowMX(), []);
   const { data: orgUsers } = useOrgUsers();
@@ -87,12 +92,32 @@ export function PersonalDashboard() {
       const { data, error } = await supabase.functions.invoke("generate-phrase", {
         body: { mood_score: moodScore ?? null, time_of_day: "morning", force_regenerate: forceRegenerate ?? false },
       });
-      if (error) throw error;
-      if (data?.phrase) {
-        setPersonalPhrase(data.phrase);
+      const payload = data as { phrase?: string; error?: string; message?: string } | null;
+
+      if (error || payload?.error) {
+        const code = payload?.error;
+        const desc = payload?.message;
+        if (code === "ai_not_configured" || code === "ai_auth_error" || code === "ai_provider_error") {
+          toast({
+            title: "Frase del día",
+            description:
+              desc ||
+              "Configura ANTHROPIC_API_KEY en Supabase (Project Settings → Edge Functions → Secrets) y vuelve a desplegar generate-phrase.",
+            variant: "destructive",
+          });
+        } else {
+          console.error("Phrase error:", error, data);
+        }
+        setPersonalPhrase(PHRASE_FALLBACK);
+        return;
+      }
+
+      if (payload?.phrase) {
+        setPersonalPhrase(payload.phrase);
       }
     } catch (e: any) {
       console.error("Phrase error:", e);
+      setPersonalPhrase(PHRASE_FALLBACK);
     } finally {
       setPhraseLoading(false);
     }

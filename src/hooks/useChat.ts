@@ -349,7 +349,7 @@ export function useChat() {
           } else {
             try {
               const j = JSON.parse(errRaw) as { error?: string; message?: string };
-              errMsg = j.error || j.message || errMsg;
+              errMsg = j.message || j.error || errMsg;
             } catch {
               if (errRaw && errRaw.length < 500) errMsg = errRaw;
             }

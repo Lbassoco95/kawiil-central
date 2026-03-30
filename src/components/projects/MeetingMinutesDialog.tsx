@@ -161,8 +161,8 @@ export function MeetingMinutesDialog({
             area: area ?? null,
           },
         });
-        if (error) throw new Error(data?.error ?? error.message);
-        if (data?.error) throw new Error(data.error);
+        if (error) throw new Error(data?.message ?? data?.error ?? error.message);
+        if (data?.error) throw new Error(data.message ?? data.error);
         setContent(extractedText);
         setSummary(data.summary ?? "");
         setPhases(data.phases ?? []);
@@ -217,10 +217,10 @@ export function MeetingMinutesDialog({
       });
 
       if (error) {
-        const errorMsg = data?.error || error.message || "Error desconocido";
+        const errorMsg = data?.message || data?.error || error.message || "Error desconocido";
         throw new Error(errorMsg);
       }
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) throw new Error(data.message || data.error);
 
       setSummary(data.summary || "");
       setPhases(data.phases || []);

@@ -17,6 +17,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+/** Modelo ligero para frases cortas (mismo ecosistema que el resto de Edge functions). */
+const PHRASE_MODEL = "claude-3-5-haiku-20241022";
+
 const FALLBACK_QUOTES = [
   "La disciplina tarde o temprano vencerá a la inteligencia.\n— Yukio Mishima, Sol y acero",
   "No cuentes los días, haz que los días cuenten.\n— Muhammad Ali, Entrevistas",
@@ -226,28 +230,35 @@ INSTRUCCIONES:
 FRASE: [la cita textual]
 — [Autor/Personaje], [Fuente/Obra]`;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      return new Response(
+        JSON.stringify({
+          error: "ai_not_configured",
+          message:
+            "IA no configurada: define el secreto ANTHROPIC_API_KEY en el proyecto Supabase (Edge Functions) para generar frases personalizadas.",
+        }),
+        {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     async function requestAiPhrase(prompt: string) {
-      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResp = await fetch(ANTHROPIC_API_URL, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            {
-              role: "system",
-              content:
-                "Eres un curador cultural experto. Solo compartes citas auténticas, verificables y con atribución completa. Nunca inventas frases y no repites citas recientes del historial.",
-            },
-            { role: "user", content: prompt },
-          ],
+          model: PHRASE_MODEL,
+          max_tokens: 512,
+          system:
+            "Eres un curador cultural experto. Solo compartes citas auténticas, verificables y con atribución completa. Nunca inventas frases y no repites citas recientes del historial.",
+          messages: [{ role: "user", content: prompt }],
         }),
       });
 
@@ -255,17 +266,20 @@ FRASE: [la cita textual]
         if (aiResp.status === 429) {
           throw new Error("RATE_LIMIT");
         }
-        if (aiResp.status === 402) {
-          throw new Error("NO_CREDITS");
-        }
         const text = await aiResp.text();
-        console.error("AI gateway error:", aiResp.status, text);
-        throw new Error("AI_GATEWAY_ERROR");
+        console.error("Anthropic error:", aiResp.status, text.slice(0, 500));
+        if (aiResp.status === 401 || aiResp.status === 403) {
+          throw new Error("AI_AUTH_ERROR");
+        }
+        throw new Error("AI_PROVIDER_ERROR");
       }
 
       const aiData = await aiResp.json();
+      const raw =
+        aiData.content?.find?.((b: { type?: string; text?: string }) => b.type === "text")?.text?.trim() ||
+        "";
       return (
-        aiData.choices?.[0]?.message?.content?.trim() ||
+        raw ||
         "FRASE: Hazlo o no lo hagas, pero no lo intentes.\n— Yoda, Star Wars: El Imperio Contraataca"
       );
     }
@@ -334,11 +348,30 @@ FRASE: [la cita textual]
       );
     }
 
-    if (errorMessage === "NO_CREDITS") {
-      return new Response(JSON.stringify({ error: "Créditos de IA agotados." }), {
-        status: 402,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (errorMessage === "AI_AUTH_ERROR") {
+      return new Response(
+        JSON.stringify({
+          error: "ai_auth_error",
+          message: "La clave de Anthropic no es válida o no tiene permisos. Revisa ANTHROPIC_API_KEY en Supabase.",
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (errorMessage === "AI_PROVIDER_ERROR") {
+      return new Response(
+        JSON.stringify({
+          error: "ai_provider_error",
+          message: "El proveedor de IA devolvió un error. Intenta de nuevo más tarde.",
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     console.error("generate-phrase error:", e);

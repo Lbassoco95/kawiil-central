@@ -10,7 +10,6 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 function escapePostgrestString(input: string): string {
   return input
@@ -226,15 +225,11 @@ async function sqliteBytesToSummary(bytes: Uint8Array): Promise<string> {
   }
 }
 
-type AttachmentProcessOpts = { needsGatewayPdfText?: boolean };
-
 async function processAttachmentFile(
   bytes: Uint8Array,
   mime: string,
   name: string,
-  opts: AttachmentProcessOpts = {},
 ): Promise<{ claude: any[]; gatewayText: string }> {
-  const needsGatewayPdfText = opts.needsGatewayPdfText ?? true;
   const lower = name.toLowerCase();
   const mt = (mime || "").toLowerCase();
 
@@ -259,15 +254,12 @@ async function processAttachmentFile(
   }
   if (mt === "application/pdf" || lower.endsWith(".pdf")) {
     if (bytes.length <= PDF_AS_NATIVE_DOCUMENT_MAX_BYTES) {
-      const gatewayText = needsGatewayPdfText
-        ? await pdfBytesToGatewayText(bytes, name)
-        : `[PDF «${name}»: contenido enviado al modelo como documento PDF.]`;
       return {
         claude: [{
           type: "document",
           source: { type: "base64", media_type: "application/pdf", data: toBase64(bytes) },
         }],
-        gatewayText,
+        gatewayText: "",
       };
     }
     const gatewayText = await pdfBytesToGatewayText(bytes, name);
@@ -335,17 +327,15 @@ async function resolveChatAttachments(
   svc: ReturnType<typeof createClient>,
   messages: any[],
   attachmentRefs: Array<{ bucket?: string; path: string; name?: string; mime_type?: string }> | undefined,
-  opts: AttachmentProcessOpts = {},
-): Promise<{ forClaude: any[]; forGateway: any[] }> {
+): Promise<{ forClaude: any[] }> {
   const refs = (attachmentRefs || []).slice(0, CHAT_ATTACH_MAX_FILES);
   const lastIdx = findLastUserMessageIndex(messages);
   if (lastIdx < 0 || refs.length === 0) {
-    return { forClaude: messages, forGateway: messages };
+    return { forClaude: messages };
   }
 
   const userText = typeof messages[lastIdx].content === "string" ? messages[lastIdx].content : "";
   const claudeBlocks: any[] = [];
-  const gatewayParts: string[] = [];
   let batchBytes = 0;
   const maxMb = Math.round(CHAT_ATTACH_MAX_BYTES / (1024 * 1024));
   const maxBatchMb = Math.round(CHAT_ATTACH_BATCH_MAX_BYTES / (1024 * 1024));
@@ -354,21 +344,29 @@ async function resolveChatAttachments(
     const bucket = ref.bucket || "chat-uploads";
     const bytes = await downloadStorageObject(svc, bucket, ref.path);
     if (!bytes) {
-      gatewayParts.push(`No se pudo leer: ${ref.name || ref.path}`);
+      claudeBlocks.push({
+        type: "text",
+        text: `[Adjunto: no se pudo leer el archivo «${ref.name || ref.path}».]`,
+      });
       continue;
     }
     if (bytes.length > CHAT_ATTACH_MAX_BYTES) {
-      gatewayParts.push(`Archivo demasiado grande (máx ${maxMb}MB): ${ref.name}`);
+      claudeBlocks.push({
+        type: "text",
+        text: `[Adjunto «${ref.name}» demasiado grande (máx. ${maxMb} MB).]`,
+      });
       continue;
     }
     if (batchBytes + bytes.length > CHAT_ATTACH_BATCH_MAX_BYTES) {
-      gatewayParts.push(`Omitido (supera ${maxBatchMb}MB total por mensaje): ${ref.name}`);
+      claudeBlocks.push({
+        type: "text",
+        text: `[Adjunto «${ref.name}» omitido: supera ${maxBatchMb} MB total por mensaje.]`,
+      });
       continue;
     }
     batchBytes += bytes.length;
-    const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo", opts);
+    const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo");
     claudeBlocks.push(...proc.claude);
-    if (proc.gatewayText) gatewayParts.push(proc.gatewayText);
   }
 
   let claudeContent: any = userText;
@@ -379,12 +377,8 @@ async function resolveChatAttachments(
   }
 
   const forClaude = messages.map((m, i) => (i === lastIdx ? { ...m, content: claudeContent } : m));
-  const gwAppend = gatewayParts.length ? `\n\n--- Archivos adjuntos ---\n${gatewayParts.join("\n\n")}` : "";
-  const forGateway = messages.map((m, i) =>
-    i === lastIdx ? { ...m, content: userText + gwAppend } : m
-  );
 
-  return { forClaude, forGateway };
+  return { forClaude };
 }
 
 // ─── Anthropic tool definitions ───
@@ -695,16 +689,6 @@ const anthropicTools = [
     },
   },
 ];
-
-// ─── OpenAI-format tools for fallback gateway ───
-const openaiTools = anthropicTools.map((t) => ({
-  type: "function" as const,
-  function: {
-    name: t.name,
-    description: t.description,
-    parameters: t.input_schema,
-  },
-}));
 
 // ─── Tool executor ───
 async function executeTool(
@@ -1365,8 +1349,19 @@ serve(async (req) => {
 
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!ANTHROPIC_API_KEY && !LOVABLE_API_KEY) throw new Error("No AI provider configured");
+    if (!ANTHROPIC_API_KEY) {
+      return new Response(
+        JSON.stringify({
+          error: "ai_not_configured",
+          message:
+            "Configura ANTHROPIC_API_KEY en los secretos de Edge Functions (Supabase). El asistente usa solo Claude (Anthropic).",
+        }),
+        {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     const authHeader = req.headers.get("Authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1402,9 +1397,7 @@ serve(async (req) => {
       });
     }
 
-    const { forClaude, forGateway } = await resolveChatAttachments(svc, messages || [], attachmentRefs, {
-      needsGatewayPdfText: !!LOVABLE_API_KEY,
-    });
+    const { forClaude } = await resolveChatAttachments(svc, messages || [], attachmentRefs);
 
     // Load AI Project context + memories
     let projectContext = "";
@@ -1507,44 +1500,23 @@ serve(async (req) => {
         try {
           const summaryPrompt = `El usuario buscó "${searchQuery}" en la plataforma. Estos son los resultados encontrados:\n${JSON.stringify(results, null, 2)}\n\nGenera un resumen breve (2-3 oraciones) en español que contextualice qué encontramos relacionado con "${searchQuery}". No listes los resultados, solo da contexto. Sé conciso y útil.`;
 
-          const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-          const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-          let summaryResp: Response | null = null;
+          const summaryResp = await fetch(ANTHROPIC_API_URL, {
+            method: "POST",
+            headers: {
+              "x-api-key": ANTHROPIC_API_KEY,
+              "anthropic-version": "2023-06-01",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 256,
+              messages: [{ role: "user", content: summaryPrompt }],
+            }),
+          });
 
-          if (ANTHROPIC_API_KEY) {
-            summaryResp = await fetch(ANTHROPIC_API_URL, {
-              method: "POST",
-              headers: {
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                model: "claude-sonnet-4-20250514",
-                max_tokens: 256,
-                messages: [{ role: "user", content: summaryPrompt }],
-              }),
-            });
-          }
-
-          if (!summaryResp?.ok && LOVABLE_API_KEY) {
-            summaryResp = await fetch(AI_GATEWAY_URL, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
-                messages: [{ role: "user", content: summaryPrompt }],
-                stream: false,
-              }),
-            });
-          }
-
-          if (summaryResp?.ok) {
+          if (summaryResp.ok) {
             const sData = await summaryResp.json();
-            // Handle both Anthropic and OpenAI response formats
-            summary = sData.content?.find?.((b: any) => b.type === "text")?.text
-              || sData.choices?.[0]?.message?.content
-              || "";
+            summary = sData.content?.find?.((b: any) => b.type === "text")?.text || "";
           }
         } catch (e) {
           console.warn("Search summary generation failed (non-critical):", e);
@@ -1558,101 +1530,62 @@ serve(async (req) => {
 
     // ─── Simple mode (no tools, no streaming) ───
     if (simple) {
-      if (ANTHROPIC_API_KEY) {
-        const resp = await fetch(ANTHROPIC_API_URL, {
-          method: "POST",
-          headers: {
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 2048,
-            system: systemPrompt,
-            messages: toAnthropicMessages(forClaude),
-          }),
+      const resp = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2048,
+          system: systemPrompt,
+          messages: toAnthropicMessages(forClaude),
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const text = data.content?.find((b: any) => b.type === "text")?.text || "";
+        return new Response(JSON.stringify({ content: text }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-        if (resp.ok) {
-          const data = await resp.json();
-          const text = data.content?.find((b: any) => b.type === "text")?.text || "";
-          return new Response(JSON.stringify({ content: text }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        console.warn("Claude simple failed, falling back...");
       }
-      if (LOVABLE_API_KEY) {
-        const resp = await fetch(AI_GATEWAY_URL, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: [{ role: "system", content: systemPrompt }, ...forGateway], stream: false }),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          return new Response(JSON.stringify({ content: data.choices?.[0]?.message?.content || "" }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-      }
-      return new Response(JSON.stringify({ error: "Error del servicio de IA" }), {
+      console.warn("Claude simple failed:", resp.status);
+      return new Response(JSON.stringify({ error: "Error del servicio de IA (Claude)" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // ─── Main chat with tools (Claude primary) ───
-    if (ANTHROPIC_API_KEY) {
-      try {
-        return await handleClaudeChat(
-          ANTHROPIC_API_KEY,
-          systemPrompt,
-          forClaude,
-          supabase,
-          user.id,
-          orgId!,
-          ai_project_id || null,
-          sseProgressPreamble,
-        );
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e);
-        console.warn("Claude chat failed:", errMsg);
-        // If it's a rate limit, try gateway; otherwise return the error directly
-        if (!errMsg.includes("RATE_LIMIT_429")) {
-          // ─── Fallback: Lovable AI Gateway (OpenAI format) ───
-          if (LOVABLE_API_KEY) {
-            return await handleGatewayChat(
-              LOVABLE_API_KEY,
-              systemPrompt,
-              forGateway,
-              supabase,
-              user.id,
-              orgId!,
-              sseProgressPreamble,
-            );
-          }
-          return new Response(JSON.stringify({ error: errMsg }), {
-            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-      }
-    }
-
-    // ─── Fallback: Lovable AI Gateway (OpenAI format) ───
-    if (LOVABLE_API_KEY) {
-      return await handleGatewayChat(
-        LOVABLE_API_KEY,
+    // ─── Main chat with tools (Claude / Anthropic) ───
+    try {
+      return await handleClaudeChat(
+        ANTHROPIC_API_KEY,
         systemPrompt,
-        forGateway,
+        forClaude,
         supabase,
         user.id,
         orgId!,
+        ai_project_id || null,
         sseProgressPreamble,
       );
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.warn("Claude chat failed:", errMsg);
+      if (errMsg.includes("RATE_LIMIT_429")) {
+        return new Response(
+          JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+      return new Response(JSON.stringify({ error: errMsg }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-
-    return new Response(JSON.stringify({ error: "No AI provider available" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   } catch (e) {
     console.error("ai-chat error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Error desconocido" }), {
@@ -2253,67 +2186,6 @@ async function handleClaudeChat(
     }
 
     return streamProgressAndText(progressPreamble, textContent);
-  }
-
-  return new Response(JSON.stringify({ error: "Demasiadas consultas internas" }), {
-    status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-// ─── Gateway (OpenAI format) fallback handler ───
-async function handleGatewayChat(
-  apiKey: string, systemPrompt: string, userMessages: any[],
-  supabase: any, userId: string, orgId: string,
-  progressPreamble: Array<{ phase: string; message: string }>,
-): Promise<Response> {
-  let aiMessages: any[] = [{ role: "system", content: systemPrompt }, ...userMessages];
-  const MAX_ROUNDS = 5;
-
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const resp = await fetch(AI_GATEWAY_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: aiMessages,
-        tools: openaiTools,
-        stream: false,
-      }),
-    });
-
-    if (!resp.ok) {
-      const errText = await resp.text();
-      if (resp.status === 429) {
-        return new Response(JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (resp.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos de IA agotados." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: "Error del servicio de IA" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const data = await resp.json();
-    const choice = data.choices[0];
-    const msg = choice.message;
-    aiMessages.push(msg);
-
-    if (choice.finish_reason === "tool_calls" && msg.tool_calls?.length) {
-      for (const tc of msg.tool_calls) {
-        const args = JSON.parse(tc.function.arguments);
-        console.log(`Tool [Gateway]: ${tc.function.name}`, args);
-        const result = await executeTool(tc.function.name, args, supabase, userId, orgId);
-        aiMessages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) });
-      }
-      continue;
-    }
-
-    return streamProgressAndText(progressPreamble, msg.content || "");
   }
 
   return new Response(JSON.stringify({ error: "Demasiadas consultas internas" }), {
