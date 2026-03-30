@@ -13,6 +13,7 @@ import { DocumentUploader } from "./DocumentUploader";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import type { AiArtifact } from "@/hooks/useAiArtifacts";
 import type { AiMemory } from "@/hooks/useAiMemories";
+import type { AiSharedMemory } from "@/hooks/useAiSharedMemories";
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -31,11 +32,13 @@ function timeAgo(dateStr: string): string {
 interface KnowledgePanelProps {
   projectDocs: any[];
   memories: AiMemory[];
+  sharedMemories?: AiSharedMemory[];
   artifacts: AiArtifact[];
   activeArtifactId: string | null;
   onClose: () => void;
   onRemoveDoc: (id: string) => void;
   onDeleteMemory: (id: string) => void;
+  onDeleteSharedMemory?: (id: string) => void;
   onDeleteArtifact: (id: string) => void;
   onUpdateArtifact: (id: string, content: string) => void;
   onViewArtifact: (id: string | null) => void;
@@ -52,8 +55,8 @@ interface KnowledgePanelProps {
 type Tab = "docs" | "memories" | "artifacts";
 
 export function KnowledgePanel({
-  projectDocs, memories, artifacts, activeArtifactId,
-  onClose, onRemoveDoc, onDeleteMemory, onDeleteArtifact, onUpdateArtifact,
+  projectDocs, memories, sharedMemories = [], artifacts, activeArtifactId,
+  onClose, onRemoveDoc, onDeleteMemory, onDeleteSharedMemory, onDeleteArtifact, onUpdateArtifact,
   onViewArtifact, onUploadFile, uploading, uploadProgress, onIndexDropbox, indexing,
   onCreateMemory, onUpdateMemory, onAddDropboxFile,
 }: KnowledgePanelProps) {
@@ -179,12 +182,37 @@ export function KnowledgePanel({
 
         {tab === "memories" && (
           <div className="p-3 space-y-1.5">
-            {memories.length === 0 ? (
+            {sharedMemories.length > 0 && (
+              <div className="mb-3 pb-3 border-b border-border/30">
+                <p className="text-[10px] font-semibold text-primary mb-1.5">Memoria de equipo (/team/)</p>
+                <div className="space-y-1">
+                  {sharedMemories.map((sm) => (
+                    <div key={sm.id} className="flex items-start justify-between gap-2 rounded-lg bg-primary/5 px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-medium truncate">{sm.path.replace(/^\/team\//, "")}</p>
+                        <p className="text-[9px] text-muted-foreground line-clamp-2">{sm.content}</p>
+                      </div>
+                      {onDeleteSharedMemory && (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={() => onDeleteSharedMemory(sm.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {memories.length === 0 && sharedMemories.length === 0 ? (
               <p className="text-[11px] text-muted-foreground text-center py-6">
                 La IA guardara automaticamente insights importantes.
                 Tambien puedes promover documentos o artefactos a memoria.
               </p>
-            ) : (
+            ) : null}
+            {memories.length > 0 ? (
               memories.map((mem) => {
                 const isExpanded = expandedMemory === mem.id;
                 const isEditing = editingMemoryId === mem.id;
@@ -268,7 +296,7 @@ export function KnowledgePanel({
                   </div>
                 );
               })
-            )}
+            ) : null}
           </div>
         )}
 

@@ -9,7 +9,7 @@ import {
 import {
   Plus, Trash2, MessageSquare, FolderOpen, Folder, FolderPlus,
   MoreHorizontal, Pencil, FolderInput, ChevronDown, ChevronRight,
-  BrainCircuit, ArrowLeft, Settings2,
+  BrainCircuit, ArrowLeft, Settings2, Users, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatConversation } from "@/hooks/useChat";
@@ -33,14 +33,18 @@ interface ProjectSidebarProps {
   onMoveConversation: (id: string, folder: string | null) => void;
   onCreateProject: () => void;
   onArchiveProject: (id: string) => void;
+  onLeaveProject?: (id: string) => void;
   onUpdateInstructions: (id: string, instructions: string) => void;
+  currentUserId?: string | null;
+  onOpenMembers?: () => void;
 }
 
 export function ProjectSidebar({
   activeProject, aiProjects, activeAiProjectId, activeConversationId,
   filteredConversations, onSelectProject, onNewChat, onLoadConversation,
   onDeleteConversation, onRenameConversation, onMoveConversation,
-  onCreateProject, onArchiveProject, onUpdateInstructions,
+  onCreateProject, onArchiveProject, onLeaveProject, onUpdateInstructions,
+  currentUserId, onOpenMembers,
 }: ProjectSidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["__none__"]));
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -150,14 +154,24 @@ export function ProjectSidebar({
       {/* Project header or project list */}
       {activeProject ? (
         <div className="border-b border-border/30 p-3 space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-1">
             <div className="flex items-center gap-1.5 min-w-0">
               <BrainCircuit className="h-3.5 w-3.5 text-primary shrink-0" />
               <span className="text-xs font-semibold truncate">{activeProject.name}</span>
+              {currentUserId && activeProject.user_id !== currentUserId && (
+                <span className="text-[8px] bg-amber-500/15 text-amber-700 dark:text-amber-400 px-1 rounded shrink-0">Compartido</span>
+              )}
             </div>
-            <Button size="sm" variant="ghost" onClick={() => onSelectProject(null)} className="h-6 w-6 p-0" title="Salir del proyecto">
-              <ArrowLeft className="h-3 w-3" />
-            </Button>
+            <div className="flex items-center shrink-0">
+              {onOpenMembers && (
+                <Button size="sm" variant="ghost" onClick={onOpenMembers} className="h-6 w-6 p-0" title="Miembros">
+                  <Users className="h-3 w-3" />
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => onSelectProject(null)} className="h-6 w-6 p-0" title="Salir del proyecto">
+                <ArrowLeft className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
 
           {activeProject.description && (
@@ -170,7 +184,7 @@ export function ProjectSidebar({
               <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
                 <Settings2 className="h-2.5 w-2.5" /> Instrucciones
               </span>
-              {!editingInstructions && (
+              {!editingInstructions && currentUserId && activeProject.user_id === currentUserId && (
                 <button
                   onClick={() => {
                     setEditInstructions(activeProject.instructions || "");
@@ -253,16 +267,26 @@ export function ProjectSidebar({
                 >
                   <BrainCircuit className="h-3 w-3 shrink-0 text-primary/70" />
                   <span className="truncate flex-1 text-[12px]">{proj.name}</span>
+                  {currentUserId && proj.user_id !== currentUserId && (
+                    <span className="text-[7px] uppercase tracking-tighter text-amber-700 dark:text-amber-400 shrink-0">Eq.</span>
+                  )}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity shrink-0">
                         <MoreHorizontal className="h-3.5 w-3.5" />
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-36">
-                      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onArchiveProject(proj.id); }}>
-                        <Trash2 className="h-3 w-3 mr-2" /> Archivar
-                      </DropdownMenuItem>
+                    <DropdownMenuContent align="end" className="w-40">
+                      {currentUserId && proj.user_id === currentUserId && (
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onArchiveProject(proj.id); }}>
+                          <Trash2 className="h-3 w-3 mr-2" /> Archivar
+                        </DropdownMenuItem>
+                      )}
+                      {currentUserId && proj.user_id !== currentUserId && onLeaveProject && (
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onLeaveProject(proj.id); }}>
+                          <LogOut className="h-3 w-3 mr-2" /> Salir del proyecto
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

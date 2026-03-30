@@ -3,7 +3,8 @@ import { useChat } from "@/hooks/useChat";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Sparkles, Send, Loader2, X, Minus, MessageSquare, Plus } from "lucide-react";
+import { Sparkles, Send, Loader2, X, Minus, Plus, FileText } from "lucide-react";
+import { ChatAttachmentPicker } from "@/components/ai/ChatAttachmentPicker";
 import { cn } from "@/lib/utils";
 import { useLocation } from "react-router-dom";
 
@@ -11,6 +12,7 @@ export function FloatingAIChat() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const location = useLocation();
@@ -38,9 +40,10 @@ export function FloatingAIChat() {
   if (isAssistantPage) return null;
 
   const handleSend = () => {
-    if (!input.trim() || isStreaming) return;
-    sendMessage(input.trim());
+    if ((!input.trim() && pendingFiles.length === 0) || isStreaming) return;
+    sendMessage(input.trim(), { files: pendingFiles });
     setInput("");
+    setPendingFiles([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
 
@@ -125,7 +128,7 @@ export function FloatingAIChat() {
         ) : (
           <div className="space-y-3">
             {messages.map((msg, i) => (
-              <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
+              <div key={msg.id || i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
                 {msg.role === "assistant" && (
                   <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <Sparkles className="h-3 w-3 text-primary" />
@@ -144,7 +147,19 @@ export function FloatingAIChat() {
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <div className="space-y-1">
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-0.5">
+                          {msg.attachments.map((a, idx) => (
+                            <span key={idx} className="inline-flex items-center gap-0.5 text-[9px] bg-primary-foreground/15 rounded px-1">
+                              <FileText className="h-2.5 w-2.5" />
+                              <span className="truncate max-w-[100px]">{a.name}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -170,21 +185,27 @@ export function FloatingAIChat() {
 
       {/* Input */}
       <div className="border-t border-border/40 px-3 py-2.5 bg-secondary/10">
-        <div className="flex gap-2 items-end">
+        <div className="flex gap-1.5 items-end">
+          <ChatAttachmentPicker
+            files={pendingFiles}
+            onChange={setPendingFiles}
+            disabled={isStreaming}
+            className="shrink-0"
+          />
           <Textarea
             ref={textareaRef}
             value={input}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
-            placeholder="Escribe tu mensaje..."
-            className="resize-none min-h-[36px] max-h-[120px] text-[13px] bg-background border-border/50 rounded-xl py-2"
+            placeholder="Mensaje o archivos…"
+            className="resize-none min-h-[36px] max-h-[120px] text-[13px] bg-background border-border/50 rounded-xl py-2 flex-1 min-w-0"
             rows={1}
             disabled={isStreaming}
           />
           <Button
             size="sm"
             onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
+            disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
             className="h-[36px] w-[36px] rounded-xl shrink-0"
           >
             {isStreaming ? (

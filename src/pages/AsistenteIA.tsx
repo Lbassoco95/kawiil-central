@@ -2,7 +2,10 @@ import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useChat } from "@/hooks/useChat";
-import { useAiProjects, useAiProjectDocuments } from "@/hooks/useAiProjects";
+import { useAiProjects, useAiProjectDocuments, useAiProjectMembers } from "@/hooks/useAiProjects";
+import { useAiSharedMemories } from "@/hooks/useAiSharedMemories";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAiMemories } from "@/hooks/useAiMemories";
 import { useAiArtifacts } from "@/hooks/useAiArtifacts";
 import { useProjectDocumentUpload } from "@/hooks/useProjectDocumentUpload";
@@ -15,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Send, Sparkles, Loader2, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight,
-  BrainCircuit, Settings2,
+  BrainCircuit, Settings2, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -25,6 +28,10 @@ import { ProjectSidebar } from "@/components/ai/ProjectSidebar";
 import { KnowledgePanel } from "@/components/ai/KnowledgePanel";
 import { ArtifactCard } from "@/components/ai/ArtifactCard";
 import { ProjectPreviewCard } from "@/components/ai/ProjectPreviewCard";
+import { ChatAttachmentPicker } from "@/components/ai/ChatAttachmentPicker";
+import { AiProjectMembersDialog } from "@/components/ai/AiProjectMembersDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 const SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
@@ -40,6 +47,7 @@ const PROJECT_LINK_RE = /\[project:([a-f0-9-]{36})\|([^\]|]+)(?:\|([^\]]*))?\]/g
 
 const AsistenteIA = () => {
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const {
     messages, isStreaming, conversations, activeConversationId, activeAiProjectId,
     sendMessage, loadConversation, startNewChat, deleteConversation,
@@ -48,7 +56,11 @@ const AsistenteIA = () => {
   const {
     projects: aiProjects, createProject: createAiProject,
     archiveProject: archiveAiProject, updateProject: updateAiProject,
+    leaveAiProject,
   } = useAiProjects();
+  const { data: orgUsers = [] } = useOrgUsers();
+  const { members: projectMembers, isLoading: membersLoading, addMember, removeMember } = useAiProjectMembers(activeAiProjectId);
+  const { sharedMemories, deleteMemory: deleteSharedMemory } = useAiSharedMemories(activeAiProjectId);
   const { memories, deleteMemory, createMemory, updateMemory } = useAiMemories(activeAiProjectId);
   const { artifacts, deleteArtifact, updateArtifact } = useAiArtifacts(activeAiProjectId);
   const { documents: projectDocs, addDocument, removeDocument } = useAiProjectDocuments(activeAiProjectId);
@@ -63,6 +75,9 @@ const AsistenteIA = () => {
   const [newProjectDesc, setNewProjectDesc] = useState("");
   const [newProjectInstructions, setNewProjectInstructions] = useState("");
   const [indexing, setIndexing] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [linkFilesToProject, setLinkFilesToProject] = useState(false);
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMobile = useIsMobile();
@@ -209,9 +224,30 @@ const AsistenteIA = () => {
     if (id) setShowKnowledge(true);
   }, []);
 
-  const renderMessageContent = (content: string, role: string) => {
+  const renderMessageContent = (
+    content: string,
+    role: string,
+    attachments?: { name: string; mime_type?: string }[]
+  ) => {
     if (role === "user") {
-      return <p className="text-sm whitespace-pre-wrap">{content}</p>;
+      return (
+        <div className="space-y-2">
+          <p className="text-sm whitespace-pre-wrap">{content}</p>
+          {attachments && attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {attachments.map((a, idx) => (
+                <span
+                  key={`${a.name}-${idx}`}
+                  className="inline-flex items-center gap-1 text-[10px] bg-primary-foreground/15 rounded px-1.5 py-0.5"
+                >
+                  <FileText className="h-3 w-3 shrink-0" />
+                  <span className="truncate max-w-[140px]">{a.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      );
     }
 
     const COMBINED_RE = /\[artifact:([a-f0-9-]{36})\|([^\]]+)\|([^\]]+)\]|\[project:([a-f0-9-]{36})\|([^\]|]+)(?:\|([^\]]*))?\]/gi;
@@ -288,10 +324,21 @@ const AsistenteIA = () => {
             }}
             onCreateProject={() => setShowCreateProject(true)}
             onArchiveProject={(id) => archiveAiProject.mutate(id)}
+            onLeaveProject={(id) => {
+              leaveAiProject.mutate(id, {
+                onSuccess: () => {
+                  toast.success("Saliste del proyecto compartido");
+                  if (activeAiProjectId === id) setAiProject(null);
+                },
+                onError: (e: Error) => toast.error(e.message),
+              });
+            }}
             onUpdateInstructions={(id, instr) => {
               updateAiProject.mutate({ id, instructions: instr });
               toast.success("Instrucciones actualizadas");
             }}
+            currentUserId={user?.id}
+            onOpenMembers={activeAiProjectId ? () => setMembersDialogOpen(true) : undefined}
           />
         )}
 
@@ -386,7 +433,7 @@ const AsistenteIA = () => {
             ) : (
               <div className="max-w-3xl mx-auto space-y-6">
                 {messages.map((msg, i) => (
-                  <div key={i} className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}>
+                  <div key={msg.id || i} className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}>
                     {msg.role === "assistant" && (
                       <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                         <Sparkles className="h-3.5 w-3.5 text-primary" />
@@ -398,7 +445,7 @@ const AsistenteIA = () => {
                         msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary/40"
                       )}
                     >
-                      {renderMessageContent(msg.content, msg.role)}
+                      {renderMessageContent(msg.content, msg.role, msg.attachments)}
                     </div>
                   </div>
                 ))}
@@ -424,27 +471,46 @@ const AsistenteIA = () => {
           {/* Input */}
           <div className="border-t border-border/30 px-4 py-3">
             <div className="max-w-3xl mx-auto flex gap-2 items-end">
+              <ChatAttachmentPicker
+                files={pendingFiles}
+                onChange={setPendingFiles}
+                disabled={isStreaming}
+                className="shrink-0"
+              />
               <Textarea
                 ref={textareaRef}
                 value={input}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Escribe tu mensaje..."
-                className="resize-none min-h-[42px] max-h-[150px] text-sm bg-secondary/30 border-0 rounded-xl"
+                placeholder="Escribe tu mensaje o adjunta archivos…"
+                className="resize-none min-h-[42px] max-h-[150px] text-sm bg-secondary/30 border-0 rounded-xl flex-1"
                 rows={1}
                 disabled={isStreaming}
               />
               <Button
                 size="sm"
                 onClick={handleSend}
-                disabled={!input.trim() || isStreaming}
+                disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
                 className="h-[42px] w-[42px] rounded-xl shrink-0"
               >
                 {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
+            {activeAiProjectId && (
+              <div className="max-w-3xl mx-auto flex items-center gap-2 mt-2">
+                <Checkbox
+                  id="link-project-files"
+                  checked={linkFilesToProject}
+                  onCheckedChange={(c) => setLinkFilesToProject(!!c)}
+                  disabled={isStreaming}
+                />
+                <Label htmlFor="link-project-files" className="text-[10px] text-muted-foreground cursor-pointer font-normal">
+                  También vincular adjuntos al conocimiento del proyecto (documentos Kawiil)
+                </Label>
+              </div>
+            )}
             <p className="text-[10px] text-muted-foreground text-center mt-2">
-              Kawiil AI puede cometer errores. Verifica la información importante.
+              Adjuntos: imágenes, PDF, Excel, texto, SQLite (máx. 5 archivos, 15MB c/u). Kawiil AI puede cometer errores.
             </p>
           </div>
         </div>
@@ -454,11 +520,13 @@ const AsistenteIA = () => {
           <KnowledgePanel
             projectDocs={projectDocs}
             memories={memories}
+            sharedMemories={sharedMemories}
             artifacts={artifacts}
             activeArtifactId={activeArtifactId}
             onClose={() => { setShowKnowledge(false); setActiveArtifactId(null); }}
             onRemoveDoc={(id) => removeDocument.mutate(id)}
             onDeleteMemory={(id) => deleteMemory.mutate(id)}
+            onDeleteSharedMemory={(id) => deleteSharedMemory.mutate(id)}
             onDeleteArtifact={(id) => deleteArtifact.mutate(id)}
             onUpdateArtifact={(id, content) => updateArtifact.mutate({ id, content })}
             onViewArtifact={handleViewArtifact}
@@ -475,6 +543,24 @@ const AsistenteIA = () => {
       </div>
 
       {/* Create AI Project Dialog */}
+      <AiProjectMembersDialog
+        open={membersDialogOpen}
+        onOpenChange={setMembersDialogOpen}
+        project={activeProject ?? null}
+        members={projectMembers}
+        orgUsers={orgUsers}
+        currentUserId={user?.id}
+        isLoading={membersLoading}
+        onAddMember={async (userId, role) => {
+          await addMember.mutateAsync({ userId, role });
+          toast.success("Miembro invitado");
+        }}
+        onRemoveMember={async (memberRowId) => {
+          await removeMember.mutateAsync(memberRowId);
+          toast.success("Miembro eliminado");
+        }}
+      />
+
       <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

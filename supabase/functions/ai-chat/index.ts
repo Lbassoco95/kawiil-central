@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import { DB } from "https://deno.land/x/sqlite@v3.7.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',
@@ -18,6 +20,222 @@ function escapePostgrestString(input: string): string {
     .replace(/,/g, '\\,')
     .replace(/\(/g, '\\(')
     .replace(/\)/g, '\\)');
+}
+
+const CHAT_ATTACH_MAX_FILES = 5;
+const CHAT_ATTACH_MAX_BYTES = 15 * 1024 * 1024;
+const CHAT_TEXT_EXTRACT_MAX = 120_000;
+
+async function assertAiProjectAccess(
+  svc: ReturnType<typeof createClient>,
+  aiProjectId: string | null | undefined,
+  userId: string,
+  orgId: string | null | undefined,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!aiProjectId) return { ok: true };
+  if (!orgId) return { ok: false, error: "Sin organización" };
+  const { data: ap } = await svc.from("ai_projects")
+    .select("id, organization_id, user_id")
+    .eq("id", aiProjectId)
+    .maybeSingle();
+  if (!ap) return { ok: false, error: "Proyecto de IA no encontrado" };
+  if (ap.organization_id !== orgId) return { ok: false, error: "Acceso denegado al proyecto" };
+  if (ap.user_id === userId) return { ok: true };
+  const { data: mem } = await svc.from("ai_project_members")
+    .select("role")
+    .eq("ai_project_id", aiProjectId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (mem) return { ok: true };
+  return { ok: false, error: "No eres miembro de este proyecto de IA" };
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
+function isLikelySqlite(bytes: Uint8Array): boolean {
+  const sig = new TextDecoder().decode(bytes.subarray(0, 16));
+  return sig.startsWith("SQLite format 3");
+}
+
+async function downloadStorageObject(
+  svc: ReturnType<typeof createClient>,
+  bucket: string,
+  path: string,
+): Promise<Uint8Array | null> {
+  const { data, error } = await svc.storage.from(bucket).download(path);
+  if (error || !data) {
+    console.warn("storage download failed", bucket, path, error?.message);
+    return null;
+  }
+  return new Uint8Array(await data.arrayBuffer());
+}
+
+function truncateText(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max) + "\n\n[…contenido truncado por tamaño…]";
+}
+
+function xlsxBytesToText(bytes: Uint8Array): string {
+  try {
+    const wb = XLSX.read(bytes, { type: "array" });
+    const parts: string[] = [];
+    const maxRowsPerSheet = 200;
+    for (const sheetName of wb.SheetNames.slice(0, 10)) {
+      const sheet = wb.Sheets[sheetName];
+      const csv = XLSX.utils.sheet_to_csv(sheet, { FS: "\t" });
+      const lines = csv.split("\n");
+      parts.push(`## Hoja: ${sheetName}\n${lines.slice(0, maxRowsPerSheet).join("\n")}`);
+    }
+    return truncateText(parts.join("\n\n"), CHAT_TEXT_EXTRACT_MAX);
+  } catch (e) {
+    console.warn("xlsx parse error", e);
+    return "[No se pudo leer el Excel como tabla.]";
+  }
+}
+
+async function sqliteBytesToSummary(bytes: Uint8Array): Promise<string> {
+  const tmp = await Deno.makeTempFile();
+  try {
+    await Deno.writeFile(tmp, bytes);
+    const db = new DB(tmp);
+    const tables = [...db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+      .map((r) => String(r[0]));
+    const parts: string[] = [`Tablas: ${tables.join(", ") || "(ninguna)"}`];
+    for (const t of tables.slice(0, 8)) {
+      try {
+        const cnt = [...db.query(`SELECT COUNT(*) FROM "${t.replace(/"/g, '""')}"`)][0][0];
+        const rows = [...db.query(`SELECT * FROM "${t.replace(/"/g, '""')}" LIMIT 12`)];
+        parts.push(`\n## ${t} (${cnt} filas, muestra hasta 12)\n${JSON.stringify(rows, null, 2)}`);
+      } catch { /* ignore */ }
+    }
+    db.close();
+    return truncateText(parts.join("\n"), CHAT_TEXT_EXTRACT_MAX);
+  } catch (e) {
+    console.warn("sqlite read error", e);
+    return "[No se pudo leer el archivo SQLite.]";
+  } finally {
+    try {
+      await Deno.remove(tmp);
+    } catch { /* ignore */ }
+  }
+}
+
+async function processAttachmentFile(
+  bytes: Uint8Array,
+  mime: string,
+  name: string,
+): Promise<{ claude: any[]; gatewayText: string }> {
+  const lower = name.toLowerCase();
+  const mt = (mime || "").toLowerCase();
+
+  if (mt.startsWith("image/")) {
+    const media = mt === "image/png" || mt === "image/gif" || mt === "image/webp" || mt === "image/jpeg"
+      ? mt
+      : "image/jpeg";
+    return {
+      claude: [{ type: "image", source: { type: "base64", media_type: media, data: toBase64(bytes) } }],
+      gatewayText: `[Imagen adjunta: ${name}]`,
+    };
+  }
+  if (mt === "application/pdf" || lower.endsWith(".pdf")) {
+    return {
+      claude: [{
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: toBase64(bytes) },
+      }],
+      gatewayText: `[PDF adjunto: ${name} — contenido disponible en el modo principal con Claude.]`,
+    };
+  }
+  if (
+    mt === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    mt === "application/vnd.ms-excel" ||
+    lower.endsWith(".xlsx") ||
+    lower.endsWith(".xls")
+  ) {
+    const t = xlsxBytesToText(bytes);
+    return { claude: [{ type: "text", text: `Contenido de ${name}:\n${t}` }], gatewayText: `### ${name}\n${t}` };
+  }
+  if (lower.endsWith(".sqlite") || lower.endsWith(".db") || isLikelySqlite(bytes)) {
+    const t = await sqliteBytesToSummary(bytes);
+    return { claude: [{ type: "text", text: `Resumen SQLite ${name}:\n${t}` }], gatewayText: `### ${name}\n${t}` };
+  }
+  if (
+    mt.startsWith("text/") ||
+    mt === "application/json" ||
+    mt === "application/csv" ||
+    lower.endsWith(".csv") ||
+    lower.endsWith(".md") ||
+    lower.endsWith(".sql")
+  ) {
+    const dec = new TextDecoder("utf-8", { fatal: false });
+    const t = truncateText(dec.decode(bytes), CHAT_TEXT_EXTRACT_MAX);
+    return { claude: [{ type: "text", text: `Archivo ${name}:\n${t}` }], gatewayText: `### ${name}\n${t}` };
+  }
+  return {
+    claude: [{ type: "text", text: `[Archivo binario no interpretado: ${name} (${mt || "sin tipo"})]` }],
+    gatewayText: `[Adjunto sin vista previa de texto: ${name}]`,
+  };
+}
+
+function findLastUserMessageIndex(messages: any[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user") return i;
+  }
+  return -1;
+}
+
+async function resolveChatAttachments(
+  svc: ReturnType<typeof createClient>,
+  messages: any[],
+  attachmentRefs: Array<{ bucket?: string; path: string; name?: string; mime_type?: string }> | undefined,
+): Promise<{ forClaude: any[]; forGateway: any[] }> {
+  const refs = (attachmentRefs || []).slice(0, CHAT_ATTACH_MAX_FILES);
+  const lastIdx = findLastUserMessageIndex(messages);
+  if (lastIdx < 0 || refs.length === 0) {
+    return { forClaude: messages, forGateway: messages };
+  }
+
+  const userText = typeof messages[lastIdx].content === "string" ? messages[lastIdx].content : "";
+  const claudeBlocks: any[] = [];
+  const gatewayParts: string[] = [];
+
+  for (const ref of refs) {
+    const bucket = ref.bucket || "chat-uploads";
+    const bytes = await downloadStorageObject(svc, bucket, ref.path);
+    if (!bytes) {
+      gatewayParts.push(`No se pudo leer: ${ref.name || ref.path}`);
+      continue;
+    }
+    if (bytes.length > CHAT_ATTACH_MAX_BYTES) {
+      gatewayParts.push(`Archivo demasiado grande (máx 15MB): ${ref.name}`);
+      continue;
+    }
+    const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo");
+    claudeBlocks.push(...proc.claude);
+    if (proc.gatewayText) gatewayParts.push(proc.gatewayText);
+  }
+
+  let claudeContent: any = userText;
+  if (claudeBlocks.length) {
+    const arr = [...claudeBlocks];
+    if (userText.trim()) arr.push({ type: "text", text: userText.trim() });
+    claudeContent = arr.length === 1 && arr[0].type === "text" ? arr[0].text : arr;
+  }
+
+  const forClaude = messages.map((m, i) => (i === lastIdx ? { ...m, content: claudeContent } : m));
+  const gwAppend = gatewayParts.length ? `\n\n--- Archivos adjuntos ---\n${gatewayParts.join("\n\n")}` : "";
+  const forGateway = messages.map((m, i) =>
+    i === lastIdx ? { ...m, content: userText + gwAppend } : m
+  );
+
+  return { forClaude, forGateway };
 }
 
 // ─── Anthropic tool definitions ───
@@ -224,7 +442,7 @@ const anthropicTools = [
         project_id: { type: "string", description: "Filtrar por proyecto específico (UUID)" },
         source_types: {
           type: "array",
-          items: { type: "string", enum: ["document", "extracted_data", "chat_message", "procedure", "comunicado", "memory", "artifact"] },
+          items: { type: "string", enum: ["document", "extracted_data", "chat_message", "procedure", "comunicado", "memory", "artifact", "shared_memory"] },
           description: "Filtrar por tipos de fuente. Omitir para buscar en todo.",
         },
         limit: { type: "number", description: "Máximo de resultados (default 8)" },
@@ -983,7 +1201,7 @@ function toAnthropicMessages(openaiMessages: any[]): any[] {
     if (m.role === "user") {
       msgs.push({ role: "user", content: m.content });
     } else if (m.role === "assistant") {
-      if (m.content) {
+      if (m.content !== undefined && m.content !== null && m.content !== "") {
         msgs.push({ role: "assistant", content: m.content });
       }
     }
@@ -1022,13 +1240,23 @@ serve(async (req) => {
 
     const orgId = profile?.organization_id;
     const body = await req.json();
-    const { messages, simple, searchMode, searchQuery, ai_project_id } = body;
+    const { messages, simple, searchMode, searchQuery, ai_project_id, attachmentRefs } = body;
 
-    // Load AI Project context + memories
-    let projectContext = "";
     const svcUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const svc = createClient(svcUrl, serviceKey);
+
+    const access = await assertAiProjectAccess(svc, ai_project_id, user.id, orgId ?? null);
+    if (!access.ok) {
+      return new Response(JSON.stringify({ error: access.error }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { forClaude, forGateway } = await resolveChatAttachments(svc, messages || [], attachmentRefs);
+
+    // Load AI Project context + memories
+    let projectContext = "";
 
     if (ai_project_id) {
       const { data: aiProject } = await svc.from("ai_projects")
@@ -1066,21 +1294,39 @@ serve(async (req) => {
     else memQuery = memQuery.is("ai_project_id", null);
     const { data: memories } = await memQuery.order("path");
 
+    let sharedMemories: { path: string; content: string; updated_at: string }[] = [];
+    if (ai_project_id) {
+      const { data: sm } = await svc.from("ai_project_shared_memories")
+        .select("path, content, updated_at")
+        .eq("ai_project_id", ai_project_id)
+        .order("path");
+      sharedMemories = sm || [];
+    }
+
     projectContext += `\n\n### Memoria persistente (Memory Tool)
-- Tienes acceso a la herramienta **memory** para guardar y consultar notas, aprendizajes, análisis y decisiones importantes.
-- **USA memory PROACTIVAMENTE**: cuando descubras información valiosa sobre un cliente, proyecto, ley, o estrategia, guárdala en /memories/ para futuras conversaciones.
-- Organiza las memorias en archivos temáticos: /memories/cliente_X.md, /memories/analisis_pld.md, /memories/estrategias.md, etc.
-- Al inicio de cada conversación, consulta tus memorias con 'view /memories' si el tema lo amerita.
-- Cuando actualices información existente, usa 'str_replace' en lugar de recrear el archivo completo.`;
+- **Personal** (solo el usuario): rutas bajo \`/memories/\` — notas privadas del Kawiiler.
+- **Equipo** (proyecto de IA compartido): rutas bajo \`/team/\` — visibles para todos los miembros del proyecto. Requiere proyecto de IA activo.
+- COMANDOS: 'view', 'create', 'str_replace', 'insert', 'delete', 'rename'.
+- Usa \`/team/\` para decisiones y contexto que deban ver colegas en el mismo proyecto de IA.`;
 
     if (memories?.length) {
-      projectContext += `\n\n**Memorias existentes (${memories.length} archivos):**`;
+      projectContext += `\n\n**Memorias personales (${memories.length}):**`;
       for (const m of memories) {
         const preview = m.content.substring(0, 120).replace(/\n/g, " ");
         projectContext += `\n- \`${m.path}\` — ${preview}…`;
       }
     } else {
-      projectContext += `\n\nAún no hay memorias guardadas. Empieza a construir conocimiento persistente guardando insights importantes.`;
+      projectContext += `\n\nSin memorias personales en /memories/ todavía.`;
+    }
+
+    if (sharedMemories.length) {
+      projectContext += `\n\n**Memoria de equipo /team/ (${sharedMemories.length} archivos):**`;
+      for (const m of sharedMemories) {
+        const preview = m.content.substring(0, 120).replace(/\n/g, " ");
+        projectContext += `\n- \`${m.path}\` — ${preview}…`;
+      }
+    } else if (ai_project_id) {
+      projectContext += `\n\nAún no hay memorias de equipo (/team/). Crea con memory create en rutas /team/archivo.md cuando el conocimiento deba compartirse.`;
     }
 
     const systemPrompt = buildSystemPrompt(profile) + projectContext;
@@ -1158,7 +1404,7 @@ serve(async (req) => {
             model: "claude-sonnet-4-20250514",
             max_tokens: 2048,
             system: systemPrompt,
-            messages: toAnthropicMessages(messages),
+            messages: toAnthropicMessages(forClaude),
           }),
         });
         if (resp.ok) {
@@ -1174,7 +1420,7 @@ serve(async (req) => {
         const resp = await fetch(AI_GATEWAY_URL, {
           method: "POST",
           headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: [{ role: "system", content: systemPrompt }, ...messages], stream: false }),
+          body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: [{ role: "system", content: systemPrompt }, ...forGateway], stream: false }),
         });
         if (resp.ok) {
           const data = await resp.json();
@@ -1191,7 +1437,7 @@ serve(async (req) => {
     // ─── Main chat with tools (Claude primary) ───
     if (ANTHROPIC_API_KEY) {
       try {
-        return await handleClaudeChat(ANTHROPIC_API_KEY, systemPrompt, messages, supabase, user.id, orgId, ai_project_id || null);
+        return await handleClaudeChat(ANTHROPIC_API_KEY, systemPrompt, forClaude, supabase, user.id, orgId, ai_project_id || null);
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         console.warn("Claude chat failed:", errMsg);
@@ -1199,7 +1445,7 @@ serve(async (req) => {
         if (!errMsg.includes("RATE_LIMIT_429")) {
           // ─── Fallback: Lovable AI Gateway (OpenAI format) ───
           if (LOVABLE_API_KEY) {
-            return await handleGatewayChat(LOVABLE_API_KEY, systemPrompt, messages, supabase, user.id, orgId);
+            return await handleGatewayChat(LOVABLE_API_KEY, systemPrompt, forGateway, supabase, user.id, orgId);
           }
           return new Response(JSON.stringify({ error: errMsg }), {
             status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1210,7 +1456,7 @@ serve(async (req) => {
 
     // ─── Fallback: Lovable AI Gateway (OpenAI format) ───
     if (LOVABLE_API_KEY) {
-      return await handleGatewayChat(LOVABLE_API_KEY, systemPrompt, messages, supabase, user.id, orgId);
+      return await handleGatewayChat(LOVABLE_API_KEY, systemPrompt, forGateway, supabase, user.id, orgId);
     }
 
     return new Response(JSON.stringify({ error: "No AI provider available" }), {
@@ -1284,6 +1530,16 @@ async function handleCreateArtifact(
   });
 }
 
+function normalizeTeamMemoryPath(memPath: string): string {
+  if (memPath.startsWith("/team/")) return memPath;
+  if (memPath.startsWith("team/")) return `/${memPath}`;
+  return `/team/${memPath.replace(/^\/+/, "")}`;
+}
+
+function isTeamMemoryPath(memPath: string | undefined): boolean {
+  return !!memPath && (memPath.startsWith("/team") || memPath.startsWith("team/"));
+}
+
 // ─── Memory Tool handler (backed by Supabase) ───
 async function handleMemoryToolCall(
   input: any, userId: string, orgId: string, aiProjectId: string | null,
@@ -1296,6 +1552,20 @@ async function handleMemoryToolCall(
 
   switch (command) {
     case "view": {
+      if (memPath === "/team" || memPath === "/team/") {
+        if (!aiProjectId) return "No hay proyecto de IA activo para listar /team/.";
+        const { data: teamFiles } = await svc.from("ai_project_shared_memories")
+          .select("path, updated_at, content")
+          .eq("ai_project_id", aiProjectId)
+          .order("path");
+        if (!teamFiles?.length) return "El directorio /team/ está vacío.";
+        const listing = teamFiles.map((f) => {
+          const sizeKB = (new TextEncoder().encode(f.content).length / 1024).toFixed(1);
+          return `${sizeKB}K\t${f.path}`;
+        }).join("\n");
+        return `Archivos en /team/ (memoria compartida del proyecto):\n${listing}`;
+      }
+
       if (!memPath || memPath === "/memories" || memPath === "/memories/") {
         let query = svc.from("ai_project_memories")
           .select("path, updated_at, content")
@@ -1305,12 +1575,48 @@ async function handleMemoryToolCall(
         else query = query.is("ai_project_id", null);
         const { data: files } = await query.order("path");
 
-        if (!files?.length) return "El directorio /memories está vacío. Puedes crear archivos con el comando 'create'.";
-        const listing = files.map((f) => {
-          const sizeKB = (new TextEncoder().encode(f.content).length / 1024).toFixed(1);
-          return `${sizeKB}K\t${f.path}`;
-        }).join("\n");
-        return `Here're the files and directories up to 2 levels deep in /memories:\n${listing}`;
+        let out = "";
+        if (files?.length) {
+          const listing = files.map((f) => {
+            const sizeKB = (new TextEncoder().encode(f.content).length / 1024).toFixed(1);
+            return `${sizeKB}K\t${f.path}`;
+          }).join("\n");
+          out = `Archivos en /memories/ (personales):\n${listing}`;
+        } else {
+          out = "/memories/ está vacío para este contexto.";
+        }
+        if (aiProjectId) {
+          const { data: teamFiles } = await svc.from("ai_project_shared_memories")
+            .select("path, updated_at, content")
+            .eq("ai_project_id", aiProjectId)
+            .order("path");
+          if (teamFiles?.length) {
+            const tl = teamFiles.map((f) => {
+              const sizeKB = (new TextEncoder().encode(f.content).length / 1024).toFixed(1);
+              return `${sizeKB}K\t${f.path}`;
+            }).join("\n");
+            out += `\n\nArchivos en /team/ (equipo):\n${tl}`;
+          }
+        }
+        return out;
+      }
+
+      if (isTeamMemoryPath(memPath)) {
+        if (!aiProjectId) return "Rutas /team/ requieren un proyecto de IA activo.";
+        const tp = normalizeTeamMemoryPath(memPath);
+        const { data: file } = await svc.from("ai_project_shared_memories")
+          .select("content")
+          .eq("ai_project_id", aiProjectId)
+          .eq("path", tp)
+          .maybeSingle();
+        if (!file) return `The path ${tp} does not exist.`;
+        let lines = file.content.split("\n");
+        if (view_range && Array.isArray(view_range) && view_range.length === 2) {
+          const [start, end] = view_range;
+          lines = lines.slice(Math.max(0, start - 1), end);
+        }
+        const numbered = lines.map((l: string, i: number) => `${String(i + 1).padStart(6)} \t${l}`).join("\n");
+        return `Here's the content of ${tp} with line numbers:\n${numbered}`;
       }
 
       let query = svc.from("ai_project_memories")
@@ -1334,6 +1640,36 @@ async function handleMemoryToolCall(
 
     case "create": {
       if (!memPath || !content) return "Error: path and content are required for create.";
+      if (isTeamMemoryPath(memPath)) {
+        if (!aiProjectId) return "Las rutas /team/ requieren proyecto de IA activo.";
+        const tp = normalizeTeamMemoryPath(memPath);
+        const { data: ap } = await svc.from("ai_projects").select("organization_id").eq("id", aiProjectId).single();
+        if (!ap) return "Proyecto no encontrado.";
+        const { data: existing } = await svc.from("ai_project_shared_memories")
+          .select("id")
+          .eq("ai_project_id", aiProjectId)
+          .eq("path", tp)
+          .maybeSingle();
+        let rowId: string;
+        if (existing) {
+          await svc.from("ai_project_shared_memories")
+            .update({ content, updated_at: new Date().toISOString(), updated_by: userId })
+            .eq("id", existing.id);
+          rowId = existing.id;
+        } else {
+          const { data: ins } = await svc.from("ai_project_shared_memories").insert({
+            ai_project_id: aiProjectId,
+            organization_id: ap.organization_id,
+            path: tp,
+            content,
+            updated_by: userId,
+          }).select("id").single();
+          rowId = ins!.id;
+        }
+        await embedSharedMemory(svc, tp, content, ap.organization_id, aiProjectId, rowId);
+        return `Successfully wrote team memory to ${tp} (${content.split("\n").length} lines)`;
+      }
+
       const normalizedPath = memPath.startsWith("/memories/") ? memPath : `/memories/${memPath}`;
       const { data: existing } = await svc.from("ai_project_memories")
         .select("id")
@@ -1355,13 +1691,31 @@ async function handleMemoryToolCall(
         });
       }
 
-      // Auto-embed the memory
       await embedMemory(svc, normalizedPath, content, userId, orgId, aiProjectId);
       return `Successfully wrote to ${normalizedPath} (${content.split("\n").length} lines)`;
     }
 
     case "str_replace": {
       if (!memPath || !old_str || !new_str) return "Error: path, old_str, and new_str are required.";
+      if (isTeamMemoryPath(memPath)) {
+        if (!aiProjectId) return "Rutas /team/ requieren proyecto de IA activo.";
+        const tp = normalizeTeamMemoryPath(memPath);
+        const { data: file } = await svc.from("ai_project_shared_memories")
+          .select("id, content")
+          .eq("ai_project_id", aiProjectId)
+          .eq("path", tp)
+          .single();
+        if (!file) return `The path ${tp} does not exist.`;
+        if (!file.content.includes(old_str)) return `old_str not found in ${tp}.`;
+        const updated = file.content.replace(old_str, new_str);
+        await svc.from("ai_project_shared_memories")
+          .update({ content: updated, updated_at: new Date().toISOString(), updated_by: userId })
+          .eq("id", file.id);
+        const { data: ap } = await svc.from("ai_projects").select("organization_id").eq("id", aiProjectId).single();
+        if (ap) await embedSharedMemory(svc, tp, updated, ap.organization_id, aiProjectId, file.id);
+        return `Successfully replaced text in ${tp}`;
+      }
+
       let query = svc.from("ai_project_memories")
         .select("id, content")
         .eq("user_id", userId)
@@ -1385,6 +1739,26 @@ async function handleMemoryToolCall(
     case "insert": {
       if (!memPath || !content) return "Error: path and content are required for insert.";
       const insertLine = input.insert_line ?? 0;
+      if (isTeamMemoryPath(memPath)) {
+        if (!aiProjectId) return "Rutas /team/ requieren proyecto de IA activo.";
+        const tp = normalizeTeamMemoryPath(memPath);
+        const { data: file } = await svc.from("ai_project_shared_memories")
+          .select("id, content")
+          .eq("ai_project_id", aiProjectId)
+          .eq("path", tp)
+          .single();
+        if (!file) return `The path ${tp} does not exist.`;
+        const lines = file.content.split("\n");
+        lines.splice(insertLine, 0, content);
+        const updated = lines.join("\n");
+        await svc.from("ai_project_shared_memories")
+          .update({ content: updated, updated_at: new Date().toISOString(), updated_by: userId })
+          .eq("id", file.id);
+        const { data: ap } = await svc.from("ai_projects").select("organization_id").eq("id", aiProjectId).single();
+        if (ap) await embedSharedMemory(svc, tp, updated, ap.organization_id, aiProjectId, file.id);
+        return `Successfully inserted text at line ${insertLine} in ${tp}`;
+      }
+
       let query = svc.from("ai_project_memories")
         .select("id, content")
         .eq("user_id", userId)
@@ -1407,6 +1781,23 @@ async function handleMemoryToolCall(
 
     case "delete": {
       if (!memPath) return "Error: path is required for delete.";
+      if (isTeamMemoryPath(memPath)) {
+        if (!aiProjectId) return "Rutas /team/ requieren proyecto de IA activo.";
+        const tp = normalizeTeamMemoryPath(memPath);
+        const { data: file } = await svc.from("ai_project_shared_memories")
+          .select("id")
+          .eq("ai_project_id", aiProjectId)
+          .eq("path", tp)
+          .single();
+        if (!file) return `The path ${tp} does not exist.`;
+        await svc.from("ai_project_shared_memories").delete().eq("id", file.id);
+        await svc.from("document_chunks")
+          .delete()
+          .eq("source_type", "shared_memory")
+          .eq("source_id", file.id);
+        return `Successfully deleted ${tp}`;
+      }
+
       let query = svc.from("ai_project_memories")
         .select("id")
         .eq("user_id", userId)
@@ -1427,6 +1818,22 @@ async function handleMemoryToolCall(
 
     case "rename": {
       if (!memPath || !input.new_path) return "Error: path and new_path are required.";
+      if (isTeamMemoryPath(memPath) || isTeamMemoryPath(input.new_path)) {
+        if (!aiProjectId) return "Rutas /team/ requieren proyecto de IA activo.";
+        const tp = normalizeTeamMemoryPath(memPath);
+        const newNorm = normalizeTeamMemoryPath(input.new_path);
+        const { data: file } = await svc.from("ai_project_shared_memories")
+          .select("id")
+          .eq("ai_project_id", aiProjectId)
+          .eq("path", tp)
+          .single();
+        if (!file) return `The path ${tp} does not exist.`;
+        await svc.from("ai_project_shared_memories")
+          .update({ path: newNorm, updated_at: new Date().toISOString(), updated_by: userId })
+          .eq("id", file.id);
+        return `Successfully renamed ${tp} to ${newNorm}`;
+      }
+
       const newNorm = input.new_path.startsWith("/memories/") ? input.new_path : `/memories/${input.new_path}`;
       let query = svc.from("ai_project_memories")
         .select("id")
@@ -1497,6 +1904,47 @@ async function embedMemory(
   }
 }
 
+async function embedSharedMemory(
+  svc: any, path: string, content: string,
+  orgId: string, aiProjectId: string, rowId: string,
+): Promise<void> {
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!openaiKey || content.length < 20) return;
+
+  try {
+    await svc.from("document_chunks")
+      .delete()
+      .eq("source_type", "shared_memory")
+      .eq("source_id", rowId);
+
+    const textToEmbed = `[Memoria equipo: ${path}] ${content}`;
+    const embResp = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ input: textToEmbed.replace(/\n+/g, " ").trim().substring(0, 8000), model: "text-embedding-3-small", dimensions: 1536 }),
+    });
+
+    if (!embResp.ok) return;
+    const embData = await embResp.json();
+    const embedding = embData.data[0].embedding;
+
+    await svc.from("document_chunks").insert({
+      organization_id: orgId,
+      client_id: null,
+      project_id: null,
+      source_type: "shared_memory",
+      source_id: rowId,
+      content: textToEmbed.substring(0, 4000),
+      metadata: { path, ai_project_id: aiProjectId },
+      embedding: JSON.stringify(embedding),
+      token_count: Math.ceil(textToEmbed.length / 3.5),
+    });
+    console.log(`Embedded shared memory: ${path}`);
+  } catch (e) {
+    console.error("Shared memory embedding failed (non-blocking):", e);
+  }
+}
+
 // ─── Claude (Anthropic) handler ───
 async function handleClaudeChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
@@ -1509,12 +1957,12 @@ async function handleClaudeChat(
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
   const memoryToolDef = {
     name: "memory",
-    description: "Herramienta de memoria persistente. Permite guardar, leer, actualizar y eliminar notas/archivos en /memories/. Usa esta herramienta para construir conocimiento que persiste entre conversaciones. COMANDOS: 'view' (ver directorio o archivo), 'create' (crear/sobrescribir archivo), 'str_replace' (reemplazar texto en archivo), 'insert' (insertar texto en linea), 'delete' (eliminar archivo), 'rename' (renombrar archivo).",
+    description: "Memoria persistente: /memories/... (personal del usuario) y /team/... (compartida con el proyecto de IA, requiere proyecto activo). COMANDOS: view, create, str_replace, insert, delete, rename.",
     input_schema: {
       type: "object",
       properties: {
         command: { type: "string", enum: ["view", "create", "str_replace", "insert", "delete", "rename"], description: "Comando a ejecutar" },
-        path: { type: "string", description: "Ruta del archivo, ej: /memories/cliente_x.md" },
+        path: { type: "string", description: "Ruta: /memories/archivo.md (personal) o /team/archivo.md (equipo)" },
         content: { type: "string", description: "Contenido del archivo (para create/insert)" },
         old_str: { type: "string", description: "Texto a reemplazar (para str_replace)" },
         new_str: { type: "string", description: "Nuevo texto (para str_replace)" },

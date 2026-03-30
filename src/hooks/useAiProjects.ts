@@ -33,14 +33,9 @@ export function useAiProjects() {
   const { data: projects, isLoading } = useQuery({
     queryKey: ["ai-projects"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("ai_projects")
-        .select("*")
-        .eq("user_id", user!.id)
-        .eq("is_archived", false)
-        .order("updated_at", { ascending: false });
+      const { data, error } = await supabase.rpc("get_my_ai_projects" as any);
       if (error) throw error;
-      return data as AiProject[];
+      return (data ?? []) as AiProject[];
     },
     enabled: !!user,
   });
@@ -94,12 +89,36 @@ export function useAiProjects() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-projects"] }),
   });
 
+  const leaveAiProject = useMutation({
+    mutationFn: async (projectId: string) => {
+      const { data: proj } = await (supabase as any)
+        .from("ai_projects")
+        .select("user_id")
+        .eq("id", projectId)
+        .single();
+      if (proj?.user_id === user!.id) {
+        throw new Error("El dueño debe archivar el proyecto; no puede abandonarlo así.");
+      }
+      const { data: rows } = await (supabase as any)
+        .from("ai_project_members")
+        .select("id")
+        .eq("ai_project_id", projectId)
+        .eq("user_id", user!.id);
+      const row = rows?.[0];
+      if (!row) return;
+      const { error } = await (supabase as any).from("ai_project_members").delete().eq("id", row.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-projects"] }),
+  });
+
   return {
     projects: projects ?? [],
     isLoading,
     createProject,
     updateProject,
     archiveProject,
+    leaveAiProject,
   };
 }
 
@@ -158,4 +177,54 @@ export function useAiProjectDocuments(projectId: string | null) {
     addDocument,
     removeDocument,
   };
+}
+
+export interface AiProjectMemberRow {
+  id: string;
+  ai_project_id: string;
+  user_id: string;
+  role: string;
+  invited_by: string | null;
+  created_at: string;
+}
+
+export function useAiProjectMembers(projectId: string | null) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  const { data: members, isLoading } = useQuery({
+    queryKey: ["ai-project-members", projectId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("ai_project_members")
+        .select("id, ai_project_id, user_id, role, invited_by, created_at")
+        .eq("ai_project_id", projectId!);
+      if (error) throw error;
+      return data as AiProjectMemberRow[];
+    },
+    enabled: !!projectId && !!user,
+  });
+
+  const addMember = useMutation({
+    mutationFn: async ({ userId, role = "editor" }: { userId: string; role?: string }) => {
+      const { error } = await (supabase as any).from("ai_project_members").insert({
+        ai_project_id: projectId!,
+        user_id: userId,
+        role,
+        invited_by: user!.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-project-members", projectId] }),
+  });
+
+  const removeMember = useMutation({
+    mutationFn: async (memberRowId: string) => {
+      const { error } = await (supabase as any).from("ai_project_members").delete().eq("id", memberRowId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-project-members", projectId] }),
+  });
+
+  return { members: members ?? [], isLoading, addMember, removeMember };
 }
