@@ -48,11 +48,19 @@ export function useAiProjects() {
       client_id?: string;
       project_id?: string;
     }) => {
-      const orgRes = await supabase.rpc("get_user_org_id" as any, { _user_id: user!.id });
+      const { data: orgId, error: orgError } = await supabase.rpc("get_user_org_id", {
+        _user_id: user!.id,
+      });
+      if (orgError) throw orgError;
+      if (orgId == null) {
+        throw new Error(
+          "Tu cuenta no tiene organización asignada; completa el perfil o contacta al administrador."
+        );
+      }
       const { data, error } = await (supabase as any)
         .from("ai_projects")
         .insert({
-          organization_id: orgRes.data,
+          organization_id: orgId,
           user_id: user!.id,
           ...input,
         })

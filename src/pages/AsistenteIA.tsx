@@ -147,8 +147,15 @@ const AsistenteIA = () => {
       setNewProjectName("");
       setNewProjectDesc("");
       setNewProjectInstructions("");
-    } catch {
-      toast.error("Error al crear proyecto");
+    } catch (e) {
+      console.error("[AsistenteIA] createAiProject", e);
+      const msg =
+        e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string"
+          ? (e as { message: string }).message
+          : e instanceof Error
+            ? e.message
+            : "Error al crear proyecto";
+      toast.error(msg);
     }
   };
 
