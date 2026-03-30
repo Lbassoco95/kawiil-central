@@ -49,9 +49,9 @@ const AsistenteIA = () => {
     projects: aiProjects, createProject: createAiProject,
     archiveProject: archiveAiProject, updateProject: updateAiProject,
   } = useAiProjects();
-  const { memories, deleteMemory } = useAiMemories(activeAiProjectId);
+  const { memories, deleteMemory, createMemory, updateMemory } = useAiMemories(activeAiProjectId);
   const { artifacts, deleteArtifact, updateArtifact } = useAiArtifacts(activeAiProjectId);
-  const { documents: projectDocs, removeDocument } = useAiProjectDocuments(activeAiProjectId);
+  const { documents: projectDocs, addDocument, removeDocument } = useAiProjectDocuments(activeAiProjectId);
   const { uploadToProject, uploading, progress: uploadProgress } = useProjectDocumentUpload(activeAiProjectId);
 
   const [input, setInput] = useState("");
@@ -152,6 +152,57 @@ const AsistenteIA = () => {
       setIndexing(false);
     }
   }, [activeAiProjectId]);
+
+  const handleAddDropboxFile = useCallback(async (file: { name: string; path: string }) => {
+    if (!activeAiProjectId || !file.path) return;
+    setIndexing(true);
+    try {
+      const orgRes = await supabase.rpc("get_user_org_id" as any, {
+        _user_id: (await supabase.auth.getUser()).data.user?.id,
+      });
+
+      const clientId = activeProject?.client_id || null;
+      const projectId = activeProject?.project_id || null;
+
+      const { data: doc, error: docErr } = await (supabase as any)
+        .from("documents")
+        .insert({
+          organization_id: orgRes.data,
+          client_id: clientId,
+          project_id: projectId,
+          name: file.name,
+          source: "dropbox",
+          external_path: file.path,
+          document_type: file.name.split(".").pop()?.toUpperCase() || "FILE",
+        })
+        .select("id")
+        .single();
+
+      if (docErr) throw docErr;
+
+      await addDocument.mutateAsync({
+        ai_project_id: activeAiProjectId,
+        document_id: doc.id,
+        dropbox_path: file.path,
+        name: file.name,
+        source: "dropbox",
+      });
+
+      supabase.functions.invoke("process-document", {
+        body: { document_id: doc.id },
+      }).then(() => {
+        toast.success(`${file.name} procesado correctamente`);
+      }).catch((err) => {
+        console.error("process-document error:", err);
+      });
+
+      toast.success(`${file.name} vinculado al proyecto`);
+    } catch (e: any) {
+      toast.error(e.message || "Error al vincular archivo de Dropbox");
+    } finally {
+      setIndexing(false);
+    }
+  }, [activeAiProjectId, activeProject, addDocument]);
 
   const handleViewArtifact = useCallback((id: string | null) => {
     setActiveArtifactId(id);
@@ -416,6 +467,9 @@ const AsistenteIA = () => {
             uploadProgress={uploadProgress}
             onIndexDropbox={handleIndexDropbox}
             indexing={indexing}
+            onCreateMemory={(path, content) => createMemory.mutate({ path, content })}
+            onUpdateMemory={(id, content) => updateMemory.mutate({ id, content })}
+            onAddDropboxFile={handleAddDropboxFile}
           />
         )}
       </div>

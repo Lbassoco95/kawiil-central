@@ -31,11 +31,31 @@ export function useAiMemories(aiProjectId: string | null) {
         query = query.is("ai_project_id", null);
       }
 
-      const { data, error } = await query.order("path");
+      const { data, error } = await query.order("updated_at", { ascending: false });
       if (error) throw error;
       return data as AiMemory[];
     },
     enabled: !!user,
+  });
+
+  const createMemory = useMutation({
+    mutationFn: async (input: { path: string; content: string }) => {
+      const orgRes = await supabase.rpc("get_user_org_id" as any, { _user_id: user!.id });
+      const { data, error } = await (supabase as any)
+        .from("ai_project_memories")
+        .insert({
+          ai_project_id: aiProjectId,
+          user_id: user!.id,
+          organization_id: orgRes.data,
+          path: input.path,
+          content: input.content,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as AiMemory;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ai-memories", aiProjectId] }),
   });
 
   const updateMemory = useMutation({
@@ -63,6 +83,7 @@ export function useAiMemories(aiProjectId: string | null) {
   return {
     memories: memories ?? [],
     isLoading,
+    createMemory,
     updateMemory,
     deleteMemory,
   };

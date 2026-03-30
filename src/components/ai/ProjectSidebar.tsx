@@ -47,7 +47,7 @@ export function ProjectSidebar({
   const [renameValue, setRenameValue] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [showInstructions, setShowInstructions] = useState(false);
+  const [editingInstructions, setEditingInstructions] = useState(false);
   const [editInstructions, setEditInstructions] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
 
@@ -154,39 +154,74 @@ export function ProjectSidebar({
               <BrainCircuit className="h-3.5 w-3.5 text-primary shrink-0" />
               <span className="text-xs font-semibold truncate">{activeProject.name}</span>
             </div>
-            <div className="flex gap-0.5">
-              <Button size="sm" variant="ghost" onClick={() => setShowInstructions(!showInstructions)} className="h-6 w-6 p-0" title="Instrucciones">
-                <Settings2 className="h-3 w-3" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => onSelectProject(null)} className="h-6 w-6 p-0" title="Salir del proyecto">
-                <ArrowLeft className="h-3 w-3" />
-              </Button>
-            </div>
+            <Button size="sm" variant="ghost" onClick={() => onSelectProject(null)} className="h-6 w-6 p-0" title="Salir del proyecto">
+              <ArrowLeft className="h-3 w-3" />
+            </Button>
           </div>
+
           {activeProject.description && (
             <p className="text-[10px] text-muted-foreground leading-relaxed">{activeProject.description}</p>
           )}
-          {showInstructions && (
-            <div className="space-y-1.5">
-              <Textarea
-                value={editInstructions || activeProject.instructions || ""}
-                onChange={(e) => setEditInstructions(e.target.value)}
-                placeholder="Instrucciones para la IA en este proyecto..."
-                rows={3}
-                className="text-[11px] resize-none"
-              />
-              <Button
-                size="sm"
-                className="h-6 text-[10px] w-full"
-                onClick={() => {
-                  onUpdateInstructions(activeProject.id, editInstructions);
-                  setShowInstructions(false);
-                }}
-              >
-                Guardar instrucciones
-              </Button>
+
+          {/* Instructions - always visible */}
+          <div className="rounded-md bg-secondary/40 p-2 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+                <Settings2 className="h-2.5 w-2.5" /> Instrucciones
+              </span>
+              {!editingInstructions && (
+                <button
+                  onClick={() => {
+                    setEditInstructions(activeProject.instructions || "");
+                    setEditingInstructions(true);
+                  }}
+                  className="text-[9px] text-primary hover:underline"
+                >
+                  {activeProject.instructions ? "Editar" : "Agregar"}
+                </button>
+              )}
             </div>
-          )}
+            {editingInstructions ? (
+              <div className="space-y-1.5">
+                <Textarea
+                  value={editInstructions}
+                  onChange={(e) => setEditInstructions(e.target.value)}
+                  placeholder="Instrucciones para la IA en este proyecto..."
+                  rows={3}
+                  className="text-[11px] resize-none"
+                  autoFocus
+                />
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    className="h-5 text-[9px] flex-1"
+                    onClick={() => {
+                      onUpdateInstructions(activeProject.id, editInstructions);
+                      setEditingInstructions(false);
+                    }}
+                  >
+                    Guardar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-5 text-[9px]"
+                    onClick={() => setEditingInstructions(false)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            ) : activeProject.instructions ? (
+              <p className="text-[10px] text-foreground/80 leading-relaxed whitespace-pre-wrap line-clamp-6">
+                {activeProject.instructions}
+              </p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/50 italic">
+                Sin instrucciones. Agrega indicaciones para personalizar la IA.
+              </p>
+            )}
+          </div>
         </div>
       ) : (
         <div className="border-b border-border/30">
