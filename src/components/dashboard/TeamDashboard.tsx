@@ -23,6 +23,9 @@ import { formatDateMX, nowMX } from "@/lib/dateUtils";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { useUserRole } from "@/hooks/useUserRole";
 
+/** Separación entre llamadas IA en el mismo montaje (tabs pueden estar todas en DOM). */
+const TEAM_AI_STAGGER_MS = 700;
+
 export function TeamDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -369,6 +372,7 @@ INSTRUCCIONES:
               <MetricInsight
                 metricKey="area-stats"
                 ready={areaStats.length > 0}
+                requestDelayMs={TEAM_AI_STAGGER_MS * 1}
                 contextPrompt={`Eres el analista de un despacho contable/legal. Analiza estos datos de avance por célula y da UNA recomendación accionable (máximo 45 palabras).
 
 Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% avance, ${a.overdue} vencidas, ${a.pending} pendientes`).join("; ")}
@@ -412,6 +416,7 @@ Formato obligatorio: Markdown. Usa **negritas** para el hallazgo principal; viñ
                 <MetricInsight
                   metricKey="team-workload"
                   ready={teamWorkload.length > 0}
+                  requestDelayMs={TEAM_AI_STAGGER_MS * 2}
                   contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable (máximo 50 palabras).
 
 Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}
@@ -465,6 +470,7 @@ Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñe
           <MetricInsight
             metricKey="project-progress"
             ready={projectProgress.length > 0}
+            requestDelayMs={TEAM_AI_STAGGER_MS * 3}
             contextPrompt={`Eres el analista de un despacho. Analiza el avance de proyectos y da UNA recomendación accionable (máximo 45 palabras).
 
 Datos: ${projectProgress.slice(0, 5).map(p => `${p.clientName} (${p.name}): ${p.pct}%`).join("; ")}
@@ -512,6 +518,7 @@ Markdown obligatorio: **negritas** para prioridades; viñetas si hay varios proy
           <MetricInsight
             metricKey="client-progress"
             ready={clientProgress.length > 0}
+            requestDelayMs={TEAM_AI_STAGGER_MS * 4}
             contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable (máximo 45 palabras).
 
 Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.total - c.completed} pendientes)`).join("; ")}

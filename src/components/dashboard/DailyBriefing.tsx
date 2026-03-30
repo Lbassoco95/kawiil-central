@@ -6,6 +6,7 @@ import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { toDateStringMX } from "@/lib/dateUtils";
+import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
 
 interface DailyBriefingProps {
   tasksCount: number;
@@ -94,51 +95,10 @@ INSTRUCCIONES:
 5. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.`;
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ messages: [{ role: "user", content: contextPrompt }] }),
-      });
-
-      if (!resp.ok) throw new Error(`Error ${resp.status}`);
-      if (!resp.body) throw new Error("No stream");
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-      let fullContent = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              fullContent += content;
-              setBriefing(fullContent);
-            }
-          } catch { break; }
-        }
-      }
-
+      const fullContent = await fetchAiChatSimpleContent(
+        [{ role: "user", content: contextPrompt }],
+        { retries: 2 },
+      );
       if (fullContent) {
         setBriefing(fullContent);
         try {

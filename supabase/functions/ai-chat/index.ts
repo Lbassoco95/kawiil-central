@@ -1384,7 +1384,7 @@ serve(async (req) => {
 
     const orgId = profile?.organization_id;
     const body = await req.json();
-    const { messages, simple, searchMode, searchQuery, ai_project_id, attachmentRefs } = body;
+    const { messages, simple, searchMode, searchQuery, ai_project_id, attachmentRefs, insightLite } = body;
 
     const svcUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1399,81 +1399,91 @@ serve(async (req) => {
 
     const { forClaude } = await resolveChatAttachments(svc, messages || [], attachmentRefs);
 
-    // Load AI Project context + memories
+    const LITE_SYSTEM_PROMPT =
+      `Eres el asistente de Kawiil, un despacho de contabilidad, fiscal y legal en México.\n` +
+      `Responde en español mexicano, profesional y claro.\n` +
+      `El mensaje del usuario incluye datos reales del sistema: no inventes cifras.\n` +
+      `Si pide Markdown, usa **negritas**, listas y emojis según lo indicado.`;
+
+    // Load AI Project context + memories (omitido en simple+insightLite para menos tokens y menos carga)
     let projectContext = "";
 
-    if (ai_project_id) {
-      const { data: aiProject } = await svc.from("ai_projects")
-        .select("name, description, instructions, client_id, project_id")
-        .eq("id", ai_project_id)
-        .single();
+    if (!(simple && insightLite)) {
+      if (ai_project_id) {
+        const { data: aiProject } = await svc.from("ai_projects")
+          .select("name, description, instructions, client_id, project_id")
+          .eq("id", ai_project_id)
+          .single();
 
-      if (aiProject) {
-        projectContext = `\n\n## PROYECTO DE IA ACTIVO: ${aiProject.name}`;
-        if (aiProject.description) projectContext += `\nDescripción: ${aiProject.description}`;
-        if (aiProject.instructions) projectContext += `\n\n### Instrucciones del proyecto:\n${aiProject.instructions}`;
-        if (aiProject.client_id) projectContext += `\n- Filtrar búsquedas semánticas por client_id: ${aiProject.client_id}`;
-        if (aiProject.project_id) projectContext += `\n- Filtrar búsquedas semánticas por project_id: ${aiProject.project_id}`;
+        if (aiProject) {
+          projectContext = `\n\n## PROYECTO DE IA ACTIVO: ${aiProject.name}`;
+          if (aiProject.description) projectContext += `\nDescripción: ${aiProject.description}`;
+          if (aiProject.instructions) projectContext += `\n\n### Instrucciones del proyecto:\n${aiProject.instructions}`;
+          if (aiProject.client_id) projectContext += `\n- Filtrar búsquedas semánticas por client_id: ${aiProject.client_id}`;
+          if (aiProject.project_id) projectContext += `\n- Filtrar búsquedas semánticas por project_id: ${aiProject.project_id}`;
 
-        const { data: projDocs } = await svc.from("ai_project_documents")
-          .select("name, source, dropbox_path")
-          .eq("ai_project_id", ai_project_id);
+          const { data: projDocs } = await svc.from("ai_project_documents")
+            .select("name, source, dropbox_path")
+            .eq("ai_project_id", ai_project_id);
 
-        if (projDocs?.length) {
-          projectContext += `\n\n### Documentos vinculados al proyecto (${projDocs.length}):`;
-          for (const d of projDocs) {
-            projectContext += `\n- ${d.name} (${d.source})`;
+          if (projDocs?.length) {
+            projectContext += `\n\n### Documentos vinculados al proyecto (${projDocs.length}):`;
+            for (const d of projDocs) {
+              projectContext += `\n- ${d.name} (${d.source})`;
+            }
+            projectContext += `\nUsa semantic_search para buscar en estos documentos cuando sea relevante.`;
           }
-          projectContext += `\nUsa semantic_search para buscar en estos documentos cuando sea relevante.`;
         }
       }
-    }
 
-    // Load existing memories for this context
-    let memQuery = svc.from("ai_project_memories")
-      .select("path, content, updated_at")
-      .eq("user_id", user.id)
-      .eq("organization_id", orgId);
-    if (ai_project_id) memQuery = memQuery.eq("ai_project_id", ai_project_id);
-    else memQuery = memQuery.is("ai_project_id", null);
-    const { data: memories } = await memQuery.order("path");
-
-    let sharedMemories: { path: string; content: string; updated_at: string }[] = [];
-    if (ai_project_id) {
-      const { data: sm } = await svc.from("ai_project_shared_memories")
+      // Load existing memories for this context
+      let memQuery = svc.from("ai_project_memories")
         .select("path, content, updated_at")
-        .eq("ai_project_id", ai_project_id)
-        .order("path");
-      sharedMemories = sm || [];
-    }
+        .eq("user_id", user.id)
+        .eq("organization_id", orgId);
+      if (ai_project_id) memQuery = memQuery.eq("ai_project_id", ai_project_id);
+      else memQuery = memQuery.is("ai_project_id", null);
+      const { data: memories } = await memQuery.order("path");
 
-    projectContext += `\n\n### Memoria persistente (Memory Tool)
+      let sharedMemories: { path: string; content: string; updated_at: string }[] = [];
+      if (ai_project_id) {
+        const { data: sm } = await svc.from("ai_project_shared_memories")
+          .select("path, content, updated_at")
+          .eq("ai_project_id", ai_project_id)
+          .order("path");
+        sharedMemories = sm || [];
+      }
+
+      projectContext += `\n\n### Memoria persistente (Memory Tool)
 - **Personal** (solo el usuario): rutas bajo \`/memories/\` — notas privadas del Kawiiler.
 - **Equipo** (proyecto de IA compartido): rutas bajo \`/team/\` — visibles para todos los miembros del proyecto. Requiere proyecto de IA activo.
 - COMANDOS: 'view', 'create', 'str_replace', 'insert', 'delete', 'rename'.
 - Usa \`/team/\` para decisiones y contexto que deban ver colegas en el mismo proyecto de IA.`;
 
-    if (memories?.length) {
-      projectContext += `\n\n**Memorias personales (${memories.length}):**`;
-      for (const m of memories) {
-        const preview = m.content.substring(0, 120).replace(/\n/g, " ");
-        projectContext += `\n- \`${m.path}\` — ${preview}…`;
+      if (memories?.length) {
+        projectContext += `\n\n**Memorias personales (${memories.length}):**`;
+        for (const m of memories) {
+          const preview = m.content.substring(0, 120).replace(/\n/g, " ");
+          projectContext += `\n- \`${m.path}\` — ${preview}…`;
+        }
+      } else {
+        projectContext += `\n\nSin memorias personales en /memories/ todavía.`;
       }
-    } else {
-      projectContext += `\n\nSin memorias personales en /memories/ todavía.`;
+
+      if (sharedMemories.length) {
+        projectContext += `\n\n**Memoria de equipo /team/ (${sharedMemories.length} archivos):**`;
+        for (const m of sharedMemories) {
+          const preview = m.content.substring(0, 120).replace(/\n/g, " ");
+          projectContext += `\n- \`${m.path}\` — ${preview}…`;
+        }
+      } else if (ai_project_id) {
+        projectContext += `\n\nAún no hay memorias de equipo (/team/). Crea con memory create en rutas /team/archivo.md cuando el conocimiento deba compartirse.`;
+      }
     }
 
-    if (sharedMemories.length) {
-      projectContext += `\n\n**Memoria de equipo /team/ (${sharedMemories.length} archivos):**`;
-      for (const m of sharedMemories) {
-        const preview = m.content.substring(0, 120).replace(/\n/g, " ");
-        projectContext += `\n- \`${m.path}\` — ${preview}…`;
-      }
-    } else if (ai_project_id) {
-      projectContext += `\n\nAún no hay memorias de equipo (/team/). Crea con memory create en rutas /team/archivo.md cuando el conocimiento deba compartirse.`;
-    }
-
-    const systemPrompt = buildSystemPrompt(profile) + projectContext;
+    const systemPrompt = simple && insightLite
+      ? LITE_SYSTEM_PROMPT
+      : buildSystemPrompt(profile) + projectContext;
 
     const sseProgressPreamble: { phase: string; message: string }[] = [];
     const nAtt = Array.isArray(attachmentRefs) ? attachmentRefs.length : 0;
@@ -1551,10 +1561,36 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      console.warn("Claude simple failed:", resp.status);
-      return new Response(JSON.stringify({ error: "Error del servicio de IA (Claude)" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+      const errText = await resp.text();
+      let retryAfter: number | undefined;
+      try {
+        const j = JSON.parse(errText);
+        retryAfter = j?.error?.retry_after ?? j?.retry_after;
+      } catch {
+        /* ignore */
+      }
+
+      if (resp.status === 429) {
+        const payload: Record<string, unknown> = {
+          error: "rate_limited",
+          message: "Demasiadas solicitudes. Intenta de nuevo en unos segundos.",
+        };
+        if (typeof retryAfter === "number") payload.retry_after = retryAfter;
+        return new Response(JSON.stringify(payload), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.warn("Claude simple failed:", resp.status, errText.slice(0, 200));
+      return new Response(
+        JSON.stringify({ error: "Error del servicio de IA (Claude)", detail: errText.slice(0, 500) }),
+        {
+          status: resp.status >= 400 && resp.status < 600 ? resp.status : 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     // ─── Main chat with tools (Claude / Anthropic) ───

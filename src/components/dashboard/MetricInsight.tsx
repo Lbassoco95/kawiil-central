@@ -1,16 +1,20 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { nowMX, toDateStringMX } from "@/lib/dateUtils";
+import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
 
 interface MetricInsightProps {
   metricKey: string;
   contextPrompt: string;
   ready: boolean;
+  /** Espera antes de llamar a la IA (evita ráfagas 429 cuando hay varios widgets montados). */
+  requestDelayMs?: number;
 }
 
-export function MetricInsight({ metricKey, contextPrompt, ready }: MetricInsightProps) {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export function MetricInsight({ metricKey, contextPrompt, ready, requestDelayMs = 0 }: MetricInsightProps) {
   const [insight, setInsight] = useState<string | null>(() => {
     try {
       const cached = localStorage.getItem(`kawiil-insight-${metricKey}`);
@@ -29,52 +33,11 @@ export function MetricInsight({ metricKey, contextPrompt, ready }: MetricInsight
     setLoading(true);
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: contextPrompt }],
-        }),
-      });
-
-      if (!resp.ok || !resp.body) throw new Error("Error");
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-      let fullContent = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const c = parsed.choices?.[0]?.delta?.content;
-            if (c) {
-              fullContent += c;
-              setInsight(fullContent);
-            }
-          } catch { break; }
-        }
-      }
-
+      if (requestDelayMs > 0) await sleep(requestDelayMs);
+      const fullContent = await fetchAiChatSimpleContent(
+        [{ role: "user", content: contextPrompt }],
+        { retries: 2 },
+      );
       if (fullContent) {
         setInsight(fullContent);
         try {
@@ -89,7 +52,7 @@ export function MetricInsight({ metricKey, contextPrompt, ready }: MetricInsight
     } finally {
       setLoading(false);
     }
-  }, [contextPrompt, ready, metricKey, loading]);
+  }, [contextPrompt, ready, metricKey, loading, requestDelayMs]);
 
   useEffect(() => {
     if (ready && !insight && !loading && !attempted.current) {

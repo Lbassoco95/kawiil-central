@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { nowMX, toDateStringMX } from "@/lib/dateUtils";
+import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
 
 interface Props {
   cacheKey: string;
@@ -11,7 +11,11 @@ interface Props {
   ready: boolean;
   userId?: string;
   accentClass?: string;
+  /** Espera antes de llamar a la IA (escalonar con otros widgets del dashboard). */
+  requestDelayMs?: number;
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function AISummaryCard({
   cacheKey,
@@ -19,6 +23,7 @@ export function AISummaryCard({
   title = "Resumen Kawiil AI",
   ready,
   userId,
+  requestDelayMs = 0,
 }: Props) {
   const [content, setContent] = useState<string | null>(() => {
     try {
@@ -41,67 +46,16 @@ export function AISummaryCard({
     setExpanded(true);
 
     try {
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: contextPrompt }],
-        }),
-      });
-
-      if (!resp.ok) {
-        if (resp.status === 429) throw new Error("Demasiadas solicitudes. Intenta en unos minutos.");
-        if (resp.status === 402) throw new Error("Créditos de IA agotados.");
-        const errData = await resp.json().catch(() => ({}));
-        throw new Error(errData.error || `Error ${resp.status}`);
-      }
-
-      if (!resp.body) throw new Error("No stream");
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-      let fullContent = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const c = parsed.choices?.[0]?.delta?.content;
-            if (c) {
-              fullContent += c;
-              setContent(fullContent);
-            }
-          } catch {
-            break;
-          }
-        }
-      }
-
+      const fullContent = await fetchAiChatSimpleContent(
+        [{ role: "user", content: contextPrompt }],
+        { retries: 2 },
+      );
       if (fullContent) {
         setContent(fullContent);
         try {
           localStorage.setItem(
             `kawiil-summary-${cacheKey}`,
-            JSON.stringify({ date: new Date().toISOString().split("T")[0], content: fullContent })
+            JSON.stringify({ date: toDateStringMX(nowMX()), content: fullContent })
           );
         } catch {}
       }
@@ -110,7 +64,7 @@ export function AISummaryCard({
     } finally {
       setLoading(false);
     }
-  }, [contextPrompt, ready, cacheKey]);
+  }, [contextPrompt, ready, cacheKey, requestDelayMs]);
 
   // Auto-generate on mount if no cached content
   useEffect(() => {
