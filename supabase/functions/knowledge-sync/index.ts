@@ -42,6 +42,13 @@ serve(async (req: Request) => {
       await notifyCompletion(supabase, orgId, "Archivista", "completó el escaneo de documentos");
       results.archivista = "completed";
     }
+
+    // Wait for document processing to settle before running Integrador
+    if (!targetAgent) {
+      console.log("Waiting 8s for document processing to settle...");
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+    }
+
     if (!targetAgent || targetAgent === "integrador") {
       const logId = await startLog(supabase, orgId, "integrador");
       activeLogIds.push(logId);
@@ -196,11 +203,32 @@ async function runArchivista(
       .select("id", { count: "exact", head: true })
       .eq("organization_id", orgId);
 
+    // Also index platform data inline and include stats
+    let platformStats: any = {};
+    try {
+      const platformResp = await fetch(`${supabaseUrl}/functions/v1/index-platform-data`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ organization_id: orgId }),
+      });
+      if (platformResp.ok) {
+        platformStats = await platformResp.json().catch(() => ({}));
+      }
+    } catch (e: any) {
+      console.error("platform indexing in archivista:", e.message);
+    }
+
     await completeLog(supabase, logId, {
       clients_scanned: (clients || []).length,
       docs_indexed: totalDocs,
       total_docs: docCount || 0,
       total_chunks: chunkCount || 0,
+      tasks_indexed: platformStats.tasks_indexed || 0,
+      projects_indexed: platformStats.projects_indexed || 0,
+      platform_chunks: platformStats.chunks_created || 0,
       details: clientResults,
     });
   } catch (err: any) {

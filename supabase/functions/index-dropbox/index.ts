@@ -322,18 +322,35 @@ Deno.serve(async (req) => {
         }
       }
 
-      // For PDFs/binary: trigger process-document to extract with Claude
-      if (!TEXT_EXTENSIONS.includes(ext) && ["application/pdf", "application/xml"].includes(mime)) {
+      // For PDFs/binary/office docs: trigger process-document to extract with Claude
+      const PROCESS_DOC_MIMES = [
+        "application/pdf",
+        "application/xml",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ];
+      if (!TEXT_EXTENSIONS.includes(ext) && PROCESS_DOC_MIMES.includes(mime)) {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        fetch(`${supabaseUrl}/functions/v1/process-document`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ document_id: doc.id }),
-        }).catch((err) => console.error(`Trigger process-document failed for ${file.name}:`, err));
+        try {
+          const procResp = await fetch(`${supabaseUrl}/functions/v1/process-document`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${serviceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ document_id: doc.id }),
+          });
+          if (procResp.ok) {
+            const procResult = await procResp.json().catch(() => ({}));
+            embedded += procResult.chunks_created || 0;
+            console.log(`process-document OK for ${file.name}: ${procResult.chunks_created || 0} chunks`);
+          } else {
+            console.error(`process-document HTTP ${procResp.status} for ${file.name}`);
+          }
+        } catch (err) {
+          console.error(`Trigger process-document failed for ${file.name}:`, err);
+        }
       }
     }
 

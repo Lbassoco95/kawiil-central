@@ -30,7 +30,7 @@ const agentMeta: Record<string, { label: string; icon: typeof Archive; color: st
     label: "Archivista",
     icon: Archive,
     color: "text-blue-500",
-    desc: "Escanea Dropbox, clasifica documentos, genera embeddings",
+    desc: "Escanea Dropbox (.pdf, .docx, .xlsx, .txt), indexa tareas y proyectos, genera embeddings",
   },
   integrador: {
     label: "Integrador",
@@ -201,6 +201,7 @@ function LearningProgressPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Main metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="text-center">
             <p className="text-2xl font-bold">{progress.totalDocs}</p>
@@ -211,7 +212,7 @@ function LearningProgressPanel() {
           <div className="text-center">
             <p className="text-2xl font-bold">{progress.totalChunks.toLocaleString()}</p>
             <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
-              <Database className="h-3 w-3" /> Chunks
+              <Database className="h-3 w-3" /> Chunks totales
             </p>
           </div>
           <div className="text-center">
@@ -228,6 +229,23 @@ function LearningProgressPanel() {
           </div>
         </div>
 
+        {/* Source breakdown */}
+        <div className="grid grid-cols-3 gap-2 p-3 bg-muted/50 rounded-lg">
+          <div className="text-center">
+            <p className="text-lg font-semibold text-blue-600">{progress.documentChunks.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground">Docs Dropbox</p>
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-emerald-600">{progress.taskChunks.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground">Tareas indexadas</p>
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-amber-600">{progress.projectChunks.toLocaleString()}</p>
+            <p className="text-[10px] text-muted-foreground">Proyectos indexados</p>
+          </div>
+        </div>
+
+        {/* Coverage bars */}
         <div className="space-y-2.5">
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs">

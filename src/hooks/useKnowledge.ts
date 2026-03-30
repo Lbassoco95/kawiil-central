@@ -288,6 +288,9 @@ export interface LearningProgress {
   totalClients: number;
   projectsWithChunks: number;
   totalProjects: number;
+  taskChunks: number;
+  projectChunks: number;
+  documentChunks: number;
   lastSyncAt: string | null;
 }
 
@@ -298,41 +301,46 @@ export function useLearningProgress() {
     queryKey: ["learning-progress", orgId],
     enabled: !!orgId,
     queryFn: async () => {
-      const [docsRes, chunksRes, insightsRes, feedRes, clientsRes, projectsRes, logsRes] = await Promise.all([
-        (supabase as any).from("documents").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
-        (supabase as any).from("document_chunks").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
-        (supabase as any).from("knowledge_insights").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
-        (supabase as any).from("knowledge_feed").select("id", { count: "exact", head: true }).eq("organization_id", orgId),
-        (supabase as any).from("clients").select("id", { count: "exact", head: true }).eq("organization_id", orgId).eq("status", "activo"),
-        (supabase as any).from("projects").select("id", { count: "exact", head: true }).eq("organization_id", orgId).in("status", ["activo", "pausado"]),
-        (supabase as any).from("knowledge_sync_logs").select("completed_at").eq("organization_id", orgId).eq("status", "completed").order("completed_at", { ascending: false }).limit(1),
-      ]);
+      const { data, error } = await (supabase as any).rpc("learning_progress_stats", {
+        p_org_id: orgId,
+      });
 
-      const clientsWithChunksRes = await (supabase as any)
-        .from("document_chunks")
-        .select("client_id")
-        .eq("organization_id", orgId)
-        .not("client_id", "is", null);
+      if (error) {
+        console.error("learning_progress_stats RPC error:", error);
+        throw error;
+      }
 
-      const projectsWithChunksRes = await (supabase as any)
-        .from("document_chunks")
-        .select("project_id")
-        .eq("organization_id", orgId)
-        .not("project_id", "is", null);
-
-      const uniqueClients = new Set((clientsWithChunksRes.data || []).map((r: any) => r.client_id));
-      const uniqueProjects = new Set((projectsWithChunksRes.data || []).map((r: any) => r.project_id));
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) {
+        return {
+          totalDocs: 0,
+          totalChunks: 0,
+          totalInsights: 0,
+          totalFeedItems: 0,
+          clientsWithChunks: 0,
+          totalClients: 0,
+          projectsWithChunks: 0,
+          totalProjects: 0,
+          taskChunks: 0,
+          projectChunks: 0,
+          documentChunks: 0,
+          lastSyncAt: null,
+        } as LearningProgress;
+      }
 
       return {
-        totalDocs: docsRes.count ?? 0,
-        totalChunks: chunksRes.count ?? 0,
-        totalInsights: insightsRes.count ?? 0,
-        totalFeedItems: feedRes.count ?? 0,
-        clientsWithChunks: uniqueClients.size,
-        totalClients: clientsRes.count ?? 0,
-        totalProjects: projectsRes.count ?? 0,
-        projectsWithChunks: uniqueProjects.size,
-        lastSyncAt: logsRes.data?.[0]?.completed_at || null,
+        totalDocs: Number(row.total_docs) || 0,
+        totalChunks: Number(row.total_chunks) || 0,
+        totalInsights: Number(row.total_insights) || 0,
+        totalFeedItems: Number(row.total_feed_items) || 0,
+        clientsWithChunks: Number(row.clients_with_chunks) || 0,
+        totalClients: Number(row.total_active_clients) || 0,
+        projectsWithChunks: Number(row.projects_with_chunks) || 0,
+        totalProjects: Number(row.total_active_projects) || 0,
+        taskChunks: Number(row.task_chunks) || 0,
+        projectChunks: Number(row.project_chunks) || 0,
+        documentChunks: Number(row.document_chunks_count) || 0,
+        lastSyncAt: row.last_sync_at || null,
       } as LearningProgress;
     },
   });
