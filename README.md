@@ -50,6 +50,11 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
+## Supabase (Kawiil Central)
+
+- Reglas críticas del proyecto (ID, URLs, Edge Functions): ver [`.cursor/rules/supabase-config.mdc`](.cursor/rules/supabase-config.mdc).
+- Despliegue y verificación de **IA colaborativa, memoria `/team/` y adjuntos en chat**: [`docs/supabase-ia-colaboracion-y-adjuntos.md`](docs/supabase-ia-colaboracion-y-adjuntos.md).
+
 ## What technologies are used for this project?
 
 This project is built with:
