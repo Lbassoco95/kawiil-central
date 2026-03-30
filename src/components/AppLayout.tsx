@@ -19,9 +19,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex min-h-screen w-full bg-background relative">
+      {/* Ambient gradient mesh */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
+        <div className="absolute -top-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-primary/[0.03] blur-3xl" />
+        <div className="absolute -bottom-1/4 -left-1/4 w-[500px] h-[500px] rounded-full bg-accent/[0.03] blur-3xl" />
+      </div>
       <AppSidebar />
-      <main className="flex-1 overflow-auto w-full">
+      <main className="flex-1 overflow-auto w-full relative z-10">
         {/* Global date/time bar */}
         <div className={`sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border/50 ${isMobile ? "px-4 pt-12 pb-2" : "px-6 py-2"}`}>
           <div className="max-w-7xl mx-auto flex items-center gap-3">

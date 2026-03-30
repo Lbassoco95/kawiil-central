@@ -266,19 +266,20 @@ INSTRUCCIONES:
           <button
             key={stat.label}
             onClick={() => navigate(stat.href)}
-            className={`stat-card flex items-center gap-3 text-left animate-fade-in ${
-              stat.highlight ? "border-destructive/20 bg-destructive/5" : ""
+            className={`stat-card flex items-center gap-3 text-left relative overflow-hidden animate-fade-in ${
+              stat.highlight ? "border-destructive/20" : ""
             }`}
             style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
           >
-            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+            <div className={`absolute inset-0 opacity-[0.05] bg-gradient-to-br ${stat.highlight ? "from-destructive to-destructive/50" : "from-primary to-accent"}`} />
+            <div className={`relative h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
               stat.highlight ? "bg-destructive/10" : "bg-primary/10"
             }`}>
-              <stat.icon className={`h-4 w-4 ${stat.highlight ? "text-destructive" : "text-primary"}`} />
+              <stat.icon className={`h-4.5 w-4.5 ${stat.highlight ? "text-destructive" : "text-primary"}`} />
             </div>
-            <div className="min-w-0">
-              <div className="text-2xl font-semibold text-foreground leading-none animate-count-up">{stat.value}</div>
-              <div className="text-xs text-muted-foreground mt-1">{stat.label}</div>
+            <div className="relative min-w-0">
+              <div className="text-2xl font-bold text-foreground leading-none animate-count-up">{stat.value}</div>
+              <div className="text-xs text-muted-foreground mt-1 font-medium">{stat.label}</div>
             </div>
           </button>
         ))}

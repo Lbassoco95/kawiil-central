@@ -116,7 +116,7 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
   if (existingCheckin) {
     const mood = MOODS.find((m) => m.value === (existingCheckin as any).mood);
     return (
-      <div className="rounded-xl bg-gradient-to-r from-primary/5 to-accent/5 border border-border/50 p-3 flex items-center gap-3 animate-fade-in">
+      <div className="glass-card bg-gradient-to-r from-primary/5 to-accent/5 p-4 flex items-center gap-3 animate-fade-in">
         <span className="text-2xl">{mood?.emoji}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-foreground font-medium">
@@ -134,15 +134,16 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
   }
 
   return (
-    <div className="rounded-xl bg-gradient-to-r from-primary/5 to-accent/5 border border-border/50 p-4 animate-scale-in">
+    <div className="glass-card bg-gradient-to-r from-primary/5 to-accent/5 p-5 animate-scale-in">
       <p className="text-sm font-medium text-foreground mb-3">¿Cómo va tu {timeLabel}?</p>
-      <div className="flex gap-2 justify-center">
+      <div className="flex gap-1.5 justify-center">
         {MOODS.map((m) => (
           <button
             key={m.value}
             onClick={() => submitMood.mutate(m.value)}
             disabled={submitMood.isPending}
-            className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg hover:bg-white/60 dark:hover:bg-white/5 hover:scale-110 transition-all duration-200"
+            className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl hover:bg-white/60 dark:hover:bg-white/5 hover:scale-110 hover:shadow-md transition-all duration-300"
+            style={{ transitionTimingFunction: "cubic-bezier(0.34, 1.56, 0.64, 1)" }}
           >
             <span className="text-2xl">{m.emoji}</span>
             <span className="text-[10px] text-muted-foreground">{m.label}</span>

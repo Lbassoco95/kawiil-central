@@ -20,6 +20,12 @@ import {
   ArrowRight,
   Sparkles,
   Clock,
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Sun,
+  Moon,
+  Sunrise,
 } from "lucide-react";
 import { formatDateMX, nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { useNavigate } from "react-router-dom";
@@ -232,118 +238,117 @@ export function PersonalDashboard() {
   const dailyTotal = totalPending + (completedToday ?? 0);
   const dailyProgress = dailyTotal > 0 ? Math.round(((completedToday ?? 0) / dailyTotal) * 100) : 0;
 
+  const TimeIcon = (() => {
+    const h = today.getHours();
+    if (h < 12) return Sunrise;
+    if (h < 19) return Sun;
+    return Moon;
+  })();
+
   return (
-    <div className="max-w-3xl space-y-6 min-w-0">
-      {/* Warm greeting */}
-      <div className="animate-fade-in">
-        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
-          {greetingByHour()}, {firstName || "Kawiiler"}
-        </h1>
-        {personalPhrase ? (
-          <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-2 animate-fade-in">
-            {personalPhrase}
-          </p>
-        ) : phraseLoading ? (
-          <p className="text-sm text-muted-foreground italic border-l-2 border-border pl-3 mt-2 animate-pulse">
-            Preparando tu frase del día...
-          </p>
-        ) : null}
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 min-w-0">
+      {/* ═══ LEFT COLUMN ═══ */}
+      <div className="space-y-6 min-w-0">
 
-      {/* Day progress bar */}
-      <div className="animate-fade-in stagger-1" style={{ animationFillMode: "both" }}>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Progreso del día</span>
-          <span className="text-xs font-medium text-foreground">{completedToday ?? 0} de {dailyTotal} tareas</span>
-        </div>
-        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-700 ease-out"
-            style={{ width: `${dailyProgress}%` }}
-          />
-        </div>
-      </div>
-
-      {/* KPI grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
-        <button
-          onClick={() => navigate("/tareas?priority=urgente")}
-          className={`stat-card text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${urgentCount > 0 ? "border-destructive/30 bg-destructive/5" : ""}`}
-        >
-          <p className="text-2xl font-semibold text-foreground animate-count-up">{urgentCount}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Urgentes</p>
-        </button>
-        <button
-          onClick={() => navigate("/tareas?due=week")}
-          className={`stat-card text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${dueThisWeek > 0 ? "border-warning/30 bg-warning/5" : ""}`}
-        >
-          <p className="text-2xl font-semibold text-foreground animate-count-up">{dueThisWeek}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Esta semana</p>
-        </button>
-        <button
-          onClick={() => navigate("/tareas?status=completada")}
-          className={`stat-card text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${(completedToday ?? 0) > 0 ? "border-accent/30 bg-accent/5" : ""}`}
-        >
-          <p className="text-2xl font-semibold text-foreground animate-count-up">{completedToday ?? 0}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Completadas hoy</p>
-        </button>
-      </div>
-
-      {/* Questionnaire reminder */}
-      {showQuestionnaireReminder && (
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl bg-primary/5 border border-primary/15 animate-scale-in">
-          <Sparkles className="h-5 w-5 text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
-            <p className="text-xs text-muted-foreground">Responde un breve cuestionario para personalizar tu experiencia</p>
+        {/* Hero greeting */}
+        <div className="animate-fade-in">
+          <div className="flex items-center gap-2 mb-1">
+            <TimeIcon className="h-5 w-5 text-primary/60 animate-float" />
+            <span className="text-xs text-muted-foreground font-medium">{formatDateMX(today)}</span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              {daysLeft}d
-            </span>
-            <Button size="sm" variant="default" className="text-xs" onClick={() => setShowQuestionnaire(true)}>
-              Responder
-            </Button>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight gradient-text">
+            {greetingByHour()}, {firstName || "Kawiiler"}
+          </h1>
+          {personalPhrase ? (
+            <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-3 animate-fade-in leading-relaxed">
+              {personalPhrase}
+            </p>
+          ) : phraseLoading ? (
+            <div className="mt-3 h-5 w-3/4 rounded-md shimmer-overlay" />
+          ) : null}
         </div>
-      )}
 
-      {/* Mood — card */}
-      <MoodCheckin userCelula={userCelula} />
-
-      {/* Next action */}
-      {nextAction && (
-        <div className="animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Siguiente acción</h3>
+        {/* KPI grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
           <button
-            onClick={() => navigate(nextAction.project_id ? `/proyectos/${nextAction.project_id}?tab=tareas&taskId=${nextAction.id}` : `/tareas?taskId=${nextAction.id}`)}
-            className="w-full text-left rounded-xl border-2 border-primary/20 bg-primary/[0.03] p-4 card-hover group"
+            onClick={() => navigate("/tareas?priority=urgente")}
+            className={`stat-card text-left group relative overflow-hidden ${urgentCount > 0 ? "border-destructive/30" : ""}`}
           >
-            <div className="flex items-start gap-3">
-              <span className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${priorityDot(nextAction.priority)}`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{nextAction.title}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  {nextAction.area && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                      {(SERVICE_LABELS as any)[nextAction.area] || nextAction.area}
-                    </Badge>
-                  )}
-                  {nextAction.due_date && (
-                    <span className={`text-xs ${new Date(nextAction.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                      {formatDateMX(nextAction.due_date)}
-                    </span>
-                  )}
-                </div>
+            <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${urgentCount > 0 ? "from-destructive to-destructive/50" : "from-muted to-muted"}`} />
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="text-3xl font-bold text-foreground animate-count-up">{urgentCount}</p>
+                <p className="text-xs text-muted-foreground mt-1 font-medium">Urgentes</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+              <div className={`p-2 rounded-xl ${urgentCount > 0 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={() => navigate("/tareas?due=week")}
+            className={`stat-card text-left group relative overflow-hidden ${dueThisWeek > 0 ? "border-warning/30" : ""}`}
+          >
+            <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${dueThisWeek > 0 ? "from-warning to-warning/50" : "from-muted to-muted"}`} />
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="text-3xl font-bold text-foreground animate-count-up">{dueThisWeek}</p>
+                <p className="text-xs text-muted-foreground mt-1 font-medium">Esta semana</p>
+              </div>
+              <div className={`p-2 rounded-xl ${dueThisWeek > 0 ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground"}`}>
+                <CalendarDays className="h-4 w-4" />
+              </div>
+            </div>
+          </button>
+          <button
+            onClick={() => navigate("/tareas?status=completada")}
+            className={`stat-card text-left group relative overflow-hidden ${(completedToday ?? 0) > 0 ? "border-accent/30" : ""}`}
+          >
+            <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${(completedToday ?? 0) > 0 ? "from-accent to-accent/50" : "from-muted to-muted"}`} />
+            <div className="relative flex items-start justify-between">
+              <div>
+                <p className="text-3xl font-bold text-foreground animate-count-up">{completedToday ?? 0}</p>
+                <p className="text-xs text-muted-foreground mt-1 font-medium">Completadas hoy</p>
+              </div>
+              <div className={`p-2 rounded-xl ${(completedToday ?? 0) > 0 ? "bg-accent/10 text-accent" : "bg-muted text-muted-foreground"}`}>
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
             </div>
           </button>
         </div>
-      )}
 
-      {/* Tabs for sections */}
+        {/* Next action */}
+        {nextAction && (
+          <div className="animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Siguiente acción</h3>
+            <button
+              onClick={() => navigate(nextAction.project_id ? `/proyectos/${nextAction.project_id}?tab=tareas&taskId=${nextAction.id}` : `/tareas?taskId=${nextAction.id}`)}
+              className="w-full text-left glass-card-hover p-4 group border-2 border-primary/15"
+            >
+              <div className="flex items-start gap-3">
+                <span className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${priorityDot(nextAction.priority)} animate-glow-pulse`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">{nextAction.title}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {nextAction.area && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {(SERVICE_LABELS as any)[nextAction.area] || nextAction.area}
+                      </Badge>
+                    )}
+                    {nextAction.due_date && (
+                      <span className={`text-xs ${new Date(nextAction.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                        {formatDateMX(nextAction.due_date)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Tabs for sections */}
       <Tabs defaultValue="resumen" className="w-full min-w-0">
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
           <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
@@ -593,6 +598,77 @@ export function PersonalDashboard() {
           <MonthlyPerformance />
         </TabsContent>
       </Tabs>
+
+      </div>{/* end left column */}
+
+      {/* ═══ RIGHT COLUMN (sidebar widgets) ═══ */}
+      <div className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+        {/* Day progress */}
+        <div className="glass-card p-5 animate-fade-in stagger-1" style={{ animationFillMode: "both" }}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold text-foreground">Progreso del día</span>
+            <span className="text-xs font-bold text-primary animate-count-up">{dailyProgress}%</span>
+          </div>
+          <div className="h-2.5 bg-secondary/60 rounded-full overflow-hidden">
+            <div className="h-full gradient-bar rounded-full transition-all duration-700 ease-out" style={{ width: `${dailyProgress}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">{completedToday ?? 0} de {dailyTotal} tareas</p>
+        </div>
+
+        {/* Mood check-in */}
+        <div className="animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
+          <MoodCheckin userCelula={userCelula} />
+        </div>
+
+        {/* Questionnaire reminder */}
+        {showQuestionnaireReminder && (
+          <div className="glass-card p-4 animate-scale-in">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-primary/10">
+                <Sparkles className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Responde un breve cuestionario para personalizar tu experiencia</p>
+                <div className="flex items-center gap-2 mt-2.5">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />{daysLeft}d
+                  </span>
+                  <Button size="sm" variant="default" className="text-xs h-7" onClick={() => setShowQuestionnaire(true)}>Responder</Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick upcoming tasks */}
+        {myTasks && myTasks.length > 0 && (
+          <div className="glass-card p-5 animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-foreground">Próximas tareas</span>
+              <button onClick={() => navigate("/tareas")} className="text-xs text-primary hover:text-primary/80 transition-colors">Ver todas</button>
+            </div>
+            <div className="space-y-1">
+              {myTasks.slice(0, 4).map((t, i) => (
+                <button
+                  key={t.id}
+                  className="flex items-center gap-2.5 w-full py-2 text-left row-hover px-2 rounded-lg"
+                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
+                  onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
+                >
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
+                  <span className="text-[13px] text-foreground truncate flex-1">{t.title}</span>
+                  {t.due_date && (
+                    <span className={`text-[10px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                      {formatDateMX(t.due_date)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>{/* end right column */}
 
       {/* Questionnaire Dialog */}
       <PreferenceQuestionnaire
