@@ -26,14 +26,19 @@ const CHAT_ATTACH_MAX_FILES = 20;
 const CHAT_ATTACH_MAX_BYTES = 50 * 1024 * 1024;
 const CHAT_ATTACH_BATCH_MAX_BYTES = 150 * 1024 * 1024;
 const CHAT_TEXT_EXTRACT_MAX = 120_000;
-/** Por debajo: Claude recibe PDF nativo (base64). Por encima: solo texto extraído — evita 546 WORKER_LIMIT. */
+/** Por debajo: Claude puede recibir PDF nativo (base64). Por encima: solo texto extraído — evita 546 WORKER_LIMIT. */
 const PDF_AS_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
-/** PDFs mayores: no ejecutar unpdf (CPU/RAM del isolate). */
-const PDF_TEXT_EXTRACT_MAX_BYTES = 10 * 1024 * 1024;
+/** Hasta aquí: extractText completo (unpdf). Por encima: extracción por páginas (menor pico de CPU/RAM). */
+const PDF_FULL_TEXT_EXTRACT_MAX_BYTES = 10 * 1024 * 1024;
+/** Intentar texto por páginas hasta este tamaño. */
+const PDF_PAGE_EXTRACT_MAX_BYTES = 28 * 1024 * 1024;
+/** Máximo de páginas a recorrer en PDFs grandes. */
+const PDF_PAGE_EXTRACT_MAX_PAGES = 120;
 /** Imágenes mayores: no multimodal base64 en Edge. */
 const IMAGE_MULTIMODAL_MAX_BYTES = 4 * 1024 * 1024;
-/** Excel muy grande: evitar XLSX.read completo en memoria. */
-const XLSX_PROCESS_MAX_BYTES = 20 * 1024 * 1024;
+/** Excel grande permitido; filas/hojas se reducen por tamaño para limitar RAM. */
+const XLSX_PROCESS_MAX_BYTES = 35 * 1024 * 1024;
+const XLSX_LARGE_FILE_BYTES = 8 * 1024 * 1024;
 
 async function assertAiProjectAccess(
   svc: ReturnType<typeof createClient>,
@@ -91,10 +96,60 @@ function truncateText(s: string, max: number): string {
   return s.slice(0, max) + "\n\n[…contenido truncado por tamaño…]";
 }
 
+async function pdfBytesExtractPageLimited(bytes: Uint8Array, name: string): Promise<string> {
+  const fallback =
+    `[PDF: ${name}] No se pudo extraer texto (archivo grande o dañado). Prueba un PDF más pequeño o exportado de nuevo.`;
+  try {
+    const { getDocumentProxy } = await import(
+      "https://esm.sh/unpdf@0.12.1",
+    ) as {
+      getDocumentProxy: (data: Uint8Array) => Promise<{
+        numPages: number;
+        getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: { str?: string }[] }> }>;
+      }>;
+    };
+    const pdf = await getDocumentProxy(bytes);
+    const totalPages = pdf.numPages || 1;
+    const maxPages = Math.min(totalPages, PDF_PAGE_EXTRACT_MAX_PAGES);
+    const parts: string[] = [];
+    let acc = 0;
+    let pagesDone = 0;
+    for (let p = 1; p <= maxPages; p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      let pageText = "";
+      for (const item of tc.items) {
+        if (item && typeof item.str === "string") pageText += item.str;
+      }
+      parts.push(pageText);
+      acc += pageText.length;
+      pagesDone = p;
+      if (acc >= CHAT_TEXT_EXTRACT_MAX - 500) break;
+    }
+    const truncatedByChars = acc >= CHAT_TEXT_EXTRACT_MAX - 500;
+    const truncatedByPages = totalPages > pagesDone;
+    const footer =
+      (truncatedByChars || truncatedByPages)
+        ? `\n\n[…PDF truncado: ${totalPages} páginas totales; procesadas ${pagesDone}${truncatedByChars ? "; límite de texto" : ""}…]`
+        : "";
+    const t = parts.join("\n\n").trim();
+    if (!t) {
+      return `[PDF: ${name}] No se extrajo texto legible (p. ej. escaneo sin OCR).`;
+    }
+    return `### ${name} (PDF, texto extraído parcial)\n${truncateText(t + footer, CHAT_TEXT_EXTRACT_MAX)}`;
+  } catch (e) {
+    console.warn("pdf page-limited extract", e);
+    return fallback;
+  }
+}
+
 async function pdfBytesToGatewayText(bytes: Uint8Array, name: string): Promise<string> {
-  if (bytes.length > PDF_TEXT_EXTRACT_MAX_BYTES) {
+  if (bytes.length > PDF_PAGE_EXTRACT_MAX_BYTES) {
     const mb = Math.round(bytes.length / (1024 * 1024));
-    return `[PDF: ${name}] Archivo de ~${mb} MB: demasiado grande para extraer texto en el servidor. Divide el PDF o reduce el tamaño.`;
+    return `[PDF: ${name}] Archivo de ~${mb} MB: demasiado grande para procesar en el servidor (máx ~${Math.round(PDF_PAGE_EXTRACT_MAX_BYTES / (1024 * 1024))} MB). Divide el PDF o reduce el tamaño.`;
+  }
+  if (bytes.length > PDF_FULL_TEXT_EXTRACT_MAX_BYTES) {
+    return pdfBytesExtractPageLimited(bytes, name);
   }
   const fallback =
     `[PDF: ${name}] No se pudo extraer texto automáticamente; si usas solo el gateway, prueba otro formato o activa Anthropic.`;
@@ -120,12 +175,17 @@ function xlsxBytesToText(bytes: Uint8Array): string {
   try {
     const wb = XLSX.read(bytes, { type: "array" });
     const parts: string[] = [];
-    const maxRowsPerSheet = 200;
-    for (const sheetName of wb.SheetNames.slice(0, 10)) {
+    const large = bytes.length > XLSX_LARGE_FILE_BYTES;
+    const maxSheets = large ? 5 : 10;
+    const maxRowsPerSheet = large ? 80 : 200;
+    for (const sheetName of wb.SheetNames.slice(0, maxSheets)) {
       const sheet = wb.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet, { FS: "\t" });
       const lines = csv.split("\n");
       parts.push(`## Hoja: ${sheetName}\n${lines.slice(0, maxRowsPerSheet).join("\n")}`);
+    }
+    if (large && wb.SheetNames.length > maxSheets) {
+      parts.push(`\n[…${wb.SheetNames.length - maxSheets} hoja(s) omitidas por tamaño del archivo; exporta a CSV si necesitas todo.]`);
     }
     return truncateText(parts.join("\n\n"), CHAT_TEXT_EXTRACT_MAX);
   } catch (e) {
@@ -166,11 +226,15 @@ async function sqliteBytesToSummary(bytes: Uint8Array): Promise<string> {
   }
 }
 
+type AttachmentProcessOpts = { needsGatewayPdfText?: boolean };
+
 async function processAttachmentFile(
   bytes: Uint8Array,
   mime: string,
   name: string,
+  opts: AttachmentProcessOpts = {},
 ): Promise<{ claude: any[]; gatewayText: string }> {
+  const needsGatewayPdfText = opts.needsGatewayPdfText ?? true;
   const lower = name.toLowerCase();
   const mt = (mime || "").toLowerCase();
 
@@ -194,8 +258,10 @@ async function processAttachmentFile(
     };
   }
   if (mt === "application/pdf" || lower.endsWith(".pdf")) {
-    const gatewayText = await pdfBytesToGatewayText(bytes, name);
     if (bytes.length <= PDF_AS_NATIVE_DOCUMENT_MAX_BYTES) {
+      const gatewayText = needsGatewayPdfText
+        ? await pdfBytesToGatewayText(bytes, name)
+        : `[PDF «${name}»: contenido enviado al modelo como documento PDF.]`;
       return {
         claude: [{
           type: "document",
@@ -204,6 +270,7 @@ async function processAttachmentFile(
         gatewayText,
       };
     }
+    const gatewayText = await pdfBytesToGatewayText(bytes, name);
     const inner = gatewayText.replace(/^###[^\n]*\n?/, "").trim() || gatewayText;
     return {
       claude: [{
@@ -268,6 +335,7 @@ async function resolveChatAttachments(
   svc: ReturnType<typeof createClient>,
   messages: any[],
   attachmentRefs: Array<{ bucket?: string; path: string; name?: string; mime_type?: string }> | undefined,
+  opts: AttachmentProcessOpts = {},
 ): Promise<{ forClaude: any[]; forGateway: any[] }> {
   const refs = (attachmentRefs || []).slice(0, CHAT_ATTACH_MAX_FILES);
   const lastIdx = findLastUserMessageIndex(messages);
@@ -298,7 +366,7 @@ async function resolveChatAttachments(
       continue;
     }
     batchBytes += bytes.length;
-    const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo");
+    const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo", opts);
     claudeBlocks.push(...proc.claude);
     if (proc.gatewayText) gatewayParts.push(proc.gatewayText);
   }
@@ -1334,7 +1402,9 @@ serve(async (req) => {
       });
     }
 
-    const { forClaude, forGateway } = await resolveChatAttachments(svc, messages || [], attachmentRefs);
+    const { forClaude, forGateway } = await resolveChatAttachments(svc, messages || [], attachmentRefs, {
+      needsGatewayPdfText: !!LOVABLE_API_KEY,
+    });
 
     // Load AI Project context + memories
     let projectContext = "";
