@@ -268,7 +268,7 @@ FRASE: [la cita textual]
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: PHRASE_MODEL,
+          model: phraseAnthropicModel(),
           max_tokens: 512,
           system:
             "Eres un curador cultural experto. Solo compartes citas auténticas, verificables y con atribución completa. Nunca inventas frases y no repites citas recientes del historial.",
