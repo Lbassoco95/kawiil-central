@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Search, FolderKanban, Scale, Trash2 } from "lucide-react";
+import { Search, FolderKanban, Scale, Trash2, Sparkles } from "lucide-react";
+import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
-import { ProjectFormDialog } from "@/components/projects/ProjectFormDialog";
+import { ProjectCreationDialog } from "@/components/projects/ProjectCreationDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useState, useMemo } from "react";
@@ -40,6 +41,7 @@ const Proyectos = () => {
   const { areaLabelMap, getCelulaLabel } = useAreaOptions();
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
+  const [minutesOpen, setMinutesOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [selectedArea, setSelectedArea] = useState<string>("all");
 
@@ -86,13 +88,18 @@ const Proyectos = () => {
             <p className="text-sm text-muted-foreground mt-0.5">Proyectos por cliente o internos</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setMinutesOpen(true)}>
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Desde minuta</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setLawsuitOpen(true)}>
               <Scale className="mr-1.5 h-3.5 w-3.5" />
-              Nuevo juicio
+              <span className="hidden sm:inline">Nuevo juicio</span>
             </Button>
-            <ProjectFormDialog />
+            <ProjectCreationDialog />
           </div>
           <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
+          <MeetingMinutesDialog open={minutesOpen} onOpenChange={setMinutesOpen} />
         </div>
 
         <ScrollableFilterTabs
@@ -134,7 +141,7 @@ const Proyectos = () => {
             <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
               {search || selectedArea !== "all" ? "Intenta con otro filtro." : "Crea tu primer proyecto para organizar tareas."}
             </p>
-            {!search && selectedArea === "all" && <div className="mt-4"><ProjectFormDialog /></div>}
+            {!search && selectedArea === "all" && <div className="mt-4"><ProjectCreationDialog /></div>}
           </div>
         ) : (
           <div className="space-y-2">

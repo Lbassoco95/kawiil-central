@@ -58,10 +58,10 @@ interface ProposedTask {
 interface MeetingMinutesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projectId: string;
+  projectId?: string | null;
   clientId?: string | null;
   area?: string | null;
-  projectName: string;
+  projectName?: string;
 }
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -94,6 +94,8 @@ export function MeetingMinutesDialog({
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [phases, setPhases] = useState<string[]>([]);
   const [newPhaseName, setNewPhaseName] = useState("");
+  const [newProjectName, setNewProjectName] = useState("");
+  const isStandalone = !projectId;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -299,6 +301,33 @@ export function MeetingMinutesDialog({
         _user_id: user!.id,
       });
 
+      let targetProjectId = projectId;
+
+      if (isStandalone && newProjectName.trim()) {
+        const phaseObjs = phases.map((name, i) => ({
+          key: `phase_${Date.now()}_${i}`,
+          name,
+          order: i,
+        }));
+        const { data: newProject, error: projError } = await supabase
+          .from("projects")
+          .insert({
+            name: newProjectName.trim(),
+            description: summary || null,
+            client_id: clientId || null,
+            area: (area as any) || null,
+            organization_id: orgId!,
+            created_by: user!.id,
+            responsible_user_id: user!.id,
+            phases: phaseObjs,
+          } as any)
+          .select("id")
+          .single();
+        if (projError) throw projError;
+        targetProjectId = newProject.id;
+        toast.success(`Proyecto "${newProjectName}" creado`);
+      }
+
       let created = 0;
       for (const task of accepted) {
         const finalTitle = task.phase ? `[${task.phase}] ${task.title}` : task.title;
@@ -308,7 +337,7 @@ export function MeetingMinutesDialog({
           priority: task.priority || "media",
           due_date: task.due_date || null,
           assigned_to: task.assigned_to_id || null,
-          project_id: projectId,
+          project_id: targetProjectId || null,
           client_id: clientId || null,
           area: (area as any) || null,
           organization_id: orgId!,
@@ -319,7 +348,11 @@ export function MeetingMinutesDialog({
       }
 
       toast.success(`${created} tarea${created !== 1 ? "s" : ""} creada${created !== 1 ? "s" : ""} exitosamente`);
-      queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+      if (targetProjectId) {
+        queryClient.invalidateQueries({ queryKey: ["project-tasks", targetProjectId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
       handleClose();
     } catch (err: any) {
       toast.error("Error al crear tareas: " + err.message);
@@ -337,6 +370,7 @@ export function MeetingMinutesDialog({
     setExpandedIndex(null);
     setPhases([]);
     setNewPhaseName("");
+    setNewProjectName("");
     onOpenChange(false);
   };
 
@@ -352,7 +386,9 @@ export function MeetingMinutesDialog({
           </DialogTitle>
           <DialogDescription>
             {step === "input"
-              ? `Sube o pega el contenido del documento para generar tareas automáticamente en "${projectName}".`
+              ? isStandalone
+                ? "Sube o pega el contenido del documento para generar un proyecto con tareas automáticamente."
+                : `Sube o pega el contenido del documento para generar tareas automáticamente en "${projectName}".`
               : summary}
           </DialogDescription>
         </DialogHeader>
@@ -396,6 +432,19 @@ export function MeetingMinutesDialog({
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-2">
+            {/* New project name (standalone mode) */}
+            {isStandalone && (
+              <div className="space-y-1.5 pb-2 border-b border-border/40">
+                <label className="text-xs font-medium text-muted-foreground">Nombre del nuevo proyecto *</label>
+                <Input
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="Ej: Auditoría interna Q2 2026"
+                  className="text-sm"
+                />
+              </div>
+            )}
+
             {/* Phase management */}
             <div className="space-y-2 pb-2 border-b border-border/40">
               <div className="flex items-center gap-2">
@@ -701,7 +750,7 @@ export function MeetingMinutesDialog({
               <Button variant="outline" onClick={() => setStep("input")}>
                 Volver a editar
               </Button>
-              <Button onClick={handleCreateTasks} disabled={creating || acceptedCount === 0}>
+              <Button onClick={handleCreateTasks} disabled={creating || acceptedCount === 0 || (isStandalone && !newProjectName.trim())}>
                 {creating ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />

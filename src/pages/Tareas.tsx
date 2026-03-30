@@ -16,6 +16,7 @@ import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { QuickTaskInput } from "@/components/tasks/QuickTaskInput";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { useAuth } from "@/contexts/AuthContext";
@@ -144,6 +145,11 @@ INSTRUCCIONES:
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
           </Button>
         </div>
+
+        <QuickTaskInput
+          area={area !== "todas" ? area : undefined}
+          placeholder="Crear tarea rápida... (Enter para crear)"
+        />
 
         <AISummaryCard
           cacheKey={`tasks-${user?.id}-${area}`}

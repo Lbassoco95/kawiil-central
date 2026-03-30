@@ -14,6 +14,10 @@ export interface ProjectTemplate {
   is_ai_generated: boolean;
   created_by: string | null;
   created_at: string;
+  client_type: string | null;
+  service_tags: string[];
+  avg_duration_days: number | null;
+  usage_count: number;
 }
 
 export function useProjectTemplates(area?: string) {
@@ -44,6 +48,9 @@ export function useCreateProjectTemplate() {
       phases?: any[];
       suggested_tasks?: any[];
       is_ai_generated?: boolean;
+      client_type?: string;
+      service_tags?: string[];
+      avg_duration_days?: number;
     }) => {
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
       const { data, error } = await supabase
@@ -57,6 +64,9 @@ export function useCreateProjectTemplate() {
           is_ai_generated: tpl.is_ai_generated || false,
           organization_id: orgId!,
           created_by: user!.id,
+          client_type: tpl.client_type || null,
+          service_tags: tpl.service_tags || [],
+          avg_duration_days: tpl.avg_duration_days || null,
         })
         .select()
         .single();
@@ -84,5 +94,22 @@ export function useDeleteProjectTemplate() {
       toast.success("Plantilla eliminada");
     },
     onError: (e: Error) => toast.error("Error: " + e.message),
+  });
+}
+
+export function useIncrementTemplateUsage() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data: current } = await supabase
+        .from("project_templates" as any)
+        .select("usage_count")
+        .eq("id", id)
+        .single();
+      const count = (current?.usage_count || 0) + 1;
+      await supabase
+        .from("project_templates" as any)
+        .update({ usage_count: count })
+        .eq("id", id);
+    },
   });
 }

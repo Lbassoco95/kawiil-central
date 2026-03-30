@@ -247,7 +247,7 @@ const anthropicTools = [
   },
   {
     name: "create_project",
-    description: "Crea un nuevo proyecto en Kawiil. USA ESTA HERRAMIENTA cuando el usuario pida crear un proyecto, ya sea directamente o a partir de una minuta de reunión, un análisis o instrucciones. Puedes asociar el proyecto a un cliente existente y definir el área de servicio.",
+    description: "Crea un nuevo proyecto en Kawiil. USA ESTA HERRAMIENTA cuando el usuario pida crear un proyecto, ya sea directamente o a partir de una minuta de reunión, un análisis o instrucciones. Puedes asociar el proyecto a un cliente existente y definir el área de servicio. Incluye fases si el proyecto lo requiere.",
     input_schema: {
       type: "object",
       properties: {
@@ -255,6 +255,33 @@ const anthropicTools = [
         description: { type: "string", description: "Descripción del proyecto" },
         client_id: { type: "string", description: "UUID del cliente (opcional)" },
         area: { type: "string", enum: ["contabilidad", "legal", "softlanding", "pld_ft", "juicios", "gestoria", "constitucion_nacional", "cumplimiento"], description: "Área/célula de servicio" },
+        service_tags: { type: "array", items: { type: "string" }, description: "Tags de servicio adicionales (ej: auditoria_interna, control_interno)" },
+        phases: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              order: { type: "number" },
+            },
+            required: ["name"],
+          },
+          description: "Fases del proyecto (opcional)",
+        },
+        tasks: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              phase_name: { type: "string", description: "Nombre de la fase a la que pertenece esta tarea" },
+              priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
+              due_date: { type: "string", description: "YYYY-MM-DD" },
+            },
+            required: ["title"],
+          },
+          description: "Tareas iniciales del proyecto",
+        },
       },
       required: ["name"],
     },
@@ -277,6 +304,7 @@ const anthropicTools = [
               description: { type: "string" },
               priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
               due_date: { type: "string", description: "YYYY-MM-DD" },
+              phase_key: { type: "string", description: "Key de la fase del proyecto" },
             },
             required: ["title"],
           },
@@ -284,6 +312,19 @@ const anthropicTools = [
         },
       },
       required: ["tasks"],
+    },
+  },
+  {
+    name: "suggest_template",
+    description: "Sugiere una plantilla de proyecto basándose en el tipo de cliente, servicio y descripción. Busca plantillas existentes o genera una sugerencia adaptada.",
+    input_schema: {
+      type: "object",
+      properties: {
+        client_type: { type: "string", description: "Tipo de cliente (persona_moral, persona_fisica)" },
+        service_area: { type: "string", description: "Área de servicio" },
+        service_tags: { type: "array", items: { type: "string" }, description: "Tags de servicio" },
+        description: { type: "string", description: "Descripción de lo que necesita el proyecto" },
+      },
     },
   },
 ];
@@ -721,6 +762,12 @@ async function executeTool(
     }
 
     case "create_project": {
+      const projectPhases = (args.phases || []).map((p: any, i: number) => ({
+        key: `phase_${Date.now()}_${i}`,
+        name: p.name,
+        order: p.order ?? i,
+      }));
+
       const { data: project, error } = await supabase.from("projects").insert({
         name: args.name,
         description: args.description || null,
@@ -730,10 +777,36 @@ async function executeTool(
         created_by: userId,
         responsible_user_id: userId,
         tax_obligations: [],
+        phases: projectPhases,
+        service_tags: args.service_tags || [],
       }).select("id, name, area, status").single();
       if (error) return { error: error.message };
 
-      // Also save as template for future AI suggestions
+      // Create tasks if provided inline
+      const taskResults: any[] = [];
+      for (const task of args.tasks || []) {
+        let phaseKey: string | null = null;
+        if (task.phase_name) {
+          const matched = projectPhases.find((p: any) => p.name.toLowerCase() === task.phase_name.toLowerCase());
+          if (matched) phaseKey = matched.key;
+        }
+        const { data: td, error: te } = await supabase.from("tasks").insert({
+          title: task.title,
+          project_id: project.id,
+          client_id: args.client_id || null,
+          organization_id: orgId,
+          created_by: userId,
+          assigned_to: userId,
+          area: args.area || null,
+          priority: task.priority || "media",
+          due_date: task.due_date || null,
+          phase_key: phaseKey,
+          status: "pendiente",
+        }).select("id, title").single();
+        taskResults.push(td || { title: task.title, error: te?.message });
+      }
+
+      // Save as template for future AI suggestions
       const svcUrlT = Deno.env.get("SUPABASE_URL")!;
       const svcKeyT = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const svcT = createClient(svcUrlT, svcKeyT);
@@ -741,14 +814,22 @@ async function executeTool(
         name: args.name,
         description: args.description || null,
         area: args.area || null,
-        phases: [],
-        suggested_tasks: [],
+        phases: projectPhases,
+        suggested_tasks: (args.tasks || []).map((t: any) => ({ title: t.title, phase_name: t.phase_name })),
         is_ai_generated: true,
         organization_id: orgId,
         created_by: userId,
+        service_tags: args.service_tags || [],
       });
 
-      return { success: true, project, url: `/proyectos/${project.id}` };
+      return {
+        success: true,
+        project,
+        phases: projectPhases,
+        tasks_created: taskResults.filter((r) => !r.error).length,
+        tasks: taskResults,
+        url: `/proyectos/${project.id}`,
+      };
     }
 
     case "create_tasks": {
@@ -765,6 +846,7 @@ async function executeTool(
           area: args.area || null,
           priority: task.priority || "media",
           due_date: task.due_date || null,
+          phase_key: task.phase_key || null,
           status: "pendiente",
         }).select("id, title, priority, status").single();
         if (error) {
@@ -774,6 +856,33 @@ async function executeTool(
         }
       }
       return { success: true, created: results.filter((r) => !r.error).length, tasks: results };
+    }
+
+    case "suggest_template": {
+      let q = supabase.from("project_templates").select("id, name, description, area, phases, suggested_tasks, service_tags, client_type, avg_duration_days, usage_count").eq("organization_id", orgId);
+      if (args.service_area) q = q.eq("area", args.service_area);
+      const { data: tpls } = await q.order("usage_count", { ascending: false }).limit(10);
+      if (!tpls || tpls.length === 0) {
+        return { templates: [], suggestion: "No se encontraron plantillas. Se puede crear el proyecto desde cero y guardar como plantilla al finalizar." };
+      }
+      const filtered = tpls.filter((t: any) => {
+        if (args.client_type && t.client_type && t.client_type !== args.client_type) return false;
+        if (args.service_tags?.length) {
+          const overlap = (t.service_tags || []).some((st: string) => args.service_tags.includes(st));
+          if (!overlap && t.service_tags?.length) return false;
+        }
+        return true;
+      });
+      return {
+        templates: (filtered.length > 0 ? filtered : tpls).slice(0, 5).map((t: any) => ({
+          id: t.id, name: t.name, description: t.description, area: t.area,
+          phases_count: (t.phases || []).length, tasks_count: (t.suggested_tasks || []).length,
+          usage_count: t.usage_count || 0, service_tags: t.service_tags || [],
+        })),
+        suggestion: filtered.length > 0
+          ? `Encontré ${filtered.length} plantilla(s) relevantes. La más usada es "${filtered[0].name}".`
+          : `No hay plantillas exactas pero estas ${Math.min(tpls.length, 5)} podrían adaptarse.`,
+      };
     }
 
     default:
@@ -830,11 +939,13 @@ Ejemplos de tu estilo:
 - Después de crear un artifact, incluye un breve resumen en el chat de lo que generaste y por qué.
 
 ### 5b. Creación de proyectos y tareas
-- **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto.
+- **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto. Puedes incluir fases y tareas directamente en la herramienta.
 - **USA create_tasks** cuando el usuario pida crear tareas, ya sea a partir de instrucciones directas, una minuta, un análisis, o fases de un proyecto. Puedes crear múltiples tareas de una vez.
+- **USA suggest_template** para buscar plantillas relevantes cuando el usuario quiera crear un proyecto similar a uno anterior.
 - Cuando el usuario comparta una minuta o notas de reunión, analiza el contenido y propón la creación del proyecto y tareas correspondientes. Confirma con el usuario antes de crearlos, a menos que el usuario diga explícitamente "crea las tareas".
 - Al crear proyectos, intenta identificar el cliente y área correctos basándote en el contexto.
 - Al crear tareas, asigna prioridades inteligentemente según la urgencia y la naturaleza de la tarea.
+- **IMPORTANTE:** Cuando crees un proyecto exitosamente, SIEMPRE incluye en tu respuesta el marcador [project:UUID_DEL_PROYECTO|NOMBRE_DEL_PROYECTO|AREA] para que aparezca una tarjeta visual del proyecto en el chat. Ejemplo: [project:abc-123|Contabilidad Grupo Dazon|contabilidad]
 
 ### 6. Comunicación profesional
 - Redacta correos, mensajes y documentos en español formal mexicano.

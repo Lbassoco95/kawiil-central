@@ -12,12 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
-import { Save, Pencil, X, AlertTriangle, Sparkles } from "lucide-react";
+import { Save, Pencil, X, AlertTriangle, Sparkles, BookTemplate } from "lucide-react";
 import { useUpdateProject, type Project } from "@/hooks/useProjects";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { useCreateProjectTemplate } from "@/hooks/useProjectTemplates";
+import { toast } from "sonner";
 import { formatDateMX } from "@/lib/dateUtils";
 import type { Database } from "@/integrations/supabase/types";
 import { MeetingMinutesDialog } from "./MeetingMinutesDialog";
@@ -60,6 +62,35 @@ export function ProjectGeneralTab({ project }: Props) {
   const [delayNotes, setDelayNotes] = useState((project as any).delay_notes || "");
   const [clientId, setClientId] = useState(project.client_id || "");
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
+  const createTemplate = useCreateProjectTemplate();
+  const [savedAsTemplate, setSavedAsTemplate] = useState(false);
+
+  const handleSaveAsTemplate = async () => {
+    const tasks = projectTasks || [];
+    const phases = (project as any).phases || [];
+    const suggestedTasks = tasks
+      .filter((t: any) => t.status === "completada" || t.status === "en_progreso")
+      .slice(0, 30)
+      .map((t: any) => ({ title: t.title, area: t.area, priority: t.priority }));
+
+    const startD = project.start_date ? new Date(project.start_date) : null;
+    const endD = project.end_date ? new Date(project.end_date) : null;
+    const durationDays = startD && endD ? Math.round((endD.getTime() - startD.getTime()) / (1000 * 60 * 60 * 24)) : undefined;
+
+    try {
+      await createTemplate.mutateAsync({
+        name: `Plantilla: ${project.name}`,
+        description: project.description || undefined,
+        area: project.area || undefined,
+        phases,
+        suggested_tasks: suggestedTasks,
+        is_ai_generated: false,
+        service_tags: (project as any).service_tags || [],
+        avg_duration_days: durationDays,
+      });
+      setSavedAsTemplate(true);
+    } catch {}
+  };
 
   // Fetch clients for selector
   const { data: clients } = useQuery({
@@ -542,6 +573,34 @@ INSTRUCCIONES:
           userId={user?.id}
         />
       </div>
+
+      {/* Save as Template - show for completed or advanced projects */}
+      {(project.status === "completado" || project.status === "activo") && (
+        <div className="md:col-span-2">
+          <Card className="border-dashed border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
+            <CardContent className="py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <BookTemplate className="h-4 w-4 text-emerald-600" />
+                  Guardar como plantilla
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Reutiliza la estructura de este proyecto para crear otros similares
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSaveAsTemplate}
+                disabled={createTemplate.isPending || savedAsTemplate}
+              >
+                <BookTemplate className="h-3.5 w-3.5 mr-1.5" />
+                {savedAsTemplate ? "Guardada" : createTemplate.isPending ? "Guardando..." : "Guardar plantilla"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Meeting Minutes Button */}
       <div className="md:col-span-2">

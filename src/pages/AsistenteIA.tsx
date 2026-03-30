@@ -24,6 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ProjectSidebar } from "@/components/ai/ProjectSidebar";
 import { KnowledgePanel } from "@/components/ai/KnowledgePanel";
 import { ArtifactCard } from "@/components/ai/ArtifactCard";
+import { ProjectPreviewCard } from "@/components/ai/ProjectPreviewCard";
 
 const SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
@@ -35,6 +36,7 @@ const SUGGESTIONS = [
 ];
 
 const ARTIFACT_RE = /\[artifact:([a-f0-9-]{36})\|([^\]]+)\|([^\]]+)\]/gi;
+const PROJECT_LINK_RE = /\[project:([a-f0-9-]{36})\|([^\]|]+)(?:\|([^\]]*))?\]/gi;
 
 const AsistenteIA = () => {
   const [searchParams] = useSearchParams();
@@ -161,12 +163,13 @@ const AsistenteIA = () => {
       return <p className="text-sm whitespace-pre-wrap">{content}</p>;
     }
 
+    const COMBINED_RE = /\[artifact:([a-f0-9-]{36})\|([^\]]+)\|([^\]]+)\]|\[project:([a-f0-9-]{36})\|([^\]|]+)(?:\|([^\]]*))?\]/gi;
+
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let match: RegExpExecArray | null;
-    const regex = new RegExp(ARTIFACT_RE.source, ARTIFACT_RE.flags);
 
-    while ((match = regex.exec(content)) !== null) {
+    while ((match = COMBINED_RE.exec(content)) !== null) {
       if (match.index > lastIndex) {
         const textBefore = content.slice(lastIndex, match.index);
         parts.push(
@@ -175,15 +178,25 @@ const AsistenteIA = () => {
           </div>
         );
       }
-      parts.push(
-        <ArtifactCard
-          key={`artifact-${match[1]}`}
-          artifactId={match[1]}
-          title={match[2]}
-          contentType={match[3]}
-          onView={handleViewArtifact}
-        />
-      );
+
+      if (match[1]) {
+        parts.push(
+          <ArtifactCard
+            key={`artifact-${match[1]}`}
+            artifactId={match[1]}
+            title={match[2]}
+            contentType={match[3]}
+            onView={handleViewArtifact}
+          />
+        );
+      } else if (match[4]) {
+        parts.push(
+          <ProjectPreviewCard
+            key={`project-${match[4]}`}
+            project={{ id: match[4], name: match[5], area: match[6] || undefined }}
+          />
+        );
+      }
       lastIndex = match.index + match[0].length;
     }
 

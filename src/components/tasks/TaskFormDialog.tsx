@@ -10,7 +10,7 @@ import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Link } from "lucide-react";
+import { X, Plus, Link, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
@@ -21,9 +21,10 @@ interface Props {
   defaultProjectId?: string;
   defaultClientId?: string;
   defaultArea?: string;
+  defaultPhaseKey?: string;
 }
 
-export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea }: Props) {
+export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [area, setArea] = useState<string>(defaultArea || "");
@@ -35,6 +36,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [projectId, setProjectId] = useState(defaultProjectId || "");
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const createTask = useCreateTask();
   const { data: profiles } = useProfiles();
@@ -87,24 +89,17 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!assignedTo) {
-      toast.error("Debes asignar un responsable");
-      return;
-    }
-    if (!description.trim()) {
-      toast.error("La descripción es obligatoria");
-      return;
-    }
     createTask.mutate(
       {
         title,
-        description,
+        description: description || undefined,
         area: area || undefined,
         priority,
         due_date: dueDate || undefined,
-        assigned_to: assignedTo,
+        assigned_to: assignedTo || undefined,
         client_id: clientId || undefined,
         project_id: projectId || undefined,
+        phase_key: defaultPhaseKey || undefined,
         additional_assignees: additionalAssignees,
         dropbox_links: dropboxLinks,
       },
@@ -150,39 +145,39 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nueva tarea</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Essential fields */}
           <div>
             <Label>Título *</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="Describe la tarea..." />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="¿Qué hay que hacer?" autoFocus />
           </div>
 
-          <div>
-            <div className="flex items-center justify-between">
-              <Label>Descripción *</Label>
-              <AIDescriptionButton title={title} onGenerated={setDescription} />
-            </div>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe de qué se trata esta tarea..." rows={3} required />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Célula</Label>
+              <Label>Responsable</Label>
               <SearchableSelect
-                options={sortedAreaOptions}
-                value={area}
-                onValueChange={setArea}
-                placeholder="Seleccionar célula"
-                searchPlaceholder="Buscar célula..."
+                options={profileOptions}
+                value={assignedTo}
+                onValueChange={setAssignedTo}
+                placeholder="Asignar a..."
+                searchPlaceholder="Buscar..."
               />
             </div>
             <div>
+              <Label>Fecha límite</Label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <Label>Prioridad</Label>
               <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {priorityOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
@@ -190,92 +185,106 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Fecha límite</Label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-            <div>
-              <Label>Responsable principal *</Label>
+              <Label>Célula</Label>
               <SearchableSelect
-                options={profileOptions}
-                value={assignedTo}
-                onValueChange={setAssignedTo}
-                placeholder="Asignar a..."
-                searchPlaceholder="Buscar persona..."
+                options={sortedAreaOptions}
+                value={area}
+                onValueChange={setArea}
+                placeholder="Seleccionar"
+                searchPlaceholder="Buscar célula..."
               />
             </div>
           </div>
 
-          {/* Additional assignees */}
-          <div>
-            <Label>Colaboradores adicionales</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {additionalAssignees.map((uid) => {
-                const p = profiles?.find((pr) => pr.user_id === uid);
-                return (
-                  <Badge key={uid} variant="secondary" className="gap-1">
-                    {p?.full_name || uid}
-                    <X className="h-3 w-3 cursor-pointer" onClick={() => removeAssignee(uid)} />
-                  </Badge>
-                );
-              })}
-            </div>
-            <SearchableSelect
-              options={availableAssignees}
-              value=""
-              onValueChange={addAssignee}
-              placeholder="Agregar colaborador..."
-              searchPlaceholder="Buscar colaborador..."
-            />
-          </div>
+          {/* Expandable advanced section */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-1.5 transition-colors"
+          >
+            {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {showAdvanced ? "Menos opciones" : "Más opciones (descripción, cliente, proyecto, enlaces...)"}
+          </button>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Cliente <span className="text-xs text-muted-foreground">(dejar vacío para tarea interna)</span></Label>
-              <SearchableSelect
-                options={clientOptions}
-                value={clientId || "__none__"}
-                onValueChange={(v) => setClientId(v === "__none__" ? "" : v)}
-                placeholder="Tarea interna"
-                searchPlaceholder="Buscar cliente..."
-              />
-            </div>
-            <div>
-              <Label>Proyecto</Label>
-              <SearchableSelect
-                options={projectOptions}
-                value={projectId || "__none__"}
-                onValueChange={(v) => setProjectId(v === "__none__" ? "" : v)}
-                placeholder="Opcional"
-                searchPlaceholder="Buscar proyecto..."
-              />
-            </div>
-          </div>
-
-          {/* Dropbox links */}
-          <div>
-            <Label className="flex items-center gap-1"><Link className="h-4 w-4" /> Enlaces de Dropbox</Label>
-            <div className="space-y-2 mb-2">
-              {dropboxLinks.map((link, i) => (
-                <div key={i} className="flex items-center gap-2 text-sm">
-                  <a href={link} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate flex-1">{link}</a>
-                  <X className="h-4 w-4 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => setDropboxLinks(dropboxLinks.filter((_, j) => j !== i))} />
+          {showAdvanced && (
+            <div className="space-y-4 pt-1 border-t border-border/40 animate-fade-in">
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label>Descripción</Label>
+                  <AIDescriptionButton title={title} onGenerated={setDescription} />
                 </div>
-              ))}
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Detalle adicional de la tarea..." rows={3} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Cliente</Label>
+                  <SearchableSelect
+                    options={clientOptions}
+                    value={clientId || "__none__"}
+                    onValueChange={(v) => setClientId(v === "__none__" ? "" : v)}
+                    placeholder="Tarea interna"
+                    searchPlaceholder="Buscar..."
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Proyecto</Label>
+                  <SearchableSelect
+                    options={projectOptions}
+                    value={projectId || "__none__"}
+                    onValueChange={(v) => setProjectId(v === "__none__" ? "" : v)}
+                    placeholder="Opcional"
+                    searchPlaceholder="Buscar..."
+                  />
+                </div>
+              </div>
+
+              {/* Additional assignees */}
+              <div>
+                <Label className="text-xs">Colaboradores adicionales</Label>
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {additionalAssignees.map((uid) => {
+                    const p = profiles?.find((pr) => pr.user_id === uid);
+                    return (
+                      <Badge key={uid} variant="secondary" className="text-xs gap-1">
+                        {p?.full_name || uid}
+                        <X className="h-2.5 w-2.5 cursor-pointer" onClick={() => removeAssignee(uid)} />
+                      </Badge>
+                    );
+                  })}
+                </div>
+                <SearchableSelect
+                  options={availableAssignees}
+                  value=""
+                  onValueChange={addAssignee}
+                  placeholder="Agregar colaborador..."
+                  searchPlaceholder="Buscar..."
+                />
+              </div>
+
+              {/* Dropbox links */}
+              <div>
+                <Label className="text-xs flex items-center gap-1"><Link className="h-3 w-3" /> Enlaces de Dropbox</Label>
+                <div className="space-y-1.5 mb-1.5">
+                  {dropboxLinks.map((link, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <a href={link} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate flex-1">{link}</a>
+                      <X className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => setDropboxLinks(dropboxLinks.filter((_, j) => j !== i))} />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} placeholder="https://www.dropbox.com/..." className="flex-1 h-8 text-xs" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLink(); } }} />
+                  <Button type="button" variant="outline" size="sm" className="h-8" onClick={addLink}><Plus className="h-3 w-3" /></Button>
+                </div>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Input value={newLink} onChange={(e) => setNewLink(e.target.value)} placeholder="https://www.dropbox.com/..." className="flex-1" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLink(); } }} />
-              <Button type="button" variant="outline" size="sm" onClick={addLink}><Plus className="h-4 w-4" /></Button>
-            </div>
-          </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={createTask.isPending}>
+            <Button type="submit" disabled={createTask.isPending || !title.trim()}>
               {createTask.isPending ? "Creando..." : "Crear tarea"}
             </Button>
           </div>

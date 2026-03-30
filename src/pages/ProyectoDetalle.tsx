@@ -35,6 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -232,6 +233,26 @@ const ProyectoDetalle = () => {
     },
     enabled: !!user && !!id,
   });
+
+  const projectPhases: Phase[] = useMemo(() => {
+    const raw = (project as any)?.phases;
+    if (Array.isArray(raw) && raw.length > 0) return raw as Phase[];
+    const titlePhases = new Set<string>();
+    for (const t of tasks) {
+      const match = t.title?.match(/^\[([^\]]+)\]/);
+      if (match) titlePhases.add(match[1]);
+    }
+    return Array.from(titlePhases).map((name, i) => ({ key: `legacy_${name.toLowerCase().replace(/\s+/g, "_")}`, name, order: i }));
+  }, [project, tasks]);
+
+  const handlePhasesChange = useCallback(async (newPhases: Phase[]) => {
+    await supabase.from("projects").update({ phases: newPhases } as any).eq("id", id!);
+    queryClient.invalidateQueries({ queryKey: ["project", id] });
+  }, [id, queryClient]);
+
+  const handleAddTaskForPhase = useCallback((phaseKey?: string) => {
+    setShowTaskForm(true);
+  }, []);
 
   const toggleTaskSelection = useCallback((taskId: string) => {
     setSelectedTaskIds(prev => {
@@ -471,7 +492,7 @@ const ProyectoDetalle = () => {
               </div>
             )}
 
-            {tasks.length === 0 ? (
+            {tasks.length === 0 && projectPhases.length === 0 ? (
               <div className="text-center py-16">
                 <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
                 <p className="mt-3 text-sm text-muted-foreground">Sin tareas en este proyecto.</p>
@@ -480,15 +501,18 @@ const ProyectoDetalle = () => {
                 </Button>
               </div>
             ) : (
-              <TaskListGrouped
+              <PhaseManager
+                phases={projectPhases}
                 tasks={tasks}
+                profileMap={profileMap}
+                onPhasesChange={handlePhasesChange}
+                onTaskClick={(taskId) => setSelectedTaskId(taskId)}
+                onAddTask={handleAddTaskForPhase}
+                canDeleteTasks={canDeleteTasks}
+                onDeleteTask={(taskId) => setDeleteTargetId(taskId)}
                 selectionMode={selectionMode}
                 selectedTaskIds={selectedTaskIds}
-                toggleTaskSelection={toggleTaskSelection}
-                setSelectedTaskId={setSelectedTaskId}
-                profileMap={profileMap}
-                canDeleteTasks={canDeleteTasks}
-                setDeleteTargetId={setDeleteTargetId}
+                onToggleTaskSelection={toggleTaskSelection}
               />
             )}
 

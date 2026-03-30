@@ -188,6 +188,7 @@ export function useCreateTask() {
       assigned_to?: string;
       client_id?: string;
       project_id?: string;
+      phase_key?: string;
       additional_assignees?: string[];
       dropbox_links?: string[];
       criticality_level?: string;
