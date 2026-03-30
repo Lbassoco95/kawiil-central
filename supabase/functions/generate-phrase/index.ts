@@ -18,8 +18,22 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-/** Modelo ligero para frases cortas (mismo ecosistema que el resto de Edge functions). */
-const PHRASE_MODEL = "claude-3-5-haiku-20241022";
+/** Mismo modelo que ai-chat / process-document (Haiku a veces falla o no está habilitado en la cuenta). Override: secreto opcional GENERATE_PHRASE_ANTHROPIC_MODEL. */
+function phraseAnthropicModel(): string {
+  return (Deno.env.get("GENERATE_PHRASE_ANTHROPIC_MODEL") || "").trim() ||
+    "claude-sonnet-4-20250514";
+}
+
+function parseAnthropicErrorBody(text: string): string {
+  try {
+    const j = JSON.parse(text) as { error?: { message?: string } };
+    const m = j.error?.message;
+    if (m) return m.replace(/\s+/g, " ").trim().slice(0, 400);
+  } catch {
+    /* ignore */
+  }
+  return text.replace(/\s+/g, " ").trim().slice(0, 400);
+}
 
 const FALLBACK_QUOTES = [
   "La disciplina tarde o temprano vencerá a la inteligencia.\n— Yukio Mishima, Sol y acero",
@@ -267,11 +281,12 @@ FRASE: [la cita textual]
           throw new Error("RATE_LIMIT");
         }
         const text = await aiResp.text();
-        console.error("Anthropic error:", aiResp.status, text.slice(0, 500));
+        const detail = parseAnthropicErrorBody(text);
+        console.error("Anthropic error:", aiResp.status, detail);
         if (aiResp.status === 401 || aiResp.status === 403) {
           throw new Error("AI_AUTH_ERROR");
         }
-        throw new Error("AI_PROVIDER_ERROR");
+        throw new Error(`AI_PROVIDER_ERROR|${detail}`);
       }
 
       const aiData = await aiResp.json();
@@ -361,11 +376,16 @@ FRASE: [la cita textual]
       );
     }
 
-    if (errorMessage === "AI_PROVIDER_ERROR") {
+    if (errorMessage.startsWith("AI_PROVIDER_ERROR")) {
+      const detail = errorMessage.startsWith("AI_PROVIDER_ERROR|")
+        ? errorMessage.slice("AI_PROVIDER_ERROR|".length).trim()
+        : "";
       return new Response(
         JSON.stringify({
           error: "ai_provider_error",
-          message: "El proveedor de IA devolvió un error. Intenta de nuevo más tarde.",
+          message: detail
+            ? detail
+            : "El proveedor de IA devolvió un error. Intenta de nuevo más tarde.",
         }),
         {
           status: 502,
