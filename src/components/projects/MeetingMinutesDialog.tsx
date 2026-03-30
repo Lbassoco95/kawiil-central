@@ -22,6 +22,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { cn } from "@/lib/utils";
+import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { toast } from "sonner";
@@ -379,13 +380,27 @@ export function MeetingMinutesDialog({
             <Sparkles className="h-5 w-5 text-primary" />
             {step === "input" ? "Analizar documento / minuta" : "Tareas propuestas por AI"}
           </DialogTitle>
-          <DialogDescription>
-            {step === "input"
-              ? isStandalone
+          {step === "input" ? (
+            <DialogDescription>
+              {isStandalone
                 ? "Sube o pega el contenido del documento para generar un proyecto con tareas automáticamente."
-                : `Sube o pega el contenido del documento para generar tareas automáticamente en "${projectName}".`
-              : summary}
-          </DialogDescription>
+                : `Sube o pega el contenido del documento para generar tareas automáticamente en "${projectName}".`}
+            </DialogDescription>
+          ) : (
+            <>
+              <DialogDescription className="sr-only">
+                Resumen generado a partir del documento. Revisa y ajusta las tareas propuestas.
+              </DialogDescription>
+              {summary ? (
+                <div className="text-left mt-1 space-y-2 max-h-40 overflow-y-auto pr-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Resumen del documento
+                  </p>
+                  <KawiilAiMarkdown variant="compact">{summary}</KawiilAiMarkdown>
+                </div>
+              ) : null}
+            </>
+          )}
         </DialogHeader>
 
         {step === "input" ? (

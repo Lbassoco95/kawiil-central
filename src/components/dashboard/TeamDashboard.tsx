@@ -253,7 +253,7 @@ INSTRUCCIONES:
 4. Si hay proyectos críticos o con atraso, menciónalos con contexto.
 5. Si hay muchas tareas vencidas en alguna célula, sugiere acción.
 6. Cierra con una observación motivadora.
-7. Máximo 150 palabras. Usa markdown.`;
+7. Máximo 150 palabras. Usa Markdown: títulos con ## o ** (ej. **📊 Resumen ejecutivo**, **Estado general**), listas con guiones, **negritas** en cifras y alertas, emojis en viñetas.`;
   }, [activeClients, activeProjects, pendingTasks, completedTasks, dueSoon, areaStats, projects, allTasks, today]);
 
   const tabClass = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap";
@@ -369,7 +369,11 @@ INSTRUCCIONES:
               <MetricInsight
                 metricKey="area-stats"
                 ready={areaStats.length > 0}
-                contextPrompt={`Eres el analista de un despacho contable/legal. Analiza estos datos de avance por célula y da UNA recomendación accionable en máximo 30 palabras. Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% avance, ${a.overdue} vencidas, ${a.pending} pendientes`).join("; ")}. Identifica la célula con más riesgo o retraso y sugiere qué hacer. Sin emojis, sin saludo.`}
+                contextPrompt={`Eres el analista de un despacho contable/legal. Analiza estos datos de avance por célula y da UNA recomendación accionable (máximo 45 palabras).
+
+Datos: ${areaStats.map(a => `${a.label}: ${a.pct}% avance, ${a.overdue} vencidas, ${a.pending} pendientes`).join("; ")}
+
+Formato obligatorio: Markdown. Usa **negritas** para el hallazgo principal; viñetas si hay varios puntos; 1-2 emojis opcionales. Sin saludo ni despedida.`}
               />
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-4">
                 {areaStats.map((a) => (
@@ -408,7 +412,11 @@ INSTRUCCIONES:
                 <MetricInsight
                   metricKey="team-workload"
                   ready={teamWorkload.length > 0}
-                  contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable en máximo 30 palabras. Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}. Identifica sobrecarga o riesgo y sugiere redistribución si aplica. Sin emojis, sin saludo.`}
+                  contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable (máximo 50 palabras).
+
+Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}
+
+Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñetas si listas varias personas o acciones; emojis opcionales (ej. ⚠️ 🔥). Sin saludo.`}
                 />
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 mt-4">
                   {teamWorkload.map((m) => (
@@ -457,7 +465,11 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="project-progress"
             ready={projectProgress.length > 0}
-            contextPrompt={`Eres el analista de un despacho. Analiza el avance de proyectos y da UNA recomendación accionable en máximo 30 palabras. Datos: ${projectProgress.slice(0, 5).map(p => `${p.clientName} (${p.name}): ${p.pct}%`).join("; ")}. Identifica proyectos rezagados y sugiere prioridad. Sin emojis, sin saludo.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance de proyectos y da UNA recomendación accionable (máximo 45 palabras).
+
+Datos: ${projectProgress.slice(0, 5).map(p => `${p.clientName} (${p.name}): ${p.pct}%`).join("; ")}
+
+Markdown obligatorio: **negritas** para prioridades; viñetas si hay varios proyectos; emojis opcionales. Sin saludo.`}
           />
           {projectProgress.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6">Sin proyectos activos</p>
@@ -500,7 +512,11 @@ INSTRUCCIONES:
           <MetricInsight
             metricKey="client-progress"
             ready={clientProgress.length > 0}
-            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable en máximo 30 palabras. Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.total - c.completed} pendientes)`).join("; ")}. Identifica clientes con más riesgo y sugiere acción. Sin emojis, sin saludo.`}
+            contextPrompt={`Eres el analista de un despacho. Analiza el avance por cliente y da UNA recomendación accionable (máximo 45 palabras).
+
+Datos: ${clientProgress.slice(0, 5).map(c => `${c.name}: ${c.pct}% (${c.total - c.completed} pendientes)`).join("; ")}
+
+Markdown: **negritas** para riesgo o acción; viñetas si varios clientes; emojis opcionales. Sin saludo.`}
           />
           {clientProgress.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6">Sin datos de clientes</p>

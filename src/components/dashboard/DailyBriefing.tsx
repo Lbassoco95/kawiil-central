@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { toDateStringMX } from "@/lib/dateUtils";
 
@@ -90,7 +90,8 @@ INSTRUCCIONES:
 1. Resume en máximo 3 puntos clave con emojis.
 2. Si hay vencidas, menciona con empatía.
 3. Si completó, reconoce.
-4. Máximo 80 palabras. Sé ultra-conciso. Markdown. Sin saludo largo.`;
+4. Máximo 80 palabras. Sé ultra-conciso.
+5. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.`;
 
     try {
       const session = await supabase.auth.getSession();
@@ -202,11 +203,7 @@ INSTRUCCIONES:
             </div>
           )}
 
-          {briefing && (
-            <div className="text-[13px] text-foreground leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_strong]:font-medium">
-              <ReactMarkdown>{briefing}</ReactMarkdown>
-            </div>
-          )}
+          {briefing && <KawiilAiMarkdown>{briefing}</KawiilAiMarkdown>}
 
           {briefing && (
             <button

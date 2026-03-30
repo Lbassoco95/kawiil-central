@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import ReactMarkdown from "react-markdown";
+import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
+import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 
 interface Props {
   cacheKey: string;
@@ -24,8 +25,7 @@ export function AISummaryCard({
       const cached = localStorage.getItem(`kawiil-summary-${cacheKey}`);
       if (cached) {
         const { date, content: c } = JSON.parse(cached);
-        const today = new Date().toISOString().split("T")[0];
-        if (date === today) return c;
+        if (date === toDateStringMX(nowMX())) return c;
       }
     } catch {}
     return null;
@@ -152,9 +152,9 @@ export function AISummaryCard({
           )}
 
           {content ? (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1">
-              <ReactMarkdown>{content}</ReactMarkdown>
-            </div>
+            <KawiilAiMarkdown className="rounded-lg border border-border/40 bg-muted/10 px-3 py-2.5">
+              {content}
+            </KawiilAiMarkdown>
           ) : loading ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -4,7 +4,7 @@ import { Search, Loader2, Sparkles, ArrowRight, Users, Briefcase, FolderKanban, 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import ReactMarkdown from "react-markdown";
+import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 
 interface SearchResult {
   type: "client" | "project" | "task" | "user";
@@ -163,8 +163,10 @@ export function GlobalAISearch() {
             <div className="px-3 py-2 border-b bg-muted/30">
               <div className="flex items-start gap-2 text-xs text-muted-foreground">
                 <Sparkles className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
-                <div className="leading-relaxed prose prose-sm dark:prose-invert max-w-none [&_p]:m-0 [&_strong]:text-foreground">
-                  <ReactMarkdown>{summary}</ReactMarkdown>
+                <div className="min-w-0 flex-1 [&_p:first-child]:mt-0">
+                  <KawiilAiMarkdown variant="compact" className="text-muted-foreground [&_strong]:text-foreground">
+                    {summary}
+                  </KawiilAiMarkdown>
                 </div>
               </div>
             </div>

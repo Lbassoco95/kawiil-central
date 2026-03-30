@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
+import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 
 interface MetricInsightProps {
   metricKey: string;
@@ -14,7 +16,7 @@ export function MetricInsight({ metricKey, contextPrompt, ready }: MetricInsight
       const cached = localStorage.getItem(`kawiil-insight-${metricKey}`);
       if (cached) {
         const { date, content } = JSON.parse(cached);
-        if (date === new Date().toISOString().split("T")[0]) return content;
+        if (date === toDateStringMX(nowMX())) return content;
       }
     } catch {}
     return null;
@@ -78,7 +80,7 @@ export function MetricInsight({ metricKey, contextPrompt, ready }: MetricInsight
         try {
           localStorage.setItem(
             `kawiil-insight-${metricKey}`,
-            JSON.stringify({ date: new Date().toISOString().split("T")[0], content: fullContent })
+            JSON.stringify({ date: toDateStringMX(nowMX()), content: fullContent })
           );
         } catch {}
       }
@@ -99,17 +101,19 @@ export function MetricInsight({ metricKey, contextPrompt, ready }: MetricInsight
   if (!insight && !loading) return null;
 
   return (
-    <div className="flex items-start gap-1.5 mt-1">
+    <div className="flex items-start gap-2 mt-2 w-full min-w-0">
       {loading ? (
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-          <span>Analizando...</span>
+          <span>Analizando…</span>
         </div>
       ) : insight ? (
-        <div className="flex items-start gap-1.5">
-          <Sparkles className="h-3 w-3 text-primary shrink-0 mt-0.5" />
-          <p className="text-[11px] text-muted-foreground leading-relaxed">{insight}</p>
-        </div>
+        <>
+          <Sparkles className="h-3.5 w-3.5 text-primary shrink-0 mt-1" aria-hidden />
+          <div className="min-w-0 flex-1 rounded-lg border border-border/50 bg-muted/15 px-3 py-2.5">
+            <KawiilAiMarkdown variant="compact">{insight}</KawiilAiMarkdown>
+          </div>
+        </>
       ) : null}
     </div>
   );
