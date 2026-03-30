@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, Send, Loader2, X, Minus, Plus, FileText } from "lucide-react";
-import { ChatAttachmentPicker } from "@/components/ai/ChatAttachmentPicker";
+import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
 import { cn } from "@/lib/utils";
 import { useLocation } from "react-router-dom";
 
@@ -184,12 +184,19 @@ export function FloatingAIChat() {
       </div>
 
       {/* Input */}
-      <div className="border-t border-border/40 px-3 py-2.5 bg-secondary/10">
+      <div className="border-t border-border/40 px-3 py-2.5 bg-secondary/10 flex flex-col gap-2">
+        <ChatAttachmentChips
+          files={pendingFiles}
+          disabled={isStreaming}
+          onRemove={(i) => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+          className="max-h-24"
+        />
         <div className="flex gap-1.5 items-end">
           <ChatAttachmentPicker
             files={pendingFiles}
             onChange={setPendingFiles}
             disabled={isStreaming}
+            showChips={false}
             className="shrink-0"
           />
           <Textarea
@@ -198,8 +205,8 @@ export function FloatingAIChat() {
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             placeholder="Mensaje o archivos…"
-            className="resize-none min-h-[36px] max-h-[120px] text-[13px] bg-background border-border/50 rounded-xl py-2 flex-1 min-w-0"
-            rows={1}
+            className="resize-none min-h-[64px] max-h-[120px] text-[13px] bg-background border-border/50 rounded-xl py-2 flex-1 min-w-0"
+            rows={2}
             disabled={isStreaming}
           />
           <Button

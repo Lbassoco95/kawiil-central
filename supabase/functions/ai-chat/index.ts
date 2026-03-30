@@ -22,8 +22,9 @@ function escapePostgrestString(input: string): string {
     .replace(/\)/g, '\\)');
 }
 
-const CHAT_ATTACH_MAX_FILES = 5;
-const CHAT_ATTACH_MAX_BYTES = 15 * 1024 * 1024;
+const CHAT_ATTACH_MAX_FILES = 20;
+const CHAT_ATTACH_MAX_BYTES = 50 * 1024 * 1024;
+const CHAT_ATTACH_BATCH_MAX_BYTES = 150 * 1024 * 1024;
 const CHAT_TEXT_EXTRACT_MAX = 120_000;
 
 async function assertAiProjectAccess(
@@ -80,6 +81,27 @@ async function downloadStorageObject(
 function truncateText(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, max) + "\n\n[…contenido truncado por tamaño…]";
+}
+
+async function pdfBytesToGatewayText(bytes: Uint8Array, name: string): Promise<string> {
+  const fallback =
+    `[PDF: ${name}] No se pudo extraer texto automáticamente; si usas solo el gateway, prueba otro formato o activa Anthropic.`;
+  try {
+    const { extractText, getDocumentProxy } = await import(
+      "https://esm.sh/unpdf@0.12.1",
+    ) as {
+      extractText: (pdf: unknown, opts?: { mergePages?: boolean }) => Promise<{ text?: string }>;
+      getDocumentProxy: (data: Uint8Array) => Promise<unknown>;
+    };
+    const pdf = await getDocumentProxy(bytes);
+    const { text } = await extractText(pdf, { mergePages: true });
+    const t = (text || "").trim();
+    if (!t) return fallback;
+    return `### ${name} (PDF, texto extraído)\n${truncateText(t, CHAT_TEXT_EXTRACT_MAX)}`;
+  } catch (e) {
+    console.warn("pdf extract", e);
+    return fallback;
+  }
 }
 
 function xlsxBytesToText(bytes: Uint8Array): string {
@@ -145,12 +167,13 @@ async function processAttachmentFile(
     };
   }
   if (mt === "application/pdf" || lower.endsWith(".pdf")) {
+    const gatewayText = await pdfBytesToGatewayText(bytes, name);
     return {
       claude: [{
         type: "document",
         source: { type: "base64", media_type: "application/pdf", data: toBase64(bytes) },
       }],
-      gatewayText: `[PDF adjunto: ${name} — contenido disponible en el modo principal con Claude.]`,
+      gatewayText,
     };
   }
   if (
@@ -205,6 +228,9 @@ async function resolveChatAttachments(
   const userText = typeof messages[lastIdx].content === "string" ? messages[lastIdx].content : "";
   const claudeBlocks: any[] = [];
   const gatewayParts: string[] = [];
+  let batchBytes = 0;
+  const maxMb = Math.round(CHAT_ATTACH_MAX_BYTES / (1024 * 1024));
+  const maxBatchMb = Math.round(CHAT_ATTACH_BATCH_MAX_BYTES / (1024 * 1024));
 
   for (const ref of refs) {
     const bucket = ref.bucket || "chat-uploads";
@@ -214,9 +240,14 @@ async function resolveChatAttachments(
       continue;
     }
     if (bytes.length > CHAT_ATTACH_MAX_BYTES) {
-      gatewayParts.push(`Archivo demasiado grande (máx 15MB): ${ref.name}`);
+      gatewayParts.push(`Archivo demasiado grande (máx ${maxMb}MB): ${ref.name}`);
       continue;
     }
+    if (batchBytes + bytes.length > CHAT_ATTACH_BATCH_MAX_BYTES) {
+      gatewayParts.push(`Omitido (supera ${maxBatchMb}MB total por mensaje): ${ref.name}`);
+      continue;
+    }
+    batchBytes += bytes.length;
     const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo");
     claudeBlocks.push(...proc.claude);
     if (proc.gatewayText) gatewayParts.push(proc.gatewayText);

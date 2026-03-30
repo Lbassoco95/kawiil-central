@@ -28,7 +28,13 @@ import { ProjectSidebar } from "@/components/ai/ProjectSidebar";
 import { KnowledgePanel } from "@/components/ai/KnowledgePanel";
 import { ArtifactCard } from "@/components/ai/ArtifactCard";
 import { ProjectPreviewCard } from "@/components/ai/ProjectPreviewCard";
-import { ChatAttachmentPicker } from "@/components/ai/ChatAttachmentPicker";
+import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
+import {
+  MAX_CHAT_ATTACHMENT_BATCH_BYTES,
+  MAX_CHAT_ATTACHMENT_BYTES_PER_FILE,
+  MAX_CHAT_ATTACHMENT_FILES,
+  formatMb,
+} from "@/lib/chatAttachmentLimits";
 import { AiProjectMembersDialog } from "@/components/ai/AiProjectMembersDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -114,9 +120,14 @@ const AsistenteIA = () => {
   }, [activeProject?.id]);
 
   const handleSend = () => {
-    if (!input.trim() || isStreaming) return;
-    sendMessage(input.trim());
+    if ((!input.trim() && pendingFiles.length === 0) || isStreaming) return;
+    sendMessage(input.trim(), {
+      files: pendingFiles,
+      onAfterChatUpload:
+        linkFilesToProject && activeAiProjectId ? (file) => uploadToProject(file) : undefined,
+    });
     setInput("");
+    setPendingFiles([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
 
@@ -131,7 +142,7 @@ const AsistenteIA = () => {
     setInput(e.target.value);
     const ta = e.target;
     ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 150) + "px";
+    ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   };
 
   const handleCreateAiProject = async () => {
@@ -477,31 +488,39 @@ const AsistenteIA = () => {
 
           {/* Input */}
           <div className="border-t border-border/30 px-4 py-3">
-            <div className="max-w-3xl mx-auto flex gap-2 items-end">
-              <ChatAttachmentPicker
+            <div className="max-w-3xl mx-auto flex flex-col gap-2">
+              <ChatAttachmentChips
                 files={pendingFiles}
-                onChange={setPendingFiles}
                 disabled={isStreaming}
-                className="shrink-0"
+                onRemove={(i) => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
               />
-              <Textarea
-                ref={textareaRef}
-                value={input}
-                onChange={handleTextareaChange}
-                onKeyDown={handleKeyDown}
-                placeholder="Escribe tu mensaje o adjunta archivos…"
-                className="resize-none min-h-[42px] max-h-[150px] text-sm bg-secondary/30 border-0 rounded-xl flex-1"
-                rows={1}
-                disabled={isStreaming}
-              />
-              <Button
-                size="sm"
-                onClick={handleSend}
-                disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
-                className="h-[42px] w-[42px] rounded-xl shrink-0"
-              >
-                {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
+              <div className="flex gap-2 items-end">
+                <ChatAttachmentPicker
+                  files={pendingFiles}
+                  onChange={setPendingFiles}
+                  disabled={isStreaming}
+                  showChips={false}
+                  className="shrink-0"
+                />
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={handleTextareaChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Escribe tu mensaje o adjunta archivos…"
+                  className="resize-none min-h-[80px] max-h-[200px] text-sm bg-secondary/30 border-0 rounded-xl flex-1 min-w-0"
+                  rows={3}
+                  disabled={isStreaming}
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSend}
+                  disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
+                  className="h-[42px] w-[42px] rounded-xl shrink-0"
+                >
+                  {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
             {activeAiProjectId && (
               <div className="max-w-3xl mx-auto flex items-center gap-2 mt-2">
@@ -516,8 +535,10 @@ const AsistenteIA = () => {
                 </Label>
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground text-center mt-2">
-              Adjuntos: imágenes, PDF, Excel, texto, SQLite (máx. 5 archivos, 15MB c/u). Kawiil AI puede cometer errores.
+            <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
+              Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
+              {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
+              MB total por mensaje. Kawiil AI puede cometer errores.
             </p>
           </div>
         </div>

@@ -3,6 +3,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  MAX_CHAT_ATTACHMENT_BATCH_BYTES,
+  MAX_CHAT_ATTACHMENT_BYTES_PER_FILE,
+  MAX_CHAT_ATTACHMENT_FILES,
+  formatMb,
+} from "@/lib/chatAttachmentLimits";
 
 export interface ChatAttachmentMeta {
   bucket: string;
@@ -34,8 +40,6 @@ export interface SendMessageOptions {
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
-const MAX_CHAT_FILES = 5;
-const MAX_CHAT_FILE_BYTES = 15 * 1024 * 1024;
 
 export function useChat() {
   const { user } = useAuth();
@@ -194,7 +198,7 @@ export function useChat() {
 
   const sendMessage = useCallback(
     async (input: string, opts?: SendMessageOptions) => {
-      const files = (opts?.files ?? []).slice(0, MAX_CHAT_FILES);
+      const files = (opts?.files ?? []).slice(0, MAX_CHAT_ATTACHMENT_FILES);
       const text = input.trim() || (files.length ? "(Archivos adjuntos)" : "");
       if ((!text && !files.length) || isStreaming) return;
 
@@ -206,15 +210,28 @@ export function useChat() {
       }
 
       const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
-      const orgId = orgRes.data as string;
+      if (orgRes.error) {
+        toast.error(orgRes.error.message || "No se pudo obtener la organización");
+        return;
+      }
+      const orgId = orgRes.data as string | null;
+      if (files.length > 0 && !orgId) {
+        toast.error("Tu cuenta no tiene organización; no se pueden subir adjuntos.");
+        return;
+      }
 
       const savedMeta: ChatAttachmentMeta[] = [];
       const attachmentRefs: ChatAttachmentMeta[] = [];
+      let uploadedBatchBytes = 0;
 
       for (const file of files) {
-        if (file.size > MAX_CHAT_FILE_BYTES) {
-          toast.error(`${file.name} supera 15MB`);
+        if (file.size > MAX_CHAT_ATTACHMENT_BYTES_PER_FILE) {
+          toast.error(`${file.name} supera ${formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo`);
           continue;
+        }
+        if (uploadedBatchBytes + file.size > MAX_CHAT_ATTACHMENT_BATCH_BYTES) {
+          toast.error(`Límite de ${formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)} MB total por mensaje`);
+          break;
         }
         const safe = file.name.replace(/[^\w.\-]+/g, "_");
         const objectPath = `${orgId}/${user!.id}/${crypto.randomUUID()}_${safe}`;
@@ -231,6 +248,7 @@ export function useChat() {
         };
         savedMeta.push(meta);
         attachmentRefs.push(meta);
+        uploadedBatchBytes += file.size;
         if (opts?.onAfterChatUpload) {
           try {
             await opts.onAfterChatUpload(file);
