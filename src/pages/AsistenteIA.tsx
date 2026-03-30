@@ -604,7 +604,7 @@ const AsistenteIA = () => {
             <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
               Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
               {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
-              MB total por mensaje. Kawiil AI puede cometer errores.
+              MB total por mensaje. PDF mayores a ~3 MB se procesan como texto en el servidor (no binario completo) para evitar límites de la función. Kawiil AI puede cometer errores.
             </p>
           </div>
         </div>

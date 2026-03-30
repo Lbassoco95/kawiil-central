@@ -26,6 +26,14 @@ const CHAT_ATTACH_MAX_FILES = 20;
 const CHAT_ATTACH_MAX_BYTES = 50 * 1024 * 1024;
 const CHAT_ATTACH_BATCH_MAX_BYTES = 150 * 1024 * 1024;
 const CHAT_TEXT_EXTRACT_MAX = 120_000;
+/** Por debajo: Claude recibe PDF nativo (base64). Por encima: solo texto extraído — evita 546 WORKER_LIMIT. */
+const PDF_AS_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
+/** PDFs mayores: no ejecutar unpdf (CPU/RAM del isolate). */
+const PDF_TEXT_EXTRACT_MAX_BYTES = 10 * 1024 * 1024;
+/** Imágenes mayores: no multimodal base64 en Edge. */
+const IMAGE_MULTIMODAL_MAX_BYTES = 4 * 1024 * 1024;
+/** Excel muy grande: evitar XLSX.read completo en memoria. */
+const XLSX_PROCESS_MAX_BYTES = 20 * 1024 * 1024;
 
 async function assertAiProjectAccess(
   svc: ReturnType<typeof createClient>,
@@ -84,6 +92,10 @@ function truncateText(s: string, max: number): string {
 }
 
 async function pdfBytesToGatewayText(bytes: Uint8Array, name: string): Promise<string> {
+  if (bytes.length > PDF_TEXT_EXTRACT_MAX_BYTES) {
+    const mb = Math.round(bytes.length / (1024 * 1024));
+    return `[PDF: ${name}] Archivo de ~${mb} MB: demasiado grande para extraer texto en el servidor. Divide el PDF o reduce el tamaño.`;
+  }
   const fallback =
     `[PDF: ${name}] No se pudo extraer texto automáticamente; si usas solo el gateway, prueba otro formato o activa Anthropic.`;
   try {
@@ -122,7 +134,12 @@ function xlsxBytesToText(bytes: Uint8Array): string {
   }
 }
 
+const SQLITE_PROCESS_MAX_BYTES = 15 * 1024 * 1024;
+
 async function sqliteBytesToSummary(bytes: Uint8Array): Promise<string> {
+  if (bytes.length > SQLITE_PROCESS_MAX_BYTES) {
+    return `[SQLite ~${Math.round(bytes.length / (1024 * 1024))} MB: demasiado grande para analizar en el servidor.]`;
+  }
   const tmp = await Deno.makeTempFile();
   try {
     await Deno.writeFile(tmp, bytes);
@@ -158,6 +175,16 @@ async function processAttachmentFile(
   const mt = (mime || "").toLowerCase();
 
   if (mt.startsWith("image/")) {
+    if (bytes.length > IMAGE_MULTIMODAL_MAX_BYTES) {
+      const mb = (bytes.length / (1024 * 1024)).toFixed(1);
+      return {
+        claude: [{
+          type: "text",
+          text: `[Imagen demasiado grande (${mb} MB; máx ${IMAGE_MULTIMODAL_MAX_BYTES / (1024 * 1024)} MB en el servidor): ${name}]`,
+        }],
+        gatewayText: `[Imagen omitida por tamaño: ${name}]`,
+      };
+    }
     const media = mt === "image/png" || mt === "image/gif" || mt === "image/webp" || mt === "image/jpeg"
       ? mt
       : "image/jpeg";
@@ -168,10 +195,23 @@ async function processAttachmentFile(
   }
   if (mt === "application/pdf" || lower.endsWith(".pdf")) {
     const gatewayText = await pdfBytesToGatewayText(bytes, name);
+    if (bytes.length <= PDF_AS_NATIVE_DOCUMENT_MAX_BYTES) {
+      return {
+        claude: [{
+          type: "document",
+          source: { type: "base64", media_type: "application/pdf", data: toBase64(bytes) },
+        }],
+        gatewayText,
+      };
+    }
+    const inner = gatewayText.replace(/^###[^\n]*\n?/, "").trim() || gatewayText;
     return {
       claude: [{
-        type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: toBase64(bytes) },
+        type: "text",
+        text: truncateText(
+          `PDF «${name}» (> ${Math.round(PDF_AS_NATIVE_DOCUMENT_MAX_BYTES / (1024 * 1024))} MB en el servidor): se envía solo texto extraído, no el binario completo.\n\n${inner}`,
+          CHAT_TEXT_EXTRACT_MAX,
+        ),
       }],
       gatewayText,
     };
@@ -182,6 +222,16 @@ async function processAttachmentFile(
     lower.endsWith(".xlsx") ||
     lower.endsWith(".xls")
   ) {
+    if (bytes.length > XLSX_PROCESS_MAX_BYTES) {
+      const mb = Math.round(bytes.length / (1024 * 1024));
+      return {
+        claude: [{
+          type: "text",
+          text: `[Excel ~${mb} MB: demasiado grande para procesar en el servidor. Exporta una hoja a CSV o reduce el archivo.]`,
+        }],
+        gatewayText: `[Excel omitido por tamaño: ${name}]`,
+      };
+    }
     const t = xlsxBytesToText(bytes);
     return { claude: [{ type: "text", text: `Contenido de ${name}:\n${t}` }], gatewayText: `### ${name}\n${t}` };
   }

@@ -340,8 +340,21 @@ export function useChat() {
         const ct = resp.headers.get("content-type") || "";
 
         if (!resp.ok) {
-          const errorData = await resp.json().catch(() => ({}));
-          throw new Error((errorData as any).error || `Error ${resp.status}`);
+          const errRaw = await resp.text();
+          let errMsg = `Error ${resp.status}`;
+          if (resp.status === 546) {
+            errMsg =
+              "Límite de recursos en Supabase (código 546: memoria o tiempo de CPU del Edge Function). " +
+              "Suele ocurrir con varios PDF/imágenes grandes. Prueba menos archivos, PDF bajo ~3 MB si envías varios a la vez, o divide el mensaje.";
+          } else {
+            try {
+              const j = JSON.parse(errRaw) as { error?: string; message?: string };
+              errMsg = j.error || j.message || errMsg;
+            } catch {
+              if (errRaw && errRaw.length < 500) errMsg = errRaw;
+            }
+          }
+          throw new Error(errMsg);
         }
 
         if (ct.includes("application/json") && !ct.includes("event-stream")) {
