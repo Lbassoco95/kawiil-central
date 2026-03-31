@@ -51,6 +51,25 @@ const MSG_ANTHROPIC_BILLING_FALLBACK =
   "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
   "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
 
+/** Entre cada `index-chat-attachment` hay al menos este tiempo (varios trozos por invocación; evita ráfagas 429). */
+const MIN_MS_BETWEEN_INDEX_INVOKES = 800;
+/** Tras un posible 429 de embeddings, una pausa antes de reintentar la misma petición. */
+const INDEX_CLIENT_RETRY_ON_429_MS = 8000;
+const INDEX_CLIENT_MAX_429_RETRIES = 1;
+
+function sleepMsChat(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function looksLikeOpenAIRateLimit(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("429") ||
+    m.includes("rate limit") ||
+    m.includes("too many requests")
+  );
+}
+
 const isPdfChatAttachment = (m: ChatAttachmentMeta) =>
   m.mime_type === "application/pdf" || m.name.toLowerCase().endsWith(".pdf");
 
@@ -118,6 +137,7 @@ async function runChatPdfIndexingInBackground(
       });
 
       try {
+        let nextIndexInvokeEarliest = 0;
         /* Cada página puede requerir varias invocaciones (trozos de texto); resume_from_chunk = offset en caracteres. */
         while (iterations < 20000) {
           iterations += 1;
@@ -138,15 +158,11 @@ async function runChatPdfIndexingInBackground(
             },
           };
 
-          const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
-            body,
-          });
-          const early = data as { error?: string } | null;
-          if (fnErr) {
-            if (early?.error) throw new Error(early.error);
-            throw fnErr;
-          }
-          const d = data as {
+          const throttleWait = Math.max(0, nextIndexInvokeEarliest - Date.now());
+          if (throttleWait > 0) await sleepMsChat(throttleWait);
+
+          let r429Left = INDEX_CLIENT_MAX_429_RETRIES;
+          let d: {
             error?: string;
             attachment_index_id?: string;
             pages_done?: number;
@@ -156,9 +172,39 @@ async function runChatPdfIndexingInBackground(
             resume_from_chunk_next?: number | null;
             continuation_chunk_index_next?: number;
           };
-          if (d?.error) throw new Error(d.error);
-          if (!d || typeof d.attachment_index_id !== "string") {
-            throw new Error("Respuesta inválida de index-chat-attachment");
+
+          for (;;) {
+            const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
+              body,
+            });
+            nextIndexInvokeEarliest = Date.now() + MIN_MS_BETWEEN_INDEX_INVOKES;
+
+            const early = data as { error?: string } | null;
+            const fnMsg = fnErr ? String((fnErr as Error).message || fnErr) : "";
+            const bodyErr = early?.error ?? "";
+
+            if (fnErr && !early?.error) {
+              if (looksLikeOpenAIRateLimit(fnMsg) && r429Left > 0) {
+                r429Left -= 1;
+                await sleepMsChat(INDEX_CLIENT_RETRY_ON_429_MS);
+                continue;
+              }
+              throw fnErr;
+            }
+            if (bodyErr) {
+              if (looksLikeOpenAIRateLimit(bodyErr) && r429Left > 0) {
+                r429Left -= 1;
+                await sleepMsChat(INDEX_CLIENT_RETRY_ON_429_MS);
+                continue;
+              }
+              throw new Error(bodyErr);
+            }
+
+            d = data as typeof d;
+            if (!d || typeof d.attachment_index_id !== "string") {
+              throw new Error("Respuesta inválida de index-chat-attachment");
+            }
+            break;
           }
 
           indexId = d.attachment_index_id;
@@ -179,7 +225,6 @@ async function runChatPdfIndexingInBackground(
 
           if (d.resume_from_chunk_next != null) {
             resumeChunk = d.resume_from_chunk_next;
-            await new Promise((r) => setTimeout(r, 40));
             continue;
           }
           resumeChunk = 0;
@@ -187,7 +232,6 @@ async function runChatPdfIndexingInBackground(
           if (d.done) break;
           if (d.next_page == null) break;
           pageStart = d.next_page;
-          await new Promise((r) => setTimeout(r, 120));
         }
         toast.success(`«${meta.name}» quedó indexado para búsqueda en próximos mensajes.`);
       } catch (e) {
@@ -368,7 +412,7 @@ export function useChat() {
     async (input: string, opts?: SendMessageOptions) => {
       const files = (opts?.files ?? []).slice(0, MAX_CHAT_ATTACHMENT_FILES);
       const text = input.trim() || (files.length ? "(Archivos adjuntos)" : "");
-      if ((!text && !files.length) || isStreaming || pdfIndexingStatus) return;
+      if ((!text && !files.length) || isStreaming) return;
 
       progressStepsRef.current = [];
       const pushProgress = (phase: string, message: string, mode: PushProgressMode = "append") => {

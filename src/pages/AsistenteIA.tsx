@@ -7,7 +7,7 @@ import { useAiSharedMemories } from "@/hooks/useAiSharedMemories";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAiMemories } from "@/hooks/useAiMemories";
-import { useAiArtifacts } from "@/hooks/useAiArtifacts";
+import { useAiArtifacts, type AiArtifact } from "@/hooks/useAiArtifacts";
 import { useProjectDocumentUpload } from "@/hooks/useProjectDocumentUpload";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ProjectSidebar } from "@/components/ai/ProjectSidebar";
 import { KnowledgePanel } from "@/components/ai/KnowledgePanel";
 import { ArtifactCard } from "@/components/ai/ArtifactCard";
+import { ArtifactViewer } from "@/components/ai/ArtifactViewer";
 import { ProjectPreviewCard } from "@/components/ai/ProjectPreviewCard";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
 import { ChatProcessingPanel } from "@/components/ai/ChatProcessingPanel";
@@ -85,6 +86,9 @@ const AsistenteIA = () => {
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [linkFilesToProject, setLinkFilesToProject] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [artifactDialogOpen, setArtifactDialogOpen] = useState(false);
+  const [artifactDialogArtifact, setArtifactDialogArtifact] = useState<AiArtifact | null>(null);
+  const [artifactDialogLoading, setArtifactDialogLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMobile = useIsMobile();
@@ -121,7 +125,7 @@ const AsistenteIA = () => {
   }, [activeProject?.id]);
 
   const handleSend = () => {
-    if ((!input.trim() && pendingFiles.length === 0) || isStreaming || pdfIndexingStatus) return;
+    if ((!input.trim() && pendingFiles.length === 0) || isStreaming) return;
     sendMessage(input.trim(), {
       files: pendingFiles,
       onAfterChatUpload:
@@ -238,10 +242,46 @@ const AsistenteIA = () => {
     }
   }, [activeAiProjectId, activeProject, addDocument]);
 
-  const handleViewArtifact = useCallback((id: string | null) => {
+  /** Panel lateral de conocimiento: vista detalle de artefacto en contexto de proyecto. */
+  const handleViewArtifactInPanel = useCallback((id: string | null) => {
     setActiveArtifactId(id);
     if (id) setShowKnowledge(true);
   }, []);
+
+  /** Tarjeta "Ver" en el hilo del chat: siempre abre visor (incluso sin proyecto IA o artefacto fuera de la lista filtrada). */
+  const openArtifactFromChat = useCallback(
+    async (id: string) => {
+      const local = artifacts.find((a) => a.id === id);
+      if (local) {
+        setArtifactDialogArtifact(local);
+        setArtifactDialogOpen(true);
+        return;
+      }
+      setArtifactDialogLoading(true);
+      setArtifactDialogOpen(true);
+      setArtifactDialogArtifact(null);
+      try {
+        const { data, error } = await (supabase as any)
+          .from("ai_artifacts")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw error;
+        if (data) setArtifactDialogArtifact(data as AiArtifact);
+        else {
+          toast.error("No se encontró el artefacto.");
+          setArtifactDialogOpen(false);
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Error al cargar el artefacto";
+        toast.error(msg);
+        setArtifactDialogOpen(false);
+      } finally {
+        setArtifactDialogLoading(false);
+      }
+    },
+    [artifacts],
+  );
 
   const renderMessageContent = (
     content: string,
@@ -300,7 +340,7 @@ const AsistenteIA = () => {
             artifactId={match[1]}
             title={match[2]}
             contentType={match[3]}
-            onView={handleViewArtifact}
+            onView={openArtifactFromChat}
           />
         );
       } else if (match[4]) {
@@ -559,7 +599,7 @@ const AsistenteIA = () => {
                 <span className="min-w-0">
                   {pdfIndexingStatus.phase === "extracting"
                     ? `Leyendo «${pdfIndexingStatus.fileName}» para indexar búsqueda semántica…`
-                    : `Indexando «${pdfIndexingStatus.fileName}» para búsqueda… ${pdfIndexingStatus.pageDone}/${pdfIndexingStatus.totalPages} páginas`}
+                    : `Indexando «${pdfIndexingStatus.fileName}» en segundo plano: ${pdfIndexingStatus.pageDone}/${pdfIndexingStatus.totalPages} páginas. Puedes seguir chateando; la búsqueda en el PDF mejora al terminar.`}
                 </span>
               </div>
             </div>
@@ -570,14 +610,14 @@ const AsistenteIA = () => {
             <div className="max-w-3xl mx-auto flex flex-col gap-2">
               <ChatAttachmentChips
                 files={pendingFiles}
-                disabled={isStreaming || !!pdfIndexingStatus}
+                disabled={isStreaming}
                 onRemove={(i) => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
               />
               <div className="flex gap-2 items-end">
                 <ChatAttachmentPicker
                   files={pendingFiles}
                   onChange={setPendingFiles}
-                  disabled={isStreaming || !!pdfIndexingStatus}
+                  disabled={isStreaming}
                   showChips={false}
                   className="shrink-0"
                 />
@@ -589,19 +629,15 @@ const AsistenteIA = () => {
                   placeholder="Escribe tu mensaje o adjunta archivos…"
                   className="resize-none min-h-[80px] max-h-[200px] text-sm bg-secondary/30 border-0 rounded-xl flex-1 min-w-0"
                   rows={3}
-                  disabled={isStreaming || !!pdfIndexingStatus}
+                  disabled={isStreaming}
                 />
                 <Button
                   size="sm"
                   onClick={handleSend}
-                  disabled={
-                    (!input.trim() && pendingFiles.length === 0) ||
-                    isStreaming ||
-                    !!pdfIndexingStatus
-                  }
+                  disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
                   className="h-[42px] w-[42px] rounded-xl shrink-0"
                 >
-                  {isStreaming || pdfIndexingStatus ? (
+                  {isStreaming ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="h-4 w-4" />
@@ -615,7 +651,7 @@ const AsistenteIA = () => {
                   id="link-project-files"
                   checked={linkFilesToProject}
                   onCheckedChange={(c) => setLinkFilesToProject(!!c)}
-                  disabled={isStreaming || !!pdfIndexingStatus}
+                  disabled={isStreaming}
                 />
                 <Label htmlFor="link-project-files" className="text-[10px] text-muted-foreground cursor-pointer font-normal">
                   También vincular adjuntos al conocimiento del proyecto (documentos Kawiil)
@@ -625,8 +661,9 @@ const AsistenteIA = () => {
             <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
               Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
               {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
-              MB total. Tras la respuesta de la IA, los PDF se indexan por páginas para búsqueda semántica en mensajes
-              siguientes. Imágenes/Excel u otros sí se procesan en el mensaje. Kawiil AI puede cometer errores.
+              MB total. Tras la respuesta de la IA, los PDF se indexan en segundo plano para búsqueda semántica en
+              mensajes siguientes (puedes seguir escribiendo mientras indexa). Imágenes/Excel u otros sí se procesan en
+              el mensaje. Kawiil AI puede cometer errores.
             </p>
           </div>
         </div>
@@ -645,7 +682,7 @@ const AsistenteIA = () => {
             onDeleteSharedMemory={(id) => deleteSharedMemory.mutate(id)}
             onDeleteArtifact={(id) => deleteArtifact.mutate(id)}
             onUpdateArtifact={(id, content) => updateArtifact.mutate({ id, content })}
-            onViewArtifact={handleViewArtifact}
+            onViewArtifact={handleViewArtifactInPanel}
             onUploadFile={uploadToProject}
             uploading={uploading}
             uploadProgress={uploadProgress}
@@ -676,6 +713,42 @@ const AsistenteIA = () => {
           toast.success("Miembro eliminado");
         }}
       />
+
+      <Dialog
+        open={artifactDialogOpen}
+        onOpenChange={(o) => {
+          setArtifactDialogOpen(o);
+          if (!o) setArtifactDialogArtifact(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Artefacto</DialogTitle>
+          </DialogHeader>
+          {artifactDialogLoading ? (
+            <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="text-sm">Cargando…</span>
+            </div>
+          ) : artifactDialogArtifact ? (
+            <div className="min-h-[50vh] max-h-[85vh] flex flex-col">
+              <ArtifactViewer
+                artifact={artifactDialogArtifact}
+                onBack={() => {
+                  setArtifactDialogOpen(false);
+                  setArtifactDialogArtifact(null);
+                }}
+                onUpdate={(id, content) => {
+                  updateArtifact.mutate({ id, content });
+                  setArtifactDialogArtifact((prev) =>
+                    prev && prev.id === id ? { ...prev, content } : prev,
+                  );
+                }}
+              />
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
         <DialogContent className="sm:max-w-md">

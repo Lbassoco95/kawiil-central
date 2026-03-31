@@ -43,7 +43,7 @@ export function FloatingAIChat() {
   if (isAssistantPage) return null;
 
   const handleSend = () => {
-    if ((!input.trim() && pendingFiles.length === 0) || isStreaming || pdfIndexingStatus) return;
+    if ((!input.trim() && pendingFiles.length === 0) || isStreaming) return;
     sendMessage(input.trim(), { files: pendingFiles });
     setInput("");
     setPendingFiles([]);
@@ -266,7 +266,7 @@ export function FloatingAIChat() {
       <div className="border-t border-border/40 px-3 py-2.5 bg-secondary/10 flex flex-col gap-2">
         <ChatAttachmentChips
           files={pendingFiles}
-          disabled={isStreaming || !!pdfIndexingStatus}
+          disabled={isStreaming}
           onRemove={(i) => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
           className="max-h-24"
         />
@@ -274,7 +274,7 @@ export function FloatingAIChat() {
           <ChatAttachmentPicker
             files={pendingFiles}
             onChange={setPendingFiles}
-            disabled={isStreaming || !!pdfIndexingStatus}
+            disabled={isStreaming}
             showChips={false}
             className="shrink-0"
           />
@@ -286,19 +286,15 @@ export function FloatingAIChat() {
             placeholder="Mensaje o archivos…"
             className="resize-none min-h-[64px] max-h-[120px] text-[13px] bg-background border-border/50 rounded-xl py-2 flex-1 min-w-0"
             rows={2}
-            disabled={isStreaming || !!pdfIndexingStatus}
+            disabled={isStreaming}
           />
           <Button
             size="sm"
             onClick={handleSend}
-            disabled={
-              (!input.trim() && pendingFiles.length === 0) ||
-              isStreaming ||
-              !!pdfIndexingStatus
-            }
+            disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
             className="h-[36px] w-[36px] rounded-xl shrink-0"
           >
-            {isStreaming || pdfIndexingStatus ? (
+            {isStreaming ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Send className="h-3.5 w-3.5" />

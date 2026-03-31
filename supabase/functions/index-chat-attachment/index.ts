@@ -8,7 +8,7 @@ const corsHeaders = {
 
 /**
  * Solo embeddings + DB. El PDF se parsea en el navegador (`client_pdf_page`).
- * Sin chunkText() pesado: un trozo fijo por invocación (WORKER_LIMIT / 546).
+ * Varios trozos por invocación + embeddings batch en OpenAI (menos round-trips cliente/Edge).
  *
  * Operación: deploy manual tras cambios:
  *   supabase functions deploy index-chat-attachment --project-ref qppfampapbxdgednkofc
@@ -18,9 +18,11 @@ const MAX_CHARS_PER_PAGE = 8000;
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
-/** Caracteres por trozo por request (menos round-trips; si vuelve 546, bajar a ~900). */
+/** Caracteres por trozo (si vuelve 546, bajar a ~900). */
 const EMBED_SLICE_CHARS = 1400;
 const EMBED_SLICE_OVERLAP = 36;
+/** Trozos embedidos por invocación (1 llamada OpenAI con input[] + inserts en bloque). */
+const MAX_CHUNKS_PER_INVOCATION = 12;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
@@ -30,8 +32,9 @@ async function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function embedOneText(text: string, apiKey: string): Promise<number[]> {
-  const clean = text.replace(/\n+/g, " ").trim();
+async function embedManyTexts(texts: string[], apiKey: string): Promise<number[][]> {
+  if (texts.length === 0) return [];
+  const cleaned = texts.map((t) => t.replace(/\n+/g, " ").trim());
   let lastErr = "";
   for (let attempt = 0; attempt < 5; attempt++) {
     const resp = await fetch(OPENAI_EMBEDDINGS_URL, {
@@ -41,14 +44,16 @@ async function embedOneText(text: string, apiKey: string): Promise<number[]> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        input: clean,
+        input: cleaned,
         model: EMBEDDING_MODEL,
         dimensions: EMBEDDING_DIMENSIONS,
       }),
     });
     if (resp.ok) {
       const data = await resp.json();
-      return data.data[0].embedding as number[];
+      const rows = data.data as { index: number; embedding: number[] }[];
+      rows.sort((a, b) => a.index - b.index);
+      return rows.map((r) => r.embedding);
     }
     lastErr = await resp.text();
     if (resp.status === 429 && attempt < 4) {
@@ -225,52 +230,108 @@ Deno.serve(async (req) => {
       });
     }
 
-    const sliceEnd = Math.min(charOffset + EMBED_SLICE_CHARS, pageText.length);
-    const content = pageText.slice(charOffset, sliceEnd).trim();
+    type SliceItem = {
+      content: string;
+      charFrom: number;
+      charTo: number;
+      chunkIndex: number;
+    };
+    const items: SliceItem[] = [];
+    let cursor = charOffset;
+    let ci = chunkIndex;
+    /** Siguiente offset si no hubo ningún embed en esta invocación (avance dentro de la página). */
+    let resumeIfNoEmbeds = charOffset;
+
+    while (items.length < MAX_CHUNKS_PER_INVOCATION && cursor < pageText.length) {
+      const sliceEnd = Math.min(cursor + EMBED_SLICE_CHARS, pageText.length);
+      const content = pageText.slice(cursor, sliceEnd).trim();
+      if (content.length >= 12) {
+        items.push({ content, charFrom: cursor, charTo: sliceEnd, chunkIndex: ci });
+        ci += 1;
+      }
+      if (sliceEnd >= pageText.length) {
+        resumeIfNoEmbeds = pageText.length;
+        break;
+      }
+      cursor = Math.max(0, sliceEnd - EMBED_SLICE_OVERLAP);
+      resumeIfNoEmbeds = cursor;
+    }
+
     let inserted = 0;
 
-    if (content.length >= 12) {
-      const embedding = await embedOneText(content, openaiKey);
-      const row = {
+    if (items.length > 0) {
+      const embeddings = await embedManyTexts(
+        items.map((i) => i.content),
+        openaiKey,
+      );
+      if (embeddings.length !== items.length) {
+        throw new Error("OpenAI devolvió un número distinto de embeddings");
+      }
+      const rows = items.map((it, i) => ({
         organization_id: orgId,
         document_id: null,
         client_id: body.client_id || null,
         project_id: body.project_id || null,
         source_type: "chat_attachment",
         source_id: indexId,
-        content,
+        content: it.content,
         metadata: {
           attachment_index_id: indexId,
           storage_path: path,
           filename: name,
           page_from: pageStart,
           page_to: pageStart,
-          chunk_index: chunkIndex,
-          char_from: charOffset,
-          char_to: sliceEnd,
+          chunk_index: it.chunkIndex,
+          char_from: it.charFrom,
+          char_to: it.charTo,
         },
-        embedding: JSON.stringify(embedding),
-        token_count: estimateTokens(content),
-      };
-      const { error: insErr } = await svc.from("document_chunks").insert(row);
+        embedding: JSON.stringify(embeddings[i]),
+        token_count: estimateTokens(it.content),
+      }));
+      const { error: insErr } = await svc.from("document_chunks").insert(rows);
       if (insErr) {
-        console.error("insert chunk:", insErr);
+        console.error("insert chunks:", insErr);
         throw new Error(insErr.message);
       }
-      inserted = 1;
-      chunkIndex += 1;
+      inserted = items.length;
+      chunkIndex = ci;
     }
 
-    const hasMoreOnPage = sliceEnd < pageText.length;
-    if (hasMoreOnPage) {
-      const nextOff = Math.max(0, sliceEnd - EMBED_SLICE_OVERLAP);
+    if (items.length === 0) {
+      if (resumeIfNoEmbeds < pageText.length) {
+        return jsonOk({
+          attachment_index_id: indexId,
+          pages_done: pageStart,
+          total_pages: totalPages,
+          done: false,
+          next_page: pageStart,
+          resume_from_chunk_next: resumeIfNoEmbeds,
+          continuation_chunk_index_next: chunkIndex,
+          chunks_this_batch: 0,
+        });
+      }
+      const done0 = endPage >= totalPages;
+      return jsonOk({
+        attachment_index_id: indexId,
+        pages_done: endPage,
+        total_pages: totalPages,
+        done: done0,
+        next_page: done0 ? null : endPage + 1,
+        resume_from_chunk_next: null,
+        continuation_chunk_index_next: chunkIndex,
+        chunks_this_batch: 0,
+      });
+    }
+
+    const last = items[items.length - 1];
+    if (last.charTo < pageText.length) {
       return jsonOk({
         attachment_index_id: indexId,
         pages_done: pageStart,
         total_pages: totalPages,
         done: false,
         next_page: pageStart,
-        resume_from_chunk_next: nextOff,
+        resume_from_chunk_next: Math.max(0, last.charTo - EMBED_SLICE_OVERLAP),
         continuation_chunk_index_next: chunkIndex,
         chunks_this_batch: inserted,
       });
