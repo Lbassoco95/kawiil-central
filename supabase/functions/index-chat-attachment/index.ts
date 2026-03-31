@@ -73,26 +73,44 @@ async function downloadStorageObject(
   return new Uint8Array(await data.arrayBuffer());
 }
 
+async function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function embedBatch(texts: string[], apiKey: string): Promise<number[][]> {
   const clean = texts.map((t) => t.replace(/\n+/g, " ").trim());
-  const resp = await fetch(OPENAI_EMBEDDINGS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      input: clean,
-      model: EMBEDDING_MODEL,
-      dimensions: EMBEDDING_DIMENSIONS,
-    }),
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`OpenAI embeddings ${resp.status}: ${err.slice(0, 400)}`);
+  let lastErr = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const resp = await fetch(OPENAI_EMBEDDINGS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        input: clean,
+        model: EMBEDDING_MODEL,
+        dimensions: EMBEDDING_DIMENSIONS,
+      }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      return data.data.map((d: { embedding: number[] }) => d.embedding);
+    }
+    lastErr = await resp.text();
+    if (resp.status === 429 && attempt < 4) {
+      let wait = 2000 * (attempt + 1);
+      const ra = resp.headers.get("retry-after");
+      if (ra) {
+        const s = parseInt(ra, 10);
+        if (!Number.isNaN(s) && s > 0) wait = Math.min(60_000, s * 1000);
+      }
+      await sleepMs(wait);
+      continue;
+    }
+    throw new Error(`OpenAI embeddings ${resp.status}: ${lastErr.slice(0, 400)}`);
   }
-  const data = await resp.json();
-  return data.data.map((d: { embedding: number[] }) => d.embedding);
+  throw new Error(lastErr.slice(0, 400));
 }
 
 serve(async (req) => {
@@ -299,6 +317,9 @@ serve(async (req) => {
         });
       }
       inserted += rows.length;
+      if (i + EMBED_BATCH < allChunks.length) {
+        await sleepMs(400);
+      }
     }
 
     const done = end >= totalPages;

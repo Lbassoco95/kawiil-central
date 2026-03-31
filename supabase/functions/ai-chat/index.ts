@@ -10,7 +10,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_429_MAX_ATTEMPTS = 4;
+const ANTHROPIC_429_MAX_ATTEMPTS = 7;
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -42,11 +42,16 @@ async function anthropicMessagesFetch(apiKey: string, body: Record<string, unkno
       });
     }
 
-    let waitMs = Math.min(45_000, 2000 * 2 ** attempt);
+    let waitMs = Math.min(90_000, 3000 * 2 ** attempt);
+    const retryHdr = resp.headers.get("retry-after");
+    if (retryHdr) {
+      const sec = parseInt(retryHdr, 10);
+      if (!Number.isNaN(sec) && sec > 0) waitMs = Math.min(120_000, sec * 1000);
+    }
     try {
       const j = JSON.parse(errText);
       const ra = j?.error?.retry_after ?? j?.retry_after;
-      if (typeof ra === "number" && ra > 0) waitMs = Math.min(60_000, ra * 1000);
+      if (typeof ra === "number" && ra > 0) waitMs = Math.min(120_000, Math.max(waitMs, ra * 1000));
     } catch {
       /* ignore */
     }
@@ -1701,7 +1706,7 @@ serve(async (req) => {
           JSON.stringify({
             error: msg,
             message: msg,
-            retry_after: 8,
+            retry_after: 20,
           }),
           {
             status: 429,

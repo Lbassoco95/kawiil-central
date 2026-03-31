@@ -361,6 +361,7 @@ export function useChat() {
             if (d.done) break;
             if (d.next_page == null) break;
             pageStart = d.next_page;
+            await new Promise((r) => setTimeout(r, 900));
           }
           indexedNames.push(meta.name);
           refsForAiChat = refsForAiChat.filter((r) => r.path !== meta.path);
@@ -370,6 +371,15 @@ export function useChat() {
             `No se indexó «${meta.name}» para búsqueda semántica. Se enviará el PDF al modelo de forma directa (documentos muy largos pueden fallar).`,
           );
         }
+      }
+
+      if (indexedNames.length > 0) {
+        const coolMs = Math.min(35_000, 6_000 + indexedNames.length * 5_000);
+        pushProgress(
+          "rate_limit",
+          `Pausa de ${Math.round(coolMs / 1000)} s para evitar límite de solicitudes del proveedor de IA tras indexar el PDF…`,
+        );
+        await new Promise((r) => setTimeout(r, coolMs));
       }
 
       pushProgress("ai_connect", "Conectando con Kawiil AI y procesando contexto…");
@@ -400,18 +410,21 @@ export function useChat() {
           });
 
         let resp = await chatFetch();
-        for (let r429 = 0; r429 < 2 && resp.status === 429; r429++) {
-          let waitMs = 3500 * (r429 + 1);
+        for (let r429 = 0; r429 < 5 && resp.status === 429; r429++) {
+          let waitMs = 6000 + r429 * 4000;
           try {
             const errRaw = await resp.text();
             const j = JSON.parse(errRaw) as { retry_after?: number; message?: string; error?: string };
             if (typeof j.retry_after === "number" && j.retry_after > 0) {
-              waitMs = Math.min(60_000, j.retry_after * 1000);
+              waitMs = Math.min(120_000, j.retry_after * 1000 + 3000);
             }
           } catch {
             /* ignore */
           }
-          pushProgress("rate_limit", "Límite temporal del proveedor de IA. Reintentando en unos segundos…");
+          pushProgress(
+            "rate_limit",
+            `Límite temporal del proveedor de IA. Esperando ${Math.round(waitMs / 1000)} s y reintentando (${r429 + 1}/5)…`,
+          );
           await new Promise((r) => setTimeout(r, waitMs));
           resp = await chatFetch();
         }
