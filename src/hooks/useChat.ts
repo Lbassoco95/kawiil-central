@@ -243,7 +243,6 @@ export function useChat() {
       }
 
       const savedMeta: ChatAttachmentMeta[] = [];
-      const attachmentRefs: ChatAttachmentMeta[] = [];
       let uploadedBatchBytes = 0;
 
       for (const file of files) {
@@ -269,7 +268,6 @@ export function useChat() {
           mime_type: file.type || "application/octet-stream",
         };
         savedMeta.push(meta);
-        attachmentRefs.push(meta);
         uploadedBatchBytes += file.size;
         if (opts?.onAfterChatUpload) {
           try {
@@ -314,6 +312,66 @@ export function useChat() {
         return;
       }
 
+      let refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
+      const indexedNames: string[] = [];
+
+      const isPdfAttachment = (m: ChatAttachmentMeta) =>
+        m.mime_type === "application/pdf" || m.name.toLowerCase().endsWith(".pdf");
+
+      for (const meta of savedMeta) {
+        if (!isPdfAttachment(meta)) continue;
+
+        let pageStart = 1;
+        let indexId: string | null = null;
+        let iterations = 0;
+        pushProgress("index_pdf", `Indexando «${meta.name}» para búsqueda en todo el documento…`);
+
+        try {
+          while (iterations < 60) {
+            iterations += 1;
+            const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
+              body: {
+                bucket: meta.bucket,
+                path: meta.path,
+                name: meta.name,
+                mime_type: meta.mime_type,
+                page_start: pageStart,
+                attachment_index_id: indexId,
+              },
+            });
+            if (fnErr) throw fnErr;
+            const d = data as {
+              error?: string;
+              attachment_index_id?: string;
+              pages_done?: number;
+              total_pages?: number;
+              done?: boolean;
+              next_page?: number | null;
+            };
+            if (d?.error) throw new Error(d.error);
+            if (!d || typeof d.attachment_index_id !== "string") {
+              throw new Error("Respuesta inválida de index-chat-attachment");
+            }
+
+            indexId = d.attachment_index_id;
+            const donePg = d.pages_done ?? 0;
+            const totalPg = d.total_pages ?? 0;
+            pushProgress("index_pdf", `Indexando «${meta.name}»… ${donePg}/${totalPg} páginas`);
+
+            if (d.done) break;
+            if (d.next_page == null) break;
+            pageStart = d.next_page;
+          }
+          indexedNames.push(meta.name);
+          refsForAiChat = refsForAiChat.filter((r) => r.path !== meta.path);
+        } catch (e) {
+          console.error("index-chat-attachment", e);
+          toast.error(
+            `No se indexó «${meta.name}» para búsqueda semántica. Se enviará el PDF al modelo de forma directa (documentos muy largos pueden fallar).`,
+          );
+        }
+      }
+
       pushProgress("ai_connect", "Conectando con Kawiil AI y procesando contexto…");
 
       let assistantContent = "";
@@ -326,7 +384,8 @@ export function useChat() {
           messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
           conversationId: convId,
           ai_project_id: activeAiProjectId || undefined,
-          attachmentRefs: attachmentRefs.length ? attachmentRefs : undefined,
+          attachmentRefs: refsForAiChat.length ? refsForAiChat : undefined,
+          ...(indexedNames.length ? { indexed_attachment_names: indexedNames } : {}),
         });
 
         const chatFetch = () =>

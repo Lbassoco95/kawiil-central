@@ -635,7 +635,8 @@ const anthropicTools = [
   },
   {
     name: "semantic_search",
-    description: "Búsqueda semántica en la base de conocimiento de Kawiil usando embeddings vectoriales. Encuentra información relevante en documentos procesados, conversaciones anteriores, procedimientos internos y comunicados — incluso si no coinciden las palabras exactas. ÚSALA cuando el usuario pregunte sobre un tema, cliente, ley, procedimiento o concepto. Es más potente que search_across y search_past_conversations para encontrar contexto conceptual.",
+    description:
+      "Búsqueda semántica con embeddings. Incluye documentos del repositorio, PDFs largos del chat indexados (chat_attachment), conversaciones, procedimientos y comunicados. ÚSALA ante preguntas sobre temas, leyes, clientes o el contenido de PDFs que el usuario acaba de adjuntar si fueron indexados. Más potente que search_across y search_past_conversations para contexto conceptual.",
     input_schema: {
       type: "object",
       properties: {
@@ -644,8 +645,22 @@ const anthropicTools = [
         project_id: { type: "string", description: "Filtrar por proyecto específico (UUID)" },
         source_types: {
           type: "array",
-          items: { type: "string", enum: ["document", "extracted_data", "chat_message", "procedure", "comunicado", "memory", "artifact", "shared_memory"] },
-          description: "Filtrar por tipos de fuente. Omitir para buscar en todo.",
+          items: {
+            type: "string",
+            enum: [
+              "document",
+              "extracted_data",
+              "chat_message",
+              "procedure",
+              "comunicado",
+              "memory",
+              "artifact",
+              "shared_memory",
+              "chat_attachment",
+            ],
+          },
+          description:
+            "Filtrar por tipos. Para solo fragmentos de PDFs indexados desde el chat usa [\"chat_attachment\"]. Omitir para buscar en todas las fuentes.",
         },
         limit: { type: "number", description: "Máximo de resultados (default 8)" },
       },
@@ -1443,7 +1458,16 @@ serve(async (req) => {
 
     const orgId = profile?.organization_id;
     const body = await req.json();
-    const { messages, simple, searchMode, searchQuery, ai_project_id, attachmentRefs, insightLite } = body;
+    const {
+      messages,
+      simple,
+      searchMode,
+      searchQuery,
+      ai_project_id,
+      attachmentRefs,
+      insightLite,
+      indexed_attachment_names,
+    } = body;
 
     const svcUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1540,12 +1564,30 @@ serve(async (req) => {
       }
     }
 
-    const systemPrompt = simple && insightLite
+    let systemPrompt = simple && insightLite
       ? LITE_SYSTEM_PROMPT
       : buildSystemPrompt(profile) + projectContext;
 
+    const indexedNames = Array.isArray(indexed_attachment_names)
+      ? indexed_attachment_names.filter((n: unknown) => typeof n === "string" && n.trim().length > 0)
+      : [];
+    if (indexedNames.length > 0 && !(simple && insightLite)) {
+      systemPrompt +=
+        `\n\n## PDF(s) del usuario indexados para búsqueda semántica\n` +
+        `Estos archivos ya fueron fragmentados y están en la base vectorial de la organización: **${indexedNames.join(", ")}**.\n` +
+        `Para responder sobre su contenido debes usar la herramienta **semantic_search** con una consulta en lenguaje natural (reformula la pregunta del usuario si hace falta). ` +
+        `Los fragmentos recuperados incluyen metadatos con rangos de página aproximados (page_from / page_to) cuando apliquen.\n` +
+        `No digas que "leíste el PDF completo" sin haber llamado a semantic_search.\n`;
+    }
+
     const sseProgressPreamble: { phase: string; message: string }[] = [];
     const nAtt = Array.isArray(attachmentRefs) ? attachmentRefs.length : 0;
+    if (indexedNames.length > 0) {
+      sseProgressPreamble.push({
+        phase: "indexed_pdfs",
+        message: `${indexedNames.length} PDF(s) disponibles vía búsqueda semántica: ${indexedNames.join(", ")}`,
+      });
+    }
     if (nAtt > 0) {
       sseProgressPreamble.push({
         phase: "attachments",

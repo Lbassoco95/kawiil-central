@@ -21,3 +21,5 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.generate-phrase]
     verify_jwt = false
+  [functions.index-chat-attachment]
+    verify_jwt = true

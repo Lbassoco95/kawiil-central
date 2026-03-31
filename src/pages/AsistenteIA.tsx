@@ -604,7 +604,9 @@ const AsistenteIA = () => {
             <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
               Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
               {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
-              MB total por mensaje. PDF mayores a ~3 MB van como texto extraído en el servidor (hasta ~28 MB, con límite de páginas si es muy grande); por debajo de ~3 MB pueden enviarse como documento al modelo. Excel hasta {formatMb(35 * 1024 * 1024)} MB con menos filas/hojas si el archivo es grande. Kawiil AI puede cometer errores.
+              MB total. Los PDF se indexan automáticamente por
+              páginas para búsqueda semántica (documentos largos: la IA usa semantic_search sobre el índice, no el archivo
+              entero en memoria). Imágenes/Excel u otros sí se procesan en el mensaje. Kawiil AI puede cometer errores.
             </p>
           </div>
         </div>
