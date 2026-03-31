@@ -365,7 +365,8 @@ export function useChat() {
           if (resp.status === 546) {
             errMsg =
               "Límite de recursos en Supabase (código 546: memoria o tiempo de CPU del Edge Function). " +
-              "Puede pasar con un solo PDF/Excel/imagen muy pesado o muchos adjuntos. Prueba un archivo más liviano, PDF por debajo de ~25–28 MB, Excel más pequeño o menos hojas, o divide el mensaje.";
+              "Suele ocurrir con PDFs de muchas páginas, Excel muy grandes o varios adjuntos a la vez. " +
+              "Prueba un PDF más corto (o las páginas que necesites), exporta solo una hoja a CSV, imágenes bajo ~2 MB, o envía los archivos en mensajes separados.";
           } else {
             try {
               const j = JSON.parse(errRaw) as { error?: string; message?: string };

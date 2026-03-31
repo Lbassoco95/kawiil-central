@@ -67,22 +67,24 @@ function escapePostgrestString(input: string): string {
 }
 
 const CHAT_ATTACH_MAX_FILES = 20;
-const CHAT_ATTACH_MAX_BYTES = 50 * 1024 * 1024;
-const CHAT_ATTACH_BATCH_MAX_BYTES = 150 * 1024 * 1024;
-const CHAT_TEXT_EXTRACT_MAX = 120_000;
-/** Por debajo: Claude puede recibir PDF nativo (base64). Por encima: solo texto extraído — evita 546 WORKER_LIMIT. */
-const PDF_AS_NATIVE_DOCUMENT_MAX_BYTES = 3 * 1024 * 1024;
-/** Hasta aquí: extractText completo (unpdf). Por encima: extracción por páginas (menor pico de CPU/RAM). */
-const PDF_FULL_TEXT_EXTRACT_MAX_BYTES = 10 * 1024 * 1024;
-/** Intentar texto por páginas hasta este tamaño. */
-const PDF_PAGE_EXTRACT_MAX_BYTES = 28 * 1024 * 1024;
-/** Máximo de páginas a recorrer en PDFs grandes. */
-const PDF_PAGE_EXTRACT_MAX_PAGES = 120;
+const CHAT_ATTACH_MAX_BYTES = 20 * 1024 * 1024;
+const CHAT_ATTACH_BATCH_MAX_BYTES = 100 * 1024 * 1024;
+/** Texto máximo enviado al modelo por adjunto (menos RAM en Edge y cuerpos HTTP más livianos). */
+const CHAT_TEXT_EXTRACT_MAX = 80_000;
+/** Por debajo: PDF nativo base64 a Claude. Más bajo = menos 546 por pico de memoria en el worker. */
+const PDF_AS_NATIVE_DOCUMENT_MAX_BYTES = 1.5 * 1024 * 1024;
+/** Por encima: extracción por páginas (extractText mergePages completo solo en PDFs ≤ este umbral). */
+const PDF_MEDIUM_USE_PAGE_EXTRACT_BYTES = 1.25 * 1024 * 1024;
+/** Intentar texto por páginas hasta este tamaño de archivo. */
+const PDF_PAGE_EXTRACT_MAX_BYTES = 20 * 1024 * 1024;
+/** Máximo de páginas a recorrer (cada getPage consume memoria). */
+const PDF_PAGE_EXTRACT_MAX_PAGES = 40;
 /** Imágenes mayores: no multimodal base64 en Edge. */
-const IMAGE_MULTIMODAL_MAX_BYTES = 4 * 1024 * 1024;
-/** Excel grande permitido; filas/hojas se reducen por tamaño para limitar RAM. */
-const XLSX_PROCESS_MAX_BYTES = 35 * 1024 * 1024;
-const XLSX_LARGE_FILE_BYTES = 8 * 1024 * 1024;
+const IMAGE_MULTIMODAL_MAX_BYTES = 2 * 1024 * 1024;
+/** Excel: por encima se rechaza antes de XLSX.read (evita OOM). */
+const XLSX_PROCESS_MAX_BYTES = 18 * 1024 * 1024;
+const XLSX_LARGE_FILE_BYTES = 6 * 1024 * 1024;
+const XLSX_HUGE_FILE_BYTES = 10 * 1024 * 1024;
 
 async function assertAiProjectAccess(
   svc: ReturnType<typeof createClient>,
@@ -192,7 +194,7 @@ async function pdfBytesToGatewayText(bytes: Uint8Array, name: string): Promise<s
     const mb = Math.round(bytes.length / (1024 * 1024));
     return `[PDF: ${name}] Archivo de ~${mb} MB: demasiado grande para procesar en el servidor (máx ~${Math.round(PDF_PAGE_EXTRACT_MAX_BYTES / (1024 * 1024))} MB). Divide el PDF o reduce el tamaño.`;
   }
-  if (bytes.length > PDF_FULL_TEXT_EXTRACT_MAX_BYTES) {
+  if (bytes.length > PDF_MEDIUM_USE_PAGE_EXTRACT_BYTES) {
     return pdfBytesExtractPageLimited(bytes, name);
   }
   const fallback =
@@ -217,24 +219,28 @@ async function pdfBytesToGatewayText(bytes: Uint8Array, name: string): Promise<s
 
 function xlsxBytesToText(bytes: Uint8Array): string {
   try {
-    const wb = XLSX.read(bytes, { type: "array" });
-    const parts: string[] = [];
+    const huge = bytes.length > XLSX_HUGE_FILE_BYTES;
     const large = bytes.length > XLSX_LARGE_FILE_BYTES;
-    const maxSheets = large ? 5 : 10;
-    const maxRowsPerSheet = large ? 80 : 200;
+    const sheetRows = huge ? 80 : large ? 150 : 400;
+    const wb = XLSX.read(bytes, { type: "array", sheetRows });
+    const parts: string[] = [];
+    const maxSheets = huge ? 2 : large ? 4 : 8;
+    const maxRowsPerSheet = huge ? 40 : large ? 60 : 120;
     for (const sheetName of wb.SheetNames.slice(0, maxSheets)) {
       const sheet = wb.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet, { FS: "\t" });
       const lines = csv.split("\n");
       parts.push(`## Hoja: ${sheetName}\n${lines.slice(0, maxRowsPerSheet).join("\n")}`);
     }
-    if (large && wb.SheetNames.length > maxSheets) {
-      parts.push(`\n[…${wb.SheetNames.length - maxSheets} hoja(s) omitidas por tamaño del archivo; exporta a CSV si necesitas todo.]`);
+    if (wb.SheetNames.length > maxSheets) {
+      parts.push(
+        `\n[…${wb.SheetNames.length - maxSheets} hoja(s) omitidas; archivo grande. Exporta a CSV o divide el libro si necesitas todo.]`,
+      );
     }
     return truncateText(parts.join("\n\n"), CHAT_TEXT_EXTRACT_MAX);
   } catch (e) {
     console.warn("xlsx parse error", e);
-    return "[No se pudo leer el Excel como tabla.]";
+    return "[No se pudo leer el Excel como tabla. Prueba exportar una sola hoja a CSV o un archivo más pequeño.]";
   }
 }
 
@@ -386,32 +392,40 @@ async function resolveChatAttachments(
   const maxBatchMb = Math.round(CHAT_ATTACH_BATCH_MAX_BYTES / (1024 * 1024));
 
   for (const ref of refs) {
-    const bucket = ref.bucket || "chat-uploads";
-    const bytes = await downloadStorageObject(svc, bucket, ref.path);
-    if (!bytes) {
+    try {
+      const bucket = ref.bucket || "chat-uploads";
+      const bytes = await downloadStorageObject(svc, bucket, ref.path);
+      if (!bytes) {
+        claudeBlocks.push({
+          type: "text",
+          text: `[Adjunto: no se pudo leer el archivo «${ref.name || ref.path}».]`,
+        });
+        continue;
+      }
+      if (bytes.length > CHAT_ATTACH_MAX_BYTES) {
+        claudeBlocks.push({
+          type: "text",
+          text: `[Adjunto «${ref.name}» demasiado grande (máx. ${maxMb} MB).]`,
+        });
+        continue;
+      }
+      if (batchBytes + bytes.length > CHAT_ATTACH_BATCH_MAX_BYTES) {
+        claudeBlocks.push({
+          type: "text",
+          text: `[Adjunto «${ref.name}» omitido: supera ${maxBatchMb} MB total por mensaje.]`,
+        });
+        continue;
+      }
+      batchBytes += bytes.length;
+      const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo");
+      claudeBlocks.push(...proc.claude);
+    } catch (e) {
+      console.warn("resolveChatAttachments: fallo procesando adjunto", ref.name, e);
       claudeBlocks.push({
         type: "text",
-        text: `[Adjunto: no se pudo leer el archivo «${ref.name || ref.path}».]`,
+        text: `[No se pudo procesar «${ref.name || ref.path}» en el servidor (memoria o tiempo). Prueba un archivo más liviano, menos páginas/hojas, o divide el documento.]`,
       });
-      continue;
     }
-    if (bytes.length > CHAT_ATTACH_MAX_BYTES) {
-      claudeBlocks.push({
-        type: "text",
-        text: `[Adjunto «${ref.name}» demasiado grande (máx. ${maxMb} MB).]`,
-      });
-      continue;
-    }
-    if (batchBytes + bytes.length > CHAT_ATTACH_BATCH_MAX_BYTES) {
-      claudeBlocks.push({
-        type: "text",
-        text: `[Adjunto «${ref.name}» omitido: supera ${maxBatchMb} MB total por mensaje.]`,
-      });
-      continue;
-    }
-    batchBytes += bytes.length;
-    const proc = await processAttachmentFile(bytes, ref.mime_type || "", ref.name || "archivo");
-    claudeBlocks.push(...proc.claude);
   }
 
   let claudeContent: any = userText;
