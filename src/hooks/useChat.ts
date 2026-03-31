@@ -10,6 +10,7 @@ import {
   MAX_CHAT_ATTACHMENT_FILES,
   formatMb,
 } from "@/lib/chatAttachmentLimits";
+import { extractPdfPagesClient } from "@/lib/extractPdfTextClient";
 
 export interface ChatAttachmentMeta {
   bucket: string;
@@ -243,6 +244,7 @@ export function useChat() {
       }
 
       const savedMeta: ChatAttachmentMeta[] = [];
+      const pathToFile = new Map<string, File>();
       let uploadedBatchBytes = 0;
 
       for (const file of files) {
@@ -268,6 +270,7 @@ export function useChat() {
           mime_type: file.type || "application/octet-stream",
         };
         savedMeta.push(meta);
+        pathToFile.set(objectPath, file);
         uploadedBatchBytes += file.size;
         if (opts?.onAfterChatUpload) {
           try {
@@ -323,23 +326,57 @@ export function useChat() {
 
         let pageStart = 1;
         let indexId: string | null = null;
+        let resumeChunk = 0;
+        let continuationChunk = 0;
         let iterations = 0;
         pushProgress("index_pdf", `Indexando «${meta.name}» para búsqueda en todo el documento…`);
+
+        const localFile = pathToFile.get(meta.path);
+        let clientPages: { totalPages: number; pages: string[] } | null = null;
+        if (localFile) {
+          try {
+            pushProgress("index_pdf", `Leyendo «${meta.name}» en el navegador…`);
+            clientPages = await extractPdfPagesClient(localFile);
+            if (!clientPages.totalPages || clientPages.pages.length === 0) {
+              clientPages = null;
+            }
+          } catch (ex) {
+            console.error("extractPdfPagesClient", ex);
+            clientPages = null;
+          }
+        }
 
         try {
           while (iterations < 600) {
             iterations += 1;
+            const body: Record<string, unknown> = {
+              bucket: meta.bucket,
+              path: meta.path,
+              name: meta.name,
+              mime_type: meta.mime_type,
+              page_start: pageStart,
+              attachment_index_id: indexId,
+              resume_from_chunk: resumeChunk,
+              continuation_chunk_index: continuationChunk,
+            };
+            if (clientPages) {
+              const raw = clientPages.pages[pageStart - 1] ?? "";
+              /** Alineado con MAX_CHARS_PER_PAGE en index-chat-attachment (menos carga en Edge). */
+              const text = raw.length > 8000 ? raw.slice(0, 8000) : raw;
+              body.client_pdf_page = {
+                total_pages: clientPages.totalPages,
+                text,
+              };
+            }
+
             const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
-              body: {
-                bucket: meta.bucket,
-                path: meta.path,
-                name: meta.name,
-                mime_type: meta.mime_type,
-                page_start: pageStart,
-                attachment_index_id: indexId,
-              },
+              body,
             });
-            if (fnErr) throw fnErr;
+            const early = data as { error?: string } | null;
+            if (fnErr) {
+              if (early?.error) throw new Error(early.error);
+              throw fnErr;
+            }
             const d = data as {
               error?: string;
               attachment_index_id?: string;
@@ -347,6 +384,8 @@ export function useChat() {
               total_pages?: number;
               done?: boolean;
               next_page?: number | null;
+              resume_from_chunk_next?: number | null;
+              continuation_chunk_index_next?: number;
             };
             if (d?.error) throw new Error(d.error);
             if (!d || typeof d.attachment_index_id !== "string") {
@@ -354,9 +393,19 @@ export function useChat() {
             }
 
             indexId = d.attachment_index_id;
+            if (typeof d.continuation_chunk_index_next === "number") {
+              continuationChunk = d.continuation_chunk_index_next;
+            }
             const donePg = d.pages_done ?? 0;
             const totalPg = d.total_pages ?? 0;
             pushProgress("index_pdf", `Indexando «${meta.name}»… ${donePg}/${totalPg} páginas`);
+
+            if (d.resume_from_chunk_next != null) {
+              resumeChunk = d.resume_from_chunk_next;
+              await new Promise((r) => setTimeout(r, 350));
+              continue;
+            }
+            resumeChunk = 0;
 
             if (d.done) break;
             if (d.next_page == null) break;

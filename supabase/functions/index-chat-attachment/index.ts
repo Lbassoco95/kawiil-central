@@ -8,21 +8,19 @@ const corsHeaders = {
 };
 
 /**
- * Edge Supabase: ~256 MB RAM y ~2 s de CPU por request (I/O async no cuenta).
- * No se puede “subir la VM”; hay que hacer poco trabajo por invocación.
- * 1 página/request minimiza pico de CPU/memoria tras cargar el PDF.
+ * Solo embeddings + DB. El PDF se parsea en el navegador (`client_pdf_page`).
+ * Incluir PDF.js/unpdf en Edge provocaba RUNTIME_ERROR / WORKER_LIMIT en producción.
  */
 const PAGE_BATCH = 1;
 const MAX_CHARS_PER_SEGMENT = 2800;
-/** Tope de caracteres por página (PDFs con texto enorme en una página). */
 const MAX_CHARS_PER_PAGE = 8000;
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
 const MAX_TOKENS_PER_CHUNK = 550;
 const OVERLAP_TOKENS = 80;
-const EMBED_BATCH = 4;
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const EMBED_BATCH = 1;
+const CHUNKS_PER_HTTP = 4;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
@@ -66,19 +64,6 @@ function chunkText(
   }
 
   return chunks;
-}
-
-async function downloadStorageObject(
-  svc: ReturnType<typeof createClient>,
-  bucket: string,
-  path: string,
-): Promise<Uint8Array | null> {
-  const { data, error } = await svc.storage.from(bucket).download(path);
-  if (error || !data) {
-    console.warn("storage download failed", bucket, path, error?.message);
-    return null;
-  }
-  return new Uint8Array(await data.arrayBuffer());
 }
 
 async function sleepMs(ms: number): Promise<void> {
@@ -181,6 +166,9 @@ serve(async (req) => {
       attachment_index_id?: string | null;
       client_id?: string | null;
       project_id?: string | null;
+      client_pdf_page?: { total_pages: number; text: string };
+      resume_from_chunk?: number;
+      continuation_chunk_index?: number;
     };
 
     const bucket = body.bucket || "chat-uploads";
@@ -189,6 +177,8 @@ serve(async (req) => {
     const mime = (body.mime_type || "").toLowerCase();
     const pageStart = Math.max(1, Math.floor(Number(body.page_start) || 1));
     const indexId = body.attachment_index_id || crypto.randomUUID();
+    const resumeFromChunk = Math.max(0, Math.floor(Number(body.resume_from_chunk) || 0));
+    const continuationChunkIndex = Math.max(0, Math.floor(Number(body.continuation_chunk_index) || 0));
 
     const prefix = `${orgId}/${user.id}/`;
     if (!path || typeof path !== "string" || !path.startsWith(prefix)) {
@@ -206,24 +196,25 @@ serve(async (req) => {
       });
     }
 
-    const svc = createClient(supabaseUrl, serviceKey);
-    let bytes = await downloadStorageObject(svc, bucket, path);
-    if (!bytes || bytes.length === 0) {
-      return new Response(JSON.stringify({ error: "No se pudo descargar el archivo" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (bytes.length > MAX_PDF_BYTES) {
+    const useClientText = body.client_pdf_page != null &&
+      typeof body.client_pdf_page.total_pages === "number" &&
+      body.client_pdf_page.total_pages >= 1 &&
+      typeof body.client_pdf_page.text === "string";
+
+    if (!useClientText) {
       return new Response(
         JSON.stringify({
-          error: `PDF demasiado grande (~${Math.round(bytes.length / (1024 * 1024))} MB). Máx. ${Math.round(MAX_PDF_BYTES / (1024 * 1024))} MB para indexar en el servidor.`,
+          error:
+            "Falta el texto del PDF extraído en el navegador. Actualiza la aplicación a la última versión e inténtalo de nuevo.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    if (pageStart === 1) {
+    const totalPages = Math.floor(body.client_pdf_page!.total_pages);
+    const svc = createClient(supabaseUrl, serviceKey);
+
+    if (pageStart === 1 && resumeFromChunk === 0 && !body.attachment_index_id) {
       const { error: delErr } = await svc.from("document_chunks")
         .delete()
         .eq("organization_id", orgId)
@@ -234,48 +225,35 @@ serve(async (req) => {
       }
     }
 
-    const { getDocumentProxy } = await import(
-      "https://esm.sh/unpdf@0.12.1",
-    ) as {
-      getDocumentProxy: (data: Uint8Array) => Promise<{
-        numPages: number;
-        destroy?: () => Promise<void>;
-        getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: { str?: string }[] }> }>;
-      }>;
-    };
-
-    const pdf = await getDocumentProxy(bytes);
-    // Soltar el buffer original; el proxy puede mantener copia interna.
-    bytes = new Uint8Array(0);
-    const totalPages = pdf.numPages || 0;
-    if (totalPages === 0) {
-      return new Response(
-        JSON.stringify({
-          attachment_index_id: indexId,
-          pages_done: 0,
-          total_pages: 0,
-          done: true,
-          next_page: null,
-          chunks_this_batch: 0,
-          warning: "PDF sin páginas legibles",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    if (pageStart > totalPages) {
+      return new Response(JSON.stringify({ error: "page_start fuera de rango" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const end = Math.min(totalPages, pageStart + PAGE_BATCH - 1);
 
     let inserted = 0;
-    let chunkIndex = 0;
+    let chunkIndex = continuationChunkIndex;
     let buffer = "";
     let segPageFrom = pageStart;
 
-    const embedAndInsert = async (plain: string, pageFrom: number, pageTo: number) => {
+    const embedAndInsert = async (
+      plain: string,
+      pageFrom: number,
+      pageTo: number,
+      opts?: { resumeFromPart?: number; maxPartsThisHttp?: number },
+    ): Promise<{ resumeNextPart: number | null }> => {
       const t = plain.trim();
-      if (t.length === 0) return;
+      if (t.length === 0) return { resumeNextPart: null };
       const parts = chunkText(t);
-      for (let i = 0; i < parts.length; i += EMBED_BATCH) {
-        const slice = parts.slice(i, i + EMBED_BATCH);
+      const resumeFrom = Math.min(parts.length, Math.max(0, opts?.resumeFromPart ?? 0));
+      const maxParts = opts?.maxPartsThisHttp ?? 999_999;
+      const endExclusive = Math.min(parts.length, resumeFrom + maxParts);
+
+      for (let i = resumeFrom; i < endExclusive; i += EMBED_BATCH) {
+        const slice = parts.slice(i, Math.min(i + EMBED_BATCH, endExclusive));
         const embeddings = await embedBatch(slice, openaiKey);
         const idx0 = chunkIndex;
         const rows = slice.map((content, j) => ({
@@ -305,17 +283,22 @@ serve(async (req) => {
           throw new Error(insErr.message);
         }
         inserted += rows.length;
-        if (i + EMBED_BATCH < parts.length) await sleepMs(250);
+        if (i + EMBED_BATCH < endExclusive) await sleepMs(200);
       }
+
+      const resumeNextPart = endExclusive < parts.length ? endExclusive : null;
+      return { resumeNextPart };
     };
 
+    const jsonOk = (payload: Record<string, unknown>) =>
+      new Response(JSON.stringify(payload), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+
+    let activeResume = resumeFromChunk;
     for (let p = pageStart; p <= end; p++) {
-      const page = await pdf.getPage(p);
-      const tc = await page.getTextContent();
-      let pageText = "";
-      for (const item of tc.items) {
-        if (item && typeof item.str === "string") pageText += item.str;
-      }
+      let pageText = body.client_pdf_page!.text;
+      if (p !== pageStart) pageText = "";
       if (pageText.length > MAX_CHARS_PER_PAGE) {
         pageText = pageText.slice(0, MAX_CHARS_PER_PAGE) + "\n[…página truncada por tamaño…]";
       }
@@ -328,32 +311,56 @@ serve(async (req) => {
         const pt = p;
         segPageFrom = p + 1;
         if (t.length > 0) {
-          await embedAndInsert(t, pf, pt);
+          const { resumeNextPart } = await embedAndInsert(t, pf, pt, {
+            resumeFromPart: activeResume,
+            maxPartsThisHttp: CHUNKS_PER_HTTP,
+          });
+          if (resumeNextPart != null) {
+            return jsonOk({
+              attachment_index_id: indexId,
+              pages_done: pageStart,
+              total_pages: totalPages,
+              done: false,
+              next_page: pageStart,
+              resume_from_chunk_next: resumeNextPart,
+              continuation_chunk_index_next: chunkIndex,
+              chunks_this_batch: inserted,
+            });
+          }
+          activeResume = 0;
         }
       }
     }
     if (buffer.trim().length > 0) {
-      await embedAndInsert(buffer.trim(), segPageFrom, end);
-    }
-
-    try {
-      await pdf.destroy?.();
-    } catch {
-      /* ignore */
+      const { resumeNextPart } = await embedAndInsert(buffer.trim(), segPageFrom, end, {
+        resumeFromPart: activeResume,
+        maxPartsThisHttp: CHUNKS_PER_HTTP,
+      });
+      if (resumeNextPart != null) {
+        return jsonOk({
+          attachment_index_id: indexId,
+          pages_done: pageStart,
+          total_pages: totalPages,
+          done: false,
+          next_page: pageStart,
+          resume_from_chunk_next: resumeNextPart,
+          continuation_chunk_index_next: chunkIndex,
+          chunks_this_batch: inserted,
+        });
+      }
     }
 
     const done = end >= totalPages;
-    return new Response(
-      JSON.stringify({
-        attachment_index_id: indexId,
-        pages_done: end,
-        total_pages: totalPages,
-        done,
-        next_page: done ? null : end + 1,
-        chunks_this_batch: inserted,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return jsonOk({
+      attachment_index_id: indexId,
+      pages_done: end,
+      total_pages: totalPages,
+      done,
+      next_page: done ? null : end + 1,
+      resume_from_chunk_next: null,
+      continuation_chunk_index_next: chunkIndex,
+      chunks_this_batch: inserted,
+    });
   } catch (e) {
     console.error("index-chat-attachment:", e);
     return new Response(
