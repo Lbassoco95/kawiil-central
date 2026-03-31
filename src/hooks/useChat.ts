@@ -47,6 +47,10 @@ export interface SendMessageOptions {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
+const MSG_ANTHROPIC_BILLING_FALLBACK =
+  "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
+  "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
+
 const isPdfChatAttachment = (m: ChatAttachmentMeta) =>
   m.mime_type === "application/pdf" || m.name.toLowerCase().endsWith(".pdf");
 
@@ -561,10 +565,22 @@ export function useChat() {
               "Prueba un PDF más corto (o las páginas que necesites), exporta solo una hoja a CSV, imágenes bajo ~2 MB, o envía los archivos en mensajes separados.";
           } else {
             try {
-              const j = JSON.parse(errRaw) as { error?: string; message?: string };
-              errMsg = j.message || j.error || errMsg;
+              const j = JSON.parse(errRaw) as {
+                error?: string;
+                message?: string;
+                code?: string;
+              };
+              if (resp.status === 402 || j.code === "anthropic_billing") {
+                errMsg = j.message || j.error || MSG_ANTHROPIC_BILLING_FALLBACK;
+              } else {
+                errMsg = j.message || j.error || errMsg;
+              }
             } catch {
-              if (errRaw && errRaw.length < 500) errMsg = errRaw;
+              if (resp.status === 402) {
+                errMsg = MSG_ANTHROPIC_BILLING_FALLBACK;
+              } else if (errRaw && errRaw.length < 500) {
+                errMsg = errRaw;
+              }
             }
           }
           throw new Error(errMsg);

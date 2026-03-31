@@ -2,6 +2,10 @@ import { supabase } from "@/integrations/supabase/client";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
+const MSG_ANTHROPIC_BILLING_FALLBACK =
+  "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
+  "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
+
 export type AiChatSimpleMessage = {
   role: "user" | "assistant" | "system";
   content: string;
@@ -63,14 +67,32 @@ export async function fetchAiChatSimpleContent(
     }
 
     if (resp.status === 402) {
-      throw new Error("Créditos de IA agotados.");
+      const raw = await resp.text();
+      let msg = MSG_ANTHROPIC_BILLING_FALLBACK;
+      try {
+        const j = JSON.parse(raw) as { message?: string; error?: string; code?: string };
+        if (j.code === "anthropic_billing" || j.message || j.error) {
+          msg = j.message || j.error || msg;
+        }
+      } catch {
+        /* usar fallback */
+      }
+      throw new Error(msg);
     }
 
     if (!resp.ok) {
       let msg = `Error ${resp.status}`;
       try {
-        const j = (await resp.json()) as { message?: string; error?: string };
-        msg = j.message || j.error || msg;
+        const j = (await resp.json()) as {
+          message?: string;
+          error?: string;
+          code?: string;
+        };
+        if (j.code === "anthropic_billing") {
+          msg = j.message || j.error || MSG_ANTHROPIC_BILLING_FALLBACK;
+        } else {
+          msg = j.message || j.error || msg;
+        }
       } catch {
         /* ignore */
       }

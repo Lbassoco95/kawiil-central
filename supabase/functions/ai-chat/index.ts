@@ -61,6 +61,37 @@ async function anthropicMessagesFetch(apiKey: string, body: Record<string, unkno
   return lastResp!;
 }
 
+/** Se lanza desde handleClaudeChat y se traduce a HTTP 402 + JSON con code estable. */
+const ANTHROPIC_BILLING_THROW = "ANTHROPIC_BILLING_LOW";
+const CLIENT_CODE_ANTHROPIC_BILLING = "anthropic_billing";
+const MSG_ANTHROPIC_BILLING_ES =
+  "Los créditos de la cuenta de Anthropic (Claude) están agotados o son insuficientes. " +
+  "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
+
+function textLooksLikeAnthropicBilling(errText: string): boolean {
+  const t = errText.toLowerCase();
+  return (
+    t.includes("credit balance is too low") ||
+    t.includes("credit balance too low") ||
+    (t.includes("purchase credits") && t.includes("billing"))
+  );
+}
+
+function isAnthropicCreditBalanceLow(status: number, errText: string): boolean {
+  return status === 400 && textLooksLikeAnthropicBilling(errText);
+}
+
+function responseAnthropicBilling(): Response {
+  return new Response(
+    JSON.stringify({
+      error: MSG_ANTHROPIC_BILLING_ES,
+      message: MSG_ANTHROPIC_BILLING_ES,
+      code: CLIENT_CODE_ANTHROPIC_BILLING,
+    }),
+    { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
 function escapePostgrestString(input: string): string {
   return input
     .replace(/\\/g, '\\\\')
@@ -1675,6 +1706,10 @@ serve(async (req) => {
         });
       }
 
+      if (isAnthropicCreditBalanceLow(resp.status, errText)) {
+        return responseAnthropicBilling();
+      }
+
       console.warn("Claude simple failed:", resp.status, errText.slice(0, 200));
       return new Response(
         JSON.stringify({ error: "Error del servicio de IA (Claude)", detail: errText.slice(0, 500) }),
@@ -1713,6 +1748,9 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           },
         );
+      }
+      if (errMsg.includes(ANTHROPIC_BILLING_THROW) || textLooksLikeAnthropicBilling(errMsg)) {
+        return responseAnthropicBilling();
       }
       return new Response(JSON.stringify({ error: errMsg }), {
         status: 500,
@@ -2253,6 +2291,9 @@ async function handleClaudeChat(
       if (resp.status === 429) {
         console.warn("Claude 429 tras reintentos en handleClaudeChat");
         throw new Error("RATE_LIMIT_429");
+      }
+      if (isAnthropicCreditBalanceLow(resp.status, errText)) {
+        throw new Error(ANTHROPIC_BILLING_THROW);
       }
       throw new Error(`Claude error ${resp.status}: ${errText.substring(0, 300)}`);
     }
