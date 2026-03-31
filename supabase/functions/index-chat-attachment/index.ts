@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 /** Pocas páginas por invocación: evita WORKER_LIMIT (546) en Edge. */
-const PAGE_BATCH = 7;
+const PAGE_BATCH = 5;
 const MAX_CHARS_PER_SEGMENT = 3200;
 /** Tope de caracteres por página (PDFs con texto enorme en una página). */
 const MAX_CHARS_PER_PAGE = 10_000;
