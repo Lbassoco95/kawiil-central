@@ -99,7 +99,8 @@ async function runChatPdfIndexingInBackground(
     await supabase.auth.refreshSession().catch(() => {});
 
     try {
-      while (iterations < 800) {
+      /* Cada página puede requerir muchas invocaciones (~1 trozo/900 chars); resume_from_chunk = offset en caracteres. */
+      while (iterations < 5000) {
         iterations += 1;
         const raw = clientPages.pages[pageStart - 1] ?? "";
         const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
