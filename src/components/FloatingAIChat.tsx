@@ -22,6 +22,7 @@ export function FloatingAIChat() {
     messages,
     isStreaming,
     streamProgressSteps,
+    pdfIndexingStatus,
     sendMessage,
     startNewChat,
   } = useChat();
@@ -42,7 +43,7 @@ export function FloatingAIChat() {
   if (isAssistantPage) return null;
 
   const handleSend = () => {
-    if ((!input.trim() && pendingFiles.length === 0) || isStreaming) return;
+    if ((!input.trim() && pendingFiles.length === 0) || isStreaming || pdfIndexingStatus) return;
     sendMessage(input.trim(), { files: pendingFiles });
     setInput("");
     setPendingFiles([]);
@@ -89,7 +90,9 @@ export function FloatingAIChat() {
       >
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-sm font-medium text-foreground">Kawiil AI</span>
-        {isStreaming && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
+        {(isStreaming || pdfIndexingStatus) && (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+        )}
         <Button size="sm" variant="ghost" className="h-6 w-6 p-0 ml-1" onClick={(e) => { e.stopPropagation(); setOpen(false); setMinimized(false); }}>
           <X className="h-3.5 w-3.5" />
         </Button>
@@ -246,11 +249,24 @@ export function FloatingAIChat() {
         )}
       </div>
 
+      {pdfIndexingStatus && (
+        <div className="shrink-0 border-t border-primary/15 bg-primary/5 px-3 py-1.5">
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+            <span className="min-w-0 truncate">
+              {pdfIndexingStatus.phase === "extracting"
+                ? `Leyendo «${pdfIndexingStatus.fileName}»…`
+                : `Indexando «${pdfIndexingStatus.fileName}» ${pdfIndexingStatus.pageDone}/${pdfIndexingStatus.totalPages}`}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div className="border-t border-border/40 px-3 py-2.5 bg-secondary/10 flex flex-col gap-2">
         <ChatAttachmentChips
           files={pendingFiles}
-          disabled={isStreaming}
+          disabled={isStreaming || !!pdfIndexingStatus}
           onRemove={(i) => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
           className="max-h-24"
         />
@@ -258,7 +274,7 @@ export function FloatingAIChat() {
           <ChatAttachmentPicker
             files={pendingFiles}
             onChange={setPendingFiles}
-            disabled={isStreaming}
+            disabled={isStreaming || !!pdfIndexingStatus}
             showChips={false}
             className="shrink-0"
           />
@@ -270,15 +286,19 @@ export function FloatingAIChat() {
             placeholder="Mensaje o archivos…"
             className="resize-none min-h-[64px] max-h-[120px] text-[13px] bg-background border-border/50 rounded-xl py-2 flex-1 min-w-0"
             rows={2}
-            disabled={isStreaming}
+            disabled={isStreaming || !!pdfIndexingStatus}
           />
           <Button
             size="sm"
             onClick={handleSend}
-            disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
+            disabled={
+              (!input.trim() && pendingFiles.length === 0) ||
+              isStreaming ||
+              !!pdfIndexingStatus
+            }
             className="h-[36px] w-[36px] rounded-xl shrink-0"
           >
-            {isStreaming ? (
+            {isStreaming || pdfIndexingStatus ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Send className="h-3.5 w-3.5" />

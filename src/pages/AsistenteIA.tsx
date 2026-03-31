@@ -56,7 +56,7 @@ const AsistenteIA = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const {
-    messages, isStreaming, streamProgressSteps, conversations, activeConversationId, activeAiProjectId,
+    messages, isStreaming, streamProgressSteps, pdfIndexingStatus, conversations, activeConversationId, activeAiProjectId,
     sendMessage, loadConversation, startNewChat, deleteConversation,
     updateConversationFolder, renameConversation, setAiProject,
   } = useChat();
@@ -121,7 +121,7 @@ const AsistenteIA = () => {
   }, [activeProject?.id]);
 
   const handleSend = () => {
-    if ((!input.trim() && pendingFiles.length === 0) || isStreaming) return;
+    if ((!input.trim() && pendingFiles.length === 0) || isStreaming || pdfIndexingStatus) return;
     sendMessage(input.trim(), {
       files: pendingFiles,
       onAfterChatUpload:
@@ -552,19 +552,32 @@ const AsistenteIA = () => {
             )}
           </div>
 
+          {pdfIndexingStatus && (
+            <div className="shrink-0 border-t border-primary/15 bg-primary/5 px-4 py-2">
+              <div className="max-w-3xl mx-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                <span className="min-w-0">
+                  {pdfIndexingStatus.phase === "extracting"
+                    ? `Leyendo «${pdfIndexingStatus.fileName}» para indexar búsqueda semántica…`
+                    : `Indexando «${pdfIndexingStatus.fileName}» para búsqueda… ${pdfIndexingStatus.pageDone}/${pdfIndexingStatus.totalPages} páginas`}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Input */}
           <div className="border-t border-border/30 px-4 py-3">
             <div className="max-w-3xl mx-auto flex flex-col gap-2">
               <ChatAttachmentChips
                 files={pendingFiles}
-                disabled={isStreaming}
+                disabled={isStreaming || !!pdfIndexingStatus}
                 onRemove={(i) => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
               />
               <div className="flex gap-2 items-end">
                 <ChatAttachmentPicker
                   files={pendingFiles}
                   onChange={setPendingFiles}
-                  disabled={isStreaming}
+                  disabled={isStreaming || !!pdfIndexingStatus}
                   showChips={false}
                   className="shrink-0"
                 />
@@ -576,15 +589,23 @@ const AsistenteIA = () => {
                   placeholder="Escribe tu mensaje o adjunta archivos…"
                   className="resize-none min-h-[80px] max-h-[200px] text-sm bg-secondary/30 border-0 rounded-xl flex-1 min-w-0"
                   rows={3}
-                  disabled={isStreaming}
+                  disabled={isStreaming || !!pdfIndexingStatus}
                 />
                 <Button
                   size="sm"
                   onClick={handleSend}
-                  disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
+                  disabled={
+                    (!input.trim() && pendingFiles.length === 0) ||
+                    isStreaming ||
+                    !!pdfIndexingStatus
+                  }
                   className="h-[42px] w-[42px] rounded-xl shrink-0"
                 >
-                  {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {isStreaming || pdfIndexingStatus ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
             </div>
@@ -594,7 +615,7 @@ const AsistenteIA = () => {
                   id="link-project-files"
                   checked={linkFilesToProject}
                   onCheckedChange={(c) => setLinkFilesToProject(!!c)}
-                  disabled={isStreaming}
+                  disabled={isStreaming || !!pdfIndexingStatus}
                 />
                 <Label htmlFor="link-project-files" className="text-[10px] text-muted-foreground cursor-pointer font-normal">
                   También vincular adjuntos al conocimiento del proyecto (documentos Kawiil)
@@ -604,9 +625,8 @@ const AsistenteIA = () => {
             <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
               Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
               {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
-              MB total. Los PDF se indexan automáticamente por
-              páginas para búsqueda semántica (documentos largos: la IA usa semantic_search sobre el índice, no el archivo
-              entero en memoria). Imágenes/Excel u otros sí se procesan en el mensaje. Kawiil AI puede cometer errores.
+              MB total. Tras la respuesta de la IA, los PDF se indexan por páginas para búsqueda semántica en mensajes
+              siguientes. Imágenes/Excel u otros sí se procesan en el mensaje. Kawiil AI puede cometer errores.
             </p>
           </div>
         </div>

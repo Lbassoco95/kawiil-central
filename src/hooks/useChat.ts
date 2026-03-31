@@ -50,136 +50,151 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 const isPdfChatAttachment = (m: ChatAttachmentMeta) =>
   m.mime_type === "application/pdf" || m.name.toLowerCase().endsWith(".pdf");
 
+/** Progreso de indexación PDF para RAG (fuera del panel del stream de ai-chat). */
+export type PdfIndexingStatus =
+  | { phase: "extracting"; fileName: string }
+  | { phase: "indexing"; fileName: string; pageDone: number; totalPages: number };
+
 type PushProgressMode = "append" | "replace_same_phase";
 
 /**
- * Indexa PDFs para RAG sin bloquear la llamada a ai-chat.
- * La indexación secuencial antes del modelo agotaba el tiempo del cliente (504) y saturaba Edge (546).
+ * Indexa PDFs para RAG tras terminar la respuesta de ai-chat (evita competir con el fetch largo al mismo host).
  */
 async function runChatPdfIndexingInBackground(
   savedMeta: ChatAttachmentMeta[],
   pathToFile: Map<string, File>,
-  pushProgress: (phase: string, message: string, mode?: PushProgressMode) => void,
+  setPdfIndexing: (s: PdfIndexingStatus | null) => void,
 ): Promise<void> {
-  for (const meta of savedMeta) {
-    if (!isPdfChatAttachment(meta)) continue;
+  try {
+    for (const meta of savedMeta) {
+      if (!isPdfChatAttachment(meta)) continue;
 
-    let pageStart = 1;
-    let indexId: string | null = null;
-    let resumeChunk = 0;
-    let continuationChunk = 0;
-    let iterations = 0;
-    /** Una línea de progreso por página (no por cada trozo dentro de la página). */
-    let lastProgressPagesDone = -1;
+      let pageStart = 1;
+      let indexId: string | null = null;
+      let resumeChunk = 0;
+      let continuationChunk = 0;
+      let iterations = 0;
+      let lastProgressPagesDone = -1;
 
-    pushProgress("index_pdf_bg", `Indexando «${meta.name}» en segundo plano (búsqueda en el documento)…`);
+      setPdfIndexing({ phase: "extracting", fileName: meta.name });
 
-    const localFile = pathToFile.get(meta.path);
-    if (!localFile) {
-      toast.error(
-        `No se indexó «${meta.name}» en segundo plano (archivo local no disponible). La conversación sigue con el PDF adjunto al modelo.`,
-      );
-      continue;
-    }
+      const localFile = pathToFile.get(meta.path);
+      if (!localFile) {
+        toast.error(
+          `No se indexó «${meta.name}» en segundo plano (archivo local no disponible). La conversación sigue con el PDF adjunto al modelo.`,
+        );
+        continue;
+      }
 
-    let clientPages: { totalPages: number; pages: string[] } | null = null;
-    try {
-      clientPages = await extractPdfPagesClient(localFile);
-      if (!clientPages.totalPages || clientPages.pages.length === 0) {
+      let clientPages: { totalPages: number; pages: string[] } | null = null;
+      try {
+        clientPages = await extractPdfPagesClient(localFile);
+        if (!clientPages.totalPages || clientPages.pages.length === 0) {
+          clientPages = null;
+        }
+      } catch (ex) {
+        console.error("extractPdfPagesClient (background)", ex);
         clientPages = null;
       }
-    } catch (ex) {
-      console.error("extractPdfPagesClient (background)", ex);
-      clientPages = null;
-    }
 
-    if (!clientPages) {
-      toast.error(
-        `No se indexó «${meta.name}» (no se pudo leer el texto en el navegador). La conversación sigue con el PDF adjunto.`,
-      );
-      continue;
-    }
-
-    await supabase.auth.refreshSession().catch(() => {});
-
-    try {
-      /* Cada página puede requerir varias invocaciones (trozos de texto); resume_from_chunk = offset en caracteres. */
-      while (iterations < 20000) {
-        iterations += 1;
-        const raw = clientPages.pages[pageStart - 1] ?? "";
-        const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
-        const body: Record<string, unknown> = {
-          bucket: meta.bucket,
-          path: meta.path,
-          name: meta.name,
-          mime_type: meta.mime_type,
-          page_start: pageStart,
-          attachment_index_id: indexId,
-          resume_from_chunk: resumeChunk,
-          continuation_chunk_index: continuationChunk,
-          client_pdf_page: {
-            total_pages: clientPages.totalPages,
-            text: pageText,
-          },
-        };
-
-        const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
-          body,
-        });
-        const early = data as { error?: string } | null;
-        if (fnErr) {
-          if (early?.error) throw new Error(early.error);
-          throw fnErr;
-        }
-        const d = data as {
-          error?: string;
-          attachment_index_id?: string;
-          pages_done?: number;
-          total_pages?: number;
-          done?: boolean;
-          next_page?: number | null;
-          resume_from_chunk_next?: number | null;
-          continuation_chunk_index_next?: number;
-        };
-        if (d?.error) throw new Error(d.error);
-        if (!d || typeof d.attachment_index_id !== "string") {
-          throw new Error("Respuesta inválida de index-chat-attachment");
-        }
-
-        indexId = d.attachment_index_id;
-        if (typeof d.continuation_chunk_index_next === "number") {
-          continuationChunk = d.continuation_chunk_index_next;
-        }
-        const donePg = d.pages_done ?? 0;
-        const totalPg = d.total_pages ?? 0;
-        if (donePg !== lastProgressPagesDone) {
-          lastProgressPagesDone = donePg;
-          pushProgress(
-            "index_pdf_bg",
-            `Indexando «${meta.name}» en segundo plano… ${donePg}/${totalPg}`,
-            "replace_same_phase",
-          );
-        }
-
-        if (d.resume_from_chunk_next != null) {
-          resumeChunk = d.resume_from_chunk_next;
-          await new Promise((r) => setTimeout(r, 40));
-          continue;
-        }
-        resumeChunk = 0;
-
-        if (d.done) break;
-        if (d.next_page == null) break;
-        pageStart = d.next_page;
-        await new Promise((r) => setTimeout(r, 120));
+      if (!clientPages) {
+        toast.error(
+          `No se indexó «${meta.name}» (no se pudo leer el texto en el navegador). La conversación sigue con el PDF adjunto.`,
+        );
+        continue;
       }
-      toast.success(`«${meta.name}» quedó indexado para búsqueda en próximos mensajes.`);
-    } catch (e) {
-      console.error("index-chat-attachment (background)", e);
-      toast.error(
-        `No se completó la indexación de «${meta.name}». El PDF sigue disponible para el modelo en este hilo.`,
-      );
+
+      await supabase.auth.refreshSession().catch(() => {});
+
+      setPdfIndexing({
+        phase: "indexing",
+        fileName: meta.name,
+        pageDone: 0,
+        totalPages: clientPages.totalPages,
+      });
+
+      try {
+        /* Cada página puede requerir varias invocaciones (trozos de texto); resume_from_chunk = offset en caracteres. */
+        while (iterations < 20000) {
+          iterations += 1;
+          const raw = clientPages.pages[pageStart - 1] ?? "";
+          const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
+          const body: Record<string, unknown> = {
+            bucket: meta.bucket,
+            path: meta.path,
+            name: meta.name,
+            mime_type: meta.mime_type,
+            page_start: pageStart,
+            attachment_index_id: indexId,
+            resume_from_chunk: resumeChunk,
+            continuation_chunk_index: continuationChunk,
+            client_pdf_page: {
+              total_pages: clientPages.totalPages,
+              text: pageText,
+            },
+          };
+
+          const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
+            body,
+          });
+          const early = data as { error?: string } | null;
+          if (fnErr) {
+            if (early?.error) throw new Error(early.error);
+            throw fnErr;
+          }
+          const d = data as {
+            error?: string;
+            attachment_index_id?: string;
+            pages_done?: number;
+            total_pages?: number;
+            done?: boolean;
+            next_page?: number | null;
+            resume_from_chunk_next?: number | null;
+            continuation_chunk_index_next?: number;
+          };
+          if (d?.error) throw new Error(d.error);
+          if (!d || typeof d.attachment_index_id !== "string") {
+            throw new Error("Respuesta inválida de index-chat-attachment");
+          }
+
+          indexId = d.attachment_index_id;
+          if (typeof d.continuation_chunk_index_next === "number") {
+            continuationChunk = d.continuation_chunk_index_next;
+          }
+          const donePg = d.pages_done ?? 0;
+          const totalPg = d.total_pages ?? 0;
+          if (donePg !== lastProgressPagesDone) {
+            lastProgressPagesDone = donePg;
+            setPdfIndexing({
+              phase: "indexing",
+              fileName: meta.name,
+              pageDone: donePg,
+              totalPages: totalPg,
+            });
+          }
+
+          if (d.resume_from_chunk_next != null) {
+            resumeChunk = d.resume_from_chunk_next;
+            await new Promise((r) => setTimeout(r, 40));
+            continue;
+          }
+          resumeChunk = 0;
+
+          if (d.done) break;
+          if (d.next_page == null) break;
+          pageStart = d.next_page;
+          await new Promise((r) => setTimeout(r, 120));
+        }
+        toast.success(`«${meta.name}» quedó indexado para búsqueda en próximos mensajes.`);
+      } catch (e) {
+        console.error("index-chat-attachment (background)", e);
+        toast.error(
+          `No se completó la indexación de «${meta.name}». El PDF sigue disponible para el modelo en este hilo.`,
+        );
+      }
     }
+  } finally {
+    setPdfIndexing(null);
   }
 }
 
@@ -190,6 +205,7 @@ export function useChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamProgressSteps, setStreamProgressSteps] = useState<ChatProgressStep[]>([]);
   const progressStepsRef = useRef<ChatProgressStep[]>([]);
+  const [pdfIndexingStatus, setPdfIndexingStatus] = useState<PdfIndexingStatus | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeAiProjectId, setActiveAiProjectId] = useState<string | null>(null);
 
@@ -227,6 +243,7 @@ export function useChat() {
       }))
     );
     setActiveConversationId(conversationId);
+    setPdfIndexingStatus(null);
 
     const { data: conv } = await supabase
       .from("chat_conversations" as any)
@@ -337,6 +354,7 @@ export function useChat() {
       if (activeConversationId === id) {
         setActiveConversationId(null);
         setMessages([]);
+        setPdfIndexingStatus(null);
       }
       toast.success("Conversación eliminada");
     },
@@ -346,7 +364,7 @@ export function useChat() {
     async (input: string, opts?: SendMessageOptions) => {
       const files = (opts?.files ?? []).slice(0, MAX_CHAT_ATTACHMENT_FILES);
       const text = input.trim() || (files.length ? "(Archivos adjuntos)" : "");
-      if ((!text && !files.length) || isStreaming) return;
+      if ((!text && !files.length) || isStreaming || pdfIndexingStatus) return;
 
       progressStepsRef.current = [];
       const pushProgress = (phase: string, message: string, mode: PushProgressMode = "append") => {
@@ -464,10 +482,6 @@ export function useChat() {
 
       const refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
 
-      void runChatPdfIndexingInBackground(savedMeta, pathToFile, pushProgress).catch((err) =>
-        console.error("runChatPdfIndexingInBackground", err),
-      );
-
       pushProgress("ai_connect", "Conectando con Kawiil AI y procesando contexto…");
 
       let assistantContent = "";
@@ -494,7 +508,28 @@ export function useChat() {
             body: chatBody,
           });
 
-        let resp = await chatFetch();
+        const fetchChatResilient = async (): Promise<Response> => {
+          for (let netTry = 0; netTry < 2; netTry++) {
+            try {
+              return await chatFetch();
+            } catch (err: unknown) {
+              const m = err instanceof Error ? err.message : String(err);
+              const soft =
+                /failed to fetch/i.test(m) ||
+                /networkerror/i.test(m) ||
+                /load failed/i.test(m);
+              if (netTry === 0 && soft) {
+                await supabase.auth.refreshSession().catch(() => {});
+                await new Promise((r) => setTimeout(r, 3000));
+                continue;
+              }
+              throw err;
+            }
+          }
+          throw new Error("No se pudo conectar con el servidor de chat.");
+        };
+
+        let resp = await fetchChatResilient();
         for (let r429 = 0; r429 < 5 && resp.status === 429; r429++) {
           let waitMs = 6000 + r429 * 4000;
           try {
@@ -511,7 +546,7 @@ export function useChat() {
             `Límite temporal del proveedor de IA. Esperando ${Math.round(waitMs / 1000)} s y reintentando (${r429 + 1}/5)…`,
           );
           await new Promise((r) => setTimeout(r, waitMs));
-          resp = await chatFetch();
+          resp = await fetchChatResilient();
         }
 
         const ct = resp.headers.get("content-type") || "";
@@ -682,19 +717,39 @@ export function useChat() {
         setStreamProgressSteps([]);
         progressStepsRef.current = [];
       }
+
+      const shouldIndexPdfs =
+        savedMeta.some(isPdfChatAttachment) && pathToFile.size > 0;
+      if (shouldIndexPdfs) {
+        void runChatPdfIndexingInBackground(savedMeta, pathToFile, setPdfIndexingStatus).catch((err) =>
+          console.error("runChatPdfIndexingInBackground", err),
+        );
+      }
     },
-    [messages, isStreaming, activeConversationId, activeAiProjectId, createConversation, saveMessage, qc, user]
+    [
+      messages,
+      isStreaming,
+      pdfIndexingStatus,
+      activeConversationId,
+      activeAiProjectId,
+      createConversation,
+      saveMessage,
+      qc,
+      user,
+    ]
   );
 
   const startNewChat = useCallback(() => {
     setActiveConversationId(null);
     setMessages([]);
+    setPdfIndexingStatus(null);
   }, []);
 
   const setAiProject = useCallback((projectId: string | null) => {
     setActiveAiProjectId(projectId);
     setActiveConversationId(null);
     setMessages([]);
+    setPdfIndexingStatus(null);
   }, []);
 
   return {
@@ -712,5 +767,6 @@ export function useChat() {
     renameConversation,
     setAiProject,
     streamProgressSteps,
+    pdfIndexingStatus,
   };
 }
