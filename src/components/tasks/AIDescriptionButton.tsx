@@ -29,6 +29,7 @@ export function AIDescriptionButton({ title, onGenerated }: Props) {
             },
           ],
           simple: true,
+          insightLite: true,
         },
       });
 

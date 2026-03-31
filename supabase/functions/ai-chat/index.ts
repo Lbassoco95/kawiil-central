@@ -10,6 +10,51 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const ANTHROPIC_429_MAX_ATTEMPTS = 4;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** POST a /v1/messages con reintentos si Anthropic responde 429 (rate limit). */
+async function anthropicMessagesFetch(apiKey: string, body: Record<string, unknown>): Promise<Response> {
+  let lastResp: Response | undefined;
+  for (let attempt = 0; attempt < ANTHROPIC_429_MAX_ATTEMPTS; attempt++) {
+    const resp = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    lastResp = resp;
+    if (resp.ok) return resp;
+    if (resp.status !== 429) return resp;
+
+    const errText = await resp.text();
+    if (attempt >= ANTHROPIC_429_MAX_ATTEMPTS - 1) {
+      console.warn("Anthropic 429 tras reintentos:", errText.slice(0, 240));
+      return new Response(errText, {
+        status: 429,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    let waitMs = Math.min(45_000, 2000 * 2 ** attempt);
+    try {
+      const j = JSON.parse(errText);
+      const ra = j?.error?.retry_after ?? j?.retry_after;
+      if (typeof ra === "number" && ra > 0) waitMs = Math.min(60_000, ra * 1000);
+    } catch {
+      /* ignore */
+    }
+    console.warn(`Anthropic 429, reintento ${attempt + 2}/${ANTHROPIC_429_MAX_ATTEMPTS} en ${waitMs}ms`);
+    await sleepMs(waitMs);
+  }
+  return lastResp!;
+}
 
 function escapePostgrestString(input: string): string {
   return input
@@ -1510,18 +1555,10 @@ serve(async (req) => {
         try {
           const summaryPrompt = `El usuario buscó "${searchQuery}" en la plataforma. Estos son los resultados encontrados:\n${JSON.stringify(results, null, 2)}\n\nGenera un resumen breve (2-3 oraciones) en español que contextualice qué encontramos relacionado con "${searchQuery}". No listes los resultados, solo da contexto. Sé conciso y útil.`;
 
-          const summaryResp = await fetch(ANTHROPIC_API_URL, {
-            method: "POST",
-            headers: {
-              "x-api-key": ANTHROPIC_API_KEY,
-              "anthropic-version": "2023-06-01",
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "claude-sonnet-4-20250514",
-              max_tokens: 256,
-              messages: [{ role: "user", content: summaryPrompt }],
-            }),
+          const summaryResp = await anthropicMessagesFetch(ANTHROPIC_API_KEY, {
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 256,
+            messages: [{ role: "user", content: summaryPrompt }],
           });
 
           if (summaryResp.ok) {
@@ -1540,19 +1577,11 @@ serve(async (req) => {
 
     // ─── Simple mode (no tools, no streaming) ───
     if (simple) {
-      const resp = await fetch(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 2048,
-          system: systemPrompt,
-          messages: toAnthropicMessages(forClaude),
-        }),
+      const resp = await anthropicMessagesFetch(ANTHROPIC_API_KEY, {
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: toAnthropicMessages(forClaude),
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -1572,11 +1601,13 @@ serve(async (req) => {
       }
 
       if (resp.status === 429) {
+        const msg = "Demasiadas solicitudes. Intenta de nuevo en unos segundos.";
         const payload: Record<string, unknown> = {
-          error: "rate_limited",
-          message: "Demasiadas solicitudes. Intenta de nuevo en unos segundos.",
+          error: msg,
+          message: msg,
         };
         if (typeof retryAfter === "number") payload.retry_after = retryAfter;
+        else payload.retry_after = 8;
         return new Response(JSON.stringify(payload), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -1609,8 +1640,13 @@ serve(async (req) => {
       const errMsg = e instanceof Error ? e.message : String(e);
       console.warn("Claude chat failed:", errMsg);
       if (errMsg.includes("RATE_LIMIT_429")) {
+        const msg = "Demasiadas solicitudes. Intenta de nuevo en unos segundos.";
         return new Response(
-          JSON.stringify({ error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." }),
+          JSON.stringify({
+            error: msg,
+            message: msg,
+            retry_after: 8,
+          }),
           {
             status: 429,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2142,27 +2178,19 @@ async function handleClaudeChat(
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const isLastChance = round === MAX_ROUNDS - 1;
 
-    const resp = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: anthropicMsgs,
-        tools: isLastChance ? undefined : allTools,
-        stream: false,
-      }),
+    const resp = await anthropicMessagesFetch(apiKey, {
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: anthropicMsgs,
+      tools: isLastChance ? undefined : allTools,
+      stream: false,
     });
 
     if (!resp.ok) {
       const errText = await resp.text();
       if (resp.status === 429) {
-        console.warn("Claude 429 rate limit, will fallback to gateway");
+        console.warn("Claude 429 tras reintentos en handleClaudeChat");
         throw new Error("RATE_LIMIT_429");
       }
       throw new Error(`Claude error ${resp.status}: ${errText.substring(0, 300)}`);

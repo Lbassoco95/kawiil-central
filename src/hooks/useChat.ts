@@ -322,20 +322,40 @@ export function useChat() {
         const session = await supabase.auth.getSession();
         const token = session.data.session?.access_token;
 
-        const resp = await fetch(CHAT_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({
-            messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
-            conversationId: convId,
-            ai_project_id: activeAiProjectId || undefined,
-            attachmentRefs: attachmentRefs.length ? attachmentRefs : undefined,
-          }),
+        const chatBody = JSON.stringify({
+          messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
+          conversationId: convId,
+          ai_project_id: activeAiProjectId || undefined,
+          attachmentRefs: attachmentRefs.length ? attachmentRefs : undefined,
         });
+
+        const chatFetch = () =>
+          fetch(CHAT_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+            body: chatBody,
+          });
+
+        let resp = await chatFetch();
+        for (let r429 = 0; r429 < 2 && resp.status === 429; r429++) {
+          let waitMs = 3500 * (r429 + 1);
+          try {
+            const errRaw = await resp.text();
+            const j = JSON.parse(errRaw) as { retry_after?: number; message?: string; error?: string };
+            if (typeof j.retry_after === "number" && j.retry_after > 0) {
+              waitMs = Math.min(60_000, j.retry_after * 1000);
+            }
+          } catch {
+            /* ignore */
+          }
+          pushProgress("rate_limit", "Límite temporal del proveedor de IA. Reintentando en unos segundos…");
+          await new Promise((r) => setTimeout(r, waitMs));
+          resp = await chatFetch();
+        }
 
         const ct = resp.headers.get("content-type") || "";
 
