@@ -107,8 +107,6 @@ const CHAT_ATTACH_MAX_BYTES = 20 * 1024 * 1024;
 const CHAT_ATTACH_BATCH_MAX_BYTES = 100 * 1024 * 1024;
 /** Texto máximo enviado al modelo por adjunto (menos RAM en Edge y cuerpos HTTP más livianos). */
 const CHAT_TEXT_EXTRACT_MAX = 80_000;
-/** Por debajo: PDF nativo base64 a Claude. Más bajo = menos 546 por pico de memoria en el worker. */
-const PDF_AS_NATIVE_DOCUMENT_MAX_BYTES = 1.5 * 1024 * 1024;
 /** Por encima: extracción por páginas (extractText mergePages completo solo en PDFs ≤ este umbral). */
 const PDF_MEDIUM_USE_PAGE_EXTRACT_BYTES = 1.25 * 1024 * 1024;
 /** Intentar texto por páginas hasta este tamaño de archivo. */
@@ -121,6 +119,135 @@ const IMAGE_MULTIMODAL_MAX_BYTES = 2 * 1024 * 1024;
 const XLSX_PROCESS_MAX_BYTES = 18 * 1024 * 1024;
 const XLSX_LARGE_FILE_BYTES = 6 * 1024 * 1024;
 const XLSX_HUGE_FILE_BYTES = 10 * 1024 * 1024;
+
+/** Presupuesto de caracteres en `messages` (texto). PDF nativo base64 contaba aparte y podía superar 200k tokens con archivos <1MB. */
+const MAX_CLAUDE_CONVERSATION_PAYLOAD_CHARS = 200_000;
+/** System + contexto proyecto/memorias: truncar para dejar margen a mensajes y tools. */
+const MAX_SYSTEM_PROMPT_CHARS = 95_000;
+/** Cada tool_result no debe exceder esto (JSON de tareas, búsquedas, etc.). */
+const MAX_TOOL_RESULT_CHARS = 28_000;
+/** Contenido devuelto por memory view (archivos muy grandes saturan el contexto). */
+const MAX_MEMORY_VIEW_CHARS = 64_000;
+
+function truncateForToolResult(payload: string, maxChars: number): string {
+  if (payload.length <= maxChars) return payload;
+  return payload.slice(0, maxChars) +
+    `\n\n[…resultado truncado por tamaño (${payload.length} caracteres); pide menos filas o un rango más acotado…]`;
+}
+
+function clampSystemPromptForClaude(system: string): string {
+  if (system.length <= MAX_SYSTEM_PROMPT_CHARS) return system;
+  return truncateText(system, MAX_SYSTEM_PROMPT_CHARS);
+}
+
+/** Estima tamaño aproximado del contenido de un mensaje Anthropic (texto, imágenes, documentos base64, tool blocks). */
+function estimateContentSize(content: unknown): number {
+  if (content === null || content === undefined) return 0;
+  if (typeof content === "string") return content.length;
+  if (!Array.isArray(content)) return String(content).length;
+  let n = 0;
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const b = block as Record<string, unknown>;
+    if (b.type === "text" && typeof b.text === "string") n += b.text.length;
+    if (b.type === "tool_result" && typeof b.content === "string") n += b.content.length;
+    if (b.type === "tool_use") n += JSON.stringify(b).length;
+    if (b.type === "image" && (b.source as any)?.data) n += String((b.source as any).data).length;
+    if (b.type === "document" && (b.source as any)?.data) n += String((b.source as any).data).length;
+  }
+  return n;
+}
+
+function estimateMessagesChars(msgs: { role: string; content: unknown }[]): number {
+  return msgs.reduce((acc, m) => acc + estimateContentSize(m.content), 0);
+}
+
+function contentHasToolUse(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some((b) => b && typeof b === "object" && (b as { type?: string }).type === "tool_use");
+}
+
+function contentIsOnlyToolResults(content: unknown): boolean {
+  if (!Array.isArray(content) || content.length === 0) return false;
+  return content.every((b) => b && typeof b === "object" && (b as { type?: string }).type === "tool_result");
+}
+
+/**
+ * Elimina prefijos completos (user+assistant o trío tool_use/tool_result) desde el inicio
+ * hasta quedar bajo el presupuesto, sin dejar tool_result huérfanos.
+ */
+function pruneClaudeMessages(msgs: any[], maxChars: number): any[] {
+  if (msgs.length === 0) return msgs;
+  const working = [...msgs];
+  let guard = 0;
+  while (working.length > 1 && estimateMessagesChars(working) > maxChars && guard < 400) {
+    guard += 1;
+    if (working[0].role !== "user") {
+      working.shift();
+      continue;
+    }
+    const u0 = working[0];
+    const a1 = working[1];
+    if (a1?.role === "assistant" && contentHasToolUse(a1.content)) {
+      const u2 = working[2];
+      if (u2?.role === "user" && contentIsOnlyToolResults(u2.content)) {
+        working.splice(0, 3);
+        continue;
+      }
+      break;
+    }
+    if (a1?.role === "assistant") {
+      working.splice(0, 2);
+      continue;
+    }
+    break;
+  }
+  while (estimateMessagesChars(working) > maxChars && working.length >= 3) {
+    if (
+      working[0].role === "user" &&
+      working[1]?.role === "assistant" &&
+      contentHasToolUse(working[1].content) &&
+      working[2]?.role === "user" &&
+      contentIsOnlyToolResults(working[2].content)
+    ) {
+      working.splice(0, 3);
+      continue;
+    }
+    break;
+  }
+  while (
+    estimateMessagesChars(working) > maxChars &&
+    working.length >= 2 &&
+    working[0].role === "user" &&
+    working[1]?.role === "assistant" &&
+    !contentHasToolUse(working[1].content)
+  ) {
+    working.splice(0, 2);
+  }
+  if (working.length === 0) {
+    const last = msgs[msgs.length - 1];
+    return last ? [last] : [];
+  }
+  while (working.length > 0 && working[0].role !== "user") {
+    working.shift();
+  }
+  if (working.length === 0) {
+    const last = msgs[msgs.length - 1];
+    return last ? [last] : [];
+  }
+  if (estimateMessagesChars(working) > maxChars && working.length === 1 && working[0].role === "user") {
+    const c = working[0].content;
+    if (typeof c === "string") {
+      working[0] = { ...working[0], content: truncateText(c, Math.min(maxChars - 500, 120_000)) };
+    }
+  }
+  return working;
+}
+
+function isAnthropicPromptTooLongMessage(errText: string): boolean {
+  const t = errText.toLowerCase();
+  return t.includes("prompt is too long") || t.includes("too many tokens") || t.includes("context length");
+}
 
 async function assertAiProjectAccess(
   svc: ReturnType<typeof createClient>,
@@ -340,22 +467,15 @@ async function processAttachmentFile(
     };
   }
   if (mt === "application/pdf" || lower.endsWith(".pdf")) {
-    if (bytes.length <= PDF_AS_NATIVE_DOCUMENT_MAX_BYTES) {
-      return {
-        claude: [{
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: toBase64(bytes) },
-        }],
-        gatewayText: "",
-      };
-    }
+    // Nunca enviar PDF como documento nativo base64: Anthropic cuenta tokens muy por encima del tamaño en bytes
+    // y un solo PDF de ~1MB puede superar el límite de 200k tokens de contexto.
     const gatewayText = await pdfBytesToGatewayText(bytes, name);
     const inner = gatewayText.replace(/^###[^\n]*\n?/, "").trim() || gatewayText;
     return {
       claude: [{
         type: "text",
         text: truncateText(
-          `PDF «${name}» (> ${Math.round(PDF_AS_NATIVE_DOCUMENT_MAX_BYTES / (1024 * 1024))} MB en el servidor): se envía solo texto extraído, no el binario completo.\n\n${inner}`,
+          `PDF «${name}» (texto extraído en el servidor para ajustarse al límite de contexto del modelo; PDFs muy largos: usar búsqueda semántica tras indexar).\n\n${inner}`,
           CHAT_TEXT_EXTRACT_MAX,
         ),
       }],
@@ -1213,14 +1333,22 @@ async function executeTool(
       }
 
       return {
-        results: results.map((r: any) => ({
-          contenido: r.content.length > 500 ? r.content.substring(0, 500) + "..." : r.content,
-          tipo_fuente: r.source_type,
-          similitud: Math.round(r.similarity * 100) + "%",
-          metadata: r.metadata,
-          client_id: r.client_id,
-          project_id: r.project_id,
-        })),
+        results: results.map((r: any) => {
+          const md = r.metadata && typeof r.metadata === "object" ? r.metadata as Record<string, unknown> : {};
+          return {
+            contenido: r.content.length > 450 ? r.content.substring(0, 450) + "..." : r.content,
+            tipo_fuente: r.source_type,
+            similitud: Math.round(r.similarity * 100) + "%",
+            metadata: {
+              page_from: md.page_from,
+              page_to: md.page_to,
+              filename: md.filename,
+              chunk_index: md.chunk_index,
+            },
+            client_id: r.client_id,
+            project_id: r.project_id,
+          };
+        }),
         total: results.length,
         query: queryText,
       };
@@ -1640,6 +1768,8 @@ serve(async (req) => {
         `Al integrar lo encontrado, responde en **párrafos** al usuario, no como inventario de fragmentos.\n`;
     }
 
+    systemPrompt = clampSystemPromptForClaude(systemPrompt);
+
     const sseProgressPreamble: { phase: string; message: string }[] = [];
     const nAtt = Array.isArray(attachmentRefs) ? attachmentRefs.length : 0;
     if (indexedNames.length > 0) {
@@ -1693,11 +1823,15 @@ serve(async (req) => {
 
     // ─── Simple mode (no tools, no streaming) ───
     if (simple) {
+      const simpleMsgs = pruneClaudeMessages(
+        toAnthropicMessages(forClaude),
+        MAX_CLAUDE_CONVERSATION_PAYLOAD_CHARS,
+      );
       const resp = await anthropicMessagesFetch(ANTHROPIC_API_KEY, {
         model: "claude-sonnet-4-20250514",
         max_tokens: 2048,
         system: systemPrompt,
-        messages: toAnthropicMessages(forClaude),
+        messages: simpleMsgs,
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -1728,6 +1862,15 @@ serve(async (req) => {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      if (resp.status === 400 && isAnthropicPromptTooLongMessage(errText)) {
+        const msg =
+          "La conversación o los adjuntos superan el límite de contexto del modelo. Inicia un chat nuevo o reduce el historial.";
+        return new Response(
+          JSON.stringify({ error: msg, message: msg, code: "context_too_long" }),
+          { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
 
       if (isAnthropicCreditBalanceLow(resp.status, errText)) {
@@ -1775,6 +1918,19 @@ serve(async (req) => {
       }
       if (errMsg.includes(ANTHROPIC_BILLING_THROW) || textLooksLikeAnthropicBilling(errMsg)) {
         return responseAnthropicBilling();
+      }
+      if (
+        errMsg.includes("CLAUDE_CONTEXT_TOO_LONG") ||
+        errMsg.toLowerCase().includes("prompt is too long")
+      ) {
+        const msg =
+          "La conversación o los datos adjuntos superan el límite de contexto del modelo (200k tokens). " +
+          "Inicia un chat nuevo, acorta el historial o evita varios PDFs enormes en el mismo hilo. " +
+          "Los PDFs grandes pueden consultarse por búsqueda semántica tras indexarlos sin cargar todo el texto en cada mensaje.";
+        return new Response(
+          JSON.stringify({ error: msg, message: msg, code: "context_too_long" }),
+          { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
       return new Response(JSON.stringify({ error: errMsg }), {
         status: 500,
@@ -1935,7 +2091,10 @@ async function handleMemoryToolCall(
           lines = lines.slice(Math.max(0, start - 1), end);
         }
         const numbered = lines.map((l: string, i: number) => `${String(i + 1).padStart(6)} \t${l}`).join("\n");
-        return `Here's the content of ${tp} with line numbers:\n${numbered}`;
+        return truncateForToolResult(
+          `Here's the content of ${tp} with line numbers:\n${numbered}`,
+          MAX_MEMORY_VIEW_CHARS,
+        );
       }
 
       let query = svc.from("ai_project_memories")
@@ -1954,7 +2113,10 @@ async function handleMemoryToolCall(
         lines = lines.slice(Math.max(0, start - 1), end);
       }
       const numbered = lines.map((l: string, i: number) => `${String(i + 1).padStart(6)} \t${l}`).join("\n");
-      return `Here's the content of ${memPath} with line numbers:\n${numbered}`;
+      return truncateForToolResult(
+        `Here's the content of ${memPath} with line numbers:\n${numbered}`,
+        MAX_MEMORY_VIEW_CHARS,
+      );
     }
 
     case "create": {
@@ -2270,7 +2432,10 @@ async function handleClaudeChat(
   supabase: any, userId: string, orgId: string, aiProjectId: string | null,
   progressPreamble: Array<{ phase: string; message: string }>,
 ): Promise<Response> {
-  let anthropicMsgs = toAnthropicMessages(userMessages);
+  let anthropicMsgs = pruneClaudeMessages(
+    toAnthropicMessages(userMessages),
+    MAX_CLAUDE_CONVERSATION_PAYLOAD_CHARS,
+  );
   const MAX_ROUNDS = 8;
   const createdArtifacts: { id: string; title: string; content_type: string }[] = [];
 
@@ -2301,6 +2466,8 @@ async function handleClaudeChat(
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const isLastChance = round === MAX_ROUNDS - 1;
 
+    anthropicMsgs = pruneClaudeMessages(anthropicMsgs, MAX_CLAUDE_CONVERSATION_PAYLOAD_CHARS);
+
     const resp = await anthropicMessagesFetch(apiKey, {
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
@@ -2318,6 +2485,9 @@ async function handleClaudeChat(
       }
       if (isAnthropicCreditBalanceLow(resp.status, errText)) {
         throw new Error(ANTHROPIC_BILLING_THROW);
+      }
+      if (resp.status === 400 && isAnthropicPromptTooLongMessage(errText)) {
+        throw new Error("CLAUDE_CONTEXT_TOO_LONG");
       }
       throw new Error(`Claude error ${resp.status}: ${errText.substring(0, 300)}`);
     }
@@ -2353,10 +2523,11 @@ async function handleClaudeChat(
           result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId);
         }
 
+        const rawToolStr = typeof result === "string" ? result : JSON.stringify(result);
         toolResults.push({
           type: "tool_result",
           tool_use_id: tu.id,
-          content: typeof result === "string" ? result : JSON.stringify(result),
+          content: truncateForToolResult(rawToolStr, MAX_TOOL_RESULT_CHARS),
         });
       }
       anthropicMsgs.push({ role: "user", content: toolResults });
