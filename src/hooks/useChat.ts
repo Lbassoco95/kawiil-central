@@ -50,6 +50,8 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 const isPdfChatAttachment = (m: ChatAttachmentMeta) =>
   m.mime_type === "application/pdf" || m.name.toLowerCase().endsWith(".pdf");
 
+type PushProgressMode = "append" | "replace_same_phase";
+
 /**
  * Indexa PDFs para RAG sin bloquear la llamada a ai-chat.
  * La indexación secuencial antes del modelo agotaba el tiempo del cliente (504) y saturaba Edge (546).
@@ -57,7 +59,7 @@ const isPdfChatAttachment = (m: ChatAttachmentMeta) =>
 async function runChatPdfIndexingInBackground(
   savedMeta: ChatAttachmentMeta[],
   pathToFile: Map<string, File>,
-  pushProgress: (phase: string, message: string) => void,
+  pushProgress: (phase: string, message: string, mode?: PushProgressMode) => void,
 ): Promise<void> {
   for (const meta of savedMeta) {
     if (!isPdfChatAttachment(meta)) continue;
@@ -67,6 +69,8 @@ async function runChatPdfIndexingInBackground(
     let resumeChunk = 0;
     let continuationChunk = 0;
     let iterations = 0;
+    /** Una línea de progreso por página (no por cada trozo dentro de la página). */
+    let lastProgressPagesDone = -1;
 
     pushProgress("index_pdf_bg", `Indexando «${meta.name}» en segundo plano (búsqueda en el documento)…`);
 
@@ -99,8 +103,8 @@ async function runChatPdfIndexingInBackground(
     await supabase.auth.refreshSession().catch(() => {});
 
     try {
-      /* Cada página puede requerir muchas invocaciones (~1 trozo/900 chars); resume_from_chunk = offset en caracteres. */
-      while (iterations < 5000) {
+      /* Cada página puede requerir varias invocaciones (trozos de texto); resume_from_chunk = offset en caracteres. */
+      while (iterations < 20000) {
         iterations += 1;
         const raw = clientPages.pages[pageStart - 1] ?? "";
         const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
@@ -148,11 +152,18 @@ async function runChatPdfIndexingInBackground(
         }
         const donePg = d.pages_done ?? 0;
         const totalPg = d.total_pages ?? 0;
-        pushProgress("index_pdf_bg", `Indexando «${meta.name}» en segundo plano… ${donePg}/${totalPg}`);
+        if (donePg !== lastProgressPagesDone) {
+          lastProgressPagesDone = donePg;
+          pushProgress(
+            "index_pdf_bg",
+            `Indexando «${meta.name}» en segundo plano… ${donePg}/${totalPg}`,
+            "replace_same_phase",
+          );
+        }
 
         if (d.resume_from_chunk_next != null) {
           resumeChunk = d.resume_from_chunk_next;
-          await new Promise((r) => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 40));
           continue;
         }
         resumeChunk = 0;
@@ -160,7 +171,7 @@ async function runChatPdfIndexingInBackground(
         if (d.done) break;
         if (d.next_page == null) break;
         pageStart = d.next_page;
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, 120));
       }
       toast.success(`«${meta.name}» quedó indexado para búsqueda en próximos mensajes.`);
     } catch (e) {
@@ -338,7 +349,18 @@ export function useChat() {
       if ((!text && !files.length) || isStreaming) return;
 
       progressStepsRef.current = [];
-      const pushProgress = (phase: string, message: string) => {
+      const pushProgress = (phase: string, message: string, mode: PushProgressMode = "append") => {
+        if (mode === "replace_same_phase") {
+          const arr = [...progressStepsRef.current];
+          for (let i = arr.length - 1; i >= 0; i--) {
+            if (arr[i].phase === phase) {
+              arr[i] = { phase, message };
+              progressStepsRef.current = arr;
+              setStreamProgressSteps([...arr]);
+              return;
+            }
+          }
+        }
         const step: ChatProgressStep = { phase, message };
         progressStepsRef.current = [...progressStepsRef.current, step];
         setStreamProgressSteps([...progressStepsRef.current]);

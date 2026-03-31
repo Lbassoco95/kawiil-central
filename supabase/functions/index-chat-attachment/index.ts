@@ -18,8 +18,8 @@ const MAX_CHARS_PER_PAGE = 8000;
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
-/** Caracteres por trozo por request (baja CPU vs chunkText sobre 8k). */
-const EMBED_SLICE_CHARS = 900;
+/** Caracteres por trozo por request (menos round-trips; si vuelve 546, bajar a ~900). */
+const EMBED_SLICE_CHARS = 1400;
 const EMBED_SLICE_OVERLAP = 36;
 
 function estimateTokens(text: string): number {
