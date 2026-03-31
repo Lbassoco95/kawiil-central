@@ -47,6 +47,130 @@ export interface SendMessageOptions {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
+const isPdfChatAttachment = (m: ChatAttachmentMeta) =>
+  m.mime_type === "application/pdf" || m.name.toLowerCase().endsWith(".pdf");
+
+/**
+ * Indexa PDFs para RAG sin bloquear la llamada a ai-chat.
+ * La indexación secuencial antes del modelo agotaba el tiempo del cliente (504) y saturaba Edge (546).
+ */
+async function runChatPdfIndexingInBackground(
+  savedMeta: ChatAttachmentMeta[],
+  pathToFile: Map<string, File>,
+  pushProgress: (phase: string, message: string) => void,
+): Promise<void> {
+  for (const meta of savedMeta) {
+    if (!isPdfChatAttachment(meta)) continue;
+
+    let pageStart = 1;
+    let indexId: string | null = null;
+    let resumeChunk = 0;
+    let continuationChunk = 0;
+    let iterations = 0;
+
+    pushProgress("index_pdf_bg", `Indexando «${meta.name}» en segundo plano (búsqueda en el documento)…`);
+
+    const localFile = pathToFile.get(meta.path);
+    if (!localFile) {
+      toast.error(
+        `No se indexó «${meta.name}» en segundo plano (archivo local no disponible). La conversación sigue con el PDF adjunto al modelo.`,
+      );
+      continue;
+    }
+
+    let clientPages: { totalPages: number; pages: string[] } | null = null;
+    try {
+      clientPages = await extractPdfPagesClient(localFile);
+      if (!clientPages.totalPages || clientPages.pages.length === 0) {
+        clientPages = null;
+      }
+    } catch (ex) {
+      console.error("extractPdfPagesClient (background)", ex);
+      clientPages = null;
+    }
+
+    if (!clientPages) {
+      toast.error(
+        `No se indexó «${meta.name}» (no se pudo leer el texto en el navegador). La conversación sigue con el PDF adjunto.`,
+      );
+      continue;
+    }
+
+    await supabase.auth.refreshSession().catch(() => {});
+
+    try {
+      while (iterations < 800) {
+        iterations += 1;
+        const raw = clientPages.pages[pageStart - 1] ?? "";
+        const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
+        const body: Record<string, unknown> = {
+          bucket: meta.bucket,
+          path: meta.path,
+          name: meta.name,
+          mime_type: meta.mime_type,
+          page_start: pageStart,
+          attachment_index_id: indexId,
+          resume_from_chunk: resumeChunk,
+          continuation_chunk_index: continuationChunk,
+          client_pdf_page: {
+            total_pages: clientPages.totalPages,
+            text: pageText,
+          },
+        };
+
+        const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
+          body,
+        });
+        const early = data as { error?: string } | null;
+        if (fnErr) {
+          if (early?.error) throw new Error(early.error);
+          throw fnErr;
+        }
+        const d = data as {
+          error?: string;
+          attachment_index_id?: string;
+          pages_done?: number;
+          total_pages?: number;
+          done?: boolean;
+          next_page?: number | null;
+          resume_from_chunk_next?: number | null;
+          continuation_chunk_index_next?: number;
+        };
+        if (d?.error) throw new Error(d.error);
+        if (!d || typeof d.attachment_index_id !== "string") {
+          throw new Error("Respuesta inválida de index-chat-attachment");
+        }
+
+        indexId = d.attachment_index_id;
+        if (typeof d.continuation_chunk_index_next === "number") {
+          continuationChunk = d.continuation_chunk_index_next;
+        }
+        const donePg = d.pages_done ?? 0;
+        const totalPg = d.total_pages ?? 0;
+        pushProgress("index_pdf_bg", `Indexando «${meta.name}» en segundo plano… ${donePg}/${totalPg}`);
+
+        if (d.resume_from_chunk_next != null) {
+          resumeChunk = d.resume_from_chunk_next;
+          await new Promise((r) => setTimeout(r, 500));
+          continue;
+        }
+        resumeChunk = 0;
+
+        if (d.done) break;
+        if (d.next_page == null) break;
+        pageStart = d.next_page;
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+      toast.success(`«${meta.name}» quedó indexado para búsqueda en próximos mensajes.`);
+    } catch (e) {
+      console.error("index-chat-attachment (background)", e);
+      toast.error(
+        `No se completó la indexación de «${meta.name}». El PDF sigue disponible para el modelo en este hilo.`,
+      );
+    }
+  }
+}
+
 export function useChat() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -315,133 +439,11 @@ export function useChat() {
         return;
       }
 
-      let refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
-      const indexedNames: string[] = [];
+      const refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
 
-      const isPdfAttachment = (m: ChatAttachmentMeta) =>
-        m.mime_type === "application/pdf" || m.name.toLowerCase().endsWith(".pdf");
-
-      for (const meta of savedMeta) {
-        if (!isPdfAttachment(meta)) continue;
-
-        let pageStart = 1;
-        let indexId: string | null = null;
-        let resumeChunk = 0;
-        let continuationChunk = 0;
-        let iterations = 0;
-        pushProgress("index_pdf", `Indexando «${meta.name}» para búsqueda en todo el documento…`);
-
-        const localFile = pathToFile.get(meta.path);
-        if (!localFile) {
-          toast.error(
-            `No se pudo indexar «${meta.name}» (archivo local no disponible). Se usará el adjunto sin búsqueda semántica en el documento.`,
-          );
-          continue;
-        }
-
-        let clientPages: { totalPages: number; pages: string[] } | null = null;
-        try {
-          pushProgress("index_pdf", `Leyendo «${meta.name}» en el navegador…`);
-          clientPages = await extractPdfPagesClient(localFile);
-          if (!clientPages.totalPages || clientPages.pages.length === 0) {
-            clientPages = null;
-          }
-        } catch (ex) {
-          console.error("extractPdfPagesClient", ex);
-          clientPages = null;
-        }
-
-        if (!clientPages) {
-          toast.error(
-            `No se pudo leer el texto de «${meta.name}» en el navegador (PDF escaneado, protegido o incompatible). Prueba otro navegador o un PDF con texto seleccionable. Se enviará el archivo al modelo sin indexación semántica.`,
-          );
-          continue;
-        }
-
-        await supabase.auth.refreshSession().catch(() => {});
-
-        try {
-          while (iterations < 600) {
-            iterations += 1;
-            const raw = clientPages!.pages[pageStart - 1] ?? "";
-            /** Alineado con MAX_CHARS_PER_PAGE en index-chat-attachment (menos carga en Edge). */
-            const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
-            const body: Record<string, unknown> = {
-              bucket: meta.bucket,
-              path: meta.path,
-              name: meta.name,
-              mime_type: meta.mime_type,
-              page_start: pageStart,
-              attachment_index_id: indexId,
-              resume_from_chunk: resumeChunk,
-              continuation_chunk_index: continuationChunk,
-              client_pdf_page: {
-                total_pages: clientPages!.totalPages,
-                text: pageText,
-              },
-            };
-
-            const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
-              body,
-            });
-            const early = data as { error?: string } | null;
-            if (fnErr) {
-              if (early?.error) throw new Error(early.error);
-              throw fnErr;
-            }
-            const d = data as {
-              error?: string;
-              attachment_index_id?: string;
-              pages_done?: number;
-              total_pages?: number;
-              done?: boolean;
-              next_page?: number | null;
-              resume_from_chunk_next?: number | null;
-              continuation_chunk_index_next?: number;
-            };
-            if (d?.error) throw new Error(d.error);
-            if (!d || typeof d.attachment_index_id !== "string") {
-              throw new Error("Respuesta inválida de index-chat-attachment");
-            }
-
-            indexId = d.attachment_index_id;
-            if (typeof d.continuation_chunk_index_next === "number") {
-              continuationChunk = d.continuation_chunk_index_next;
-            }
-            const donePg = d.pages_done ?? 0;
-            const totalPg = d.total_pages ?? 0;
-            pushProgress("index_pdf", `Indexando «${meta.name}»… ${donePg}/${totalPg} páginas`);
-
-            if (d.resume_from_chunk_next != null) {
-              resumeChunk = d.resume_from_chunk_next;
-              await new Promise((r) => setTimeout(r, 350));
-              continue;
-            }
-            resumeChunk = 0;
-
-            if (d.done) break;
-            if (d.next_page == null) break;
-            pageStart = d.next_page;
-            await new Promise((r) => setTimeout(r, 900));
-          }
-          indexedNames.push(meta.name);
-          refsForAiChat = refsForAiChat.filter((r) => r.path !== meta.path);
-        } catch (e) {
-          console.error("index-chat-attachment", e);
-          toast.error(
-            `No se indexó «${meta.name}» para búsqueda semántica. Se enviará el PDF al modelo de forma directa (documentos muy largos pueden fallar).`,
-          );
-        }
-      }
-
-      if (indexedNames.length > 0) {
-        const coolMs = Math.min(35_000, 6_000 + indexedNames.length * 5_000);
-        pushProgress(
-          "rate_limit",
-          `Pausa de ${Math.round(coolMs / 1000)} s para evitar límite de solicitudes del proveedor de IA tras indexar el PDF…`,
-        );
-        await new Promise((r) => setTimeout(r, coolMs));
-      }
+      void runChatPdfIndexingInBackground(savedMeta, pathToFile, pushProgress).catch((err) =>
+        console.error("runChatPdfIndexingInBackground", err),
+      );
 
       pushProgress("ai_connect", "Conectando con Kawiil AI y procesando contexto…");
 
@@ -456,7 +458,6 @@ export function useChat() {
           conversationId: convId,
           ai_project_id: activeAiProjectId || undefined,
           attachmentRefs: refsForAiChat.length ? refsForAiChat : undefined,
-          ...(indexedNames.length ? { indexed_attachment_names: indexedNames } : {}),
         });
 
         const chatFetch = () =>

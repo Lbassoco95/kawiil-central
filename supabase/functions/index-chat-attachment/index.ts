@@ -23,7 +23,8 @@ const EMBEDDING_DIMENSIONS = 1536;
 const MAX_TOKENS_PER_CHUNK = 550;
 const OVERLAP_TOKENS = 80;
 const EMBED_BATCH = 1;
-const CHUNKS_PER_HTTP = 2;
+/** 1 trozo por invocación minimiza CPU/memoria por request (546 WORKER_LIMIT). */
+const CHUNKS_PER_HTTP = 1;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
