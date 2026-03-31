@@ -7,17 +7,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Pocas páginas por invocación: evita WORKER_LIMIT (546) en Edge. */
-const PAGE_BATCH = 5;
-const MAX_CHARS_PER_SEGMENT = 3200;
+/**
+ * Edge Supabase: ~256 MB RAM y ~2 s de CPU por request (I/O async no cuenta).
+ * No se puede “subir la VM”; hay que hacer poco trabajo por invocación.
+ * 1 página/request minimiza pico de CPU/memoria tras cargar el PDF.
+ */
+const PAGE_BATCH = 1;
+const MAX_CHARS_PER_SEGMENT = 2800;
 /** Tope de caracteres por página (PDFs con texto enorme en una página). */
-const MAX_CHARS_PER_PAGE = 10_000;
+const MAX_CHARS_PER_PAGE = 8000;
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
 const MAX_TOKENS_PER_CHUNK = 550;
 const OVERLAP_TOKENS = 80;
-const EMBED_BATCH = 12;
+const EMBED_BATCH = 4;
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
 function estimateTokens(text: string): number {
@@ -203,7 +207,7 @@ serve(async (req) => {
     }
 
     const svc = createClient(supabaseUrl, serviceKey);
-    const bytes = await downloadStorageObject(svc, bucket, path);
+    let bytes = await downloadStorageObject(svc, bucket, path);
     if (!bytes || bytes.length === 0) {
       return new Response(JSON.stringify({ error: "No se pudo descargar el archivo" }), {
         status: 400,
@@ -235,11 +239,14 @@ serve(async (req) => {
     ) as {
       getDocumentProxy: (data: Uint8Array) => Promise<{
         numPages: number;
+        destroy?: () => Promise<void>;
         getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: { str?: string }[] }> }>;
       }>;
     };
 
     const pdf = await getDocumentProxy(bytes);
+    // Soltar el buffer original; el proxy puede mantener copia interna.
+    bytes = new Uint8Array(0);
     const totalPages = pdf.numPages || 0;
     if (totalPages === 0) {
       return new Response(
@@ -327,6 +334,12 @@ serve(async (req) => {
     }
     if (buffer.trim().length > 0) {
       await embedAndInsert(buffer.trim(), segPageFrom, end);
+    }
+
+    try {
+      await pdf.destroy?.();
+    } catch {
+      /* ignore */
     }
 
     const done = end >= totalPages;

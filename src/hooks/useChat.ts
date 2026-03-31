@@ -327,7 +327,7 @@ export function useChat() {
         pushProgress("index_pdf", `Indexando «${meta.name}» para búsqueda en todo el documento…`);
 
         try {
-          while (iterations < 120) {
+          while (iterations < 600) {
             iterations += 1;
             const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
               body: {
