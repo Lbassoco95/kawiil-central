@@ -8,6 +8,7 @@ import {
   MAX_CHAT_ATTACHMENT_BATCH_BYTES,
   MAX_CHAT_ATTACHMENT_BYTES_PER_FILE,
   MAX_CHAT_ATTACHMENT_FILES,
+  MAX_CHAT_IMAGE_BYTES_FOR_MODEL,
   formatMb,
 } from "@/lib/chatAttachmentLimits";
 import { extractPdfPagesClient } from "@/lib/extractPdfTextClient";
@@ -461,6 +462,12 @@ export function useChat() {
       let uploadedBatchBytes = 0;
 
       for (const file of files) {
+        if (file.type.startsWith("image/") && file.size > MAX_CHAT_IMAGE_BYTES_FOR_MODEL) {
+          toast.error(
+            `«${file.name}» supera 512 KB; para visión en el chat comprime o recorta la imagen (límite del modelo).`,
+          );
+          continue;
+        }
         if (file.size > MAX_CHAT_ATTACHMENT_BYTES_PER_FILE) {
           toast.error(`${file.name} supera ${formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo`);
           continue;
@@ -606,7 +613,7 @@ export function useChat() {
             errMsg =
               "Límite de recursos en Supabase (código 546: memoria o tiempo de CPU del Edge Function). " +
               "Suele ocurrir con PDFs de muchas páginas, Excel muy grandes o varios adjuntos a la vez. " +
-              "Prueba un PDF más corto (o las páginas que necesites), exporta solo una hoja a CSV, imágenes bajo ~2 MB, o envía los archivos en mensajes separados.";
+              "Prueba un PDF más corto (o las páginas que necesites), exporta solo una hoja a CSV, imágenes bajo ~512 KB para el modelo, o envía los archivos en mensajes separados.";
           } else {
             try {
               const j = JSON.parse(errRaw) as {
@@ -616,6 +623,11 @@ export function useChat() {
               };
               if (resp.status === 402 || j.code === "anthropic_billing") {
                 errMsg = j.message || j.error || MSG_ANTHROPIC_BILLING_FALLBACK;
+              } else if (resp.status === 413 || j.code === "context_too_long") {
+                errMsg =
+                  j.message ||
+                  j.error ||
+                  "El contexto supera el límite del modelo (200k tokens). Abre un chat nuevo, acorta el historial o usa archivos más pequeños.";
               } else {
                 errMsg = j.message || j.error || errMsg;
               }
