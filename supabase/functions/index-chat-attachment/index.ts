@@ -7,14 +7,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PAGE_BATCH = 45;
-const MAX_CHARS_PER_SEGMENT = 4500;
+/** Pocas páginas por invocación: evita WORKER_LIMIT (546) en Edge. */
+const PAGE_BATCH = 7;
+const MAX_CHARS_PER_SEGMENT = 3200;
+/** Tope de caracteres por página (PDFs con texto enorme en una página). */
+const MAX_CHARS_PER_PAGE = 10_000;
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
-const MAX_TOKENS_PER_CHUNK = 700;
-const OVERLAP_TOKENS = 100;
-const EMBED_BATCH = 40;
+const MAX_TOKENS_PER_CHUNK = 550;
+const OVERLAP_TOKENS = 80;
+const EMBED_BATCH = 12;
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
@@ -206,6 +210,14 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (bytes.length > MAX_PDF_BYTES) {
+      return new Response(
+        JSON.stringify({
+          error: `PDF demasiado grande (~${Math.round(bytes.length / (1024 * 1024))} MB). Máx. ${Math.round(MAX_PDF_BYTES / (1024 * 1024))} MB para indexar en el servidor.`,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     if (pageStart === 1) {
       const { error: delErr } = await svc.from("document_chunks")
@@ -246,9 +258,49 @@ serve(async (req) => {
 
     const end = Math.min(totalPages, pageStart + PAGE_BATCH - 1);
 
+    let inserted = 0;
+    let chunkIndex = 0;
     let buffer = "";
-    const rawSegments: { text: string; pageFrom: number; pageTo: number }[] = [];
     let segPageFrom = pageStart;
+
+    const embedAndInsert = async (plain: string, pageFrom: number, pageTo: number) => {
+      const t = plain.trim();
+      if (t.length === 0) return;
+      const parts = chunkText(t);
+      for (let i = 0; i < parts.length; i += EMBED_BATCH) {
+        const slice = parts.slice(i, i + EMBED_BATCH);
+        const embeddings = await embedBatch(slice, openaiKey);
+        const idx0 = chunkIndex;
+        const rows = slice.map((content, j) => ({
+          organization_id: orgId,
+          document_id: null,
+          client_id: body.client_id || null,
+          project_id: body.project_id || null,
+          source_type: "chat_attachment",
+          source_id: indexId,
+          content,
+          metadata: {
+            attachment_index_id: indexId,
+            storage_path: path,
+            filename: name,
+            page_from: pageFrom,
+            page_to: pageTo,
+            chunk_index: idx0 + j,
+          },
+          embedding: JSON.stringify(embeddings[j]),
+          token_count: estimateTokens(content),
+        }));
+        chunkIndex += slice.length;
+
+        const { error: insErr } = await svc.from("document_chunks").insert(rows);
+        if (insErr) {
+          console.error("insert chunks:", insErr);
+          throw new Error(insErr.message);
+        }
+        inserted += rows.length;
+        if (i + EMBED_BATCH < parts.length) await sleepMs(250);
+      }
+    };
 
     for (let p = pageStart; p <= end; p++) {
       const page = await pdf.getPage(p);
@@ -257,69 +309,24 @@ serve(async (req) => {
       for (const item of tc.items) {
         if (item && typeof item.str === "string") pageText += item.str;
       }
+      if (pageText.length > MAX_CHARS_PER_PAGE) {
+        pageText = pageText.slice(0, MAX_CHARS_PER_PAGE) + "\n[…página truncada por tamaño…]";
+      }
       buffer += pageText + "\n";
 
       if (buffer.length >= MAX_CHARS_PER_SEGMENT || p === end) {
         const t = buffer.trim();
-        if (t.length > 0) {
-          rawSegments.push({ text: t, pageFrom: segPageFrom, pageTo: p });
-        }
         buffer = "";
+        const pf = segPageFrom;
+        const pt = p;
         segPageFrom = p + 1;
+        if (t.length > 0) {
+          await embedAndInsert(t, pf, pt);
+        }
       }
     }
     if (buffer.trim().length > 0) {
-      rawSegments.push({ text: buffer.trim(), pageFrom: segPageFrom, pageTo: end });
-    }
-
-    const allChunks: { content: string; metadata: Record<string, unknown> }[] = [];
-    let globalIdx = 0;
-    for (const seg of rawSegments) {
-      const parts = chunkText(seg.text);
-      for (const part of parts) {
-        allChunks.push({
-          content: part,
-          metadata: {
-            attachment_index_id: indexId,
-            storage_path: path,
-            filename: name,
-            page_from: seg.pageFrom,
-            page_to: seg.pageTo,
-            chunk_index: globalIdx++,
-          },
-        });
-      }
-    }
-
-    let inserted = 0;
-    for (let i = 0; i < allChunks.length; i += EMBED_BATCH) {
-      const batch = allChunks.slice(i, i + EMBED_BATCH);
-      const embeddings = await embedBatch(batch.map((b) => b.content), openaiKey);
-      const rows = batch.map((b, idx) => ({
-        organization_id: orgId,
-        document_id: null,
-        client_id: body.client_id || null,
-        project_id: body.project_id || null,
-        source_type: "chat_attachment",
-        source_id: indexId,
-        content: b.content,
-        metadata: b.metadata,
-        embedding: JSON.stringify(embeddings[idx]),
-        token_count: estimateTokens(b.content),
-      }));
-
-      const { error: insErr } = await svc.from("document_chunks").insert(rows);
-      if (insErr) {
-        console.error("insert chunks:", insErr);
-        return new Response(JSON.stringify({ error: insErr.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      inserted += rows.length;
-      if (i + EMBED_BATCH < allChunks.length) {
-        await sleepMs(400);
-      }
+      await embedAndInsert(buffer.trim(), segPageFrom, end);
     }
 
     const done = end >= totalPages;
