@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +9,10 @@ const corsHeaders = {
 /**
  * Solo embeddings + DB. El PDF se parsea en el navegador (`client_pdf_page`).
  * Incluir PDF.js/unpdf en Edge provocaba RUNTIME_ERROR / WORKER_LIMIT en producción.
+ *
+ * Operación: el frontend se despliega con Git/Lovable; esta función NO. Tras cambios aquí:
+ *   supabase functions deploy index-chat-attachment --project-ref qppfampapbxdgednkofc
+ * Secretos: OPENAI_API_KEY en el proyecto Supabase.
  */
 const PAGE_BATCH = 1;
 const MAX_CHARS_PER_SEGMENT = 2800;
@@ -20,7 +23,7 @@ const EMBEDDING_DIMENSIONS = 1536;
 const MAX_TOKENS_PER_CHUNK = 550;
 const OVERLAP_TOKENS = 80;
 const EMBED_BATCH = 1;
-const CHUNKS_PER_HTTP = 4;
+const CHUNKS_PER_HTTP = 2;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
@@ -106,7 +109,7 @@ async function embedBatch(texts: string[], apiKey: string): Promise<number[][]> 
   throw new Error(lastErr.slice(0, 400));
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

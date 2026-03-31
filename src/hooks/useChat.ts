@@ -332,23 +332,40 @@ export function useChat() {
         pushProgress("index_pdf", `Indexando «${meta.name}» para búsqueda en todo el documento…`);
 
         const localFile = pathToFile.get(meta.path);
+        if (!localFile) {
+          toast.error(
+            `No se pudo indexar «${meta.name}» (archivo local no disponible). Se usará el adjunto sin búsqueda semántica en el documento.`,
+          );
+          continue;
+        }
+
         let clientPages: { totalPages: number; pages: string[] } | null = null;
-        if (localFile) {
-          try {
-            pushProgress("index_pdf", `Leyendo «${meta.name}» en el navegador…`);
-            clientPages = await extractPdfPagesClient(localFile);
-            if (!clientPages.totalPages || clientPages.pages.length === 0) {
-              clientPages = null;
-            }
-          } catch (ex) {
-            console.error("extractPdfPagesClient", ex);
+        try {
+          pushProgress("index_pdf", `Leyendo «${meta.name}» en el navegador…`);
+          clientPages = await extractPdfPagesClient(localFile);
+          if (!clientPages.totalPages || clientPages.pages.length === 0) {
             clientPages = null;
           }
+        } catch (ex) {
+          console.error("extractPdfPagesClient", ex);
+          clientPages = null;
         }
+
+        if (!clientPages) {
+          toast.error(
+            `No se pudo leer el texto de «${meta.name}» en el navegador (PDF escaneado, protegido o incompatible). Prueba otro navegador o un PDF con texto seleccionable. Se enviará el archivo al modelo sin indexación semántica.`,
+          );
+          continue;
+        }
+
+        await supabase.auth.refreshSession().catch(() => {});
 
         try {
           while (iterations < 600) {
             iterations += 1;
+            const raw = clientPages!.pages[pageStart - 1] ?? "";
+            /** Alineado con MAX_CHARS_PER_PAGE en index-chat-attachment (menos carga en Edge). */
+            const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
             const body: Record<string, unknown> = {
               bucket: meta.bucket,
               path: meta.path,
@@ -358,16 +375,11 @@ export function useChat() {
               attachment_index_id: indexId,
               resume_from_chunk: resumeChunk,
               continuation_chunk_index: continuationChunk,
+              client_pdf_page: {
+                total_pages: clientPages!.totalPages,
+                text: pageText,
+              },
             };
-            if (clientPages) {
-              const raw = clientPages.pages[pageStart - 1] ?? "";
-              /** Alineado con MAX_CHARS_PER_PAGE en index-chat-attachment (menos carga en Edge). */
-              const text = raw.length > 8000 ? raw.slice(0, 8000) : raw;
-              body.client_pdf_page = {
-                total_pages: clientPages.totalPages,
-                text,
-              };
-            }
 
             const { data, error: fnErr } = await supabase.functions.invoke("index-chat-attachment", {
               body,
