@@ -599,7 +599,14 @@ const AsistenteIA = () => {
                 <span className="min-w-0">
                   {pdfIndexingStatus.phase === "extracting"
                     ? `Leyendo «${pdfIndexingStatus.fileName}» para indexar búsqueda semántica…`
-                    : `Indexando «${pdfIndexingStatus.fileName}» en segundo plano: ${pdfIndexingStatus.pageDone}/${pdfIndexingStatus.totalPages} páginas. Puedes seguir chateando; la búsqueda en el PDF mejora al terminar.`}
+                    : (() => {
+                        const s = pdfIndexingStatus;
+                        const frag =
+                          s.lastBatchChunks != null && s.lastBatchChunks > 0
+                            ? ` · último lote: ${s.lastBatchChunks} fragmentos`
+                            : "";
+                        return `Indexando «${s.fileName}»: página ${s.pageDone} de ${s.totalPages}${frag}. Sigue en segundo plano; puedes chatear. La búsqueda semántica mejora al terminar.`;
+                      })()}
                 </span>
               </div>
             </div>

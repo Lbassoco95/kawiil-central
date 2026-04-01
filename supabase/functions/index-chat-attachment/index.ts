@@ -8,7 +8,7 @@ const corsHeaders = {
 
 /**
  * Solo embeddings + DB. El PDF se parsea en el navegador (`client_pdf_page`).
- * Varios trozos por invocación + embeddings batch en OpenAI (menos round-trips cliente/Edge).
+ * Varios trozos y varias páginas por invocación + embeddings batch en OpenAI (pocos round-trips).
  *
  * Operación: deploy manual tras cambios:
  *   supabase functions deploy index-chat-attachment --project-ref qppfampapbxdgednkofc
@@ -19,10 +19,13 @@ const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;
 /** Caracteres por trozo (si vuelve 546, bajar a ~900). */
-const EMBED_SLICE_CHARS = 1400;
-const EMBED_SLICE_OVERLAP = 36;
-/** Trozos embedidos por invocación (1 llamada OpenAI con input[] + inserts en bloque). */
-const MAX_CHUNKS_PER_INVOCATION = 12;
+const EMBED_SLICE_CHARS = 1600;
+const EMBED_SLICE_OVERLAP = 40;
+/**
+ * Trozos por invocación (una llamada OpenAI `input[]` + insert). OpenAI admite hasta ~2048 inputs;
+ * 80 trozos ≈ varias páginas densas y reduce round-trips frente a lotes de 12.
+ */
+const MAX_CHUNKS_PER_INVOCATION = 80;
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3.5);
@@ -132,6 +135,8 @@ Deno.serve(async (req) => {
       client_id?: string | null;
       project_id?: string | null;
       client_pdf_page?: { total_pages: number; text: string };
+      /** Varias páginas consecutivas: pages[0] = texto de `page_start`, pages[1] = page_start+1, … */
+      client_pdf_pages?: { total_pages: number; pages: string[] };
       /** Desplazamiento en caracteres dentro del texto de la página actual (no índice de chunkText). */
       resume_from_chunk?: number;
       continuation_chunk_index?: number;
@@ -161,22 +166,51 @@ Deno.serve(async (req) => {
       });
     }
 
-    const useClientText = body.client_pdf_page != null &&
-      typeof body.client_pdf_page.total_pages === "number" &&
-      body.client_pdf_page.total_pages >= 1 &&
-      typeof body.client_pdf_page.text === "string";
+    const batchIn = body.client_pdf_pages;
+    const singleIn = body.client_pdf_page;
+    let totalPages: number;
+    let pageStrings: string[];
 
-    if (!useClientText) {
+    if (
+      batchIn &&
+      typeof batchIn.total_pages === "number" &&
+      batchIn.total_pages >= 1 &&
+      Array.isArray(batchIn.pages) &&
+      batchIn.pages.length >= 1
+    ) {
+      totalPages = Math.floor(batchIn.total_pages);
+      pageStrings = batchIn.pages.map((p) => (typeof p === "string" ? p : ""));
+    } else if (
+      singleIn &&
+      typeof singleIn.total_pages === "number" &&
+      singleIn.total_pages >= 1 &&
+      typeof singleIn.text === "string"
+    ) {
+      totalPages = Math.floor(singleIn.total_pages);
+      pageStrings = [singleIn.text];
+    } else {
       return new Response(
         JSON.stringify({
           error:
-            "Falta el texto del PDF extraído en el navegador. Actualiza la aplicación a la última versión e inténtalo de nuevo.",
+            "Falta el texto del PDF extraído en el navegador. Actualiza la aplicación e inténtalo de nuevo.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const totalPages = Math.floor(body.client_pdf_page!.total_pages);
+    if (charOffset > 0 && pageStrings.length !== 1) {
+      return new Response(
+        JSON.stringify({ error: "Con resume_from_chunk solo se admite una página por petición." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (pageStart + pageStrings.length - 1 > totalPages) {
+      return new Response(JSON.stringify({ error: "Lote de páginas fuera de rango respecto a total_pages" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const svc = createClient(supabaseUrl, serviceKey);
 
     if (pageStart === 1 && charOffset === 0 && !body.attachment_index_id) {
@@ -197,33 +231,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    let pageText = body.client_pdf_page!.text;
-    if (pageText.length > MAX_CHARS_PER_PAGE) {
-      pageText = pageText.slice(0, MAX_CHARS_PER_PAGE) + "\n[…página truncada por tamaño…]";
-    }
+    const clampPageText = (t: string): string => {
+      if (t.length <= MAX_CHARS_PER_PAGE) return t;
+      return t.slice(0, MAX_CHARS_PER_PAGE) + "\n[…página truncada por tamaño…]";
+    };
 
     const jsonOk = (payload: Record<string, unknown>) =>
       new Response(JSON.stringify(payload), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
 
-    const endPage = pageStart;
-
-    if (charOffset > pageText.length) {
+    const ptFirst = clampPageText(pageStrings[0] ?? "");
+    if (charOffset > ptFirst.length) {
       return new Response(JSON.stringify({ error: "resume_from_chunk fuera del texto de página" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    if (charOffset >= pageText.length || pageText.length === 0) {
-      const done = endPage >= totalPages;
+    if (pageStrings.length === 1 && (ptFirst.length === 0 || charOffset >= ptFirst.length)) {
+      const done = pageStart >= totalPages;
       return jsonOk({
         attachment_index_id: indexId,
-        pages_done: endPage,
+        pages_done: pageStart,
         total_pages: totalPages,
         done,
-        next_page: done ? null : endPage + 1,
+        next_page: done ? null : pageStart + 1,
         resume_from_chunk_next: null,
         continuation_chunk_index_next: chunkIndex,
         chunks_this_batch: 0,
@@ -235,26 +268,58 @@ Deno.serve(async (req) => {
       charFrom: number;
       charTo: number;
       chunkIndex: number;
+      pageNum: number;
     };
     const items: SliceItem[] = [];
+    let pIdx = 0;
     let cursor = charOffset;
     let ci = chunkIndex;
-    /** Siguiente offset si no hubo ningún embed en esta invocación (avance dentro de la página). */
     let resumeIfNoEmbeds = charOffset;
+    /** Página y texto activos tras el bucle (para respuestas sin items). */
+    let tailAbsPage = pageStart;
+    let tailPageText = ptFirst;
 
-    while (items.length < MAX_CHUNKS_PER_INVOCATION && cursor < pageText.length) {
-      const sliceEnd = Math.min(cursor + EMBED_SLICE_CHARS, pageText.length);
-      const content = pageText.slice(cursor, sliceEnd).trim();
-      if (content.length >= 12) {
-        items.push({ content, charFrom: cursor, charTo: sliceEnd, chunkIndex: ci });
-        ci += 1;
+    outer: while (pIdx < pageStrings.length) {
+      tailPageText = clampPageText(pageStrings[pIdx] ?? "");
+      tailAbsPage = pageStart + pIdx;
+      if (pIdx > 0) cursor = 0;
+
+      if (tailPageText.length === 0) {
+        pIdx += 1;
+        continue;
       }
-      if (sliceEnd >= pageText.length) {
-        resumeIfNoEmbeds = pageText.length;
-        break;
+
+      if (cursor >= tailPageText.length) {
+        pIdx += 1;
+        continue;
       }
-      cursor = Math.max(0, sliceEnd - EMBED_SLICE_OVERLAP);
-      resumeIfNoEmbeds = cursor;
+
+      while (items.length < MAX_CHUNKS_PER_INVOCATION && cursor < tailPageText.length) {
+        const sliceEnd = Math.min(cursor + EMBED_SLICE_CHARS, tailPageText.length);
+        const content = tailPageText.slice(cursor, sliceEnd).trim();
+        if (content.length >= 12) {
+          items.push({
+            content,
+            charFrom: cursor,
+            charTo: sliceEnd,
+            chunkIndex: ci,
+            pageNum: tailAbsPage,
+          });
+          ci += 1;
+          if (items.length >= MAX_CHUNKS_PER_INVOCATION) {
+            break outer;
+          }
+        }
+        if (sliceEnd >= tailPageText.length) {
+          resumeIfNoEmbeds = tailPageText.length;
+          pIdx += 1;
+          continue outer;
+        }
+        cursor = Math.max(0, sliceEnd - EMBED_SLICE_OVERLAP);
+        resumeIfNoEmbeds = cursor;
+      }
+
+      pIdx += 1;
     }
 
     let inserted = 0;
@@ -279,8 +344,8 @@ Deno.serve(async (req) => {
           attachment_index_id: indexId,
           storage_path: path,
           filename: name,
-          page_from: pageStart,
-          page_to: pageStart,
+          page_from: it.pageNum,
+          page_to: it.pageNum,
           chunk_index: it.chunkIndex,
           char_from: it.charFrom,
           char_to: it.charTo,
@@ -298,25 +363,26 @@ Deno.serve(async (req) => {
     }
 
     if (items.length === 0) {
-      if (resumeIfNoEmbeds < pageText.length) {
+      if (resumeIfNoEmbeds < tailPageText.length) {
         return jsonOk({
           attachment_index_id: indexId,
-          pages_done: pageStart,
+          pages_done: tailAbsPage,
           total_pages: totalPages,
           done: false,
-          next_page: pageStart,
+          next_page: tailAbsPage,
           resume_from_chunk_next: resumeIfNoEmbeds,
           continuation_chunk_index_next: chunkIndex,
           chunks_this_batch: 0,
         });
       }
-      const done0 = endPage >= totalPages;
+      const endAbs = pageStart + pageStrings.length - 1;
+      const done0 = endAbs >= totalPages;
       return jsonOk({
         attachment_index_id: indexId,
-        pages_done: endPage,
+        pages_done: endAbs,
         total_pages: totalPages,
         done: done0,
-        next_page: done0 ? null : endPage + 1,
+        next_page: done0 ? null : endAbs + 1,
         resume_from_chunk_next: null,
         continuation_chunk_index_next: chunkIndex,
         chunks_this_batch: 0,
@@ -324,26 +390,41 @@ Deno.serve(async (req) => {
     }
 
     const last = items[items.length - 1];
-    if (last.charTo < pageText.length) {
+    const lastPageText = clampPageText(pageStrings[last.pageNum - pageStart] ?? "");
+
+    if (last.charTo < lastPageText.length) {
       return jsonOk({
         attachment_index_id: indexId,
-        pages_done: pageStart,
+        pages_done: last.pageNum,
         total_pages: totalPages,
         done: false,
-        next_page: pageStart,
+        next_page: last.pageNum,
         resume_from_chunk_next: Math.max(0, last.charTo - EMBED_SLICE_OVERLAP),
         continuation_chunk_index_next: chunkIndex,
         chunks_this_batch: inserted,
       });
     }
 
-    const done = endPage >= totalPages;
+    const nextAfterLast = last.pageNum + 1;
+    if (nextAfterLast > totalPages) {
+      return jsonOk({
+        attachment_index_id: indexId,
+        pages_done: totalPages,
+        total_pages: totalPages,
+        done: true,
+        next_page: null,
+        resume_from_chunk_next: null,
+        continuation_chunk_index_next: chunkIndex,
+        chunks_this_batch: inserted,
+      });
+    }
+
     return jsonOk({
       attachment_index_id: indexId,
-      pages_done: endPage,
+      pages_done: last.pageNum,
       total_pages: totalPages,
-      done,
-      next_page: done ? null : endPage + 1,
+      done: false,
+      next_page: nextAfterLast,
       resume_from_chunk_next: null,
       continuation_chunk_index_next: chunkIndex,
       chunks_this_batch: inserted,

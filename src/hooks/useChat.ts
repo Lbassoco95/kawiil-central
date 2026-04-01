@@ -52,8 +52,10 @@ const MSG_ANTHROPIC_BILLING_FALLBACK =
   "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
   "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
 
-/** Entre cada `index-chat-attachment` hay al menos este tiempo (varios trozos por invocación; evita ráfagas 429). */
-const MIN_MS_BETWEEN_INDEX_INVOKES = 800;
+/** Entre invocaciones: el Edge ahora procesa muchas páginas/trozos por llamada; breve pausa ante 429. */
+const MIN_MS_BETWEEN_INDEX_INVOKES = 120;
+/** Páginas por petición al Edge (texto ya extraído en el navegador). */
+const PAGES_PER_INDEX_REQUEST = 12;
 /** Tras un posible 429 de embeddings, una pausa antes de reintentar la misma petición. */
 const INDEX_CLIENT_RETRY_ON_429_MS = 8000;
 const INDEX_CLIENT_MAX_429_RETRIES = 1;
@@ -77,7 +79,14 @@ const isPdfChatAttachment = (m: ChatAttachmentMeta) =>
 /** Progreso de indexación PDF para RAG (fuera del panel del stream de ai-chat). */
 export type PdfIndexingStatus =
   | { phase: "extracting"; fileName: string }
-  | { phase: "indexing"; fileName: string; pageDone: number; totalPages: number };
+  | {
+      phase: "indexing";
+      fileName: string;
+      pageDone: number;
+      totalPages: number;
+      /** Fragmentos vectoriales del último lote (feedback más “real”). */
+      lastBatchChunks?: number;
+    };
 
 type PushProgressMode = "append" | "replace_same_phase";
 
@@ -98,7 +107,6 @@ async function runChatPdfIndexingInBackground(
       let resumeChunk = 0;
       let continuationChunk = 0;
       let iterations = 0;
-      let lastProgressPagesDone = -1;
 
       setPdfIndexing({ phase: "extracting", fileName: meta.name });
 
@@ -142,8 +150,11 @@ async function runChatPdfIndexingInBackground(
         /* Cada página puede requerir varias invocaciones (trozos de texto); resume_from_chunk = offset en caracteres. */
         while (iterations < 20000) {
           iterations += 1;
-          const raw = clientPages.pages[pageStart - 1] ?? "";
-          const pageText = raw.length > 8000 ? raw.slice(0, 8000) : raw;
+          const isResume = resumeChunk > 0;
+          const batchLen = isResume
+            ? 1
+            : Math.min(PAGES_PER_INDEX_REQUEST, clientPages.totalPages - pageStart + 1);
+          const pageSlice = clientPages.pages.slice(pageStart - 1, pageStart - 1 + batchLen);
           const body: Record<string, unknown> = {
             bucket: meta.bucket,
             path: meta.path,
@@ -153,9 +164,9 @@ async function runChatPdfIndexingInBackground(
             attachment_index_id: indexId,
             resume_from_chunk: resumeChunk,
             continuation_chunk_index: continuationChunk,
-            client_pdf_page: {
+            client_pdf_pages: {
               total_pages: clientPages.totalPages,
-              text: pageText,
+              pages: pageSlice,
             },
           };
 
@@ -172,6 +183,7 @@ async function runChatPdfIndexingInBackground(
             next_page?: number | null;
             resume_from_chunk_next?: number | null;
             continuation_chunk_index_next?: number;
+            chunks_this_batch?: number;
           };
 
           for (;;) {
@@ -214,15 +226,14 @@ async function runChatPdfIndexingInBackground(
           }
           const donePg = d.pages_done ?? 0;
           const totalPg = d.total_pages ?? 0;
-          if (donePg !== lastProgressPagesDone) {
-            lastProgressPagesDone = donePg;
-            setPdfIndexing({
-              phase: "indexing",
-              fileName: meta.name,
-              pageDone: donePg,
-              totalPages: totalPg,
-            });
-          }
+          const batchChunks = typeof d.chunks_this_batch === "number" ? d.chunks_this_batch : 0;
+          setPdfIndexing({
+            phase: "indexing",
+            fileName: meta.name,
+            pageDone: donePg,
+            totalPages: totalPg,
+            lastBatchChunks: batchChunks > 0 ? batchChunks : undefined,
+          });
 
           if (d.resume_from_chunk_next != null) {
             resumeChunk = d.resume_from_chunk_next;

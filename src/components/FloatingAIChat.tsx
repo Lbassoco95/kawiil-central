@@ -256,7 +256,14 @@ export function FloatingAIChat() {
             <span className="min-w-0 truncate">
               {pdfIndexingStatus.phase === "extracting"
                 ? `Leyendo «${pdfIndexingStatus.fileName}»…`
-                : `Indexando «${pdfIndexingStatus.fileName}» ${pdfIndexingStatus.pageDone}/${pdfIndexingStatus.totalPages}`}
+                : (() => {
+                    const s = pdfIndexingStatus;
+                    const frag =
+                      s.lastBatchChunks != null && s.lastBatchChunks > 0
+                        ? ` · +${s.lastBatchChunks} frag.`
+                        : "";
+                    return `«${s.fileName}» ${s.pageDone}/${s.totalPages}${frag}`;
+                  })()}
             </span>
           </div>
         </div>
