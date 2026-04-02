@@ -25,6 +25,14 @@ import AsistenteIA from "./pages/AsistenteIA";
 import BaseConocimiento from "./pages/BaseConocimiento";
 import Finanzas from "./pages/Finanzas";
 import NotFound from "./pages/NotFound";
+import PipelineLayout from "./pages/pipeline/PipelineLayout";
+import PipelineBoard from "./pages/pipeline/PipelineBoard";
+import PipelineList from "./pages/pipeline/PipelineList";
+import LeadDetailPage from "./pages/pipeline/LeadDetailPage";
+import PipelineAnalytics from "./pages/pipeline/PipelineAnalytics";
+import EmailTemplates from "./pages/pipeline/EmailTemplates";
+import EmailSequences from "./pages/pipeline/EmailSequences";
+import PipelineSettings from "./pages/pipeline/PipelineSettings";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +63,24 @@ const App = () => (
               <Route path="/asistente" element={<ProtectedRoute><ModuleGate moduleKey="ai"><AsistenteIA /></ModuleGate></ProtectedRoute>} />
               <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="conocimiento"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
               <Route path="/finanzas" element={<ProtectedRoute><ModuleGate moduleKey="finanzas"><Finanzas /></ModuleGate></ProtectedRoute>} />
+              <Route
+                path="/pipeline"
+                element={
+                  <ProtectedRoute>
+                    <ModuleGate moduleKey="pipeline">
+                      <PipelineLayout />
+                    </ModuleGate>
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<PipelineBoard />} />
+                <Route path="list" element={<PipelineList />} />
+                <Route path="leads/:id" element={<LeadDetailPage />} />
+                <Route path="analytics" element={<PipelineAnalytics />} />
+                <Route path="templates" element={<EmailTemplates />} />
+                <Route path="sequences" element={<EmailSequences />} />
+                <Route path="settings" element={<PipelineSettings />} />
+              </Route>
               <Route path="/admin" element={<ProtectedRoute><ModuleGate moduleKey="admin"><Admin /></ModuleGate></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

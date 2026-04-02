@@ -1052,6 +1052,306 @@ export type Database = {
           },
         ]
       }
+      email_log: {
+        Row: {
+          id: string
+          organization_id: string
+          lead_id: string
+          template_id: string | null
+          sequence_step_id: string | null
+          to_email: string
+          subject: string
+          status: string
+          scheduled_at: string | null
+          sent_at: string | null
+          opened_at: string | null
+          clicked_at: string | null
+          error_message: string | null
+          graph_message_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id?: string
+          lead_id: string
+          template_id?: string | null
+          sequence_step_id?: string | null
+          to_email: string
+          subject: string
+          status?: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          opened_at?: string | null
+          clicked_at?: string | null
+          error_message?: string | null
+          graph_message_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          lead_id?: string
+          template_id?: string | null
+          sequence_step_id?: string | null
+          to_email?: string
+          subject?: string
+          status?: string
+          scheduled_at?: string | null
+          sent_at?: string | null
+          opened_at?: string | null
+          clicked_at?: string | null
+          error_message?: string | null
+          graph_message_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      email_sequence_steps: {
+        Row: {
+          id: string
+          sequence_id: string
+          template_id: string
+          step_order: number
+          delay_hours: number
+          condition: Json | null
+        }
+        Insert: {
+          id?: string
+          sequence_id: string
+          template_id: string
+          step_order: number
+          delay_hours?: number
+          condition?: Json | null
+        }
+        Update: {
+          id?: string
+          sequence_id?: string
+          template_id?: string
+          step_order?: number
+          delay_hours?: number
+          condition?: Json | null
+        }
+        Relationships: []
+      }
+      email_sequences: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          description: string | null
+          trigger_stage: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          description?: string | null
+          trigger_stage?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          description?: string | null
+          trigger_stage?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      email_templates: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          subject: string
+          body_html: string
+          body_text: string | null
+          category: string
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          subject: string
+          body_html: string
+          body_text?: string | null
+          category?: string
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          subject?: string
+          body_html?: string
+          body_text?: string | null
+          category?: string
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lead_activities: {
+        Row: {
+          id: string
+          organization_id: string
+          lead_id: string
+          user_id: string | null
+          type: string
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id?: string
+          lead_id: string
+          user_id?: string | null
+          type: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          lead_id?: string
+          user_id?: string | null
+          type?: string
+          metadata?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      leads: {
+        Row: {
+          id: string
+          organization_id: string
+          created_at: string
+          meta_lead_id: string | null
+          meta_created_at: string | null
+          campaign_name: string | null
+          form_name: string | null
+          full_name: string
+          email: string | null
+          phone: string | null
+          whatsapp: string | null
+          company_name: string | null
+          country_code: string | null
+          country_name: string | null
+          preferred_contact: string | null
+          preferred_time: string | null
+          stage_id: string
+          owner_id: string | null
+          priority: string
+          score: number
+          tags: string[] | null
+          source: string
+          is_active: boolean
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          created_at?: string
+          meta_lead_id?: string | null
+          meta_created_at?: string | null
+          campaign_name?: string | null
+          form_name?: string | null
+          full_name: string
+          email?: string | null
+          phone?: string | null
+          whatsapp?: string | null
+          company_name?: string | null
+          country_code?: string | null
+          country_name?: string | null
+          preferred_contact?: string | null
+          preferred_time?: string | null
+          stage_id: string
+          owner_id?: string | null
+          priority?: string
+          score?: number
+          tags?: string[] | null
+          source?: string
+          is_active?: boolean
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          created_at?: string
+          meta_lead_id?: string | null
+          meta_created_at?: string | null
+          campaign_name?: string | null
+          form_name?: string | null
+          full_name?: string
+          email?: string | null
+          phone?: string | null
+          whatsapp?: string | null
+          company_name?: string | null
+          country_code?: string | null
+          country_name?: string | null
+          preferred_contact?: string | null
+          preferred_time?: string | null
+          stage_id?: string
+          owner_id?: string | null
+          priority?: string
+          score?: number
+          tags?: string[] | null
+          source?: string
+          is_active?: boolean
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pipeline_stages: {
+        Row: {
+          id: string
+          organization_id: string
+          name: string
+          slug: string
+          position: number
+          color: string
+          is_terminal: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          name: string
+          slug: string
+          position?: number
+          color?: string
+          is_terminal?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          name?: string
+          slug?: string
+          position?: number
+          color?: string
+          is_terminal?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       microsoft_tokens: {
         Row: {
           access_token: string
@@ -1966,6 +2266,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_lead: {
+        Args: { p_lead_id: string; p_owner_id: string | null }
+        Returns: Json
+      }
+      bulk_assign_leads: {
+        Args: { p_lead_ids: string[]; p_owner_id: string | null }
+        Returns: Json
+      }
+      cancel_sequence: {
+        Args: { p_lead_id: string; p_sequence_id: string }
+        Returns: Json
+      }
+      detect_duplicates: {
+        Args: { p_email: string | null; p_phone: string | null }
+        Returns: Json
+      }
+      enqueue_sequence: {
+        Args: { p_lead_id: string; p_sequence_id: string }
+        Returns: Json
+      }
+      enqueue_sequence_system: {
+        Args: {
+          p_lead_id: string
+          p_organization_id: string
+          p_sequence_id: string
+        }
+        Returns: Json
+      }
       get_celula_mood_stats: {
         Args: { _end_date: string; _org_id: string; _start_date: string }
         Returns: {
@@ -1975,6 +2303,10 @@ export type Database = {
           time_of_day: string
           total_responses: number
         }[]
+      }
+      get_pipeline_stats: {
+        Args: { p_date_from?: string | null; p_date_to?: string | null }
+        Returns: Json
       }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       has_finance_access: { Args: { _user_id: string }; Returns: boolean }
@@ -1989,6 +2321,14 @@ export type Database = {
       is_project_member: {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
+      }
+      move_lead_stage: {
+        Args: { p_lead_id: string; p_new_stage_id: string }
+        Returns: Json
+      }
+      score_lead: {
+        Args: { p_lead_id: string; p_reason?: string | null; p_score: number }
+        Returns: Json
       }
       user_in_celula: {
         Args: { _celula_slug: string; _user_id: string }

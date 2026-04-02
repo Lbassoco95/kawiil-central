@@ -19,6 +19,7 @@ import {
   Sparkles,
   Wallet,
   BookOpen,
+  Kanban,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,7 @@ const navGroups: NavGroup[] = [
       { title: "Clientes", url: "/clientes", icon: Users },
       { title: "Proyectos", url: "/proyectos", icon: FolderKanban },
       { title: "Tareas", url: "/tareas", icon: CheckSquare },
+      { title: "Pipeline", url: "/pipeline", icon: Kanban, moduleKey: "pipeline" },
       { title: "Documentos", url: "/documentos", icon: FileText },
     ],
   },

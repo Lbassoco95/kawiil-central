@@ -23,3 +23,11 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.index-chat-attachment]
     verify_jwt = true
+  [functions.import-leads-csv]
+    verify_jwt = true
+  [functions.send-pipeline-email]
+    verify_jwt = true
+  [functions.process-email-queue]
+    verify_jwt = false
+  [functions.meta-webhook-leads]
+    verify_jwt = false
