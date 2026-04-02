@@ -228,7 +228,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.user_roles ur
     WHERE ur.user_id = auth.uid()
-      AND ur.role IN ('transformador', 'admin', 'manager')
+      AND ur.role IN ('transformador', 'referente')
   );
 $$;
 
