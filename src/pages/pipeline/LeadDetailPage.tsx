@@ -9,6 +9,8 @@ import {
   usePipelineStages,
   useUpdateLead,
   useAssignLead,
+  useMoveLeadStage,
+  pipelineQueryKeys,
 } from "@/hooks/usePipeline";
 import { useProfiles } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
@@ -30,7 +32,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Mail, Phone, MessageCircle } from "lucide-react";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { pipelineQueryKeys } from "@/hooks/usePipeline";
+
+const priorityOptions = [
+  { value: "urgent", label: "Urgente" },
+  { value: "high", label: "Alta" },
+  { value: "medium", label: "Media" },
+  { value: "low", label: "Baja" },
+] as const;
 
 const schema = z.object({
   full_name: z.string().min(1),
@@ -41,6 +49,7 @@ const schema = z.object({
   notes: z.string().optional().nullable(),
   campaign_name: z.string().optional().nullable(),
   stage_id: z.string().uuid(),
+  priority: z.enum(["urgent", "high", "medium", "low"]),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -55,12 +64,14 @@ export default function LeadDetailPage() {
   const { data: profiles = [] } = useProfiles();
   const updateLead = useUpdateLead();
   const assignLead = useAssignLead();
+  const moveStage = useMoveLeadStage();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       full_name: "",
       stage_id: "",
+      priority: "medium",
     },
   });
 
@@ -75,21 +86,13 @@ export default function LeadDetailPage() {
       notes: lead.notes,
       campaign_name: lead.campaign_name,
       stage_id: lead.stage_id,
+      priority: lead.priority as FormValues["priority"],
     });
   }, [lead, form]);
 
   const onSave = form.handleSubmit(async (vals) => {
     if (!id) return;
     try {
-      if (vals.stage_id !== lead?.stage_id) {
-        const { data: mv, error: e1 } = await supabase.rpc("move_lead_stage", {
-          p_lead_id: id,
-          p_new_stage_id: vals.stage_id,
-        });
-        if (e1) throw e1;
-        const mj = mv as { ok?: boolean; error?: string };
-        if (!mj?.ok) throw new Error(mj?.error || "move");
-      }
       await updateLead.mutateAsync({
         id,
         full_name: vals.full_name,
@@ -105,6 +108,32 @@ export default function LeadDetailPage() {
       toast.error(e instanceof Error ? e.message : "Error al guardar");
     }
   });
+
+  const onStageChange = async (newStageId: string) => {
+    if (!id || !lead || newStageId === lead.stage_id) return;
+    const previous = lead.stage_id;
+    form.setValue("stage_id", newStageId);
+    try {
+      await moveStage.mutateAsync({ leadId: id, newStageId });
+      toast.success("Etapa actualizada");
+    } catch (e: unknown) {
+      form.setValue("stage_id", previous);
+      toast.error(e instanceof Error ? e.message : "No se pudo cambiar la etapa");
+    }
+  };
+
+  const onPriorityChange = async (priority: FormValues["priority"]) => {
+    if (!id || !lead || priority === lead.priority) return;
+    const previous = lead.priority as FormValues["priority"];
+    form.setValue("priority", priority);
+    try {
+      await updateLead.mutateAsync({ id, priority });
+      toast.success("Prioridad actualizada");
+    } catch (e: unknown) {
+      form.setValue("priority", previous);
+      toast.error(e instanceof Error ? e.message : "No se pudo actualizar la prioridad");
+    }
+  };
 
   const waLink = lead?.whatsapp
     ? `https://wa.me/${String(lead.whatsapp).replace(/\D/g, "")}`
@@ -144,7 +173,7 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl pb-24 md:pb-8">
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/pipeline">
@@ -218,15 +247,35 @@ export default function LeadDetailPage() {
                 <Input {...form.register("campaign_name")} />
               </div>
               <div>
-                <Label>Etapa</Label>
+                <Label>Prioridad</Label>
                 <Select
-                  value={form.watch("stage_id")}
-                  onValueChange={(v) => form.setValue("stage_id", v)}
+                  value={form.watch("priority")}
+                  onValueChange={(v) => void onPriorityChange(v as FormValues["priority"])}
+                  disabled={updateLead.isPending}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent side="top" sideOffset={5}>
+                    {priorityOptions.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Etapa</Label>
+                <Select
+                  value={form.watch("stage_id")}
+                  onValueChange={(v) => void onStageChange(v)}
+                  disabled={moveStage.isPending}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent side="top" sideOffset={5} className="max-h-72">
                     {stages.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
@@ -240,16 +289,19 @@ export default function LeadDetailPage() {
                 <Select
                   value={lead.owner_id || "__none__"}
                   onValueChange={(v) => {
-                    void assignLead.mutateAsync({
-                      leadId: lead.id,
-                      ownerId: v === "__none__" ? null : v,
-                    }).then(() => toast.success("Asignación actualizada")).catch((e) => toast.error(String(e)));
+                    void assignLead
+                      .mutateAsync({
+                        leadId: lead.id,
+                        ownerId: v === "__none__" ? null : v,
+                      })
+                      .then(() => toast.success("Asignación actualizada"))
+                      .catch((e) => toast.error(String(e)));
                   }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Sin asignar" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent side="top" sideOffset={5}>
                     <SelectItem value="__none__">Sin asignar</SelectItem>
                     {profiles.map((p) => (
                       <SelectItem key={p.user_id} value={p.user_id}>
@@ -274,6 +326,10 @@ export default function LeadDetailPage() {
                   Score 80
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Etapa, prioridad y propietario se guardan al cambiarlos. Nombre, contacto, campaña y notas usan{" "}
+                <strong>Guardar cambios</strong>.
+              </p>
             </form>
           </CardContent>
         </Card>

@@ -1,4 +1,4 @@
-import { usePipelineStats } from "@/hooks/usePipeline";
+import { usePipelineStats, usePipelineStages } from "@/hooks/usePipeline";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -12,14 +12,20 @@ import {
 } from "recharts";
 
 export default function PipelineAnalytics() {
-  const { data, isLoading } = usePipelineStats(null, null);
+  const { data, isLoading: statsLoading } = usePipelineStats(null, null);
+  const { data: stages = [], isLoading: stagesLoading } = usePipelineStages();
+
+  const isLoading = statsLoading || stagesLoading;
 
   if (isLoading) {
     return <Skeleton className="h-[400px] w-full" />;
   }
 
   const byStage = (data?.by_stage as Record<string, number> | undefined) || {};
-  const chartData = Object.entries(byStage).map(([name, value]) => ({ name, value: Number(value) || 0 }));
+  const chartData = stages.map((s) => ({
+    name: s.name,
+    value: Number(byStage[s.slug]) || 0,
+  }));
   const newLeads = Number(data?.new_leads) || 0;
   const active = Number(data?.active_leads) || 0;
   const openRate = Number(data?.email_open_rate) || 0;

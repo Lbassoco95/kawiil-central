@@ -76,8 +76,10 @@ export function useMoveLeadStage() {
       if (!j?.ok) throw new Error(j?.error || "move_lead_stage failed");
       return j;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.leads });
+      qc.invalidateQueries({ queryKey: pipelineQueryKeys.lead(variables.leadId) });
+      qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(variables.leadId) });
     },
   });
 }
@@ -98,6 +100,7 @@ export function useAssignLead() {
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.leads });
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.lead(v.leadId) });
+      qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(v.leadId) });
     },
   });
 }

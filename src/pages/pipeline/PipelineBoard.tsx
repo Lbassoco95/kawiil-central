@@ -3,6 +3,7 @@ import {
   DndContext,
   DragEndEvent,
   PointerSensor,
+  closestCorners,
   useDraggable,
   useDroppable,
   useSensor,
@@ -29,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { useCreateLead } from "@/hooks/usePipeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 const priorityVariant: Record<string, "destructive" | "default" | "secondary" | "outline"> = {
   urgent: "destructive",
@@ -43,46 +44,55 @@ function LeadCard({ lead, stageColor }: { lead: Lead; stageColor: string }) {
     id: lead.id,
     data: { lead },
   });
-  const navigate = useNavigate();
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
+  const dragStyle = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        opacity: isDragging ? 0.55 : 1,
+      }
     : undefined;
 
   return (
     <Card
-      ref={setNodeRef}
-      style={{ ...style, borderLeftWidth: 4, borderLeftColor: stageColor }}
-      className="cursor-grab active:cursor-grabbing shadow-sm"
-      onClick={() => navigate(`/pipeline/leads/${lead.id}`)}
+      className="shadow-sm overflow-hidden"
+      style={{ borderLeftWidth: 4, borderLeftColor: stageColor }}
     >
-      <CardHeader className="p-3 pb-0 flex flex-row items-start gap-2 space-y-0">
-        <button
-          type="button"
-          className="touch-none text-muted-foreground hover:text-foreground p-0.5 -ml-0.5"
-          {...listeners}
-          {...attributes}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">{lead.full_name}</p>
-          {lead.company_name && (
-            <p className="text-xs text-muted-foreground truncate">{lead.company_name}</p>
+      <div
+        ref={setNodeRef}
+        style={dragStyle}
+        {...listeners}
+        {...attributes}
+        className="cursor-grab active:cursor-grabbing select-none touch-manipulation"
+      >
+        <CardHeader className="p-3 pb-0 flex flex-row items-start gap-2 space-y-0">
+          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5 pointer-events-none" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-sm truncate">{lead.full_name}</p>
+            {lead.company_name && (
+              <p className="text-xs text-muted-foreground truncate">{lead.company_name}</p>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-3 pt-2 flex flex-wrap gap-1 items-center">
+          <Badge variant={priorityVariant[lead.priority] || "secondary"} className="text-[10px]">
+            {lead.priority}
+          </Badge>
+          {lead.country_name && (
+            <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{lead.country_name}</span>
           )}
-        </div>
-      </CardHeader>
-      <CardContent className="p-3 pt-2 flex flex-wrap gap-1 items-center">
-        <Badge variant={priorityVariant[lead.priority] || "secondary"} className="text-[10px]">
-          {lead.priority}
-        </Badge>
-        {lead.country_name && (
-          <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{lead.country_name}</span>
-        )}
-        {lead.score > 0 && (
-          <span className="text-[10px] text-muted-foreground">score {lead.score}</span>
-        )}
-      </CardContent>
+          {lead.score > 0 && (
+            <span className="text-[10px] text-muted-foreground">score {lead.score}</span>
+          )}
+        </CardContent>
+      </div>
+      <div className="border-t border-border/40 px-3 py-1.5 bg-muted/15">
+        <Link
+          to={`/pipeline/leads/${lead.id}`}
+          className="text-xs font-medium text-primary hover:underline"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          Ver detalle
+        </Link>
+      </div>
     </Card>
   );
 }
@@ -259,7 +269,10 @@ export default function PipelineBoard() {
       <div className="flex justify-end">
         <NewLeadDialog registradoStageId={registradoStageId} />
       </div>
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <p className="text-xs text-muted-foreground px-0.5">
+        Arrastra la tarjeta por el nombre o el área del lead; usa <strong>Ver detalle</strong> para abrir la ficha.
+      </p>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">
           {stages.map((stage) => (
             <StageColumn key={stage.id} stage={stage} leads={byStage.get(stage.id) || []} />
