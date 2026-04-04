@@ -33,7 +33,7 @@ export default function PipelineList() {
 
   const stageName = useMemo(() => {
     const m = new Map(stages.map((s) => [s.id, s.name]));
-    return (id: string) => m.get(id) || "—";
+    return (id: string) => m.get(id) || "\u2014";
   }, [stages]);
 
   const filtered = useMemo(() => {
@@ -79,7 +79,7 @@ export default function PipelineList() {
       <div className="flex flex-wrap gap-2 items-end">
         <div className="flex-1 min-w-[180px]">
           <label className="text-xs text-muted-foreground">Buscar</label>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, email, campaña…" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, email, campa\u00f1a\u2026" />
         </div>
         <div className="w-[140px]">
           <label className="text-xs text-muted-foreground">Prioridad</label>
@@ -113,8 +113,8 @@ export default function PipelineList() {
           </Select>
         </div>
         <div className="w-[140px]">
-          <label className="text-xs text-muted-foreground">País</label>
-          <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="México…" />
+          <label className="text-xs text-muted-foreground">Pa\u00eds</label>
+          <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="M\u00e9xico\u2026" />
         </div>
         <div className="w-[140px]">
           <label className="text-xs text-muted-foreground">Urgencia</label>
@@ -138,7 +138,7 @@ export default function PipelineList() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="yes">Sí</SelectItem>
+              <SelectItem value="yes">S\u00ed</SelectItem>
               <SelectItem value="no">No</SelectItem>
             </SelectContent>
           </Select>
@@ -155,10 +155,10 @@ export default function PipelineList() {
               <TableHead>Nombre</TableHead>
               <TableHead>Empresa</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>País</TableHead>
+              <TableHead>Pa\u00eds</TableHead>
               <TableHead>Prioridad</TableHead>
               <TableHead>Etapa</TableHead>
-              <TableHead>Campaña</TableHead>
+              <TableHead>Campa\u00f1a</TableHead>
               <TableHead className="w-[100px]" />
             </TableRow>
           </TableHeader>
@@ -173,15 +173,15 @@ export default function PipelineList() {
               filtered.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="font-medium">{l.full_name}</TableCell>
-                  <TableCell>{l.company_name || "—"}</TableCell>
-                  <TableCell className="text-sm">{l.email || "—"}</TableCell>
-                  <TableCell>{l.country_name || l.country_code || "—"}</TableCell>
+                  <TableCell>{l.company_name || "\u2014"}</TableCell>
+                  <TableCell className="text-sm">{l.email || "\u2014"}</TableCell>
+                  <TableCell>{l.country_name || l.country_code || "\u2014"}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{l.priority}</Badge>
                   </TableCell>
                   <TableCell>{stageName(l.stage_id)}</TableCell>
                   <TableCell className="max-w-[160px] truncate text-sm text-muted-foreground">
-                    {l.campaign_name || "—"}
+                    {l.campaign_name || "\u2014"}
                   </TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" asChild>
