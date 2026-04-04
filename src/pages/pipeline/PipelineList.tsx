@@ -28,10 +28,12 @@ export default function PipelineList() {
   const [priority, setPriority] = useState<string>("all");
   const [country, setCountry] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
+  const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
+  const [visaFilter, setVisaFilter] = useState<string>("all");
 
   const stageName = useMemo(() => {
     const m = new Map(stages.map((s) => [s.id, s.name]));
-    return (id: string) => m.get(id) || "—";
+    return (id: string) => m.get(id) || "\u2014";
   }, [stages]);
 
   const filtered = useMemo(() => {
@@ -56,8 +58,17 @@ export default function PipelineList() {
       );
     }
     if (stageFilter !== "all") rows = rows.filter((l) => l.stage_id === stageFilter);
+    if (urgencyFilter !== "all") {
+      rows = rows.filter((l) => (l as Record<string, unknown>).urgency === urgencyFilter);
+    }
+    if (visaFilter !== "all") {
+      rows = rows.filter((l) => {
+        const needsVisa = (l as Record<string, unknown>).needs_visa;
+        return visaFilter === "yes" ? !!needsVisa : !needsVisa;
+      });
+    }
     return rows;
-  }, [leads, q, priority, country, stageFilter]);
+  }, [leads, q, priority, country, stageFilter, urgencyFilter, visaFilter]);
 
   if (sl || ll) {
     return <Skeleton className="h-[480px] w-full" />;
@@ -68,7 +79,7 @@ export default function PipelineList() {
       <div className="flex flex-wrap gap-2 items-end">
         <div className="flex-1 min-w-[180px]">
           <label className="text-xs text-muted-foreground">Buscar</label>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, email, campaña…" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, email, campa\u00f1a\u2026" />
         </div>
         <div className="w-[140px]">
           <label className="text-xs text-muted-foreground">Prioridad</label>
@@ -102,10 +113,37 @@ export default function PipelineList() {
           </Select>
         </div>
         <div className="w-[140px]">
-          <label className="text-xs text-muted-foreground">País</label>
-          <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="México…" />
+          <label className="text-xs text-muted-foreground">Pa\u00eds</label>
+          <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="M\u00e9xico\u2026" />
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => { setQ(""); setPriority("all"); setCountry(""); setStageFilter("all"); }}>
+        <div className="w-[140px]">
+          <label className="text-xs text-muted-foreground">Urgencia</label>
+          <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="immediate">Inmediato</SelectItem>
+              <SelectItem value="short_term">Corto plazo</SelectItem>
+              <SelectItem value="exploring">Explorando</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[120px]">
+          <label className="text-xs text-muted-foreground">Visa</label>
+          <Select value={visaFilter} onValueChange={setVisaFilter}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="yes">S\u00ed</SelectItem>
+              <SelectItem value="no">No</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => { setQ(""); setPriority("all"); setCountry(""); setStageFilter("all"); setUrgencyFilter("all"); setVisaFilter("all"); }}>
           Limpiar
         </Button>
       </div>
@@ -117,10 +155,10 @@ export default function PipelineList() {
               <TableHead>Nombre</TableHead>
               <TableHead>Empresa</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>País</TableHead>
+              <TableHead>Pa\u00eds</TableHead>
               <TableHead>Prioridad</TableHead>
               <TableHead>Etapa</TableHead>
-              <TableHead>Campaña</TableHead>
+              <TableHead>Campa\u00f1a</TableHead>
               <TableHead className="w-[100px]" />
             </TableRow>
           </TableHeader>
@@ -135,15 +173,15 @@ export default function PipelineList() {
               filtered.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="font-medium">{l.full_name}</TableCell>
-                  <TableCell>{l.company_name || "—"}</TableCell>
-                  <TableCell className="text-sm">{l.email || "—"}</TableCell>
-                  <TableCell>{l.country_name || l.country_code || "—"}</TableCell>
+                  <TableCell>{l.company_name || "\u2014"}</TableCell>
+                  <TableCell className="text-sm">{l.email || "\u2014"}</TableCell>
+                  <TableCell>{l.country_name || l.country_code || "\u2014"}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{l.priority}</Badge>
                   </TableCell>
                   <TableCell>{stageName(l.stage_id)}</TableCell>
                   <TableCell className="max-w-[160px] truncate text-sm text-muted-foreground">
-                    {l.campaign_name || "—"}
+                    {l.campaign_name || "\u2014"}
                   </TableCell>
                   <TableCell>
                     <Button variant="ghost" size="sm" asChild>
