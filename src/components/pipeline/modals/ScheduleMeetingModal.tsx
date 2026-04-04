@@ -27,7 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { pipelineQueryKeys } from "@/hooks/usePipeline";
 
 const meetingSchema = z.object({
-  title: z.string().min(1, "El título es requerido"),
+  title: z.string().min(1, "El t\u00edtulo es requerido"),
   scheduled_date: z.string().min(1, "La fecha es requerida"),
   duration_minutes: z.coerce.number().default(30),
   meeting_link: z.string().optional(),
@@ -51,7 +51,7 @@ export function ScheduleMeetingModal({ open, onOpenChange, leadId, leadName }: P
   const form = useForm<MeetingForm>({
     resolver: zodResolver(meetingSchema),
     defaultValues: {
-      title: `Reunión con ${leadName}`,
+      title: `Reuni\u00f3n con ${leadName}`,
       duration_minutes: 30,
     },
   });
@@ -68,7 +68,7 @@ export function ScheduleMeetingModal({ open, onOpenChange, leadId, leadName }: P
         title: data.title,
         task_type: "meeting",
         due_date: data.scheduled_date,
-        notes: `Duración: ${data.duration_minutes}min\nEnlace: ${data.meeting_link || "Pendiente"}\n${data.notes || ""}`,
+        notes: `Duraci\u00f3n: ${data.duration_minutes}min\nEnlace: ${data.meeting_link || "Pendiente"}\n${data.notes || ""}`,
         priority: "high",
       } as never);
 
@@ -87,9 +87,9 @@ export function ScheduleMeetingModal({ open, onOpenChange, leadId, leadName }: P
       });
 
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(leadId) });
-      toast.success("Reunión agendada");
+      toast.success("Reuni\u00f3n agendada");
       onOpenChange(false);
-      form.reset({ title: `Reunión con ${leadName}`, duration_minutes: 30 });
+      form.reset({ title: `Reuni\u00f3n con ${leadName}`, duration_minutes: 30 });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Error al agendar");
     } finally {
@@ -101,11 +101,11 @@ export function ScheduleMeetingModal({ open, onOpenChange, leadId, leadName }: P
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Agendar reunión</DialogTitle>
+          <DialogTitle>Agendar reuni\u00f3n</DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <Label>Título *</Label>
+            <Label>T\u00edtulo *</Label>
             <Input {...form.register("title")} />
             {form.formState.errors.title && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
@@ -116,7 +116,7 @@ export function ScheduleMeetingModal({ open, onOpenChange, leadId, leadName }: P
             <Input type="datetime-local" {...form.register("scheduled_date")} />
           </div>
           <div>
-            <Label>Duración</Label>
+            <Label>Duraci\u00f3n</Label>
             <Select
               value={String(form.watch("duration_minutes"))}
               onValueChange={(v) => form.setValue("duration_minutes", Number(v))}
@@ -133,12 +133,12 @@ export function ScheduleMeetingModal({ open, onOpenChange, leadId, leadName }: P
             </Select>
           </div>
           <div>
-            <Label>Enlace de reunión</Label>
-            <Input {...form.register("meeting_link")} placeholder="https://meet.google.com/…" />
+            <Label>Enlace de reuni\u00f3n</Label>
+            <Input {...form.register("meeting_link")} placeholder="https://meet.google.com/\u2026" />
           </div>
           <div>
             <Label>Notas</Label>
-            <Textarea rows={3} {...form.register("notes")} placeholder="Temas a tratar…" />
+            <Textarea rows={3} {...form.register("notes")} placeholder="Temas a tratar\u2026" />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

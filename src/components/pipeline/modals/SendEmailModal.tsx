@@ -30,7 +30,7 @@ import { pipelineQueryKeys, useEmailTemplates } from "@/hooks/usePipeline";
 import { Mail, Eye } from "lucide-react";
 
 const emailSchema = z.object({
-  to_email: z.string().email("Email inválido"),
+  to_email: z.string().email("Email inv\u00e1lido"),
   subject: z.string().min(1, "El asunto es requerido"),
   body_html: z.string().min(1, "El contenido es requerido"),
   template_id: z.string().optional(),
@@ -171,7 +171,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar plantilla…" />
+                  <SelectValue placeholder="Seleccionar plantilla\u2026" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Sin plantilla</SelectItem>
@@ -202,7 +202,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
 
           <div>
             <Label>Asunto *</Label>
-            <Input {...form.register("subject")} placeholder="Asunto del correo…" />
+            <Input {...form.register("subject")} placeholder="Asunto del correo\u2026" />
             {form.formState.errors.subject && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.subject.message}</p>
             )}
@@ -231,7 +231,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
               <Textarea
                 rows={6}
                 {...form.register("body_html")}
-                placeholder="Contenido del email (soporta HTML)…"
+                placeholder="Contenido del email (soporta HTML)\u2026"
               />
             )}
           </div>
@@ -252,7 +252,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
               <Label>Fecha de seguimiento</Label>
               <Input type="datetime-local" {...form.register("follow_up_date")} />
               <p className="text-xs text-muted-foreground mt-1">
-                Se creará una tarea para dar seguimiento si el lead no responde.
+                Se crear\u00e1 una tarea para dar seguimiento si el lead no responde.
               </p>
             </div>
           )}
@@ -260,8 +260,8 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
           {/* Email tracking info */}
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-3">
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              El email se registrará en el historial del lead. Podrás ver su estado
-              (enviado, abierto, click) en la sección de Correos de la ficha del lead.
+              El email se registrar\u00e1 en el historial del lead. Podr\u00e1s ver su estado
+              (enviado, abierto, click) en la secci\u00f3n de Correos de la ficha del lead.
             </p>
           </div>
 
