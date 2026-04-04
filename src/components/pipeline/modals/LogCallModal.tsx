@@ -137,20 +137,20 @@ export function LogCallModal({ open, onOpenChange, leadId, leadName, currentStag
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="conectado">Conectado</SelectItem>
-                <SelectItem value="buzon">Buzón</SelectItem>
+                <SelectItem value="buzon">Buz\u00f3n</SelectItem>
                 <SelectItem value="no_contesta">No contesta</SelectItem>
-                <SelectItem value="numero_invalido">Número inválido</SelectItem>
+                <SelectItem value="numero_invalido">N\u00famero inv\u00e1lido</SelectItem>
                 <SelectItem value="callback">Callback</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label>Duración (minutos)</Label>
+            <Label>Duraci\u00f3n (minutos)</Label>
             <Input type="number" min={0} {...form.register("duration")} placeholder="5" />
           </div>
           <div>
             <Label>Notas</Label>
-            <Textarea rows={3} {...form.register("notes")} placeholder="Resumen de la llamada…" />
+            <Textarea rows={3} {...form.register("notes")} placeholder="Resumen de la llamada\u2026" />
           </div>
           <div className="flex items-center gap-2">
             <Checkbox

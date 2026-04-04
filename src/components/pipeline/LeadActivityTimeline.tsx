@@ -46,10 +46,10 @@ const typeConfig: Record<string, { icon: typeof Phone; color: string; label: str
   email_opened: { icon: MailOpen, color: "text-blue-500 bg-blue-50", label: "Email abierto" },
   email_clicked: { icon: MousePointerClick, color: "text-blue-700 bg-blue-100", label: "Click en email" },
   whatsapp: { icon: MessageCircle, color: "text-emerald-600 bg-emerald-100", label: "WhatsApp" },
-  meeting: { icon: Calendar, color: "text-purple-600 bg-purple-100", label: "Reunión" },
+  meeting: { icon: Calendar, color: "text-purple-600 bg-purple-100", label: "Reuni\u00f3n" },
   note: { icon: StickyNote, color: "text-amber-600 bg-amber-100", label: "Nota" },
   stage_change: { icon: ArrowRightLeft, color: "text-indigo-600 bg-indigo-100", label: "Cambio de etapa" },
-  assignment: { icon: UserCheck, color: "text-cyan-600 bg-cyan-100", label: "Asignación" },
+  assignment: { icon: UserCheck, color: "text-cyan-600 bg-cyan-100", label: "Asignaci\u00f3n" },
   score_change: { icon: TrendingUp, color: "text-orange-600 bg-orange-100", label: "Score" },
   lead_created: { icon: CheckCircle2, color: "text-green-700 bg-green-100", label: "Lead creado" },
 };
@@ -79,7 +79,7 @@ function getActivityDescription(type: string, metadata: Record<string, unknown> 
         metadata.duration_minutes && `${metadata.duration_minutes} min`,
       ]
         .filter(Boolean)
-        .join(" — ");
+        .join(" \u2014 ");
     case "email_sent":
       return metadata.subject ? `Asunto: ${metadata.subject}` : "";
     case "whatsapp":
@@ -88,7 +88,7 @@ function getActivityDescription(type: string, metadata: Record<string, unknown> 
         metadata.summary && String(metadata.summary).substring(0, 80),
       ]
         .filter(Boolean)
-        .join(" — ");
+        .join(" \u2014 ");
     case "meeting":
       return metadata.title ? String(metadata.title) : "";
     case "note":
@@ -100,7 +100,7 @@ function getActivityDescription(type: string, metadata: Record<string, unknown> 
           ? "Auto: lead sin actividad"
           : "";
     case "score_change":
-      return metadata.reason ? `Razón: ${metadata.reason}` : "";
+      return metadata.reason ? `Raz\u00f3n: ${metadata.reason}` : "";
     default:
       return "";
   }

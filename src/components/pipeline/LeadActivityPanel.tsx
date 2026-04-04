@@ -19,7 +19,7 @@ const actions = [
   { key: "call", label: "Llamada", icon: Phone, color: "text-green-600 hover:bg-green-50 border-green-200" },
   { key: "email", label: "Email", icon: Mail, color: "text-blue-600 hover:bg-blue-50 border-blue-200" },
   { key: "whatsapp", label: "WhatsApp", icon: MessageCircle, color: "text-emerald-600 hover:bg-emerald-50 border-emerald-200" },
-  { key: "meeting", label: "Reunión", icon: Calendar, color: "text-purple-600 hover:bg-purple-50 border-purple-200" },
+  { key: "meeting", label: "Reuni\u00f3n", icon: Calendar, color: "text-purple-600 hover:bg-purple-50 border-purple-200" },
   { key: "note", label: "Nota", icon: StickyNote, color: "text-amber-600 hover:bg-amber-50 border-amber-200" },
   { key: "task", label: "Tarea", icon: CheckSquare, color: "text-slate-600 hover:bg-slate-50 border-slate-200" },
 ] as const;
