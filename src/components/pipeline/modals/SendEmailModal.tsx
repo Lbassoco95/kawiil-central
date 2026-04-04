@@ -117,8 +117,15 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
         },
       );
 
-      if (fnErr) throw new Error(fnErr.message || "Error al enviar email");
-      if (result?.error) throw new Error(result.error);
+      if (fnErr) {
+        // Update email_log to failed
+        await supabase.from("email_log").update({ status: "failed", error_message: fnErr.message || "Error desconocido" }).eq("id", logEntry.id);
+        throw new Error(fnErr.message || "Error al enviar email");
+      }
+      if (result?.error) {
+        await supabase.from("email_log").update({ status: "failed", error_message: result.error }).eq("id", logEntry.id);
+        throw new Error(result.error);
+      }
 
       // Schedule follow-up if requested
       if (data.schedule_follow_up && data.follow_up_date) {
@@ -194,6 +201,11 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
               </Select>
             </div>
           )}
+
+          <div>
+            <Label>De</Label>
+            <Input value="comercial@kawiil.mx" disabled className="bg-muted text-muted-foreground" />
+          </div>
 
           <div>
             <Label>Para *</Label>
