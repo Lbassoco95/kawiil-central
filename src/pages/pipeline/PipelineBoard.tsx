@@ -9,14 +9,14 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { usePipelineStages, usePipelineLeads, useMoveLeadStage, type Lead, type PipelineStage } from "@/hooks/usePipeline";
+import { usePipelineStages, usePipelineLeads, useMoveLeadStage, type Lead, type PipelineStage, type LeadTask } from "@/hooks/usePipeline";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, GripVertical } from "lucide-react";
+import { Plus, GripVertical, Flame } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,7 +39,22 @@ const priorityVariant: Record<string, "destructive" | "default" | "secondary" | 
   low: "outline",
 };
 
-function LeadCard({ lead, stageColor }: { lead: Lead; stageColor: string }) {
+interface LeadTaskSummary {
+  hasOverdue: boolean;
+  hasToday: boolean;
+  hasFuture: boolean;
+  hasTasks: boolean;
+}
+
+function getTaskIndicator(summary: LeadTaskSummary | undefined) {
+  if (!summary || !summary.hasTasks) return null;
+  if (summary.hasOverdue) return <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" title="Tarea vencida" />;
+  if (summary.hasToday) return <span className="h-2 w-2 rounded-full bg-yellow-500 shrink-0" title="Tarea hoy" />;
+  if (summary.hasFuture) return <span className="h-2 w-2 rounded-full bg-green-500 shrink-0" title="Tarea futura" />;
+  return null;
+}
+
+function LeadCard({ lead, stageColor, taskSummary }: { lead: Lead; stageColor: string; taskSummary?: LeadTaskSummary }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
     data: { lead },
@@ -73,9 +88,13 @@ function LeadCard({ lead, stageColor }: { lead: Lead; stageColor: string }) {
           </div>
         </CardHeader>
         <CardContent className="p-3 pt-2 flex flex-wrap gap-1 items-center">
+          {getTaskIndicator(taskSummary)}
           <Badge variant={priorityVariant[lead.priority] || "secondary"} className="text-[10px]">
             {lead.priority}
           </Badge>
+          {(lead as Record<string, unknown>).urgency === "immediate" && (
+            <Flame className="h-3 w-3 text-orange-500" title="Urgente" />
+          )}
           {lead.country_name && (
             <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">{lead.country_name}</span>
           )}
@@ -97,7 +116,7 @@ function LeadCard({ lead, stageColor }: { lead: Lead; stageColor: string }) {
   );
 }
 
-function StageColumn({ stage, leads }: { stage: PipelineStage; leads: Lead[] }) {
+function StageColumn({ stage, leads, tasksByLead }: { stage: PipelineStage; leads: Lead[]; tasksByLead: Map<string, LeadTaskSummary> }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   return (
@@ -118,7 +137,7 @@ function StageColumn({ stage, leads }: { stage: PipelineStage; leads: Lead[] }) 
         <ScrollArea className="h-full pr-2">
           <div className="flex flex-col gap-2 pb-4">
             {leads.map((l) => (
-              <LeadCard key={l.id} lead={l} stageColor={stage.color} />
+              <LeadCard key={l.id} lead={l} stageColor={stage.color} taskSummary={tasksByLead.get(l.id)} />
             ))}
           </div>
         </ScrollArea>
@@ -213,11 +232,44 @@ function NewLeadDialog({ registradoStageId }: { registradoStageId: string | null
   );
 }
 
+function isToday(date: Date): boolean {
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+}
+
 export default function PipelineBoard() {
   const { data: stages = [], isLoading: ls } = usePipelineStages();
   const { data: leads = [], isLoading: ll } = usePipelineLeads(true);
   const moveStage = useMoveLeadStage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  // Fetch all pending tasks for badge indicators
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ["pipeline-kanban-tasks"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_tasks" as never)
+        .select("id, lead_id, due_date, is_completed, task_type")
+        .eq("is_completed", false);
+      if (error) return [];
+      return (data || []) as Array<{ id: string; lead_id: string; due_date: string; is_completed: boolean; task_type: string }>;
+    },
+  });
+
+  const tasksByLead = useMemo(() => {
+    const m = new Map<string, LeadTaskSummary>();
+    const now = new Date();
+    for (const t of allTasks) {
+      const dueDate = new Date(t.due_date);
+      const existing = m.get(t.lead_id) || { hasOverdue: false, hasToday: false, hasFuture: false, hasTasks: false };
+      existing.hasTasks = true;
+      if (dueDate < now && !isToday(dueDate)) existing.hasOverdue = true;
+      else if (isToday(dueDate)) existing.hasToday = true;
+      else existing.hasFuture = true;
+      m.set(t.lead_id, existing);
+    }
+    return m;
+  }, [allTasks]);
 
   const registradoStageId = useMemo(
     () => stages.find((s) => s.slug === "registrado")?.id ?? null,
@@ -275,7 +327,7 @@ export default function PipelineBoard() {
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">
           {stages.map((stage) => (
-            <StageColumn key={stage.id} stage={stage} leads={byStage.get(stage.id) || []} />
+            <StageColumn key={stage.id} stage={stage} leads={byStage.get(stage.id) || []} tasksByLead={tasksByLead} />
           ))}
         </div>
       </DndContext>

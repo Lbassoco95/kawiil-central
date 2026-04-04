@@ -33,6 +33,7 @@ import PipelineAnalytics from "./pages/pipeline/PipelineAnalytics";
 import EmailTemplates from "./pages/pipeline/EmailTemplates";
 import EmailSequences from "./pages/pipeline/EmailSequences";
 import PipelineSettings from "./pages/pipeline/PipelineSettings";
+import PipelineActivities from "./pages/pipeline/PipelineActivities";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ const App = () => (
                 <Route path="list" element={<PipelineList />} />
                 <Route path="leads/:id" element={<LeadDetailPage />} />
                 <Route path="analytics" element={<PipelineAnalytics />} />
+                <Route path="activities" element={<PipelineActivities />} />
                 <Route path="templates" element={<EmailTemplates />} />
                 <Route path="sequences" element={<EmailSequences />} />
                 <Route path="settings" element={<PipelineSettings />} />

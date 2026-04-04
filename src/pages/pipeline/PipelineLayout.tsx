@@ -6,6 +6,7 @@ const tabs = [
   { to: "/pipeline", label: "Tablero", end: true },
   { to: "/pipeline/list", label: "Lista" },
   { to: "/pipeline/analytics", label: "Métricas" },
+  { to: "/pipeline/activities", label: "Actividades" },
   { to: "/pipeline/templates", label: "Plantillas" },
   { to: "/pipeline/sequences", label: "Secuencias" },
   { to: "/pipeline/settings", label: "Ajustes" },

@@ -28,6 +28,8 @@ export default function PipelineList() {
   const [priority, setPriority] = useState<string>("all");
   const [country, setCountry] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
+  const [urgencyFilter, setUrgencyFilter] = useState<string>("all");
+  const [visaFilter, setVisaFilter] = useState<string>("all");
 
   const stageName = useMemo(() => {
     const m = new Map(stages.map((s) => [s.id, s.name]));
@@ -56,8 +58,17 @@ export default function PipelineList() {
       );
     }
     if (stageFilter !== "all") rows = rows.filter((l) => l.stage_id === stageFilter);
+    if (urgencyFilter !== "all") {
+      rows = rows.filter((l) => (l as Record<string, unknown>).urgency === urgencyFilter);
+    }
+    if (visaFilter !== "all") {
+      rows = rows.filter((l) => {
+        const needsVisa = (l as Record<string, unknown>).needs_visa;
+        return visaFilter === "yes" ? !!needsVisa : !needsVisa;
+      });
+    }
     return rows;
-  }, [leads, q, priority, country, stageFilter]);
+  }, [leads, q, priority, country, stageFilter, urgencyFilter, visaFilter]);
 
   if (sl || ll) {
     return <Skeleton className="h-[480px] w-full" />;
@@ -105,7 +116,34 @@ export default function PipelineList() {
           <label className="text-xs text-muted-foreground">País</label>
           <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="México…" />
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => { setQ(""); setPriority("all"); setCountry(""); setStageFilter("all"); }}>
+        <div className="w-[140px]">
+          <label className="text-xs text-muted-foreground">Urgencia</label>
+          <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="immediate">Inmediato</SelectItem>
+              <SelectItem value="short_term">Corto plazo</SelectItem>
+              <SelectItem value="exploring">Explorando</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-[120px]">
+          <label className="text-xs text-muted-foreground">Visa</label>
+          <Select value={visaFilter} onValueChange={setVisaFilter}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="yes">Sí</SelectItem>
+              <SelectItem value="no">No</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => { setQ(""); setPriority("all"); setCountry(""); setStageFilter("all"); setUrgencyFilter("all"); setVisaFilter("all"); }}>
           Limpiar
         </Button>
       </div>
