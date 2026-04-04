@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
     subject = interpolate(subject, vars);
     html = interpolate(html, vars);
 
-    const sender = Deno.env.get("SENDER_EMAIL") || "contacto@kawiil.mx";
+    const sender = Deno.env.get("SENDER_EMAIL") || "comercial@kawiil.mx";
     const token = await getAppOnlyGraphToken();
 
     const graphRes = await fetch(

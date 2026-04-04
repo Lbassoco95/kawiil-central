@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const sender = Deno.env.get("SENDER_EMAIL") || "contacto@kawiil.mx";
+    const sender = Deno.env.get("SENDER_EMAIL") || "comercial@kawiil.mx";
 
     for (const row of rows) {
       const { data: lead, error: leErr } = await svc.from("leads").select("*").eq("id", row.lead_id).single();

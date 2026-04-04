@@ -93,29 +93,32 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
     if (!user) return;
     setSaving(true);
     try {
-      // Insert into email_log for tracking
-      const { error: emailErr } = await supabase.from("email_log").insert({
+      // Create email_log entry first with status "sending"
+      const { data: logEntry, error: emailErr } = await supabase.from("email_log").insert({
         lead_id: leadId,
         template_id: data.template_id || null,
         to_email: data.to_email,
         subject: data.subject,
-        status: "sent",
-        sent_at: new Date().toISOString(),
-      });
+        status: "sending",
+      }).select("id").single();
       if (emailErr) throw emailErr;
 
-      // Log activity
-      await supabase.from("lead_activities").insert({
-        lead_id: leadId,
-        user_id: user.id,
-        type: "email_sent",
-        metadata: {
-          to_email: data.to_email,
-          subject: data.subject,
-          template_id: data.template_id || null,
-          has_body: !!data.body_html,
+      // Call Edge Function to send via Microsoft Graph (from comercial@kawiil.mx)
+      const { data: result, error: fnErr } = await supabase.functions.invoke(
+        "send-pipeline-email",
+        {
+          body: {
+            lead_id: leadId,
+            template_id: data.template_id || undefined,
+            email_log_id: logEntry.id,
+            subject: data.subject,
+            body_html: data.body_html,
+          },
         },
-      });
+      );
+
+      if (fnErr) throw new Error(fnErr.message || "Error al enviar email");
+      if (result?.error) throw new Error(result.error);
 
       // Schedule follow-up if requested
       if (data.schedule_follow_up && data.follow_up_date) {
@@ -133,7 +136,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
 
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(leadId) });
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.emailLog(leadId) });
-      toast.success("Email registrado y enviado");
+      toast.success("Email enviado desde comercial@kawiil.mx");
       onOpenChange(false);
       form.reset({ to_email: leadEmail || "", subject: "", body_html: "", schedule_follow_up: false });
       setShowPreview(false);
@@ -260,8 +263,9 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
           {/* Email tracking info */}
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-3">
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              El email se registrar\u00e1 en el historial del lead. Podr\u00e1s ver su estado
-              (enviado, abierto, click) en la secci\u00f3n de Correos de la ficha del lead.
+              El email se enviará desde <strong>comercial@kawiil.mx</strong> y se
+              registrará en el historial del lead. Podrás ver su estado (enviado,
+              abierto, click) en la sección de Correos.
             </p>
           </div>
 
