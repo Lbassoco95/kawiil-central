@@ -70,7 +70,7 @@ export default function PipelineAnalytics() {
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Leads nuevos (30 d\u00edas)</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Leads nuevos (30 días)</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{newLeads}</p>
@@ -102,7 +102,7 @@ export default function PipelineAnalytics() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Tasa conversi\u00f3n</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Tasa conversión</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{(conversionRate * 100).toFixed(1)}%</p>
@@ -122,7 +122,7 @@ export default function PipelineAnalytics() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-amber-600">Leads sin actividad 7+ d\u00edas</CardTitle>
+            <CardTitle className="text-sm font-medium text-amber-600">Leads sin actividad 7+ días</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold text-amber-600">{staleCount}</p>
@@ -147,7 +147,7 @@ export default function PipelineAnalytics() {
         </CardHeader>
         <CardContent className="h-[360px]">
           {chartData.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Sin datos a\u00fan</p>
+            <p className="text-muted-foreground text-sm">Sin datos aún</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
@@ -166,7 +166,7 @@ export default function PipelineAnalytics() {
       {funnelData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Embudo de conversi\u00f3n</CardTitle>
+            <CardTitle>Embudo de conversión</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">

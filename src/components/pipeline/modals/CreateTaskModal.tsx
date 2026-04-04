@@ -27,7 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { pipelineQueryKeys } from "@/hooks/usePipeline";
 
 const taskSchema = z.object({
-  title: z.string().min(1, "El t\u00edtulo es requerido"),
+  title: z.string().min(1, "El título es requerido"),
   task_type: z.enum(["call", "email", "meeting", "whatsapp", "task", "follow_up"]),
   due_date: z.string().min(1, "La fecha es requerida"),
   priority: z.enum(["low", "medium", "high", "urgent"]),
@@ -91,8 +91,8 @@ export function CreateTaskModal({ open, onOpenChange, leadId, leadName }: Props)
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <Label>T\u00edtulo *</Label>
-            <Input {...form.register("title")} placeholder="Descripci\u00f3n de la tarea\u2026" />
+            <Label>Título *</Label>
+            <Input {...form.register("title")} placeholder="Descripción de la tarea…" />
             {form.formState.errors.title && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
             )}
@@ -112,7 +112,7 @@ export function CreateTaskModal({ open, onOpenChange, leadId, leadName }: Props)
                   <SelectItem value="call">Llamada</SelectItem>
                   <SelectItem value="email">Email</SelectItem>
                   <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="meeting">Reuni\u00f3n</SelectItem>
+                  <SelectItem value="meeting">Reunión</SelectItem>
                   <SelectItem value="follow_up">Seguimiento</SelectItem>
                 </SelectContent>
               </Select>
@@ -140,8 +140,8 @@ export function CreateTaskModal({ open, onOpenChange, leadId, leadName }: Props)
             <Input type="datetime-local" {...form.register("due_date")} />
           </div>
           <div>
-            <Label>Descripci\u00f3n</Label>
-            <Textarea rows={3} {...form.register("description")} placeholder="Detalles adicionales\u2026" />
+            <Label>Descripción</Label>
+            <Textarea rows={3} {...form.register("description")} placeholder="Detalles adicionales…" />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

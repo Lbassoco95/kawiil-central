@@ -229,11 +229,11 @@ export default function PipelineActivities() {
       />
 
       <TaskSection
-        title="Pr\u00f3ximos 7 d\u00edas"
+        title="Próximos 7 días"
         icon={Calendar}
         tasks={upcoming}
         color="text-muted-foreground"
-        emptyText="Sin tareas pr\u00f3ximas"
+        emptyText="Sin tareas próximas"
         isLoading={lu}
       />
 

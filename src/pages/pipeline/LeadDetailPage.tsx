@@ -46,28 +46,28 @@ const priorityOptions = [
 
 const countryOriginOptions = [
   "Argentina", "Bolivia", "Chile", "Colombia", "Costa Rica", "Ecuador",
-  "El Salvador", "Guatemala", "Honduras", "M\u00e9xico", "Nicaragua", "Panam\u00e1",
-  "Paraguay", "Per\u00fa", "Rep. Dominicana", "Uruguay", "Venezuela", "Otro",
+  "El Salvador", "Guatemala", "Honduras", "México", "Nicaragua", "Panamá",
+  "Paraguay", "Perú", "Rep. Dominicana", "Uruguay", "Venezuela", "Otro",
 ];
 
 const entityTypeOptions = [
   { value: "sa_cv", label: "S.A. de C.V." },
   { value: "srl", label: "S. de R.L." },
-  { value: "persona_fisica", label: "Persona F\u00edsica con Act. Empresarial" },
+  { value: "persona_fisica", label: "Persona Física con Act. Empresarial" },
   { value: "sucursal", label: "Sucursal Extranjera" },
   { value: "por_definir", label: "Por definir" },
 ];
 
 const industryOptions = [
-  "Tecnolog\u00eda", "Comercio", "Servicios", "Manufactura",
-  "Consultor\u00eda", "Alimentos", "Salud", "Educaci\u00f3n", "Otro",
+  "Tecnología", "Comercio", "Servicios", "Manufactura",
+  "Consultoría", "Alimentos", "Salud", "Educación", "Otro",
 ];
 
 const budgetOptions = [
   { value: "menos_5k", label: "Menos de $5,000 USD" },
   { value: "5k_15k", label: "$5,000 - $15,000" },
   { value: "15k_30k", label: "$15,000 - $30,000" },
-  { value: "30k_plus", label: "M\u00e1s de $30,000" },
+  { value: "30k_plus", label: "Más de $30,000" },
   { value: "por_definir", label: "Por definir" },
 ];
 
@@ -278,7 +278,7 @@ export default function LeadDetailPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label>Tel\u00e9fono</Label>
+                    <Label>Teléfono</Label>
                     <Input {...form.register("phone")} />
                   </div>
                   <div>
@@ -291,7 +291,7 @@ export default function LeadDetailPage() {
                   <Input {...form.register("company_name")} />
                 </div>
                 <div>
-                  <Label>Campa\u00f1a</Label>
+                  <Label>Campaña</Label>
                   <Input {...form.register("campaign_name")} />
                 </div>
                 <div>
@@ -342,7 +342,7 @@ export default function LeadDetailPage() {
                           leadId: lead.id,
                           ownerId: v === "__none__" ? null : v,
                         })
-                        .then(() => toast.success("Asignaci\u00f3n actualizada"))
+                        .then(() => toast.success("Asignación actualizada"))
                         .catch((e) => toast.error(String(e)));
                     }}
                   >
@@ -369,13 +369,13 @@ export default function LeadDetailPage() {
                   <h3 className="text-sm font-semibold mb-3">Datos de Softlanding</h3>
                   <div className="space-y-3">
                     <div>
-                      <Label>Pa\u00eds de origen</Label>
+                      <Label>País de origen</Label>
                       <Select
                         value={form.watch("country_origin") || "__none__"}
                         onValueChange={(v) => form.setValue("country_origin", v === "__none__" ? null : v)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar\u2026" />
+                          <SelectValue placeholder="Seleccionar…" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">Sin especificar</SelectItem>
@@ -392,7 +392,7 @@ export default function LeadDetailPage() {
                         onValueChange={(v) => form.setValue("entity_type", v === "__none__" ? null : v)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar\u2026" />
+                          <SelectValue placeholder="Seleccionar…" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">Sin especificar</SelectItem>
@@ -409,7 +409,7 @@ export default function LeadDetailPage() {
                         onValueChange={(v) => form.setValue("industry", v === "__none__" ? null : v)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar\u2026" />
+                          <SelectValue placeholder="Seleccionar…" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">Sin especificar</SelectItem>
@@ -426,7 +426,7 @@ export default function LeadDetailPage() {
                         onValueChange={(v) => form.setValue("estimated_budget", v === "__none__" ? null : v)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar\u2026" />
+                          <SelectValue placeholder="Seleccionar…" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">Sin especificar</SelectItem>
@@ -443,7 +443,7 @@ export default function LeadDetailPage() {
                         onValueChange={(v) => form.setValue("urgency", v === "__none__" ? null : v)}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar\u2026" />
+                          <SelectValue placeholder="Seleccionar…" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">Sin especificar</SelectItem>
@@ -463,7 +463,7 @@ export default function LeadDetailPage() {
                     </div>
                     <div>
                       <Label>Notas de Softlanding</Label>
-                      <Textarea rows={3} {...form.register("softlanding_notes")} placeholder="Detalles espec\u00edficos del caso\u2026" />
+                      <Textarea rows={3} {...form.register("softlanding_notes")} placeholder="Detalles específicos del caso…" />
                     </div>
                   </div>
                 </div>
@@ -496,7 +496,7 @@ export default function LeadDetailPage() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm max-h-[200px] overflow-y-auto">
               {emails.length === 0 ? (
-                <p className="text-muted-foreground">Sin env\u00edos registrados</p>
+                <p className="text-muted-foreground">Sin envíos registrados</p>
               ) : (
                 emails.map((e) => (
                   <div key={e.id} className="border-b border-border/50 pb-2">

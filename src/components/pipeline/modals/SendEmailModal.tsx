@@ -30,7 +30,7 @@ import { pipelineQueryKeys, useEmailTemplates } from "@/hooks/usePipeline";
 import { Mail, Eye } from "lucide-react";
 
 const emailSchema = z.object({
-  to_email: z.string().email("Email inv\u00e1lido"),
+  to_email: z.string().email("Email inválido"),
   subject: z.string().min(1, "El asunto es requerido"),
   body_html: z.string().min(1, "El contenido es requerido"),
   template_id: z.string().optional(),
@@ -181,7 +181,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar plantilla\u2026" />
+                  <SelectValue placeholder="Seleccionar plantilla…" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Sin plantilla</SelectItem>
@@ -217,7 +217,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
 
           <div>
             <Label>Asunto *</Label>
-            <Input {...form.register("subject")} placeholder="Asunto del correo\u2026" />
+            <Input {...form.register("subject")} placeholder="Asunto del correo…" />
             {form.formState.errors.subject && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.subject.message}</p>
             )}
@@ -246,7 +246,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
               <Textarea
                 rows={6}
                 {...form.register("body_html")}
-                placeholder="Contenido del email (soporta HTML)\u2026"
+                placeholder="Contenido del email (soporta HTML)…"
               />
             )}
           </div>
@@ -267,7 +267,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
               <Label>Fecha de seguimiento</Label>
               <Input type="datetime-local" {...form.register("follow_up_date")} />
               <p className="text-xs text-muted-foreground mt-1">
-                Se crear\u00e1 una tarea para dar seguimiento si el lead no responde.
+                Se creará una tarea para dar seguimiento si el lead no responde.
               </p>
             </div>
           )}

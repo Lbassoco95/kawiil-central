@@ -207,7 +207,7 @@ function NewLeadDialog({ registradoStageId }: { registradoStageId: string | null
         <div className="space-y-3">
           <div>
             <Label>Nombre completo</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Mar\u00eda P\u00e9rez" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="María Pérez" />
           </div>
           <div>
             <Label>Email (opcional)</Label>
@@ -322,7 +322,7 @@ export default function PipelineBoard() {
         <NewLeadDialog registradoStageId={registradoStageId} />
       </div>
       <p className="text-xs text-muted-foreground px-0.5">
-        Arrastra la tarjeta por el nombre o el \u00e1rea del lead; usa <strong>Ver detalle</strong> para abrir la ficha.
+        Arrastra la tarjeta por el nombre o el área del lead; usa <strong>Ver detalle</strong> para abrir la ficha.
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-4 items-stretch">

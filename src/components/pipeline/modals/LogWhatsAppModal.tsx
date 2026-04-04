@@ -100,7 +100,7 @@ export function LogWhatsAppModal({ open, onOpenChange, leadId, leadName }: Props
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <Label>Direcci\u00f3n</Label>
+            <Label>Dirección</Label>
             <Select
               value={form.watch("direction")}
               onValueChange={(v) => form.setValue("direction", v as WAForm["direction"])}
@@ -115,8 +115,8 @@ export function LogWhatsAppModal({ open, onOpenChange, leadId, leadName }: Props
             </Select>
           </div>
           <div>
-            <Label>Resumen de la conversaci\u00f3n *</Label>
-            <Textarea rows={4} {...form.register("summary")} placeholder="Resumen del mensaje\u2026" />
+            <Label>Resumen de la conversación *</Label>
+            <Textarea rows={4} {...form.register("summary")} placeholder="Resumen del mensaje…" />
             {form.formState.errors.summary && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.summary.message}</p>
             )}

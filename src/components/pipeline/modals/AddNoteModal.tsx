@@ -20,7 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { pipelineQueryKeys } from "@/hooks/usePipeline";
 
 const noteSchema = z.object({
-  content: z.string().min(1, "La nota no puede estar vac\u00eda"),
+  content: z.string().min(1, "La nota no puede estar vacía"),
   is_important: z.boolean().default(false),
 });
 
@@ -72,7 +72,7 @@ export function AddNoteModal({ open, onOpenChange, leadId }: Props) {
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <Label>Contenido *</Label>
-            <Textarea rows={5} {...form.register("content")} placeholder="Escribe tu nota aqu\u00ed\u2026" />
+            <Textarea rows={5} {...form.register("content")} placeholder="Escribe tu nota aquí…" />
             {form.formState.errors.content && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.content.message}</p>
             )}
