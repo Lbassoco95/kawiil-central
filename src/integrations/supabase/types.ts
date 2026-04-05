@@ -1069,6 +1069,19 @@ export type Database = {
           error_message: string | null
           graph_message_id: string | null
           created_at: string
+          body_html: string | null
+          body_text: string | null
+          direction: string
+          from_email: string | null
+          from_name: string | null
+          thread_id: string | null
+          conversation_id: string | null
+          in_reply_to: string | null
+          is_read: boolean
+          has_attachments: boolean
+          attachments: Json
+          received_at: string | null
+          headers: Json
         }
         Insert: {
           id?: string
@@ -1086,6 +1099,19 @@ export type Database = {
           error_message?: string | null
           graph_message_id?: string | null
           created_at?: string
+          body_html?: string | null
+          body_text?: string | null
+          direction?: string
+          from_email?: string | null
+          from_name?: string | null
+          thread_id?: string | null
+          conversation_id?: string | null
+          in_reply_to?: string | null
+          is_read?: boolean
+          has_attachments?: boolean
+          attachments?: Json
+          received_at?: string | null
+          headers?: Json
         }
         Update: {
           id?: string
@@ -1102,6 +1128,88 @@ export type Database = {
           clicked_at?: string | null
           error_message?: string | null
           graph_message_id?: string | null
+          created_at?: string
+          body_html?: string | null
+          body_text?: string | null
+          direction?: string
+          from_email?: string | null
+          from_name?: string | null
+          thread_id?: string | null
+          conversation_id?: string | null
+          in_reply_to?: string | null
+          is_read?: boolean
+          has_attachments?: boolean
+          attachments?: Json
+          received_at?: string | null
+          headers?: Json
+        }
+        Relationships: []
+      }
+      email_sync_state: {
+        Row: {
+          id: string
+          organization_id: string
+          mailbox_email: string
+          last_sync_at: string | null
+          delta_link: string | null
+          next_sync_at: string | null
+          sync_status: string
+          error_message: string | null
+          total_synced: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          mailbox_email?: string
+          last_sync_at?: string | null
+          delta_link?: string | null
+          next_sync_at?: string | null
+          sync_status?: string
+          error_message?: string | null
+          total_synced?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          mailbox_email?: string
+          last_sync_at?: string | null
+          delta_link?: string | null
+          next_sync_at?: string | null
+          sync_status?: string
+          error_message?: string | null
+          total_synced?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      email_tracking_events: {
+        Row: {
+          id: string
+          email_log_id: string
+          lead_id: string
+          event_type: string
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email_log_id: string
+          lead_id: string
+          event_type: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email_log_id?: string
+          lead_id?: string
+          event_type?: string
+          metadata?: Json
           created_at?: string
         }
         Relationships: []

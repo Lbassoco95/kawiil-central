@@ -139,14 +139,35 @@ export function useLeadEmailLog(leadId: string | undefined) {
   return useQuery({
     queryKey: pipelineQueryKeys.emailLog(leadId || ""),
     enabled: !!leadId,
+    refetchInterval: 30_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("email_log")
-        .select("*")
-        .eq("lead_id", leadId!)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("email_log").select("*").eq("lead_id", leadId!);
       if (error) throw error;
-      return data;
+      return [...(data ?? [])].sort((a, b) => {
+        const ta = new Date(a.sent_at ?? a.received_at ?? a.created_at).getTime();
+        const tb = new Date(b.sent_at ?? b.received_at ?? b.created_at).getTime();
+        return tb - ta;
+      }) as Tables<"email_log">[];
+    },
+  });
+}
+
+export function useSyncInboxEmails() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("sync-inbox-emails", { body: {} });
+      if (error) throw error;
+      return data as { ok?: boolean; synced?: number; error?: string };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: pipelineQueryKeys.leads });
+      qc.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === "pipeline-email-log",
+      });
+      qc.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === "pipeline-activities",
+      });
     },
   });
 }

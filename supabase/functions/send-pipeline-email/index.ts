@@ -14,6 +14,29 @@ function interpolate(html: string, vars: Record<string, string>): string {
   return out;
 }
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function appendOpenPixel(html: string, pixelUrl: string): string {
+  const tag =
+    `<img src="${pixelUrl}" width="1" height="1" style="display:none" alt="" referrerpolicy="no-referrer-when-downgrade" />`;
+  if (html.toLowerCase().includes("</body>")) {
+    return html.replace(/<\/body>/i, `${tag}</body>`);
+  }
+  return html + tag;
+}
+
+function wrapLinksForTracking(html: string, eid: string, base: string): string {
+  return html.replace(
+    /<a\s+([^>]*\bhref=)(["'])(https?:\/\/[^"']+)\2([^>]*)>/gi,
+    (_m, pre: string, q: string, url: string, rest: string) => {
+      const enc = encodeURIComponent(url);
+      return `<a ${pre}${q}${base}?eid=${eid}&t=click&u=${enc}${q}${rest}>`;
+    },
+  );
+}
+
 async function getAppOnlyGraphToken(): Promise<string> {
   const tenant = Deno.env.get("AZURE_TENANT_ID") || Deno.env.get("MICROSOFT_TENANT_ID");
   const clientId = Deno.env.get("AZURE_CLIENT_ID") || Deno.env.get("MICROSOFT_CLIENT_ID");
@@ -37,6 +60,25 @@ async function getAppOnlyGraphToken(): Promise<string> {
   const j = await res.json();
   if (!res.ok) throw new Error(`Token: ${JSON.stringify(j)}`);
   return j.access_token as string;
+}
+
+async function fetchLatestSentMessage(
+  token: string,
+  sender: string,
+  toEmail: string,
+): Promise<{ id: string; conversationId?: string } | null> {
+  const esc = toEmail.replace(/'/g, "''");
+  const filter = `toRecipients/any(r:r/emailAddress/address eq '${esc}')`;
+  const url =
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/mailFolders/sentItems/messages?$filter=${
+      encodeURIComponent(filter)
+    }&$top=3&$orderby=sentDateTime desc&$select=id,conversationId,sentDateTime`;
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const v = j.value;
+  if (!Array.isArray(v) || v.length === 0) return null;
+  return { id: v[0].id as string, conversationId: v[0].conversationId as string | undefined };
 }
 
 Deno.serve(async (req) => {
@@ -75,6 +117,7 @@ Deno.serve(async (req) => {
       email_log_id?: string;
       subject?: string;
       body_html?: string;
+      in_reply_to?: string;
     };
 
     if (!body.lead_id) {
@@ -112,8 +155,8 @@ Deno.serve(async (req) => {
         .eq("organization_id", lead.organization_id)
         .single();
       if (tpl) {
-        subject = subject || tpl.subject;
-        html = html || tpl.body_html;
+        subject = subject || (tpl.subject as string);
+        html = html || (tpl.body_html as string);
       }
     }
 
@@ -126,8 +169,64 @@ Deno.serve(async (req) => {
     subject = interpolate(subject, vars);
     html = interpolate(html, vars);
 
+    if (!subject.trim() || !html.trim()) {
+      return new Response(JSON.stringify({ error: "Asunto y cuerpo requeridos" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const sender = Deno.env.get("SENDER_EMAIL") || "comercial@kawiil.mx";
     const token = await getAppOnlyGraphToken();
+
+    const effectiveLogId = body.email_log_id ?? crypto.randomUUID();
+    const bodyText = stripHtml(html);
+    const preNow = new Date().toISOString();
+
+    if (!body.email_log_id) {
+      await svc.from("email_log").insert({
+        id: effectiveLogId,
+        lead_id: lead.id,
+        template_id: body.template_id || null,
+        to_email: to,
+        subject,
+        status: "sent",
+        sent_at: preNow,
+        body_html: html,
+        body_text: bodyText,
+        from_email: sender,
+        from_name: "Kawiil",
+        direction: "outbound",
+        in_reply_to: body.in_reply_to || null,
+      });
+    }
+
+    const trackingOn = Deno.env.get("EMAIL_TRACKING") !== "false";
+    const trackingBase = `${supabaseUrl}/functions/v1/email-tracking`;
+    let htmlToSend = html;
+    if (trackingOn) {
+      htmlToSend = wrapLinksForTracking(htmlToSend, effectiveLogId, trackingBase);
+      htmlToSend = appendOpenPixel(htmlToSend, `${trackingBase}?eid=${effectiveLogId}&t=open`);
+    }
+
+    const messagePayload: Record<string, unknown> = {
+      subject,
+      body: { contentType: "HTML", content: htmlToSend },
+      toRecipients: [{ emailAddress: { address: to } }],
+    };
+
+    if (body.in_reply_to) {
+      const om = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${
+          encodeURIComponent(sender)
+        }/messages/${body.in_reply_to}?$select=conversationId`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (om.ok) {
+        const oj = await om.json();
+        if (oj.conversationId) messagePayload.conversationId = oj.conversationId;
+      }
+    }
 
     const graphRes = await fetch(
       `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,
@@ -138,11 +237,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          message: {
-            subject,
-            body: { contentType: "HTML", content: html },
-            toRecipients: [{ emailAddress: { address: to } }],
-          },
+          message: messagePayload,
           saveToSentItems: true,
         }),
       },
@@ -150,44 +245,48 @@ Deno.serve(async (req) => {
 
     if (!graphRes.ok) {
       const errText = await graphRes.text();
-      if (body.email_log_id) {
-        await svc.from("email_log").update({
-          status: "failed",
-          error_message: errText.slice(0, 500),
-        }).eq("id", body.email_log_id);
-      }
+      await svc.from("email_log").update({
+        status: "failed",
+        error_message: errText.slice(0, 500),
+        sent_at: null,
+      }).eq("id", effectiveLogId);
       throw new Error(`Graph sendMail: ${errText.slice(0, 400)}`);
     }
 
-    let graphId: string | null = null;
+    await new Promise((r) => setTimeout(r, 800));
+    const sentMeta = await fetchLatestSentMessage(token, sender, to);
+    const graphId = sentMeta?.id ?? null;
+    const conversationId = sentMeta?.conversationId ?? null;
 
-    if (body.email_log_id) {
-      await svc.from("email_log").update({
-        status: "sent",
-        sent_at: new Date().toISOString(),
-        subject,
-        graph_message_id: graphId,
-      }).eq("id", body.email_log_id);
-    } else {
-      await svc.from("email_log").insert({
-        lead_id: lead.id,
-        template_id: body.template_id || null,
-        to_email: to,
-        subject,
-        status: "sent",
-        sent_at: new Date().toISOString(),
-        graph_message_id: graphId,
-      });
-    }
+    const now = new Date().toISOString();
+
+    await svc.from("email_log").update({
+      status: "sent",
+      sent_at: now,
+      subject,
+      body_html: html,
+      body_text: bodyText,
+      from_email: sender,
+      from_name: "Kawiil",
+      direction: "outbound",
+      graph_message_id: graphId,
+      conversation_id: conversationId,
+      in_reply_to: body.in_reply_to || null,
+      error_message: null,
+    }).eq("id", effectiveLogId);
 
     await svc.from("lead_activities").insert({
       lead_id: lead.id,
       user_id: user.id,
       type: "email_sent",
-      metadata: { template_id: body.template_id, email_log_id: body.email_log_id },
+      metadata: {
+        template_id: body.template_id,
+        email_log_id: effectiveLogId,
+        subject,
+      },
     });
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, email_log_id: effectiveLogId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

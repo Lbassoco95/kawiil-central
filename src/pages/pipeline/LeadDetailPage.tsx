@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useLeadDetail,
   useLeadActivities,
-  useLeadEmailLog,
   useLeadTasks,
   usePipelineStages,
   useUpdateLead,
@@ -13,6 +12,7 @@ import {
   useMoveLeadStage,
   pipelineQueryKeys,
 } from "@/hooks/usePipeline";
+import { LeadEmailPanel } from "@/components/pipeline/LeadEmailPanel";
 import { useProfiles } from "@/hooks/useTasks";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -104,7 +104,6 @@ export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: lead, isLoading } = useLeadDetail(id);
   const { data: activities = [] } = useLeadActivities(id);
-  const { data: emails = [] } = useLeadEmailLog(id);
   const { data: tasks = [] } = useLeadTasks(id);
   const { data: stages = [] } = usePipelineStages();
   const { data: profiles = [] } = useProfiles();
@@ -490,49 +489,7 @@ export default function LeadDetailPage() {
 
         {/* Right column: Emails + Activity Timeline */}
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Correos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm max-h-[200px] overflow-y-auto">
-              {emails.length === 0 ? (
-                <p className="text-muted-foreground">Sin envíos registrados</p>
-              ) : (
-                emails.map((e) => (
-                  <div key={e.id} className="border-b border-border/50 pb-2">
-                    <p className="font-medium truncate">{e.subject}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Badge
-                        variant={
-                          e.status === "opened" || e.status === "clicked"
-                            ? "default"
-                            : e.status === "sent"
-                              ? "secondary"
-                              : "outline"
-                        }
-                        className="text-[10px]"
-                      >
-                        {e.status === "sent" && "Enviado"}
-                        {e.status === "opened" && "Abierto"}
-                        {e.status === "clicked" && "Click"}
-                        {!["sent", "opened", "clicked"].includes(e.status) && e.status}
-                      </Badge>
-                      {e.sent_at && (
-                        <span>
-                          {new Date(e.sent_at).toLocaleDateString("es-MX", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+          <LeadEmailPanel leadId={lead.id} leadEmail={lead.email || ""} leadName={lead.full_name} />
 
           <Card>
             <CardHeader>

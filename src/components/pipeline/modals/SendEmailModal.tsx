@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import DOMPurify from "dompurify";
 import {
   Dialog,
   DialogContent,
@@ -40,12 +41,20 @@ const emailSchema = z.object({
 
 type EmailForm = z.infer<typeof emailSchema>;
 
+export type ReplyToEmail = {
+  graph_message_id: string | null;
+  subject: string;
+  from_email: string | null;
+  body_html?: string | null;
+};
+
 interface Props {
   open: boolean;
-  onOpenChange: (v: boolean) => void;
+  onClose: () => void;
   leadId: string;
   leadName: string;
   leadEmail: string | null;
+  replyTo?: ReplyToEmail | null;
 }
 
 function replaceVariables(text: string, leadName: string): string {
@@ -55,7 +64,7 @@ function replaceVariables(text: string, leadName: string): string {
     .replace(/\{\{full_name\}\}/gi, leadName);
 }
 
-export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail }: Props) {
+export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, replyTo }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { data: templates = [] } = useEmailTemplates();
@@ -72,10 +81,20 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
     },
   });
 
-  // Reset email when lead changes
   useEffect(() => {
+    if (!open) return;
     if (leadEmail) form.setValue("to_email", leadEmail);
-  }, [leadEmail, form]);
+    if (replyTo?.subject) {
+      const base = replyTo.subject.replace(/^Re:\s*/i, "");
+      form.setValue("subject", `Re: ${base}`);
+    } else {
+      form.setValue("subject", "");
+    }
+    form.setValue("body_html", "");
+    form.setValue("template_id", undefined);
+    form.setValue("schedule_follow_up", false);
+    setShowPreview(false);
+  }, [open, leadEmail, replyTo, form]);
 
   const watchFollowUp = form.watch("schedule_follow_up");
   const watchTemplateId = form.watch("template_id");
@@ -85,7 +104,9 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
     const tpl = templates.find((t) => t.id === templateId);
     if (!tpl) return;
     form.setValue("template_id", templateId);
-    form.setValue("subject", replaceVariables(tpl.subject, leadName));
+    if (!replyTo) {
+      form.setValue("subject", replaceVariables(tpl.subject, leadName));
+    }
     form.setValue("body_html", replaceVariables(tpl.body_html || "", leadName));
   };
 
@@ -93,17 +114,16 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
     if (!user) return;
     setSaving(true);
     try {
-      // Create email_log entry first with status "sending"
       const { data: logEntry, error: emailErr } = await supabase.from("email_log").insert({
         lead_id: leadId,
         template_id: data.template_id || null,
         to_email: data.to_email,
         subject: data.subject,
         status: "sending",
+        in_reply_to: replyTo?.graph_message_id || null,
       }).select("id").single();
       if (emailErr) throw emailErr;
 
-      // Call Edge Function to send via Microsoft Graph (from comercial@kawiil.mx)
       const { data: result, error: fnErr } = await supabase.functions.invoke(
         "send-pipeline-email",
         {
@@ -113,12 +133,12 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
             email_log_id: logEntry.id,
             subject: data.subject,
             body_html: data.body_html,
+            in_reply_to: replyTo?.graph_message_id || undefined,
           },
         },
       );
 
       if (fnErr) {
-        // Update email_log to failed
         await supabase.from("email_log").update({ status: "failed", error_message: fnErr.message || "Error desconocido" }).eq("id", logEntry.id);
         throw new Error(fnErr.message || "Error al enviar email");
       }
@@ -127,7 +147,6 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
         throw new Error(result.error);
       }
 
-      // Schedule follow-up if requested
       if (data.schedule_follow_up && data.follow_up_date) {
         await supabase.from("lead_tasks" as never).insert({
           lead_id: leadId,
@@ -144,7 +163,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(leadId) });
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.emailLog(leadId) });
       toast.success("Email enviado desde comercial@kawiil.mx");
-      onOpenChange(false);
+      onClose();
       form.reset({ to_email: leadEmail || "", subject: "", body_html: "", schedule_follow_up: false });
       setShowPreview(false);
     } catch (e: unknown) {
@@ -157,16 +176,15 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
   const activeTemplates = templates.filter((t) => t.is_active);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Enviar email
+            {replyTo ? "Responder correo" : "Enviar email"}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
-          {/* Template selector */}
           {activeTemplates.length > 0 && (
             <div>
               <Label>Usar plantilla</Label>
@@ -240,7 +258,9 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
             {showPreview ? (
               <div
                 className="border rounded-md p-3 min-h-[120px] text-sm prose prose-sm max-w-none bg-muted/20"
-                dangerouslySetInnerHTML={{ __html: watchBody }}
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(watchBody || "", { USE_PROFILES: { html: true } }),
+                }}
               />
             ) : (
               <Textarea
@@ -251,7 +271,18 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
             )}
           </div>
 
-          {/* Follow-up scheduling */}
+          {replyTo?.body_html ? (
+            <div className="border-l-2 border-muted pl-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Mensaje original</p>
+              <div
+                className="text-sm prose prose-sm dark:prose-invert max-w-none opacity-70 max-h-40 overflow-y-auto"
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(replyTo.body_html, { USE_PROFILES: { html: true } }),
+                }}
+              />
+            </div>
+          ) : null}
+
           <div className="flex items-center gap-2">
             <Checkbox
               id="email-follow-up"
@@ -272,7 +303,6 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
             </div>
           )}
 
-          {/* Email tracking info */}
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-3">
             <p className="text-xs text-blue-700 dark:text-blue-300">
               El email se enviará desde <strong>comercial@kawiil.mx</strong> y se
@@ -282,7 +312,7 @@ export function SendEmailModal({ open, onOpenChange, leadId, leadName, leadEmail
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
             <Button type="submit" disabled={saving}>

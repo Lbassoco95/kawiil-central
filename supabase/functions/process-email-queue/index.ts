@@ -6,6 +6,48 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function appendOpenPixel(html: string, pixelUrl: string): string {
+  const tag =
+    `<img src="${pixelUrl}" width="1" height="1" style="display:none" alt="" referrerpolicy="no-referrer-when-downgrade" />`;
+  if (html.toLowerCase().includes("</body>")) {
+    return html.replace(/<\/body>/i, `${tag}</body>`);
+  }
+  return html + tag;
+}
+
+function wrapLinksForTracking(html: string, eid: string, base: string): string {
+  return html.replace(
+    /<a\s+([^>]*\bhref=)(["'])(https?:\/\/[^"']+)\2([^>]*)>/gi,
+    (_m, pre: string, q: string, url: string, rest: string) => {
+      const enc = encodeURIComponent(url);
+      return `<a ${pre}${q}${base}?eid=${eid}&t=click&u=${enc}${q}${rest}>`;
+    },
+  );
+}
+
+async function fetchLatestSentMessage(
+  token: string,
+  sender: string,
+  toEmail: string,
+): Promise<{ id: string; conversationId?: string } | null> {
+  const esc = toEmail.replace(/'/g, "''");
+  const filter = `toRecipients/any(r:r/emailAddress/address eq '${esc}')`;
+  const url =
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/mailFolders/sentItems/messages?$filter=${
+      encodeURIComponent(filter)
+    }&$top=3&$orderby=sentDateTime desc&$select=id,conversationId,sentDateTime`;
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const v = j.value;
+  if (!Array.isArray(v) || v.length === 0) return null;
+  return { id: v[0].id as string, conversationId: v[0].conversationId as string | undefined };
+}
+
 function interpolate(html: string, vars: Record<string, string>): string {
   let out = html;
   for (const [k, v] of Object.entries(vars)) {
@@ -88,6 +130,8 @@ Deno.serve(async (req) => {
     }
 
     const sender = Deno.env.get("SENDER_EMAIL") || "comercial@kawiil.mx";
+    const trackingOn = Deno.env.get("EMAIL_TRACKING") !== "false";
+    const trackingBase = `${supabaseUrl}/functions/v1/email-tracking`;
 
     for (const row of rows) {
       const { data: lead, error: leErr } = await svc.from("leads").select("*").eq("id", row.lead_id).single();
@@ -146,6 +190,13 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      const bodyText = stripHtml(html);
+      let htmlToSend = html;
+      if (trackingOn) {
+        htmlToSend = wrapLinksForTracking(htmlToSend, row.id as string, trackingBase);
+        htmlToSend = appendOpenPixel(htmlToSend, `${trackingBase}?eid=${row.id}&t=open`);
+      }
+
       const graphRes = await fetch(
         `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,
         {
@@ -157,7 +208,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             message: {
               subject,
-              body: { contentType: "HTML", content: html },
+              body: { contentType: "HTML", content: htmlToSend },
               toRecipients: [{ emailAddress: { address: lead.email } }],
             },
             saveToSentItems: true,
@@ -175,10 +226,22 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      await new Promise((r) => setTimeout(r, 600));
+      const sentMeta = await fetchLatestSentMessage(token, sender, lead.email as string);
+      const graphId = sentMeta?.id ?? null;
+      const conversationId = sentMeta?.conversationId ?? null;
+
       await svc.from("email_log").update({
         status: "sent",
         sent_at: new Date().toISOString(),
         subject,
+        body_html: html,
+        body_text: bodyText,
+        from_email: sender,
+        from_name: "Kawiil",
+        direction: "outbound",
+        graph_message_id: graphId,
+        conversation_id: conversationId,
       }).eq("id", row.id);
 
       await svc.from("lead_activities").insert({

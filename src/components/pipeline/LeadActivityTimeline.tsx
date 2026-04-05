@@ -13,6 +13,7 @@ import {
   MousePointerClick,
   CheckCircle2,
   Clock,
+  Inbox,
 } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -45,6 +46,7 @@ const typeConfig: Record<string, { icon: typeof Phone; color: string; label: str
   email_sent: { icon: Mail, color: "text-blue-600 bg-blue-100", label: "Email enviado" },
   email_opened: { icon: MailOpen, color: "text-blue-500 bg-blue-50", label: "Email abierto" },
   email_clicked: { icon: MousePointerClick, color: "text-blue-700 bg-blue-100", label: "Click en email" },
+  email_received: { icon: Inbox, color: "text-sky-600 bg-sky-100", label: "Email recibido" },
   whatsapp: { icon: MessageCircle, color: "text-emerald-600 bg-emerald-100", label: "WhatsApp" },
   meeting: { icon: Calendar, color: "text-purple-600 bg-purple-100", label: "Reunión" },
   note: { icon: StickyNote, color: "text-amber-600 bg-amber-100", label: "Nota" },
@@ -82,6 +84,11 @@ function getActivityDescription(type: string, metadata: Record<string, unknown> 
         .join(" — ");
     case "email_sent":
       return metadata.subject ? `Asunto: ${metadata.subject}` : "";
+    case "email_received": {
+      const from = metadata.from != null ? String(metadata.from) : "";
+      const subj = metadata.subject != null ? String(metadata.subject) : "";
+      return [from && `De: ${from}`, subj && `Asunto: ${subj}`].filter(Boolean).join(" — ");
+    }
     case "whatsapp":
       return [
         metadata.direction === "inbound" ? "Recibido" : "Enviado",
