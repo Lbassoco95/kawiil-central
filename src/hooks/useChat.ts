@@ -358,7 +358,7 @@ export function useChat() {
       role: string,
       content: string,
       attachments?: ChatAttachmentMeta[] | null
-    ) => {
+    ): Promise<string | undefined> => {
       const payload: Record<string, unknown> = {
         conversation_id: conversationId,
         role,
@@ -374,6 +374,8 @@ export function useChat() {
         .select("id")
         .single();
       if (insertErr) throw insertErr;
+
+      const insertedId = (msgData as { id?: string } | null)?.id;
 
       const { error: convErr } = await supabase
         .from("chat_conversations" as any)
@@ -400,6 +402,8 @@ export function useChat() {
           })
           .catch(() => {});
       }
+
+      return insertedId;
     },
     [user]
   );
@@ -664,7 +668,16 @@ export function useChat() {
               ...prev,
               { role: "assistant", content: plain, activityLog: log.length ? log : undefined },
             ]);
-            await saveMessage(convId, "assistant", assistantContent, null);
+            const aid = await saveMessage(convId, "assistant", assistantContent, null);
+            if (aid) {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1];
+                if (last?.role === "assistant" && !last.isError) {
+                  return prev.map((m, i) => (i === prev.length - 1 ? { ...m, id: aid } : m));
+                }
+                return prev;
+              });
+            }
             qc.invalidateQueries({ queryKey: ["chat-conversations"] });
           } else {
             throw new Error("El servidor respondió sin contenido de texto.");
@@ -770,7 +783,16 @@ export function useChat() {
             }
             return prev;
           });
-          await saveMessage(convId, "assistant", assistantContent, null);
+          const aid = await saveMessage(convId, "assistant", assistantContent, null);
+          if (aid) {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "assistant" && !last.isError) {
+                return prev.map((m, i) => (i === prev.length - 1 ? { ...m, id: aid } : m));
+              }
+              return prev;
+            });
+          }
           qc.invalidateQueries({ queryKey: ["chat-conversations"] });
         } else {
           const errText =

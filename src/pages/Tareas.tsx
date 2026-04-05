@@ -11,7 +11,7 @@ import { useTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
-import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
+import { useNewTaskModal } from "@/contexts/NewTaskModalContext";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
@@ -37,7 +37,7 @@ const Tareas = () => {
   useTasksRealtime();
   const [area, setArea] = useState(() => searchParams.get("area") || "todas");
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  const { openNewTask } = useNewTaskModal();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [showAllSteps, setShowAllSteps] = useState(false);
@@ -150,7 +150,7 @@ INSTRUCCIONES:
           title="Tareas"
           description="Gestión de tareas y actividades internas"
           actions={
-            <Button size="sm" onClick={() => setShowCreate(true)}>
+            <Button size="sm" onClick={openNewTask}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
             </Button>
           }
@@ -359,7 +359,6 @@ INSTRUCCIONES:
         )}
       </div>
 
-      <TaskFormDialog open={showCreate} onOpenChange={setShowCreate} />
       <TaskDetailDialog taskId={selectedTaskId} onClose={closeTask} />
       <DeleteConfirmDialog
         open={!!deleteTarget}

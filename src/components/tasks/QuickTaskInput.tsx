@@ -1,9 +1,11 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
-import { useCreateTask } from "@/hooks/useTasks";
+import { useCreateTask, useProfiles } from "@/hooks/useTasks";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { parseQuickTaskTitle } from "@/lib/quickTaskParse";
 
 interface QuickTaskInputProps {
   projectId?: string;
@@ -17,6 +19,12 @@ interface QuickTaskInputProps {
 export function QuickTaskInput({
   projectId, clientId, area, phaseKey, placeholder, onCreated,
 }: QuickTaskInputProps) {
+  const { user } = useAuth();
+  const { data: profiles = [] } = useProfiles();
+  const profileRows = useMemo(
+    () => profiles.map((p) => ({ user_id: p.user_id, full_name: p.full_name })),
+    [profiles],
+  );
   const [title, setTitle] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,15 +36,21 @@ export function QuickTaskInput({
 
     setIsCreating(true);
     try {
+      const parsed = parseQuickTaskTitle(trimmed, {
+        profiles: profileRows,
+        defaultAssignedId: user?.id ?? null,
+      });
       await createTask.mutateAsync({
-        title: trimmed,
+        title: parsed.title,
         project_id: projectId || null,
         client_id: clientId || null,
         area: area || null,
         phase_key: phaseKey || null,
-        priority: "media",
+        priority: parsed.priority,
+        due_date: parsed.due_date || undefined,
+        assigned_to: parsed.assigned_to || undefined,
         status: "pendiente",
-      } as any);
+      });
       setTitle("");
       onCreated?.();
       inputRef.current?.focus();
@@ -56,7 +70,10 @@ export function QuickTaskInput({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleCreate(); } }}
-          placeholder={placeholder || "Nueva tarea... (Enter para crear)"}
+          placeholder={
+            placeholder ||
+            "Tarea rápida… #urgente @nombre viernes (Enter)"
+          }
           className="pl-8 h-9 text-sm"
           disabled={isCreating}
         />

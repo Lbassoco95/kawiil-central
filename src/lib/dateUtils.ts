@@ -1,5 +1,6 @@
-import { format as fnsFormat } from "date-fns";
+import { format as fnsFormat, parse } from "date-fns";
 import { es } from "date-fns/locale";
+import { fromZonedTime } from "date-fns-tz";
 
 /**
  * Zona horaria central de México (CDMX).
@@ -57,4 +58,51 @@ export function toDateStringMX(date?: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/**
+ * Inicio del día calendario `ymd` (YYYY-MM-DD) en CDMX y fin exclusivo del día siguiente, en ISO (UTC).
+ * Para filtrar timestamptz en Supabase: .gte("col", start).lt("col", endExclusive).
+ */
+export function mexicoDayRangeISO(ymd: string): { start: string; endExclusive: string } {
+  const start = fromZonedTime(parse(`${ymd} 00:00:00`, "yyyy-MM-dd HH:mm:ss", new Date(0)), CDMX_TZ);
+  const [y, mo, da] = ymd.split("-").map(Number);
+  const nextCal = new Date(y, mo - 1, da + 1);
+  const nextYmd = `${nextCal.getFullYear()}-${String(nextCal.getMonth() + 1).padStart(2, "0")}-${String(nextCal.getDate()).padStart(2, "0")}`;
+  const endExclusive = fromZonedTime(parse(`${nextYmd} 00:00:00`, "yyyy-MM-dd HH:mm:ss", new Date(0)), CDMX_TZ);
+  return { start: start.toISOString(), endExclusive: endExclusive.toISOString() };
+}
+
+/** Suma días a una fecha calendario YYYY-MM-DD (componentes locales, coherente con toDateStringMX(nowMX)). */
+export function addDaysToYmd(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  return toDateStringMX(dt);
+}
+
+/** Lunes de la semana (lun–dom) que contiene el día `ymd`. */
+export function mondayYmdContaining(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dow = dt.getDay();
+  const delta = dow === 0 ? -6 : 1 - dow;
+  dt.setDate(dt.getDate() + delta);
+  return toDateStringMX(dt);
+}
+
+/**
+ * Rango UTC [lunes 00:00 CDMX, lunes siguiente 00:00 CDMX) para la semana que contiene `ymd`.
+ */
+export function mexicoWeekRangeISOContaining(ymd: string): {
+  start: string;
+  endExclusive: string;
+  weekLabel: string;
+} {
+  const mon = mondayYmdContaining(ymd);
+  const { start } = mexicoDayRangeISO(mon);
+  const nextMonYmd = addDaysToYmd(mon, 7);
+  const endExclusive = mexicoDayRangeISO(nextMonYmd).start;
+  const sunYmd = addDaysToYmd(mon, 6);
+  const weekLabel = `${formatMX(mon, "d MMM")} – ${formatMX(sunYmd, "d MMM yyyy")}`;
+  return { start, endExclusive, weekLabel };
 }

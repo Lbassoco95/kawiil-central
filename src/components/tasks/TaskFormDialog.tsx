@@ -1,4 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { defaultDueDatePlusThreeBusinessDays } from "@/lib/quickTaskParse";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +16,7 @@ import { X, Plus, Link, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Props {
   open: boolean;
@@ -25,6 +28,7 @@ interface Props {
 }
 
 export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultClientId, defaultArea, defaultPhaseKey }: Props) {
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [area, setArea] = useState<string>(defaultArea || "");
@@ -48,6 +52,12 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     () => [...areaOptions].sort((a, b) => a.label.localeCompare(b.label, "es")),
     [areaOptions]
   );
+
+  useEffect(() => {
+    if (!open) return;
+    if (user?.id) setAssignedTo(user.id);
+    setDueDate(defaultDueDatePlusThreeBusinessDays());
+  }, [open, user?.id]);
 
   const profileOptions = useMemo(
     () =>
@@ -186,7 +196,19 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
               </Select>
             </div>
             <div>
-              <Label>Célula</Label>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Label className="mb-0">Célula</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="text-[10px] text-muted-foreground underline-offset-2 hover:underline">
+                      ¿Qué es?
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px] text-xs">
+                    La célula es el equipo o área interna responsable (p. ej. Legal, Contabilidad). Ayuda a filtrar y repartir trabajo.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <SearchableSelect
                 options={sortedAreaOptions}
                 value={area}

@@ -1556,6 +1556,64 @@ async function executeTool(
   }
 }
 
+async function fetchUserWorkSnapshot(
+  svc: ReturnType<typeof createClient>,
+  userId: string,
+  orgId: string,
+): Promise<string> {
+  const todayYmd = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+  const { count: pending } = await svc.from("tasks").select("id", { count: "exact", head: true })
+    .eq("assigned_to", userId)
+    .eq("organization_id", orgId)
+    .in("status", ["pendiente", "en_progreso", "en_revision"]);
+
+  const { count: urgent } = await svc.from("tasks").select("id", { count: "exact", head: true })
+    .eq("assigned_to", userId)
+    .eq("organization_id", orgId)
+    .in("status", ["pendiente", "en_progreso", "en_revision"])
+    .in("priority", ["urgente", "alta"]);
+
+  const { data: dueRows } = await svc.from("tasks").select("due_date")
+    .eq("assigned_to", userId)
+    .eq("organization_id", orgId)
+    .in("status", ["pendiente", "en_progreso", "en_revision"])
+    .not("due_date", "is", null);
+
+  let overdue = 0;
+  for (const t of dueRows ?? []) {
+    if (String(t.due_date).slice(0, 10) < todayYmd) overdue++;
+  }
+
+  const { data: projs } = await svc.from("projects").select("name")
+    .eq("organization_id", orgId)
+    .eq("status", "activo")
+    .order("updated_at", { ascending: false })
+    .limit(8);
+
+  const names = (projs ?? []).map((p: { name: string }) => p.name).filter(Boolean);
+
+  const { data: lastT } = await svc.from("tasks").select("title, updated_at")
+    .eq("assigned_to", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  const lastTitle = lastT?.[0]?.title;
+
+  return `## Resumen operativo del usuario (al abrir el chat)
+- Tareas pendientes asignadas a esta persona: ${pending ?? 0}
+- Prioridad alta o urgente: ${urgent ?? 0}
+- Con fecha límite ya vencida: ${overdue}
+- Proyectos activos recientes (nombres): ${names.length ? names.join(", ") : "—"}
+- Última tarea tocada: ${lastTitle ? `"${lastTitle}"` : "—"}
+Hoy es ${todayYmd} (zona Ciudad de México). Personaliza saludos y priorización con esto; confirma detalle con herramientas si hace falta.`;
+}
+
 // ─── Build system prompt ───
 function buildSystemPrompt(profile: any) {
   return `Eres **Kawiil AI**, el asistente inteligente INTERNO de Kawiil — un despacho contable y legal en México que opera como un equipo unido de profesionales llamados "Kawiilers".
@@ -1824,9 +1882,18 @@ serve(async (req) => {
       }
     }
 
+    let workSnapshot = "";
+    if (!(simple && insightLite) && orgId) {
+      try {
+        workSnapshot = "\n\n" + await fetchUserWorkSnapshot(svc, user.id, orgId);
+      } catch (e) {
+        console.warn("fetchUserWorkSnapshot:", e);
+      }
+    }
+
     let systemPrompt = simple && insightLite
       ? LITE_SYSTEM_PROMPT
-      : buildSystemPrompt(profile) + projectContext;
+      : buildSystemPrompt(profile) + workSnapshot + projectContext;
 
     const indexedNames = Array.isArray(indexed_attachment_names)
       ? indexed_attachment_names.filter((n: unknown) => typeof n === "string" && n.trim().length > 0)

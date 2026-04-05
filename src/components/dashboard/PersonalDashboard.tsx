@@ -22,12 +22,21 @@ import {
   Clock,
   AlertTriangle,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
   Sun,
   Moon,
   Sunrise,
+  BarChart3,
 } from "lucide-react";
-import { formatDateMX, toDateStringMX } from "@/lib/dateUtils";
+import {
+  formatDateMX,
+  toDateStringMX,
+  mexicoDayRangeISO,
+  mexicoWeekRangeISOContaining,
+  mondayYmdContaining,
+  addDaysToYmd,
+} from "@/lib/dateUtils";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useNavigate } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
@@ -35,6 +44,25 @@ import { useToast } from "@/hooks/use-toast";
 
 const PHRASE_FALLBACK =
   "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results";
+
+const SECTION_LABELS: Record<string, string> = {
+  inicio: "Inicio",
+  tareas: "Tareas",
+  proyectos: "Proyectos",
+  clientes: "Clientes",
+  documentos: "Documentos",
+  asistente: "Asistente IA",
+  asistenteia: "Asistente IA",
+  microsoft365: "Microsoft 365",
+  notificaciones: "Notificaciones",
+  correo: "Correo",
+  calendario: "Calendario",
+};
+
+function formatSectionLabel(raw: string): string {
+  const k = raw.toLowerCase();
+  return SECTION_LABELS[k] || raw;
+}
 
 export function PersonalDashboard() {
   const { user } = useAuth();
@@ -136,39 +164,129 @@ export function PersonalDashboard() {
     return () => clearInterval(interval);
   }, [user, fetchPhrase]);
 
-  // My tasks
-  const { data: myTasks } = useQuery({
-    queryKey: ["personal-tasks", user?.id],
+  const todayYmd = toDateStringMX(today);
+  const weekBounds = useMemo(() => mexicoWeekRangeISOContaining(todayYmd), [todayYmd]);
+  const weekMondayYmd = useMemo(() => mondayYmdContaining(todayYmd), [todayYmd]);
+  const weekSundayYmd = useMemo(() => addDaysToYmd(weekMondayYmd, 6), [weekMondayYmd]);
+
+  // Todas las tareas pendientes asignadas (sin límite) para KPIs y conteos reales
+  const { data: pendingTasksSnapshot = [] } = useQuery({
+    queryKey: ["personal-pending-snapshot", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
         .select("id, title, status, priority, due_date, area, project_id")
         .eq("assigned_to", user!.id)
         .in("status", ["pendiente", "en_progreso", "en_revision"])
-        .order("due_date", { ascending: true })
-        .limit(15);
+        .order("due_date", { ascending: true });
       if (error) throw error;
-      return data;
+      return data ?? [];
     },
     enabled: !!user,
   });
 
-  // My completed today
+  const myTasks = pendingTasksSnapshot.slice(0, 15);
+
+  // Completadas hoy (zona CDMX): completed_at preferente; si falta, updated_at en el mismo rango
   const { data: completedToday } = useQuery({
-    queryKey: ["personal-completed-today", user?.id, toDateStringMX(today)],
+    queryKey: ["personal-completed-today", user?.id, todayYmd],
     queryFn: async () => {
-      const todayStr = toDateStringMX(today);
-      const { count, error } = await supabase
+      const { start, endExclusive } = mexicoDayRangeISO(todayYmd);
+
+      const { count: withCompletedAt, error: e1 } = await supabase
         .from("tasks")
         .select("id", { count: "exact", head: true })
         .eq("assigned_to", user!.id)
         .eq("status", "completada")
-        .gte("updated_at", todayStr);
-      if (error) throw error;
-      return count ?? 0;
+        .not("completed_at", "is", null)
+        .gte("completed_at", start)
+        .lt("completed_at", endExclusive);
+      if (e1) throw e1;
+
+      const { count: fallbackUpdated, error: e2 } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", user!.id)
+        .eq("status", "completada")
+        .is("completed_at", null)
+        .gte("updated_at", start)
+        .lt("updated_at", endExclusive);
+      if (e2) throw e2;
+
+      return (withCompletedAt ?? 0) + (fallbackUpdated ?? 0);
     },
     enabled: !!user,
   });
+
+  const { data: weekActivity } = useQuery({
+    queryKey: ["personal-week-activity", user?.id, weekBounds.start],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("activity_log")
+        .select("entity_type")
+        .eq("user_id", user!.id)
+        .gte("created_at", weekBounds.start)
+        .lt("created_at", weekBounds.endExclusive);
+      if (error) throw error;
+      const bySection = new Map<string, number>();
+      for (const row of data ?? []) {
+        const k = row.entity_type || "otro";
+        bySection.set(k, (bySection.get(k) ?? 0) + 1);
+      }
+      const bySectionSorted = [...bySection.entries()].sort((a, b) => b[1] - a[1]);
+      return { total: data?.length ?? 0, bySectionSorted };
+    },
+    enabled: !!user,
+  });
+
+  const { data: weekCompletedCount = 0 } = useQuery({
+    queryKey: ["personal-week-completed", user?.id, weekBounds.start],
+    queryFn: async () => {
+      const { start, endExclusive } = weekBounds;
+      const { count: withCompletedAt, error: e1 } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", user!.id)
+        .eq("status", "completada")
+        .not("completed_at", "is", null)
+        .gte("completed_at", start)
+        .lt("completed_at", endExclusive);
+      if (e1) throw e1;
+      const { count: fallbackUpdated, error: e2 } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", user!.id)
+        .eq("status", "completada")
+        .is("completed_at", null)
+        .gte("updated_at", start)
+        .lt("updated_at", endExclusive);
+      if (e2) throw e2;
+      return (withCompletedAt ?? 0) + (fallbackUpdated ?? 0);
+    },
+    enabled: !!user,
+  });
+
+  const { data: weekMoods = [] } = useQuery({
+    queryKey: ["personal-week-moods", user?.id, weekMondayYmd],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("mood_checkins")
+        .select("check_date, mood, time_of_day")
+        .eq("user_id", user!.id)
+        .gte("check_date", weekMondayYmd)
+        .lte("check_date", weekSundayYmd)
+        .order("check_date", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user,
+  });
+
+  const weekMoodAverage = useMemo(() => {
+    if (!weekMoods.length) return null;
+    const sum = weekMoods.reduce((acc, r) => acc + (r.mood ?? 0), 0);
+    return Math.round((sum / weekMoods.length) * 10) / 10;
+  }, [weekMoods]);
 
   // My clients
   const { data: myClients } = useQuery({
@@ -226,11 +344,17 @@ export function PersonalDashboard() {
     setNewReminder("");
   };
 
-  const overdueTasks = myTasks?.filter(
-    (t) => t.due_date && new Date(t.due_date) < today
-  ).length ?? 0;
+  const overdueTasks =
+    pendingTasksSnapshot.filter((t) => t.due_date && new Date(t.due_date) < today).length ?? 0;
 
-  const totalPending = myTasks?.length ?? 0;
+  const totalPending = pendingTasksSnapshot.length;
+
+  const dueTodayPending =
+    pendingTasksSnapshot.filter((t) => {
+      if (!t.due_date) return false;
+      const d = t.due_date.slice(0, 10);
+      return d === todayYmd;
+    }).length ?? 0;
   const firstName = profile?.full_name?.split(" ")[0] || "";
 
   const priorityDot = (p: string) => {
@@ -249,20 +373,23 @@ export function PersonalDashboard() {
     return "Buenas noches";
   };
 
-  const dueThisWeek = myTasks?.filter((t) => {
-    if (!t.due_date) return false;
-    const d = new Date(t.due_date);
-    const weekEnd = new Date(today);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    return d >= today && d <= weekEnd;
-  }).length ?? 0;
+  const dueThisWeek =
+    pendingTasksSnapshot.filter((t) => {
+      if (!t.due_date) return false;
+      const d = new Date(t.due_date);
+      const weekEnd = new Date(today);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      return d >= today && d <= weekEnd;
+    }).length ?? 0;
 
-  const urgentCount = myTasks?.filter((t) => t.priority === "urgente" || t.priority === "alta").length ?? 0;
+  const urgentCount =
+    pendingTasksSnapshot.filter((t) => t.priority === "urgente" || t.priority === "alta").length ?? 0;
 
-  const nextAction = myTasks?.[0] ?? null;
+  const nextAction = pendingTasksSnapshot[0] ?? null;
 
-  const dailyTotal = totalPending + (completedToday ?? 0);
-  const dailyProgress = dailyTotal > 0 ? Math.round(((completedToday ?? 0) / dailyTotal) * 100) : 0;
+  const dailyTotal = dueTodayPending + (completedToday ?? 0);
+  const dailyProgress =
+    dailyTotal > 0 ? Math.round(((completedToday ?? 0) / dailyTotal) * 100) : 0;
 
   const TimeIcon = (() => {
     const h = today.getHours();
@@ -401,6 +528,12 @@ export function PersonalDashboard() {
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
             >
               Recordatorios ({pendingReminders.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="mi-semana"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
+            >
+              Mi semana
             </TabsTrigger>
             <TabsTrigger
               value="rendimiento"
@@ -618,6 +751,74 @@ export function PersonalDashboard() {
           )}
         </TabsContent>
 
+        {/* Mi semana */}
+        <TabsContent value="mi-semana" className="mt-6 space-y-6 animate-fade-in">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <CalendarRange className="h-4 w-4 shrink-0" />
+            <p className="text-xs">{weekBounds.weekLabel} · semana en horario CDMX</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="glass-card p-4">
+              <BarChart3 className="h-4 w-4 text-primary mb-2" />
+              <p className="text-2xl font-bold text-foreground tabular-nums">{weekActivity?.total ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Registros de navegación</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/tareas?status=completada")}
+              className="glass-card p-4 text-left row-hover transition-colors"
+            >
+              <CheckCircle2 className="h-4 w-4 text-accent mb-2" />
+              <p className="text-2xl font-bold text-foreground tabular-nums">{weekCompletedCount}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Tareas completadas · ver en Tareas</p>
+            </button>
+            <div className="glass-card p-4">
+              <Sun className="h-4 w-4 text-warning mb-2" />
+              <p className="text-2xl font-bold text-foreground tabular-nums">
+                {weekMoodAverage != null ? weekMoodAverage : "—"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Promedio ánimo (1–5)</p>
+            </div>
+          </div>
+          {weekActivity && weekActivity.bySectionSorted.length > 0 && (
+            <div>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Secciones más visitadas
+              </h3>
+              <ul className="space-y-2">
+                {weekActivity.bySectionSorted.slice(0, 10).map(([section, n]) => (
+                  <li key={section} className="flex justify-between gap-3 text-sm">
+                    <span className="text-foreground truncate">{formatSectionLabel(section)}</span>
+                    <span className="text-muted-foreground tabular-nums shrink-0">{n}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {weekMoods.length > 0 ? (
+            <div>
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Check-ins de ánimo
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {weekMoods.map((row) => (
+                  <div
+                    key={`${row.check_date}-${row.time_of_day}`}
+                    className="text-xs px-2.5 py-1.5 rounded-lg bg-secondary/50 text-foreground"
+                  >
+                    {formatDateMX(row.check_date)} · {row.time_of_day === "morning" ? "mañana" : "tarde"} ·{" "}
+                    {row.mood}/5
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Sin check-ins de ánimo esta semana. Registra cómo te sientes desde el panel derecho.
+            </p>
+          )}
+        </TabsContent>
+
         {/* Rendimiento */}
         <TabsContent value="rendimiento" className="mt-6 space-y-8 animate-fade-in">
           <PerformanceChart />
@@ -638,7 +839,12 @@ export function PersonalDashboard() {
           <div className="h-2.5 bg-secondary/60 rounded-full overflow-hidden">
             <div className="h-full gradient-bar rounded-full transition-all duration-700 ease-out" style={{ width: `${dailyProgress}%` }} />
           </div>
-          <p className="text-xs text-muted-foreground mt-2">{completedToday ?? 0} de {dailyTotal} tareas</p>
+          <p className="text-xs text-muted-foreground mt-2">
+            {completedToday ?? 0} de {dailyTotal} tareas para hoy
+            {totalPending > 0 && dailyTotal === 0 ? (
+              <span className="block mt-1">({totalPending} pendientes en total)</span>
+            ) : null}
+          </p>
         </div>
 
         {/* Mood check-in */}

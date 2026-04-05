@@ -109,6 +109,41 @@ export type Database = {
           },
         ]
       }
+      ai_feedback: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          chat_message_id: string | null
+          rating: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          chat_message_id?: string | null
+          rating: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          chat_message_id?: string | null
+          rating?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_feedback_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_declarations: {
         Row: {
           created_at: string

@@ -107,6 +107,7 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
       qc.invalidateQueries({ queryKey: ["mood-checkin"] });
       qc.invalidateQueries({ queryKey: ["mood-history"] });
       qc.invalidateQueries({ queryKey: ["mood-streak"] });
+      qc.invalidateQueries({ queryKey: ["personal-week-moods"] });
       toast.success("Registrado");
       setSelectedMood(null);
     },

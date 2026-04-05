@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,17 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { useState, useMemo } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { formatDateMX } from "@/lib/dateUtils";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
@@ -34,45 +45,128 @@ const AREA_ORDER: string[] = [
   "cumplimiento", "juicios", "gestoria", "constitucion_nacional",
 ];
 
+type StatusFilterTab = "activo" | "completado" | "pausado" | "todos";
+type SortKey = "activity" | "name" | "created_at" | "progress";
+
+const CHUNK = 90;
+
 const Proyectos = () => {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useProjects();
   const deleteProject = useDeleteProject();
   const { isAdminOrManager } = useUserRole();
   const { getCelulaLabel } = useAreaOptions();
+  const { data: orgUsers = [] } = useOrgUsers();
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
   const [minutesOpen, setMinutesOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [selectedArea, setSelectedArea] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterTab>("activo");
+  const [sortKey, setSortKey] = useState<SortKey>("activity");
+
+  const profileName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of orgUsers) {
+      m.set(u.user_id, u.full_name || u.user_id);
+    }
+    return m;
+  }, [orgUsers]);
+
+  const projectsByStatus = useMemo(() => {
+    if (!projects) return [];
+    if (statusFilter === "todos") return projects;
+    return projects.filter((p) => p.status === statusFilter);
+  }, [projects, statusFilter]);
 
   const availableAreas = useMemo(() => {
-    if (!projects) return [];
+    if (!projectsByStatus.length) return [];
     const areaSet = new Set<string>();
-    for (const p of projects) areaSet.add(p.area || "sin_area");
+    for (const p of projectsByStatus) areaSet.add(p.area || "sin_area");
     return AREA_ORDER.filter((a) => areaSet.has(a)).concat(areaSet.has("sin_area") ? ["sin_area"] : []);
-  }, [projects]);
+  }, [projectsByStatus]);
 
-  const filtered = useMemo(() => {
-    if (!projects) return [];
-    let result = projects;
+  const narrowedIds = useMemo(() => {
+    let result = projectsByStatus;
     if (selectedArea !== "all") {
-      result = result.filter((p) => selectedArea === "sin_area" ? !p.area : p.area === selectedArea);
+      result = result.filter((p) => (selectedArea === "sin_area" ? !p.area : p.area === selectedArea));
     }
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
-        (p) => p.name.toLowerCase().includes(q) || (p as any).clients?.name?.toLowerCase().includes(q)
+        (p) => p.name.toLowerCase().includes(q) || (p as any).clients?.name?.toLowerCase().includes(q),
       );
     }
-    result.sort((a, b) => {
-      const clientA = ((a as any).clients?.name || "ZZZ").toLowerCase();
-      const clientB = ((b as any).clients?.name || "ZZZ").toLowerCase();
-      if (clientA !== clientB) return clientA.localeCompare(clientB);
-      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    return result.map((p) => p.id);
+  }, [projectsByStatus, selectedArea, search]);
+
+  const narrowedIdsKey = narrowedIds.slice().sort().join(",");
+
+  const { data: taskRows = [] } = useQuery({
+    queryKey: ["proyectos-task-stats", narrowedIdsKey],
+    enabled: narrowedIds.length > 0,
+    queryFn: async () => {
+      const all: { project_id: string | null; status: string }[] = [];
+      for (let i = 0; i < narrowedIds.length; i += CHUNK) {
+        const slice = narrowedIds.slice(i, i + CHUNK);
+        const { data, error } = await supabase.from("tasks").select("project_id, status").in("project_id", slice);
+        if (error) throw error;
+        all.push(...(data ?? []));
+      }
+      return all;
+    },
+  });
+
+  const statsByProject = useMemo(() => {
+    const m = new Map<string, { total: number; pending: number }>();
+    for (const row of taskRows) {
+      if (!row.project_id) continue;
+      const cur = m.get(row.project_id) ?? { total: 0, pending: 0 };
+      cur.total += 1;
+      if (row.status !== "completada") cur.pending += 1;
+      m.set(row.project_id, cur);
+    }
+    return m;
+  }, [taskRows]);
+
+  const filtered = useMemo(() => {
+    const pct = (projectId: string) => {
+      const s = statsByProject.get(projectId);
+      if (!s || s.total === 0) return 0;
+      return Math.round(((s.total - s.pending) / s.total) * 100);
+    };
+    if (!projects) return [];
+    let result = projectsByStatus;
+    if (selectedArea !== "all") {
+      result = result.filter((p) => (selectedArea === "sin_area" ? !p.area : p.area === selectedArea));
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (p) => p.name.toLowerCase().includes(q) || (p as any).clients?.name?.toLowerCase().includes(q),
+      );
+    }
+    const arr = [...result];
+    arr.sort((a, b) => {
+      if (sortKey === "name") {
+        const clientA = ((a as any).clients?.name || "ZZZ").toLowerCase();
+        const clientB = ((b as any).clients?.name || "ZZZ").toLowerCase();
+        if (clientA !== clientB) return clientA.localeCompare(clientB);
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      }
+      if (sortKey === "created_at") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      if (sortKey === "activity") {
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+      const pa = pct(a.id);
+      const pb = pct(b.id);
+      if (pb !== pa) return pb - pa;
+      return a.name.localeCompare(b.name);
     });
-    return result;
-  }, [projects, selectedArea, search]);
+    return arr;
+  }, [projects, projectsByStatus, selectedArea, search, sortKey, statsByProject]);
 
   const getAreaLabel = (slug: string) => {
     if (slug === "all") return "Todos";
@@ -103,17 +197,53 @@ const Proyectos = () => {
         <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
         <MeetingMinutesDialog open={minutesOpen} onOpenChange={setMinutesOpen} />
 
-        <ScrollableFilterTabs
-          options={["all", ...availableAreas].map((area) => ({
-            value: area,
-            label: getAreaLabel(area),
-            count: area === "all"
-              ? projects?.length || 0
-              : projects?.filter((p) => area === "sin_area" ? !p.area : p.area === area).length || 0,
-          }))}
-          value={selectedArea}
-          onChange={setSelectedArea}
-        />
+        <div className="flex flex-wrap gap-2 items-center">
+          {(
+            [
+              { k: "activo" as const, label: "Activos" },
+              { k: "completado" as const, label: "Completados" },
+              { k: "pausado" as const, label: "Pausados" },
+              { k: "todos" as const, label: "Todos" },
+            ] as const
+          ).map(({ k, label }) => (
+            <Button
+              key={k}
+              type="button"
+              size="sm"
+              variant={statusFilter === k ? "default" : "outline"}
+              className="h-8 text-xs"
+              onClick={() => setStatusFilter(k)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <ScrollableFilterTabs
+            options={["all", ...availableAreas].map((area) => ({
+              value: area,
+              label: getAreaLabel(area),
+              count:
+                area === "all"
+                  ? projectsByStatus.length
+                  : projectsByStatus.filter((p) => (area === "sin_area" ? !p.area : p.area === area)).length,
+            }))}
+            value={selectedArea}
+            onChange={setSelectedArea}
+          />
+          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+            <SelectTrigger className="w-full sm:w-[220px] h-9 text-xs">
+              <SelectValue placeholder="Ordenar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="activity">Última actividad</SelectItem>
+              <SelectItem value="name">Nombre / cliente</SelectItem>
+              <SelectItem value="created_at">Fecha de creación</SelectItem>
+              <SelectItem value="progress">Progreso (tareas)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -140,9 +270,15 @@ const Proyectos = () => {
               {search || selectedArea !== "all" ? "Sin resultados" : "Sin proyectos aún"}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
-              {search || selectedArea !== "all" ? "Intenta con otro filtro." : "Crea tu primer proyecto para organizar tareas."}
+              {search || selectedArea !== "all" || statusFilter !== "activo"
+                ? "Intenta con otro filtro."
+                : "Crea tu primer proyecto para organizar tareas."}
             </p>
-            {!search && selectedArea === "all" && <div className="mt-4"><ProjectCreationDialog /></div>}
+            {!search && selectedArea === "all" && statusFilter === "activo" && (
+              <div className="mt-4">
+                <ProjectCreationDialog />
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -168,12 +304,58 @@ const Proyectos = () => {
                     )}
                   </div>
                   <h3 className="text-sm font-medium text-foreground truncate">{project.name}</h3>
-                  {/* Inline progress bar */}
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    {project.responsible_user_id ? (
+                      <span>
+                        Resp.:{" "}
+                        <span className="text-foreground font-medium">
+                          {profileName.get(project.responsible_user_id) ?? "—"}
+                        </span>
+                      </span>
+                    ) : null}
+                    {project.end_date ? (
+                      <span>
+                        Límite:{" "}
+                        <span className="text-foreground">{formatDateMX(project.end_date)}</span>
+                      </span>
+                    ) : null}
+                    {(() => {
+                      const s = statsByProject.get(project.id);
+                      if (!s || s.total === 0) return <span>Sin tareas</span>;
+                      return (
+                        <span>
+                          Tareas:{" "}
+                          <span className="text-foreground font-medium">
+                            {s.pending}/{s.total} pend.
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden max-w-[200px]">
                       <div
-                        className="h-full bg-accent rounded-full transition-all duration-500"
-                        style={{ width: `${project.status === "completado" ? 100 : project.status === "activo" ? 50 : project.status === "en_pausa" ? 30 : 10}%` }}
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          project.status === "completado"
+                            ? "bg-green-600"
+                            : project.status === "pausado"
+                              ? "bg-amber-500"
+                              : project.status === "cancelado"
+                                ? "bg-muted-foreground/40"
+                                : "bg-accent",
+                        )}
+                        style={{
+                          width: `${
+                            project.status === "completado"
+                              ? 100
+                              : (() => {
+                                  const s = statsByProject.get(project.id);
+                                  if (!s || s.total === 0) return 8;
+                                  return Math.round(((s.total - s.pending) / s.total) * 100);
+                                })()
+                          }%`,
+                        }}
                       />
                     </div>
                     <Badge variant="outline" className={cn("text-[10px] border-0 px-1.5 py-0", STATUS_STYLES[project.status])}>

@@ -35,3 +35,5 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.email-tracking]
     verify_jwt = false
+  [functions.notification-digest]
+    verify_jwt = false

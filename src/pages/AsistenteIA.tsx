@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useChat } from "@/hooks/useChat";
@@ -38,10 +39,12 @@ import {
   formatMb,
 } from "@/lib/chatAttachmentLimits";
 import { AiProjectMembersDialog } from "@/components/ai/AiProjectMembersDialog";
+import { AiMessageFeedback } from "@/components/ai/AiMessageFeedback";
+import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
-const SUGGESTIONS = [
+const FALLBACK_SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
   "No sé cómo hacer una declaración anual, ¿me guías?",
   "¿Qué comunicados internos recientes hay?",
@@ -92,6 +95,63 @@ const AsistenteIA = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMobile = useIsMobile();
+
+  const { data: dynamicSuggestions = FALLBACK_SUGGESTIONS } = useQuery({
+    queryKey: ["asistente-sugerencias", user?.id],
+    enabled: !!user && !activeAiProjectId,
+    queryFn: async () => {
+      const out: string[] = [];
+      const today = toDateStringMX(nowMX());
+      const { data: tasks } = await supabase
+        .from("tasks")
+        .select("title, priority, due_date, projects(name)")
+        .eq("assigned_to", user!.id)
+        .in("status", ["pendiente", "en_progreso", "en_revision"])
+        .order("due_date", { ascending: true })
+        .limit(12);
+      const list = tasks ?? [];
+      const overdue = list.filter((t) => t.due_date && String(t.due_date).slice(0, 10) < today);
+      if (overdue.length > 0) {
+        out.push(
+          overdue.length === 1
+            ? `Tienes 1 tarea vencida: "${overdue[0].title.slice(0, 48)}${overdue[0].title.length > 48 ? "…" : ""}". ¿La priorizamos?`
+            : `Tienes ${overdue.length} tareas vencidas. ¿Quieres que prioricemos las más urgentes?`,
+        );
+      }
+      const urgent = list.filter((t) => t.priority === "urgente" || t.priority === "alta").slice(0, 3);
+      for (const t of urgent) {
+        if (out.length >= 6) break;
+        const pn = (t as { projects?: { name?: string } }).projects?.name;
+        out.push(
+          pn
+            ? `"${t.title.slice(0, 40)}${t.title.length > 40 ? "…" : ""}" (${pn}) — ¿revisamos?`
+            : `"${t.title.slice(0, 44)}${t.title.length > 44 ? "…" : ""}" — ¿revisamos?`,
+        );
+      }
+      const { data: prof } = await supabase.from("profiles").select("organization_id").eq("user_id", user!.id).single();
+      if (prof?.organization_id) {
+        const { data: projs } = await supabase
+          .from("projects")
+          .select("name")
+          .eq("organization_id", prof.organization_id)
+          .eq("status", "activo")
+          .order("updated_at", { ascending: false })
+          .limit(2);
+        for (const p of projs ?? []) {
+          if (out.length >= 6) break;
+          out.push(`El proyecto "${p.name}" tuvo actividad reciente. ¿Repasamos pendientes?`);
+        }
+      }
+      let i = 0;
+      while (out.length < 6) {
+        out.push(FALLBACK_SUGGESTIONS[i % FALLBACK_SUGGESTIONS.length]);
+        i++;
+      }
+      return out.slice(0, 6);
+    },
+  });
+
+  const suggestionCards = activeAiProjectId ? FALLBACK_SUGGESTIONS.slice(0, 6) : dynamicSuggestions;
 
   const filteredConversations = useMemo(() => {
     if (activeAiProjectId) {
@@ -479,9 +539,10 @@ const AsistenteIA = () => {
                   </>
                 )}
                 <div className="grid gap-2 w-full grid-cols-1 sm:grid-cols-2">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestionCards.map((s, si) => (
                     <button
-                      key={s}
+                      key={`sg-${si}-${s.slice(0, 24)}`}
+                      type="button"
                       onClick={() => { setInput(s); textareaRef.current?.focus(); }}
                       className="text-left rounded-xl bg-secondary/40 hover:bg-secondary/70 px-4 py-3 text-[13px] text-foreground transition-colors"
                     >
@@ -523,33 +584,38 @@ const AsistenteIA = () => {
                             <Sparkles className="h-3.5 w-3.5 text-primary" />
                           </div>
                         )}
-                        <div
-                          className={cn(
-                            "rounded-2xl px-4 py-3 max-w-[85%]",
-                            msg.role === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : msg.isError
-                                ? "bg-destructive/10 border border-destructive/25 text-foreground"
-                                : "bg-secondary/40"
-                          )}
-                        >
-                          {renderMessageContent(msg.content, msg.role, msg.attachments, {
-                            isError: msg.isError,
-                          })}
-                          {msg.role === "assistant" &&
-                            msg.activityLog &&
-                            msg.activityLog.length > 0 && (
-                              <details className="mt-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2">
-                                <summary className="cursor-pointer select-none font-medium text-foreground/70">
-                                  Pasos del proceso
-                                </summary>
-                                <ol className="mt-1.5 list-decimal pl-4 space-y-0.5">
-                                  {msg.activityLog.map((line, j) => (
-                                    <li key={j}>{line}</li>
-                                  ))}
-                                </ol>
-                              </details>
+                        <div className="flex flex-col min-w-0 max-w-[85%]">
+                          <div
+                            className={cn(
+                              "rounded-2xl px-4 py-3",
+                              msg.role === "user"
+                                ? "bg-primary text-primary-foreground"
+                                : msg.isError
+                                  ? "bg-destructive/10 border border-destructive/25 text-foreground"
+                                  : "bg-secondary/40"
                             )}
+                          >
+                            {renderMessageContent(msg.content, msg.role, msg.attachments, {
+                              isError: msg.isError,
+                            })}
+                            {msg.role === "assistant" &&
+                              msg.activityLog &&
+                              msg.activityLog.length > 0 && (
+                                <details className="mt-3 text-[10px] text-muted-foreground border-t border-border/40 pt-2">
+                                  <summary className="cursor-pointer select-none font-medium text-foreground/70">
+                                    Pasos del proceso
+                                  </summary>
+                                  <ol className="mt-1.5 list-decimal pl-4 space-y-0.5">
+                                    {msg.activityLog.map((line, j) => (
+                                      <li key={j}>{line}</li>
+                                    ))}
+                                  </ol>
+                                </details>
+                              )}
+                          </div>
+                          {msg.role === "assistant" && msg.id && !msg.isError && (
+                            <AiMessageFeedback messageId={msg.id} />
+                          )}
                         </div>
                       </div>
                     </Fragment>

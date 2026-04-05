@@ -12,6 +12,7 @@ import {
   BrainCircuit, ArrowLeft, Settings2, Users, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatMX } from "@/lib/dateUtils";
 import type { ChatConversation } from "@/hooks/useChat";
 import type { AiProject } from "@/hooks/useAiProjects";
 
@@ -94,7 +95,11 @@ export function ProjectSidebar({
       )}
       onClick={() => onLoadConversation(c.id)}
     >
-      <MessageSquare className="h-3 w-3 shrink-0" />
+      {c.ai_project_id ? (
+        <BrainCircuit className="h-3 w-3 shrink-0 text-primary" title="Chat de proyecto IA" />
+      ) : (
+        <MessageSquare className="h-3 w-3 shrink-0" />
+      )}
       {renamingId === c.id ? (
         <input
           ref={renameRef}
@@ -107,7 +112,12 @@ export function ProjectSidebar({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <span className="truncate flex-1 text-[12px]">{c.title}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-[9px] text-muted-foreground tabular-nums">
+            {formatMX(c.updated_at, "d MMM yyyy")}
+          </p>
+          <span className="block truncate text-[12px] leading-tight">{c.title}</span>
+        </div>
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

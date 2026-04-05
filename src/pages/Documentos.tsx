@@ -304,9 +304,15 @@ function DropboxLiveBrowser() {
     breadcrumbs.push(...parts);
   }
 
-  const personalLabel = personalFolderPath && !personalFolderPath.startsWith("id:")
-    ? personalFolderPath.split("/").filter(Boolean).pop() || userName
-    : userName;
+  const personalLabel =
+    personalFolderPath?.startsWith("memberns:") || personalFolderPath?.startsWith("id:")
+      ? "Mi Dropbox"
+      : personalFolderPath && !personalFolderPath.startsWith("id:")
+        ? personalFolderPath.split("/").filter(Boolean).pop() || userName
+        : userName;
+
+  const displayFolderName = (name: string) =>
+    name.startsWith("memberns:") || name.startsWith("id:") ? "Mi Dropbox" : name;
 
   return (
     <div className="space-y-4">
@@ -436,7 +442,7 @@ function DropboxLiveBrowser() {
                   onClick={() => openFolder(entry.path)}
                 >
                   <Folder className="h-5 w-5 text-primary shrink-0" />
-                  <span className="text-sm font-medium truncate flex-1">{entry.name}</span>
+                  <span className="text-sm font-medium truncate flex-1">{displayFolderName(entry.name)}</span>
                 </button>
                 <Button
                   variant="ghost"

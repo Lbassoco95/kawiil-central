@@ -27,6 +27,8 @@ function getNotificationIcon(type: string) {
   if (type === "expense_created" || type === "expense_status_changed") return <DollarSign className="h-3.5 w-3.5 text-emerald-500" />;
   if (type === "knowledge_sync") return <BrainCircuit className="h-3.5 w-3.5 text-violet-500" />;
   if (type.startsWith("knowledge")) return <Bot className="h-3.5 w-3.5 text-violet-500" />;
+  if (type === "deadline_overdue_task") return <AlertTriangle className="h-3.5 w-3.5 text-destructive" />;
+  if (type === "deadline_due_tomorrow_task") return <CalendarClock className="h-3.5 w-3.5 text-amber-600" />;
   return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
@@ -67,6 +69,9 @@ export default function Notificaciones() {
       navigate("/tareas");
     } else if (m.type === "expense_created" || m.type === "expense_status_changed") {
       navigate("/finanzas");
+    } else if (m.type === "deadline_overdue_task" || m.type === "deadline_due_tomorrow_task") {
+      if (m.entity_id) navigate(`/tareas?taskId=${m.entity_id}`);
+      else navigate("/tareas");
     }
   };
 

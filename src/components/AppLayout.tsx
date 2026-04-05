@@ -1,15 +1,51 @@
 import { ReactNode, useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { NewTaskModalHost } from "@/contexts/NewTaskModalContext";
 import { AppSidebar } from "@/components/AppSidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { GlobalAISearch } from "@/components/shared/GlobalAISearch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
+import { useSectionActivityLogger } from "@/hooks/useSectionActivityLogger";
 import { nowMX } from "@/lib/dateUtils";
 import { Clock } from "lucide-react";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+  const qc = useQueryClient();
   useTasksRealtime();
+  useSectionActivityLogger();
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`notifications-rt-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const row = payload.new as { title?: string; body?: string | null };
+          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+          if (row?.title) {
+            toast.info(row.title, { description: row.body || undefined });
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, qc]);
 
   const [currentTime, setCurrentTime] = useState(() => nowMX());
 
@@ -19,6 +55,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, []);
 
   return (
+    <NewTaskModalHost>
     <div className="flex min-h-screen w-full bg-background relative">
       {/* Ambient gradient mesh */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
@@ -48,5 +85,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </main>
       <FloatingAIChat />
     </div>
+    </NewTaskModalHost>
   );
 }

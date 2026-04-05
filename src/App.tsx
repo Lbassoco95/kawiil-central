@@ -54,6 +54,26 @@ const App = () => (
               <Route path="/proyectos" element={<ProtectedRoute><Proyectos /></ProtectedRoute>} />
               <Route path="/proyectos/:id" element={<ProtectedRoute><ProyectoDetalle /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute><Tareas /></ProtectedRoute>} />
+              <Route
+                path="/calendario"
+                element={
+                  <ProtectedRoute>
+                    <ModuleGate moduleKey="calendario">
+                      <Navigate to="/microsoft365/calendario" replace />
+                    </ModuleGate>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/correo"
+                element={
+                  <ProtectedRoute>
+                    <ModuleGate moduleKey="correo">
+                      <Navigate to="/microsoft365/correo" replace />
+                    </ModuleGate>
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/microsoft365" element={<Navigate to="/microsoft365/calendario" replace />} />
               <Route path="/microsoft365/calendario" element={<ProtectedRoute><ModuleGate moduleKey="calendario"><Microsoft365Calendario /></ModuleGate></ProtectedRoute>} />
               <Route path="/microsoft365/correo" element={<ProtectedRoute><ModuleGate moduleKey="correo"><Microsoft365Correo /></ModuleGate></ProtectedRoute>} />
