@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
@@ -38,9 +39,9 @@ import {
 } from "@/hooks/useMicrosoft";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
-  ClipboardList, Sparkles, Languages, ListChecks, Inbox, SendHorizonal,
+  Sparkles, Languages, ListTodo, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
-  FolderPlus, X, Check, FolderInput, Archive, MailX, Star, MoreHorizontal,
+  FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown,
 } from "lucide-react";
 import { formatDistanceToNow, parseISO, format, isToday, isYesterday } from "date-fns";
@@ -637,124 +638,200 @@ export function EmailView() {
               </div>
             </div>
 
-            {/* Action bar */}
-            <div className="flex items-center gap-0.5 sm:gap-1 px-2 sm:px-4 py-1.5 border-b border-border/50 shrink-0 bg-muted/20 overflow-x-auto">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant={emailAction === "reply" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1 shrink-0"
-                    onClick={() => emailAction === "reply" ? resetAction() : handleStartReply("reply")}>
-                    <Reply className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Responder</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Responder (r)</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant={emailAction === "reply-all" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1 shrink-0"
-                    onClick={() => emailAction === "reply-all" ? resetAction() : handleStartReply("reply-all")}>
-                    <ReplyAll className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Todos</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Responder a todos (a)</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant={emailAction === "forward" ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1 shrink-0"
-                    onClick={() => emailAction === "forward" ? resetAction() : handleStartReply("forward")}>
-                    <Forward className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Reenviar</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Reenviar (f)</TooltipContent>
-              </Tooltip>
-
-              <div className="w-px h-5 bg-border mx-0.5 shrink-0" />
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0" onClick={() => selectedEmailId && handleArchive(selectedEmailId)}>
-                    <Archive className="h-3.5 w-3.5" /> <span className="hidden md:inline">Archivar</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
-              </Tooltip>
-
-              <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0">
-                    <FolderInput className="h-3.5 w-3.5" /> <span className="hidden md:inline">Mover</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-48 p-1" align="start">
-                  <ScrollArea className="max-h-64">
-                    {sortedFolders.filter((f: any) => f.id !== selectedFolderId).map((folder: any) => {
-                      const Icon = getFolderIcon(folder.displayName);
-                      const label = getFolderLabel(folder.displayName);
-                      return (
-                        <button key={folder.id}
-                          className="w-full flex items-center gap-2 px-2.5 py-2 text-sm hover:bg-accent rounded-md text-left transition-colors"
-                          onClick={() => { if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id); }}>
-                          <Icon className="h-4 w-4 text-muted-foreground" />
-                          <span className="truncate">{label}</span>
-                        </button>
-                      );
-                    })}
-                  </ScrollArea>
-                </PopoverContent>
-              </Popover>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0"
-                    onClick={() => selectedEmailId && markUnread.mutate(selectedEmailId)}>
-                    <MailX className="h-3.5 w-3.5" /> <span className="hidden lg:inline">No leído</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">No leído (u)</TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm"
-                    className="h-8 text-xs gap-1 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => selectedEmailId && handleDelete(selectedEmailId)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
-              </Tooltip>
-
-              <div className="w-px h-5 bg-border mx-0.5 shrink-0 hidden sm:block" />
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0 hidden sm:flex"
-                    onClick={() => setQuickAIPrompt("Resume los puntos clave de este correo en viñetas.")}>
-                    <ListChecks className="h-3.5 w-3.5" /> <span className="hidden lg:inline">Resumir</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Resumir con IA</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 text-xs gap-1 shrink-0 hidden sm:flex"
-                    onClick={() => setQuickAIPrompt("Traduce este correo al inglés manteniendo el tono profesional.")}>
-                    <Languages className="h-3.5 w-3.5" /> <span className="hidden lg:inline">Traducir</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Traducir con IA</TooltipContent>
-              </Tooltip>
-
-              <div className="ml-auto shrink-0">
+            {/* Action bar: solo iconos + tooltips, sin scroll horizontal (flex-wrap) */}
+            <TooltipProvider delayDuration={200}>
+              <div className="flex flex-wrap items-center gap-1 px-2 sm:px-4 py-1.5 border-b border-border/50 shrink-0 bg-muted/20 min-w-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs gap-1" onClick={() => setCreateTaskOpen(true)}>
-                      <ClipboardList className="h-3.5 w-3.5" /> <span className="hidden md:inline">Tarea</span>
+                    <Button
+                      variant={emailAction === "reply" ? "default" : "ghost"}
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => (emailAction === "reply" ? resetAction() : handleStartReply("reply"))}
+                    >
+                      <Reply className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">Crear tarea desde correo</TooltipContent>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Responder
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={emailAction === "reply-all" ? "default" : "ghost"}
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() =>
+                        emailAction === "reply-all" ? resetAction() : handleStartReply("reply-all")
+                      }
+                    >
+                      <ReplyAll className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Todos
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={emailAction === "forward" ? "default" : "ghost"}
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() =>
+                        emailAction === "forward" ? resetAction() : handleStartReply("forward")
+                      }
+                    >
+                      <Forward className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Reenviar
+                  </TooltipContent>
+                </Tooltip>
+
+                <div className="w-px h-5 bg-border shrink-0 mx-0.5" aria-hidden />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => selectedEmailId && handleArchive(selectedEmailId)}
+                    >
+                      <Archive className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Archivar
+                  </TooltipContent>
+                </Tooltip>
+
+                <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                          <FolderInput className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Mover
+                    </TooltipContent>
+                  </Tooltip>
+                  <PopoverContent className="w-48 p-1" align="start">
+                    <ScrollArea className="max-h-64">
+                      {sortedFolders.filter((f: any) => f.id !== selectedFolderId).map((folder: any) => {
+                        const Icon = getFolderIcon(folder.displayName);
+                        const label = getFolderLabel(folder.displayName);
+                        return (
+                          <button
+                            key={folder.id}
+                            className="w-full flex items-center gap-2 px-2.5 py-2 text-sm hover:bg-accent rounded-md text-left transition-colors"
+                            onClick={() => {
+                              if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
+                            }}
+                          >
+                            <Icon className="h-4 w-4 text-muted-foreground" />
+                            <span className="truncate">{label}</span>
+                          </button>
+                        );
+                      })}
+                    </ScrollArea>
+                  </PopoverContent>
+                </Popover>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => selectedEmailId && markUnread.mutate(selectedEmailId)}
+                    >
+                      <MailOpen className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    No leído
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => selectedEmailId && handleDelete(selectedEmailId)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Eliminar
+                  </TooltipContent>
+                </Tooltip>
+
+                <div className="w-px h-5 bg-border shrink-0 mx-0.5" aria-hidden />
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                      onClick={() =>
+                        setQuickAIPrompt("Resume los puntos clave de este correo en viñetas.")
+                      }
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Resumir
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                      onClick={() =>
+                        setQuickAIPrompt(
+                          "Traduce este correo al inglés manteniendo el tono profesional.",
+                        )
+                      }
+                    >
+                      <Languages className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Traducir
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                      onClick={() => setCreateTaskOpen(true)}
+                    >
+                      <ListTodo className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Crear tarea
+                  </TooltipContent>
                 </Tooltip>
               </div>
-            </div>
+            </TooltipProvider>
 
             {/* Quick AI result */}
             {quickAIPrompt && (
