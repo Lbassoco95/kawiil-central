@@ -1,3 +1,13 @@
+/**
+ * Sincroniza el inbox de Microsoft Graph hacia `email_log` (inbound) y `lead_activities` (email_received).
+ *
+ * Checklist de despliegue y operación:
+ * - Migración: `20260405120000_pipeline_email_threading_tracking.sql` (email_log, email_sync_state, cron).
+ * - Secrets Supabase: AZURE_* o MICROSOFT_* (tenant, client id, secret), SENDER_EMAIL, CRON_SECRET alineado con `app.pipeline_cron_secret`.
+ * - Azure AD: permisos de aplicación Mail.Read + Mail.Send y consentimiento de administrador.
+ * - Deploy: `supabase functions deploy sync-inbox-emails --no-verify-jwt` (ver `supabase/config.toml`).
+ * - Cron: job `pipeline-sync-inbox-emails` vía `invoke_sync_inbox_emails_cron()` (header x-cron-secret).
+ */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {

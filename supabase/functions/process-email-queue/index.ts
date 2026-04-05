@@ -177,6 +177,7 @@ Deno.serve(async (req) => {
 
       const vars: Record<string, string> = {
         nombre: lead.full_name || "",
+        email: (lead.email as string) || "",
         empresa: lead.company_name || "",
         pais: lead.country_name || "",
         campana: lead.campaign_name || "",

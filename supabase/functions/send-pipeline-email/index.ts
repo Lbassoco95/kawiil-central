@@ -1,3 +1,8 @@
+/**
+ * Envío manual desde la app (JWT usuario). Requiere: migración pipeline email (email_log columnas),
+ * secrets AZURE_* o MICROSOFT_*, SENDER_EMAIL; Azure Mail.Send. Opcional: EMAIL_TRACKING=false para
+ * desactivar pixel/enlaces. Deploy: `supabase functions deploy send-pipeline-email` (verify_jwt true).
+ */
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -162,6 +167,7 @@ Deno.serve(async (req) => {
 
     const vars: Record<string, string> = {
       nombre: lead.full_name || "",
+      email: to || "",
       empresa: lead.company_name || "",
       pais: lead.country_name || "",
       campana: lead.campaign_name || "",

@@ -57,11 +57,13 @@ interface Props {
   replyTo?: ReplyToEmail | null;
 }
 
-function replaceVariables(text: string, leadName: string): string {
+function replaceVariables(text: string, leadName: string, leadEmail: string | null): string {
+  const email = leadEmail || "";
   return text
     .replace(/\{\{nombre\}\}/gi, leadName)
     .replace(/\{\{name\}\}/gi, leadName)
-    .replace(/\{\{full_name\}\}/gi, leadName);
+    .replace(/\{\{full_name\}\}/gi, leadName)
+    .replace(/\{\{email\}\}/gi, email);
 }
 
 export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, replyTo }: Props) {
@@ -105,9 +107,9 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
     if (!tpl) return;
     form.setValue("template_id", templateId);
     if (!replyTo) {
-      form.setValue("subject", replaceVariables(tpl.subject, leadName));
+      form.setValue("subject", replaceVariables(tpl.subject, leadName, leadEmail));
     }
-    form.setValue("body_html", replaceVariables(tpl.body_html || "", leadName));
+    form.setValue("body_html", replaceVariables(tpl.body_html || "", leadName, leadEmail));
   };
 
   const onSubmit = form.handleSubmit(async (data) => {
@@ -119,7 +121,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         template_id: data.template_id || null,
         to_email: data.to_email,
         subject: data.subject,
-        status: "sending",
+        status: "queued",
         in_reply_to: replyTo?.graph_message_id || null,
       }).select("id").single();
       if (emailErr) throw emailErr;
@@ -162,7 +164,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
 
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(leadId) });
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.emailLog(leadId) });
-      toast.success("Email enviado desde comercial@kawiil.mx");
+      toast.success("Correo enviado correctamente desde el buzón configurado en el sistema.");
       onClose();
       form.reset({ to_email: leadEmail || "", subject: "", body_html: "", schedule_follow_up: false });
       setShowPreview(false);
@@ -222,7 +224,11 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
 
           <div>
             <Label>De</Label>
-            <Input value="comercial@kawiil.mx" disabled className="bg-muted text-muted-foreground" />
+            <Input
+              value="Buzón del sistema (Microsoft 365 / SENDER_EMAIL)"
+              disabled
+              className="bg-muted text-muted-foreground"
+            />
           </div>
 
           <div>
@@ -269,6 +275,10 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
                 placeholder="Contenido del email (soporta HTML)…"
               />
             )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Variables en plantillas y cuerpo:{" "}
+              <code className="text-[10px]">{"{{nombre}} {{email}} {{empresa}} {{pais}} {{campana}}"}</code>
+            </p>
           </div>
 
           {replyTo?.body_html ? (
@@ -305,9 +315,9 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
 
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-3">
             <p className="text-xs text-blue-700 dark:text-blue-300">
-              El email se enviará desde <strong>comercial@kawiil.mx</strong> y se
-              registrará en el historial del lead. Podrás ver su estado (enviado,
-              abierto, click) en la sección de Correos.
+              El correo se envía desde el buzón configurado en Supabase (secret{" "}
+              <strong>SENDER_EMAIL</strong>) y queda en el historial del lead. El estado
+              (enviado, abierto, clic) aparece en la sección Correos.
             </p>
           </div>
 
