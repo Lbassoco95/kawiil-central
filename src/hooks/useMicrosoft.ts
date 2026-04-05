@@ -1,7 +1,21 @@
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+
+/** No leídos de Bandeja de entrada (Graph `mailFolders/inbox.unreadItemCount`). Sidebar + módulo correo. */
+export const INBOX_UNREAD_QUERY_KEY = ["inbox-unread-count"] as const;
+
+function invalidateInboxUnreadAndMailFolders(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: INBOX_UNREAD_QUERY_KEY });
+  queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+}
 
 function isNotConnectedError(data: any, error: any) {
   const errorMessage = String(error?.message || "").toLowerCase();
@@ -318,8 +332,13 @@ export function useMarkEmailUnread() {
     },
     onMutate: async (messageId) => {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
+      let wasRead = false;
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
         if (!old?.pages) return old;
+        for (const page of old.pages) {
+          const e = page.emails.find((em: any) => em.id === messageId);
+          if (e?.isRead) wasRead = true;
+        }
         return {
           ...old,
           pages: old.pages.map((page: any) => ({
@@ -328,14 +347,16 @@ export function useMarkEmailUnread() {
           })),
         };
       });
-      queryClient.setQueryData(["unread-email-count"], (old: any) =>
-        typeof old === "number" ? old + 1 : 1
-      );
+      if (wasRead) {
+        queryClient.setQueryData(INBOX_UNREAD_QUERY_KEY, (old: any) =>
+          typeof old === "number" ? old + 1 : 1
+        );
+      }
     },
     onSuccess: () => {
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
-        queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+        invalidateInboxUnreadAndMailFolders(queryClient);
       }, 2000);
     },
   });
@@ -355,8 +376,13 @@ export function useArchiveEmail() {
     },
     onMutate: async (messageId) => {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
+      let wasUnread = false;
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
         if (!old?.pages) return old;
+        for (const page of old.pages) {
+          const e = page.emails.find((em: any) => em.id === messageId);
+          if (e && !e.isRead) wasUnread = true;
+        }
         return {
           ...old,
           pages: old.pages.map((page: any) => ({
@@ -365,10 +391,15 @@ export function useArchiveEmail() {
           })),
         };
       });
+      if (wasUnread) {
+        queryClient.setQueryData(INBOX_UNREAD_QUERY_KEY, (old: any) =>
+          typeof old === "number" && old > 0 ? old - 1 : 0
+        );
+      }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
-      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      invalidateInboxUnreadAndMailFolders(queryClient);
     },
   });
 }
@@ -441,7 +472,7 @@ export function useSendDraft() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
-      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      invalidateInboxUnreadAndMailFolders(queryClient);
       toast.success("Correo enviado");
     },
     onError: (err: Error) => toast.error("Error al enviar: " + err.message),
@@ -502,10 +533,15 @@ export function useMarkEmailRead() {
     },
     onMutate: async (messageId) => {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
-      await queryClient.cancelQueries({ queryKey: ["unread-email-count"] });
+      await queryClient.cancelQueries({ queryKey: INBOX_UNREAD_QUERY_KEY });
 
+      let wasUnread = false;
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
         if (!old?.pages) return old;
+        for (const page of old.pages) {
+          const e = page.emails.find((em: any) => em.id === messageId);
+          if (e && !e.isRead) wasUnread = true;
+        }
         return {
           ...old,
           pages: old.pages.map((page: any) => ({
@@ -515,21 +551,21 @@ export function useMarkEmailRead() {
         };
       });
 
-      queryClient.setQueryData(["unread-email-count"], (old: any) => {
-        return typeof old === "number" && old > 0 ? old - 1 : 0;
-      });
+      if (wasUnread) {
+        queryClient.setQueryData(INBOX_UNREAD_QUERY_KEY, (old: any) =>
+          typeof old === "number" && old > 0 ? old - 1 : 0
+        );
+      }
     },
     onSuccess: () => {
-      // Refetch after a short delay to sync with server
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
-        queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+        invalidateInboxUnreadAndMailFolders(queryClient);
       }, 2000);
     },
     onError: (err: Error) => {
-      // Rollback on error
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
-      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      invalidateInboxUnreadAndMailFolders(queryClient);
       toast.error("Error al marcar correo como leído: " + err.message);
     },
   });
@@ -618,8 +654,7 @@ export function useMoveEmail() {
     onSuccess: () => {
       toast.success("Correo movido");
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
-      queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
-      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      invalidateInboxUnreadAndMailFolders(queryClient);
     },
   });
 }
@@ -677,8 +712,13 @@ export function useDeleteEmail() {
     onMutate: async (messageId) => {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
       const previousQueries = queryClient.getQueriesData({ queryKey: ["outlook-emails"] });
+      let wasUnread = false;
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
         if (!old?.pages) return old;
+        for (const page of old.pages) {
+          const e = page.emails.find((em: any) => em.id === messageId);
+          if (e && !e.isRead) wasUnread = true;
+        }
         return {
           ...old,
           pages: old.pages.map((page: any) => ({
@@ -687,6 +727,11 @@ export function useDeleteEmail() {
           })),
         };
       });
+      if (wasUnread) {
+        queryClient.setQueryData(INBOX_UNREAD_QUERY_KEY, (old: any) =>
+          typeof old === "number" && old > 0 ? old - 1 : 0
+        );
+      }
       return { previousQueries };
     },
     onError: (_err: Error, _vars, context) => {
@@ -695,11 +740,12 @@ export function useDeleteEmail() {
           queryClient.setQueryData(key, data);
         }
       }
+      invalidateInboxUnreadAndMailFolders(queryClient);
       toast.error("Error al eliminar correo");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
-      queryClient.invalidateQueries({ queryKey: ["unread-email-count"] });
+      invalidateInboxUnreadAndMailFolders(queryClient);
       toast.success("Correo eliminado");
     },
   });
@@ -733,20 +779,19 @@ export function useUnreadEmailCount() {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["unread-email-count"],
+    queryKey: INBOX_UNREAD_QUERY_KEY,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "emails", params: { folder: "inbox", top: 50 } },
+        body: { action: "inbox-folder-meta" },
       });
       if (isNotConnectedError(data, error)) return 0;
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      const emails = data?.value || [];
-      return emails.filter((e: any) => !e.isRead).length;
+      return Number(data?.unreadItemCount ?? 0);
     },
     enabled: !!user,
-    refetchInterval: 60000, // poll every 60s
-    staleTime: 30000,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 }
 

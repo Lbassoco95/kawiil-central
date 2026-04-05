@@ -517,6 +517,14 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "inbox-folder-meta": {
+        result = await graphRequest(
+          accessToken,
+          "/me/mailFolders/inbox?$select=id,unreadItemCount,totalItemCount"
+        );
+        break;
+      }
+
       case "mail-folders": {
         const data = await graphRequest(accessToken, "/me/mailFolders?$top=50");
         result = data?.value || [];

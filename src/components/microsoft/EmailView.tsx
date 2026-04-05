@@ -36,6 +36,7 @@ import {
   useMoveEmail,
   useDeleteEmail,
   useEmailAttachments,
+  useUnreadEmailCount,
 } from "@/hooks/useMicrosoft";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
@@ -87,6 +88,38 @@ function getFolderLabel(displayName: string) {
 }
 
 const WELL_KNOWN_ORDER = ["inbox", "sentitems", "drafts", "deleteditems", "junkemail"];
+
+/**
+ * Badges del listado de carpetas: misma fuente que el sidebar para Inbox (`useUnreadEmailCount` / Graph inbox).
+ * Borradores: total; Spam: no leídos; resto sin badge.
+ */
+function getFolderSidebarBadge(folder: any, inboxUnread: number): number | null {
+  const wk = String(folder.wellKnownFolderName || "").toLowerCase();
+  const nameKey = (folder.displayName || "").toLowerCase().replace(/\s/g, "");
+
+  const isInbox =
+    wk === "inbox" || nameKey.includes("inbox") || nameKey.includes("bandejadeentrada");
+  if (isInbox) return inboxUnread > 0 ? inboxUnread : null;
+
+  const isDrafts =
+    wk === "drafts" || nameKey.includes("draft") || nameKey.includes("borrador");
+  if (isDrafts) {
+    const t = folder.totalItemCount ?? 0;
+    return t > 0 ? t : null;
+  }
+
+  const isJunk =
+    wk === "junkemail" ||
+    nameKey.includes("junk") ||
+    nameKey.includes("spam") ||
+    nameKey.includes("correonodeseado");
+  if (isJunk) {
+    const u = folder.unreadItemCount ?? 0;
+    return u > 0 ? u : null;
+  }
+
+  return null;
+}
 
 function sortFolders(folders: any[]) {
   const wellKnown: any[] = [];
@@ -198,6 +231,7 @@ export function EmailView() {
   const isMobile = useIsMobile();
 
   const { data: folders = [] } = useMailFolders();
+  const { data: inboxUnread = 0 } = useUnreadEmailCount();
   const emailsQuery = useOutlookEmails(selectedFolderId, debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
   const { data: threadEmails = [] } = useEmailConversation(emailDetail?.conversationId || null);
@@ -388,6 +422,7 @@ export function EmailView() {
               const Icon = getFolderIcon(folder.displayName);
               const label = getFolderLabel(folder.displayName);
               const isActive = selectedFolderId === folder.id;
+              const folderBadge = getFolderSidebarBadge(folder, inboxUnread);
               return (
                 <button
                   key={folder.id}
@@ -413,9 +448,9 @@ export function EmailView() {
                 >
                   <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="truncate flex-1 text-sm">{label}</span>
-                  {folder.unreadItemCount > 0 && (
+                  {folderBadge != null && folderBadge > 0 && (
                     <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold bg-primary/15 text-primary">
-                      {folder.unreadItemCount}
+                      {folderBadge}
                     </Badge>
                   )}
                 </button>
