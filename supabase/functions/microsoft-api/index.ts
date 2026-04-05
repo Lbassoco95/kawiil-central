@@ -281,9 +281,11 @@ Deno.serve(async (req) => {
         const folder = params?.folder || "inbox";
         const search = params?.search ? `&$search="${params.search}"` : "";
         const skipParam = skip > 0 ? `&$skip=${skip}` : "";
+        const select =
+          "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
         result = await graphRequest(
           accessToken,
-          `/me/mailFolders/${folder}/messages?$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${search}`
+          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${search}`,
         );
         break;
       }

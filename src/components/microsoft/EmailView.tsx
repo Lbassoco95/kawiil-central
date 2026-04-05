@@ -44,7 +44,16 @@ import {
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown,
 } from "lucide-react";
-import { formatDistanceToNow, parseISO, format, isToday, isYesterday } from "date-fns";
+import {
+  formatDistanceToNow,
+  parseISO,
+  format,
+  isToday,
+  isYesterday,
+  differenceInMinutes,
+  differenceInCalendarDays,
+  startOfDay,
+} from "date-fns";
 import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
@@ -96,15 +105,56 @@ function sortFolders(folders: any[]) {
   return [...wellKnown, ...custom];
 }
 
-function formatEmailDate(dateStr: string) {
+/** Abreviaturas de día (getDay: 0=Dom … 6=Sáb), estilo bandeja tipo Superhuman */
+const WEEKDAY_SHORT_ES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"] as const;
+
+function capitalizeMonthSpanish(formatted: string): string {
+  return formatted.replace(/^(\d+)\s+(.+)$/, (_, day: string, month: string) => {
+    const m = month.replace(/\.$/, "");
+    return `${day} ${m.charAt(0).toUpperCase()}${m.slice(1)}`;
+  });
+}
+
+/**
+ * Timestamps estilo Superhuman para `receivedDateTime` / `sentDateTime` (ISO 8601).
+ */
+function formatEmailDate(dateStr: string): string {
+  if (!dateStr?.trim()) return "";
   try {
     const date = parseISO(dateStr);
-    if (isToday(date)) return format(date, "HH:mm");
-    if (isYesterday(date)) return "Ayer";
-    return format(date, "d MMM", { locale: es });
+    if (Number.isNaN(date.getTime())) return "";
+
+    const now = new Date();
+    const mins = differenceInMinutes(now, date);
+
+    if (mins < 0) {
+      if (isToday(date)) return format(date, "HH:mm");
+      return capitalizeMonthSpanish(format(date, "d MMM", { locale: es }));
+    }
+    if (mins < 60) {
+      return mins < 1 ? "Ahora" : `${mins}m`;
+    }
+    if (isToday(date)) {
+      return format(date, "HH:mm");
+    }
+    if (isYesterday(date)) {
+      return "Ayer";
+    }
+
+    const calDays = differenceInCalendarDays(startOfDay(now), startOfDay(date));
+    if (calDays >= 2 && calDays <= 6) {
+      return WEEKDAY_SHORT_ES[date.getDay()];
+    }
+
+    return capitalizeMonthSpanish(format(date, "d MMM", { locale: es }));
   } catch {
     return "";
   }
+}
+
+/** Mejor instante disponible en listados Graph (bandeja Enviados suele usar sentDateTime). */
+function emailListTimestamp(email: { receivedDateTime?: string; sentDateTime?: string; createdDateTime?: string }) {
+  return email.receivedDateTime || email.sentDateTime || email.createdDateTime || "";
 }
 
 function getInitials(name?: string, email?: string): string {
@@ -485,11 +535,16 @@ export function EmailView() {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2 mb-0.5">
-                          <span className={cn("text-sm truncate", !email.isRead ? "font-semibold text-foreground" : "text-foreground/80")}>
+                          <span
+                            className={cn(
+                              "truncate font-semibold",
+                              !email.isRead ? "text-foreground" : "text-foreground/80",
+                            )}
+                          >
                             {senderName}
                           </span>
-                          <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                            {formatEmailDate(email.receivedDateTime)}
+                          <span className="text-xs text-muted-foreground font-normal whitespace-nowrap ml-2 shrink-0">
+                            {formatEmailDate(emailListTimestamp(email))}
                           </span>
                         </div>
                         <p className={cn("text-sm truncate leading-snug", !email.isRead ? "font-medium text-foreground" : "text-muted-foreground")}>
@@ -993,8 +1048,8 @@ function ThreadEmailItem({ email }: { email: any }) {
           {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
           <span className="font-medium text-foreground truncate">{senderName}</span>
           <span className="text-muted-foreground truncate flex-1">— {email.bodyPreview?.substring(0, 60)}</span>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {email.receivedDateTime ? format(parseISO(email.receivedDateTime), "d MMM, HH:mm", { locale: es }) : ""}
+          <span className="text-xs text-muted-foreground font-normal whitespace-nowrap shrink-0">
+            {formatEmailDate(emailListTimestamp(email))}
           </span>
         </button>
       </CollapsibleTrigger>
