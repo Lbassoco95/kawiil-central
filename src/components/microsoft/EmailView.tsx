@@ -518,18 +518,27 @@ export function EmailView() {
                     draggable
                     onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
-                      "group px-3 py-3 cursor-pointer transition-all duration-150 border-b border-border/30 hover:bg-accent/40",
-                      isActive && "bg-primary/8 border-l-2 border-l-primary",
-                      !email.isRead && !isActive && "bg-primary/[0.03]"
+                      "group flex flex-col px-3 py-2.5 cursor-pointer transition-colors border-b border-border/30",
+                      !email.isRead && !isActive && "bg-blue-50/40 dark:bg-blue-950/20",
+                      isActive && "bg-accent border-l-2 border-l-primary",
+                      !isActive && "hover:bg-accent/40",
                     )}
                     onClick={() => handleOpenEmail(email)}
                   >
                     <div className="flex items-start gap-3">
-                      {/* Avatar */}
-                      <div className={cn(
-                        "h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 mt-0.5",
-                        getAvatarColor(senderEmail)
-                      )}>
+                      <div
+                        className={cn(
+                          "w-2 h-2 rounded-full shrink-0 mt-4",
+                          !email.isRead ? "bg-blue-500" : "bg-transparent",
+                        )}
+                        aria-hidden
+                      />
+                      <div
+                        className={cn(
+                          "h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 mt-0.5",
+                          getAvatarColor(senderEmail),
+                        )}
+                      >
                         {getInitials(senderName, senderEmail)}
                       </div>
 
@@ -537,7 +546,7 @@ export function EmailView() {
                         <div className="flex items-center justify-between gap-2 mb-0.5">
                           <span
                             className={cn(
-                              "truncate font-semibold",
+                              "truncate font-semibold text-sm",
                               !email.isRead ? "text-foreground" : "text-foreground/80",
                             )}
                           >
@@ -547,19 +556,25 @@ export function EmailView() {
                             {formatEmailDate(emailListTimestamp(email))}
                           </span>
                         </div>
-                        <p className={cn("text-sm truncate leading-snug", !email.isRead ? "font-medium text-foreground" : "text-muted-foreground")}>
+                        <p
+                          className={cn(
+                            "text-sm truncate leading-snug",
+                            !email.isRead ? "font-semibold text-foreground" : "font-normal text-muted-foreground",
+                          )}
+                        >
                           {email.subject || "(sin asunto)"}
                         </p>
-                        <p className="text-xs text-muted-foreground/60 truncate mt-0.5 leading-relaxed">
+                        <p
+                          className={cn(
+                            "text-xs truncate mt-0.5 leading-relaxed",
+                            !email.isRead ? "text-foreground" : "text-muted-foreground",
+                          )}
+                        >
                           {email.bodyPreview?.substring(0, 100)}
                         </p>
                       </div>
 
-                      {/* Indicators */}
                       <div className="flex flex-col items-center gap-1 shrink-0 pt-1">
-                        {!email.isRead && (
-                          <div className="h-2 w-2 rounded-full bg-primary" />
-                        )}
                         {email.hasAttachments && <Paperclip className="h-3.5 w-3.5 text-muted-foreground/50" />}
                         {email.importance === "high" && <div className="h-2 w-2 rounded-full bg-destructive" />}
                       </div>
@@ -567,7 +582,7 @@ export function EmailView() {
 
                     {/* Quick actions — always visible on mobile, hover on desktop */}
                     <div className={cn(
-                      "items-center gap-1 mt-1.5 ml-12",
+                      "items-center gap-1 mt-1.5 ml-14",
                       isMobile ? "flex" : "hidden group-hover:flex"
                     )}>
                       <Tooltip>
