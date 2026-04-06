@@ -1,9 +1,19 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { TeamMonthlyPerformance } from "@/components/dashboard/TeamMonthlyPerformance";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { MetricInsight } from "@/components/dashboard/MetricInsight";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   CheckSquare,
@@ -11,6 +21,7 @@ import {
   FolderKanban,
   AlertTriangle,
   ArrowRight,
+  ChevronRight,
 } from "lucide-react";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
@@ -26,9 +37,17 @@ import { useUserRole } from "@/hooks/useUserRole";
 /** Separación entre llamadas IA en el mismo montaje (tabs pueden estar todas en DOM). */
 const TEAM_AI_STAGGER_MS = 700;
 
+const PROJECT_STATUS_LABEL: Record<string, string> = {
+  activo: "Activo",
+  pausado: "Pausado",
+  completado: "Completado",
+  cancelado: "Cancelado",
+};
+
 export function TeamDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [teamMemberSheetUserId, setTeamMemberSheetUserId] = useState<string | null>(null);
   const { isAdminOrManager } = useUserRole();
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
@@ -105,6 +124,77 @@ export function TeamDashboard() {
       .filter((u) => u.total > 0 || u.assignedClients.length > 0)
       .sort((a, b) => b.pending - a.pending);
   }, [orgUsers, allTasks, clients, user, today]);
+
+  const sheetMemberCard = useMemo(
+    () => (teamMemberSheetUserId ? teamWorkload.find((m) => m.userId === teamMemberSheetUserId) ?? null : null),
+    [teamMemberSheetUserId, teamWorkload]
+  );
+
+  const memberClientsPortfolio = useMemo(() => {
+    if (!teamMemberSheetUserId || !orgUsers) return null;
+    const member = orgUsers.find((u) => u.user_id === teamMemberSheetUserId);
+    if (!member) return null;
+
+    const userNameById: Record<string, string> = {};
+    orgUsers.forEach((u) => {
+      userNameById[u.user_id] = u.full_name;
+    });
+
+    const safeClients = clients ?? [];
+    const safeProjects = projects ?? [];
+    const safeTasks = allTasks ?? [];
+
+    const assignedList = safeClients
+      .filter((c) => c.status === "activo" && c.responsible_user_id === teamMemberSheetUserId)
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+    const blocks = assignedList.map((client) => {
+      const clientTasks = safeTasks.filter((t) => t.client_id === client.id);
+      const cTotal = clientTasks.length;
+      const cCompleted = clientTasks.filter((t) => t.status === "completada").length;
+      const cPct = cTotal > 0 ? Math.round((cCompleted / cTotal) * 100) : 0;
+
+      const clientProjects = safeProjects.filter((p) => p.client_id === client.id && p.status !== "cancelado");
+      const projectRows = clientProjects
+        .map((p) => {
+          const pt = safeTasks.filter((t) => t.project_id === p.id);
+          const total = pt.length;
+          const completed = pt.filter((t) => t.status === "completada").length;
+          const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+          const rid = p.responsible_user_id;
+          return {
+            id: p.id,
+            name: p.name,
+            area: p.area,
+            areaLabel:
+              (p.area && SERVICE_LABELS[p.area as keyof typeof SERVICE_LABELS]) || p.area || "Sin área",
+            pct,
+            total,
+            completed,
+            responsibleUserId: rid,
+            responsibleName: rid ? userNameById[rid] || "—" : "Sin asignar",
+            status: p.status,
+          };
+        })
+        .sort((a, b) => a.areaLabel.localeCompare(b.areaLabel, "es") || a.name.localeCompare(b.name, "es"));
+
+      return {
+        id: client.id,
+        name: client.name,
+        clientOverallPct: cPct,
+        clientTotalTasks: cTotal,
+        clientCompleted: cCompleted,
+        projects: projectRows,
+      };
+    });
+
+    return {
+      memberName: member.full_name,
+      memberArea: member.area,
+      userId: teamMemberSheetUserId,
+      blocks,
+    };
+  }, [teamMemberSheetUserId, orgUsers, clients, projects, allTasks]);
 
   const projectProgress = useMemo(() => {
     if (!projects || !allTasks) return [];
@@ -435,12 +525,13 @@ Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñe
                   {teamWorkload.map((m) => (
                     <button
                       key={m.userId}
-                      onClick={() => navigate(m.area ? `/tareas?area=${m.area}` : "/tareas")}
+                      type="button"
+                      onClick={() => setTeamMemberSheetUserId(m.userId)}
                       className={`rounded-xl p-4 card-hover text-left cursor-pointer hover:ring-1 hover:ring-primary/30 transition-all ${
                         m.overdue > 0 ? "bg-destructive/5 border border-destructive/10" : m.pending > 8 ? "bg-warning/5 border border-warning/10" : "bg-secondary/30 border border-transparent"
                       } ${m.isMe ? "ring-1 ring-primary/20" : ""}`}
                     >
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between gap-1 mb-2">
                         <div className="min-w-0 flex-1 mr-2">
                           <span className="text-[13px] font-medium text-foreground block truncate">
                             {m.name}
@@ -448,7 +539,10 @@ Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñe
                           </span>
                           {m.area && <span className="text-[10px] text-muted-foreground">{m.area}</span>}
                         </div>
-                        <span className={`text-[13px] font-semibold ${progressColor(m.pct)}`}>{m.pct}%</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-[13px] font-semibold ${progressColor(m.pct)}`}>{m.pct}%</span>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+                        </div>
                       </div>
                       <Progress value={m.pct} className="h-1 mb-2" />
                       <div className="flex gap-3 text-[11px] text-muted-foreground">
@@ -456,13 +550,14 @@ Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñe
                         <span>{m.completed} hechas</span>
                         {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
                       </div>
-                      {m.assignedClients.length > 0 && (
-                        <div className="mt-2.5 pt-2.5 border-t border-border/50 text-left">
-                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                            Clientes asignados
-                          </p>
+                      <p className="text-[10px] text-primary font-medium mt-2">Ver clientes y avance por proyecto</p>
+                      <div className="mt-2 pt-2 border-t border-border/50 text-left">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                          Clientes como responsable
+                        </p>
+                        {m.assignedClients.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
-                            {m.assignedClients.slice(0, 6).map((c) => (
+                            {m.assignedClients.slice(0, 5).map((c) => (
                               <Badge
                                 key={c.id}
                                 variant="outline"
@@ -472,14 +567,16 @@ Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñe
                                 {c.name}
                               </Badge>
                             ))}
-                            {m.assignedClients.length > 6 && (
+                            {m.assignedClients.length > 5 && (
                               <span className="text-[10px] text-muted-foreground self-center">
-                                +{m.assignedClients.length - 6} más
+                                +{m.assignedClients.length - 5}
                               </span>
                             )}
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">Ninguno en ficha de cliente</span>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -624,6 +721,148 @@ Markdown: **negritas** para riesgo o acción; viñetas si varios clientes; emoji
           </TabsContent>
         )}
       </Tabs>
+
+      <Sheet open={!!teamMemberSheetUserId} onOpenChange={(open) => !open && setTeamMemberSheetUserId(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-xl flex flex-col p-0 gap-0">
+          {teamMemberSheetUserId && !memberClientsPortfolio && (
+            <div className="p-6 text-sm text-muted-foreground">Cargando portafolio…</div>
+          )}
+          {memberClientsPortfolio && (
+            <>
+              <SheetHeader className="p-6 pb-4 border-b border-border/60 text-left space-y-1">
+                <SheetTitle className="pr-8">{memberClientsPortfolio.memberName}</SheetTitle>
+                <SheetDescription className="text-left space-y-1">
+                  {memberClientsPortfolio.memberArea && (
+                    <span className="block text-xs">Célula: {memberClientsPortfolio.memberArea}</span>
+                  )}
+                  {sheetMemberCard && (
+                    <span className="block text-xs text-muted-foreground">
+                      Tareas: {sheetMemberCard.pending} pendientes · {sheetMemberCard.completed} completadas
+                      {sheetMemberCard.overdue > 0 && (
+                        <span className="text-destructive font-medium"> · {sheetMemberCard.overdue} vencidas</span>
+                      )}
+                    </span>
+                  )}
+                  <span className="block text-xs text-muted-foreground pt-1">
+                    Clientes donde esta persona es responsable en la ficha del cliente, con todos los proyectos no
+                    cancelados y el responsable de cada proyecto.
+                  </span>
+                </SheetDescription>
+              </SheetHeader>
+
+              <ScrollArea className="flex-1 min-h-0 max-h-[calc(100dvh-11rem)] px-6">
+                <div className="py-4 space-y-6">
+                  {memberClientsPortfolio.blocks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No hay clientes activos con esta persona como responsable. Asígnala en la ficha del cliente
+                      (campo responsable) para ver el portafolio aquí.
+                    </p>
+                  ) : (
+                    memberClientsPortfolio.blocks.map((block) => (
+                      <div key={block.id} className="rounded-xl border border-border/60 bg-secondary/20 overflow-hidden">
+                        <div className="p-3 border-b border-border/40 bg-secondary/40">
+                          <button
+                            type="button"
+                            className="w-full text-left"
+                            onClick={() => {
+                              setTeamMemberSheetUserId(null);
+                              navigate(`/clientes/${block.id}`);
+                            }}
+                          >
+                            <span className="text-sm font-semibold text-foreground hover:text-primary flex items-center gap-1">
+                              {block.name}
+                              <ArrowRight className="h-3.5 w-3.5 opacity-60" />
+                            </span>
+                          </button>
+                          <div className="flex items-center justify-between mt-2 gap-2">
+                            <span className="text-[11px] text-muted-foreground">
+                              Avance global de tareas del cliente
+                            </span>
+                            <span className={`text-xs font-semibold shrink-0 ${progressColor(block.clientOverallPct)}`}>
+                              {block.clientOverallPct}%
+                            </span>
+                          </div>
+                          <Progress value={block.clientOverallPct} className="h-1 mt-1.5" />
+                          <span className="text-[10px] text-muted-foreground mt-1 block">
+                            {block.clientCompleted} de {block.clientTotalTasks} tareas con este cliente
+                          </span>
+                        </div>
+                        <div className="p-3 space-y-2">
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                            Proyectos por área
+                          </p>
+                          {block.projects.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              Sin proyectos (excl. cancelados) para este cliente.
+                            </p>
+                          ) : (
+                            block.projects.map((proj) => (
+                              <button
+                                key={proj.id}
+                                type="button"
+                                className="w-full text-left rounded-lg border border-border/50 bg-background/80 p-2.5 hover:bg-secondary/50 transition-colors"
+                                onClick={() => {
+                                  setTeamMemberSheetUserId(null);
+                                  navigate(`/proyectos/${proj.id}`);
+                                }}
+                              >
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                  <div className="min-w-0">
+                                    <Badge variant="secondary" className="text-[10px] font-normal mb-1">
+                                      {proj.areaLabel}
+                                    </Badge>
+                                    <p className="text-[12px] font-medium text-foreground truncate">{proj.name}</p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className={`text-xs font-semibold ${progressColor(proj.pct)}`}>
+                                      {proj.pct}%
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground block">
+                                      {proj.completed}/{proj.total} tareas
+                                    </span>
+                                  </div>
+                                </div>
+                                <Progress value={proj.pct} className="h-1 mb-1.5" />
+                                <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                                  <span>
+                                    Resp. proyecto:{" "}
+                                    <span className="text-foreground font-medium">{proj.responsibleName}</span>
+                                  </span>
+                                  {proj.status !== "activo" && (
+                                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-normal">
+                                      {PROJECT_STATUS_LABEL[proj.status] || proj.status}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+
+              <SheetFooter className="p-4 border-t border-border/60 flex-col sm:flex-col gap-2">
+                {sheetMemberCard && (
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => {
+                      const area = sheetMemberCard.area;
+                      setTeamMemberSheetUserId(null);
+                      navigate(area ? `/tareas?area=${area}` : "/tareas");
+                    }}
+                  >
+                    Ir a tareas {sheetMemberCard.area ? `(${sheetMemberCard.area})` : "del equipo"}
+                  </Button>
+                )}
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
