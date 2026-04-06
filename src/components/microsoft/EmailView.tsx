@@ -62,6 +62,8 @@ import { RichTextEditor } from "./RichTextEditor";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
@@ -219,6 +221,9 @@ export function EmailView() {
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [showFullAI, setShowFullAI] = useState(false);
   const [quickAIPrompt, setQuickAIPrompt] = useState<string | null>(null);
+  const [detailAiPanel, setDetailAiPanel] = useState<null | "summarize" | "translate">(null);
+  const [detailAiLoading, setDetailAiLoading] = useState(false);
+  const [detailAiText, setDetailAiText] = useState("");
   const [draftId, setDraftId] = useState<string | null>(null);
   const [draftHtml, setDraftHtml] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -357,6 +362,77 @@ export function EmailView() {
     }
     deleteEmail.mutate(emailId);
   }, [deleteEmail, allEmails, selectedEmailId]);
+
+  const closeDetailAiPanel = useCallback(() => {
+    setDetailAiPanel(null);
+    setDetailAiLoading(false);
+    setDetailAiText("");
+  }, []);
+
+  useEffect(() => {
+    closeDetailAiPanel();
+  }, [selectedEmailId, closeDetailAiPanel]);
+
+  const runDetailSummarize = useCallback(async () => {
+    if (!emailDetail) return;
+    setQuickAIPrompt(null);
+    const plain = emailBodyToPlain(emailDetail.body?.content || "", emailDetail.body?.contentType);
+    if (!plain) {
+      toast.error("No hay contenido de correo para resumir");
+      return;
+    }
+    setDetailAiPanel("summarize");
+    setDetailAiLoading(true);
+    setDetailAiText("");
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-email-draft", {
+        body: {
+          action: "summarize",
+          emailBody: plain,
+          emailSubject: emailDetail.subject || "",
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.message === "string" ? data.message : data.error);
+      setDetailAiText((data?.text as string) || "");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al resumir");
+      closeDetailAiPanel();
+    } finally {
+      setDetailAiLoading(false);
+    }
+  }, [emailDetail, closeDetailAiPanel]);
+
+  const runDetailTranslate = useCallback(async () => {
+    if (!emailDetail) return;
+    setQuickAIPrompt(null);
+    const plain = emailBodyToPlain(emailDetail.body?.content || "", emailDetail.body?.contentType);
+    if (!plain) {
+      toast.error("No hay contenido para traducir");
+      return;
+    }
+    const targetLanguage = inferTranslationTarget(plain);
+    setDetailAiPanel("translate");
+    setDetailAiLoading(true);
+    setDetailAiText("");
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-email-draft", {
+        body: {
+          action: "translate",
+          emailBody: plain,
+          targetLanguage,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.message === "string" ? data.message : data.error);
+      setDetailAiText((data?.text as string) || "");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al traducir");
+      closeDetailAiPanel();
+    } finally {
+      setDetailAiLoading(false);
+    }
+  }, [emailDetail, closeDetailAiPanel]);
 
   // Keyboard navigation (Superhuman style)
   useEffect(() => {
@@ -915,9 +991,8 @@ export function EmailView() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                      onClick={() =>
-                        setQuickAIPrompt("Resume los puntos clave de este correo en viñetas.")
-                      }
+                      onClick={() => void runDetailSummarize()}
+                      disabled={detailAiLoading}
                     >
                       <Sparkles className="h-4 w-4" />
                     </Button>
@@ -932,11 +1007,8 @@ export function EmailView() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                      onClick={() =>
-                        setQuickAIPrompt(
-                          "Traduce este correo al inglés manteniendo el tono profesional.",
-                        )
-                      }
+                      onClick={() => void runDetailTranslate()}
+                      disabled={detailAiLoading}
                     >
                       <Languages className="h-4 w-4" />
                     </Button>
@@ -963,6 +1035,31 @@ export function EmailView() {
                 </Tooltip>
               </div>
             </TooltipProvider>
+
+            {detailAiPanel && (
+              <div className="px-3 sm:px-6 py-3 border-b border-border/50 shrink-0 bg-muted/15">
+                <div className="rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">
+                      {detailAiPanel === "summarize" ? "Resumen" : "Traducción"}
+                    </span>
+                    <Button type="button" variant="outline" size="sm" onClick={closeDetailAiPanel}>
+                      Cerrar
+                    </Button>
+                  </div>
+                  {detailAiLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      <span>Generando…</span>
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+                      {detailAiText || "Sin resultado."}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Quick AI result */}
             {quickAIPrompt && (
@@ -1173,4 +1270,24 @@ function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: st
 
 function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Cuerpo del mensaje Graph como texto plano para IA */
+function emailBodyToPlain(content: string, contentType?: string): string {
+  if (!content?.trim()) return "";
+  const ct = (contentType || "").toLowerCase();
+  if (ct.includes("html")) return stripTags(content).replace(/\s+/g, " ").trim();
+  return content.trim();
+}
+
+/** Heurística: si parece español → traducir al inglés (en); si no → al español (es) */
+function inferTranslationTarget(plain: string): "en" | "es" {
+  const t = plain.toLowerCase().slice(0, 12_000);
+  const esHits =
+    (t.match(
+      /\b(el|la|los|las|que|de|y|en|un|una|para|con|por|está|este|esta|gracias|saludos|cordialmente|atentamente|fecha|número|reunión|estimado|estimada)\b/g,
+    ) || []).length;
+  const enHits =
+    (t.match(/\b(the|and|is|are|to|of|for|with|this|that|thank|thanks|regards|best|dear|hi|hello|meeting|please)\b/g) || []).length;
+  return esHits >= enHits ? "en" : "es";
 }
