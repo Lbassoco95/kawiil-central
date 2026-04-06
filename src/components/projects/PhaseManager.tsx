@@ -31,6 +31,7 @@ import { formatMX } from "@/lib/dateUtils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import { projectPhaseColorClass } from "./projectPhaseVisual";
 
 export interface Phase {
   key: string;
@@ -64,15 +65,6 @@ const phaseDropCollision: CollisionDetection = (args) => {
   if (inside.length > 0) return inside;
   return rectIntersection(args);
 };
-
-const PHASE_COLORS = [
-  "bg-blue-500/10 border-blue-500/30",
-  "bg-emerald-500/10 border-emerald-500/30",
-  "bg-amber-500/10 border-amber-500/30",
-  "bg-purple-500/10 border-purple-500/30",
-  "bg-rose-500/10 border-rose-500/30",
-  "bg-cyan-500/10 border-cyan-500/30",
-];
 
 function TaskRow({
   task, profileMap, onClick, canDelete, onDelete, selectionMode, isSelected, onToggle, showCleanTitle, archived,
@@ -414,7 +406,7 @@ export function PhaseManager({
         const isEditing = editingPhase === phase.key;
         const progress = phaseProgress(phaseTasks);
         const completedCount = phaseTasks.filter((t) => t.status === "completada").length;
-        const colorClass = PHASE_COLORS[idx % PHASE_COLORS.length];
+        const colorClass = projectPhaseColorClass(idx);
         const shellClass = `rounded-xl border ${colorClass} overflow-hidden`;
 
         const phaseBody = (

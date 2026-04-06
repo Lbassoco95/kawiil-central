@@ -50,12 +50,14 @@ export interface UnifiedStepRowProps {
   commentStepKey?: string;
   /** Client ID for linking subtasks to a client */
   clientId?: string;
+  /** Clases del contenedor raíz (p. ej. dentro de ProjectPhaseStageCard) */
+  rootClassName?: string;
 }
 
 export function UnifiedStepRow({
   step, index, projectId, onSave, onToggle, saving,
   showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
-  commentStepKey, clientId,
+  commentStepKey, clientId, rootClassName,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
@@ -288,7 +290,13 @@ export function UnifiedStepRow({
   return (
     <>
       <Collapsible open={open} onOpenChange={setOpen}>
-        <div className={cn("rounded-lg border px-3 py-2 transition-colors", step.completed ? "bg-muted/40 opacity-70" : "bg-background")}>
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2 transition-colors",
+            step.completed ? "bg-muted/40 opacity-70" : "bg-background",
+            rootClassName
+          )}
+        >
           <CollapsibleTrigger asChild>
             <div className="flex items-start sm:items-center gap-2 sm:gap-3 cursor-pointer flex-wrap">
               <div className="flex items-center gap-2 flex-1 min-w-0">

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -12,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { UnifiedStepRow } from "./UnifiedStepRow";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
+import { ProjectPhaseStageCard } from "./ProjectPhaseStageCard";
 
 import type { AccountingStep } from "@/hooks/useAccountingPeriods";
 
@@ -147,20 +147,24 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
         </CardContent>
       </Card>
 
+      <h3 className="text-sm font-medium text-muted-foreground">Fases del trámite</h3>
       {PHASES.map((phase) => {
         const phaseSteps = steps.filter((s) => s.phase === phase.number);
         if (phaseSteps.length === 0) return null;
-        const phaseCompleted = phaseSteps.every((s) => s.status === "completado");
+        const completedInPhase = phaseSteps.filter((s) => s.status === "completado").length;
+        const totalInPhase = phaseSteps.length;
+        const phasePct = totalInPhase ? Math.round((completedInPhase / totalInPhase) * 100) : 0;
 
         return (
-          <div key={phase.number} className="space-y-2">
-            <div className="flex items-center gap-2 px-1">
-              <Badge variant={phaseCompleted ? "default" : "outline"} className={`text-xs ${phaseCompleted ? "bg-green-600 text-white" : ""}`}>
-                Fase {phase.number}
-              </Badge>
-              <h4 className="text-sm font-semibold text-foreground">{phase.label}</h4>
-            </div>
-
+          <ProjectPhaseStageCard
+            key={phase.number}
+            colorIndex={phase.number - 1}
+            title={`Fase ${phase.number}: ${phase.label}`}
+            progressPercent={phasePct}
+            completedCount={completedInPhase}
+            totalCount={totalInPhase}
+            defaultOpen
+          >
             {phaseSteps.map((step) => {
               const globalIdx = steps.findIndex((s) => s.key === step.key);
               const hasAppointment = step.appointment_date !== undefined;
@@ -177,6 +181,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
                   showCheckbox={false}
                   onSave={(updates) => updateStep(step.key, updates as Partial<GestoriaStep>)}
                   saving={saveMutation.isPending}
+                  rootClassName="border-border/50 shadow-sm"
                   extraFields={hasAppointment ? (
                     <div className="space-y-1">
                       <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
@@ -202,7 +207,7 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
                 />
               );
             })}
-          </div>
+          </ProjectPhaseStageCard>
         );
       })}
     </div>

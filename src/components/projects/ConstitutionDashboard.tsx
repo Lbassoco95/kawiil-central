@@ -164,7 +164,9 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
         </CardContent>
       </Card>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium text-muted-foreground">Pasos de constitución</h3>
+        <div className="space-y-2">
         {visibleSteps.map((step, idx) => {
           const hasAppointment = step.appointment_date !== undefined;
 
@@ -206,6 +208,7 @@ export function ConstitutionDashboard({ projectId, constitutionDetails, responsi
             />
           );
         })}
+        </div>
       </div>
 
     </div>

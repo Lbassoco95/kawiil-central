@@ -50,6 +50,7 @@ import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
 import { UnifiedStepRow } from "./UnifiedStepRow";
+import { ProjectPhaseStageCard } from "./ProjectPhaseStageCard";
 import type { AccountingStep, StepStatus } from "@/hooks/useAccountingPeriods";
 
 import { useProfiles } from "@/hooks/useTasks";
@@ -422,6 +423,16 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     persistDetails({ ...current, stages: updatedStages });
   };
 
+  const lawsuitStageCardMetrics = (stage: LawsuitStage) => {
+    if (stage.status === "completado" || stage.status === "no_aplica") {
+      return { pct: 100, completed: 1, total: 1 };
+    }
+    if (stage.status === "en_progreso") {
+      return { pct: 50, completed: 0, total: 1 };
+    }
+    return { pct: 0, completed: 0, total: 1 };
+  };
+
   const handleStageToggle = (stageKey: string, completed: boolean) => {
     const current = localDetails;
     const updatedStages = current.stages.map((s) =>
@@ -576,17 +587,18 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
         </CardContent>
       </Card>
 
-      {/* Procedural stages — now using UnifiedStepRow */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Etapas procesales</CardTitle>
+      {/* Etapas procesales — mismo diseño de fases que el resto del sistema (tab Tareas) */}
+      <div className="space-y-3">
+        <div className="flex flex-row items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Etapas procesales</h3>
           <Button size="sm" variant="outline" onClick={() => setStageDialogOpen(true)}>
             <Plus className="h-3 w-3 mr-1" /> Agregar etapa
           </Button>
-        </CardHeader>
-        <CardContent className="space-y-1">
+        </div>
+        <div className="space-y-3">
           {localDetails.stages.map((stage, idx) => {
             const attachments = stage.attachments || [];
+            const metrics = lawsuitStageCardMetrics(stage);
 
             const stageExtraFields = (
               <div className="space-y-3">
@@ -618,24 +630,34 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
             );
 
             return (
-              <UnifiedStepRow
+              <ProjectPhaseStageCard
                 key={stage.key}
-                step={stageToStep(stage)}
-                index={idx}
-                projectId={projectId}
-                clientDropboxPath={dropboxInitialPath || undefined}
-                clientId={clientId}
-                showTimer={true}
-                showCheckbox={true}
-                onToggle={(checked) => handleStageToggle(stage.key, checked)}
-                onSave={(updates) => handleStageSave(stage.key, updates)}
-                saving={updateLawsuit.isPending}
-                extraFields={stageExtraFields}
-              />
+                colorIndex={idx}
+                title={`${idx + 1}. ${stage.label}`}
+                progressPercent={metrics.pct}
+                completedCount={metrics.completed}
+                totalCount={metrics.total}
+                defaultOpen={stage.status !== "completado"}
+              >
+                <UnifiedStepRow
+                  step={stageToStep(stage)}
+                  index={idx}
+                  projectId={projectId}
+                  clientDropboxPath={dropboxInitialPath || undefined}
+                  clientId={clientId}
+                  showTimer={true}
+                  showCheckbox={true}
+                  onToggle={(checked) => handleStageToggle(stage.key, checked)}
+                  onSave={(updates) => handleStageSave(stage.key, updates)}
+                  saving={updateLawsuit.isPending}
+                  extraFields={stageExtraFields}
+                  rootClassName="border-border/50 shadow-sm"
+                />
+              </ProjectPhaseStageCard>
             );
           })}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Deadlines / Términos */}
       <Card>
