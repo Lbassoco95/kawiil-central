@@ -829,7 +829,7 @@ const anthropicTools = [
   },
   {
     name: "search_across",
-    description: "Búsqueda unificada por texto libre en tareas, clientes y proyectos. Devuelve resultados con tipo, id, nombre y URL.",
+    description: "Búsqueda unificada por texto libre en tareas, clientes, proyectos y oportunidades del pipeline (leads). Devuelve resultados con tipo, id, nombre y URL.",
     input_schema: {
       type: "object",
       properties: {
@@ -1277,6 +1277,24 @@ async function executeTool(
         results.push({ type: "project", id: p.id, name: p.name, extra: `${p.status} · ${p.area || ""}`, url: `/proyectos/${p.id}` });
       }
 
+      const esc = escapePostgrestString(q);
+      const { data: pipelineLeads } = await supabase.from("leads")
+        .select("id, full_name, company_name, email, priority, is_active")
+        .eq("organization_id", orgId)
+        .or(`full_name.ilike.%${esc}%,company_name.ilike.%${esc}%,email.ilike.%${esc}%,phone.ilike.%${esc}%`)
+        .limit(5);
+      for (const pl of pipelineLeads || []) {
+        const extraParts = [pl.company_name, pl.email].filter(Boolean);
+        const statusPart = pl.is_active === false ? "inactivo" : "activo";
+        results.push({
+          type: "pipeline_lead",
+          id: pl.id,
+          name: pl.full_name,
+          extra: [...extraParts, `${pl.priority} · ${statusPart}`].filter(Boolean).join(" · "),
+          url: `/pipeline/leads/${pl.id}`,
+        });
+      }
+
       return results;
     }
 
@@ -1659,7 +1677,7 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - Tienes acceso a una **base de conocimiento vectorial** con documentos, conversaciones previas, procedimientos, comunicados y **memorias persistentes**.
 - **USA semantic_search PRIMERO** cuando el usuario pregunte sobre un tema, ley, procedimiento, cliente o concepto. Es tu herramienta más potente: encuentra información relevante incluso si las palabras exactas no coinciden.
 - Cuando busques sobre un cliente específico, pasa el client_id como filtro para resultados más precisos.
-- Si semantic_search no encuentra suficiente info, complementa con search_past_conversations (búsqueda exacta en conversaciones) y search_across (búsqueda en tareas/clientes/proyectos).
+- Si semantic_search no encuentra suficiente info, complementa con search_past_conversations (búsqueda exacta en conversaciones) y search_across (búsqueda en tareas/clientes/proyectos/pipeline).
 - Tras semantic_search, **sintetiza en párrafos** lo relevante para la pregunta; no devuelvas al usuario un inventario de fragmentos o documentos salvo que pida un índice o un listado explícito.
 - Al responder, SIEMPRE cruza la información de múltiples fuentes: conocimiento base + memorias + comentarios + descripción + actividad.
 - Si el usuario pregunta sobre una persona, consulta sus tareas Y la actividad reciente para dar un panorama completo.

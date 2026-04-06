@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Loader2, Sparkles, ArrowRight, Users, Briefcase, FolderKanban, X } from "lucide-react";
+import { Search, Loader2, Sparkles, ArrowRight, Users, Briefcase, FolderKanban, Handshake, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { cn } from "@/lib/utils";
 
 interface SearchResult {
-  type: "client" | "project" | "task" | "user";
+  type: "client" | "project" | "task" | "user" | "pipeline_lead";
   id: string;
   name: string;
   url: string;
@@ -20,6 +20,7 @@ const ICONS = {
   project: FolderKanban,
   task: Briefcase,
   user: Users,
+  pipeline_lead: Handshake,
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -27,6 +28,7 @@ const TYPE_LABELS: Record<string, string> = {
   project: "Proyecto",
   task: "Tarea",
   user: "Usuario",
+  pipeline_lead: "Oportunidad",
 };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
@@ -123,7 +125,7 @@ export function GlobalAISearch({ className }: { className?: string }) {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setOpen(true)}
-          placeholder="Buscar clientes, proyectos, tareas..."
+          placeholder="Buscar clientes, proyectos, tareas, oportunidades…"
           className="h-8 pl-8 pr-20 text-xs bg-muted/50 border-border/50 focus:bg-background"
         />
         <div className="absolute right-1 flex items-center gap-1">
