@@ -1,10 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-/* Ocultar badge Lovable si se inyecta por script o tagger */
+/* Ocultar badge / FAB "Edit with Lovable" (preview Lovable, tagger, overlays) */
 [data-lovable-badge],
+[data-lovable],
 .lovable-badge,
-a[href*="lovable.dev"][class*="badge"] {
+[class*="lovable-badge" i],
+a[href*="lovable.dev"]:not([href*="github.com"]),
+a[href*="lovable.app"],
+button[aria-label*="Lovable" i],
+[title*="Edit with Lovable" i],
+[title*="Lovable" i][class*="fixed"],
+div[class*="LovableToolbar" i],
+div[id*="lovable" i] {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 @tailwind base;
