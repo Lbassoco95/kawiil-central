@@ -212,7 +212,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv2";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv3";
 
 export function EmailView() {
   const [search, setSearch] = useState("");
@@ -804,11 +804,14 @@ export function EmailView() {
         </ScrollArea>
       </div>
 
-      {/* Detail panel */}
-      <div className={cn(
-        "flex-1 flex flex-col min-w-0 bg-background",
-        !selectedEmailId && isMobile && "hidden"
-      )}>
+      {/* Detail panel — borde izquierdo de acento: visible incluso si el HTML del correo es plano */}
+      <div
+        className={cn(
+          "flex-1 flex flex-col min-w-0 bg-background",
+          selectedEmailId && "border-l-4 border-l-primary shadow-[4px_0_24px_-8px_hsl(var(--primary)/0.35)]",
+          !selectedEmailId && isMobile && "hidden",
+        )}
+      >
         {!selectedEmailId ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-xs">
@@ -834,7 +837,7 @@ export function EmailView() {
             data-email-layout={EMAIL_VIEW_LAYOUT_VERSION}
           >
             <div
-              className="h-1 shrink-0 bg-gradient-to-r from-primary via-blue-500 to-sky-400 opacity-90"
+              className="h-2.5 shrink-0 bg-gradient-to-r from-primary via-blue-500 to-sky-400"
               aria-hidden
             />
             {/* Detail header */}
@@ -865,11 +868,20 @@ export function EmailView() {
                       "—"}
                   </p>
                 </div>
-                <span className="text-xs text-muted-foreground shrink-0 pt-1">
-                  {emailDetail.receivedDateTime
-                    ? format(parseISO(emailDetail.receivedDateTime), "d MMM yyyy, HH:mm", { locale: es })
-                    : ""}
-                </span>
+                <div className="flex flex-col items-end gap-1.5 shrink-0 pt-0.5">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/10 text-primary tracking-tight"
+                    title="Si no ves esta etiqueta, el navegador o Lovable están sirviendo un bundle antiguo."
+                  >
+                    {EMAIL_VIEW_LAYOUT_VERSION}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {emailDetail.receivedDateTime
+                      ? format(parseISO(emailDetail.receivedDateTime), "d MMM yyyy, HH:mm", { locale: es })
+                      : ""}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1108,8 +1120,8 @@ export function EmailView() {
             {/* Email body + thread — columna centrada estilo lector premium */}
             <ScrollArea className="flex-1">
               <div className="px-3 sm:px-6 py-4 sm:py-6 space-y-5">
-                <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border border-border/70 bg-card/90 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] overflow-hidden">
-                  <div className="px-4 py-5 sm:px-7 sm:py-7">
+                <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border-2 border-primary/15 bg-card/95 shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08] overflow-hidden">
+                  <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
                     {emailDetail.body?.contentType === "html" ? (
                       <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
                     ) : (
