@@ -114,6 +114,7 @@ export function LawsuitFormDialog({ open, onOpenChange }: LawsuitFormDialogProps
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       toast.success("Juicio creado exitosamente");
       resetForm();
       onOpenChange(false);

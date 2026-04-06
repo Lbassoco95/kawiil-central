@@ -215,6 +215,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
     },
     onError: (e) => toast.error("Error: " + e.message),
   });
@@ -240,6 +241,7 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
     },
     onError: (e) => toast.error("Error: " + e.message),
   });
@@ -403,7 +405,11 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
           merged.completed_at = null;
         }
       }
-      if (updates.due_date !== undefined) merged.due_date = updates.due_date;
+      if (updates.due_date !== undefined) {
+        merged.due_date = updates.due_date;
+        // Mantener `date` alineado: la lista "Mis pasos" y datos legacy leían solo `date`.
+        merged.date = updates.due_date;
+      }
       if (updates.notes !== undefined) merged.notes = updates.notes || "";
       if (updates.assigned_to !== undefined) merged.assigned_to = updates.assigned_to;
       if (updates.collaborators !== undefined) merged.collaborators = updates.collaborators;
