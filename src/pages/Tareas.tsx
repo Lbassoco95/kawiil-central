@@ -150,7 +150,7 @@ INSTRUCCIONES:
           title="Tareas"
           description="Gestión de tareas y actividades internas"
           actions={
-            <Button size="sm" onClick={openNewTask}>
+            <Button type="button" size="sm" onClick={openNewTask}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
             </Button>
           }
@@ -319,7 +319,7 @@ INSTRUCCIONES:
             </div>
             <h3 className="text-sm font-medium text-foreground">Sin tareas aún</h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">Crea tu primera tarea para comenzar a organizar el trabajo del equipo.</p>
-            <Button className="mt-4" size="sm" onClick={openNewTask}>
+            <Button type="button" className="mt-4" size="sm" onClick={openNewTask}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
             </Button>
           </div>

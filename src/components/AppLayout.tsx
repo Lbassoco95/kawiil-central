@@ -1,6 +1,7 @@
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { NewTaskModalHost } from "@/contexts/NewTaskModalContext";
+import { NewTaskModalContext } from "@/contexts/NewTaskModalContext";
+import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,13 +50,31 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const [currentTime, setCurrentTime] = useState(() => nowMX());
 
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const openNewTask = useCallback(() => setNewTaskOpen(true), []);
+  const newTaskModalValue = useMemo(() => ({ openNewTask }), [openNewTask]);
+
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(nowMX()), 30000);
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "n") return;
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      const tag = t.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t.isContentEditable) return;
+      e.preventDefault();
+      setNewTaskOpen(true);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
   return (
-    <NewTaskModalHost>
+    <NewTaskModalContext.Provider value={newTaskModalValue}>
     <div className="flex min-h-screen w-full bg-background relative">
       {/* Ambient gradient mesh */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
@@ -85,6 +104,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       </main>
       <FloatingAIChat />
     </div>
-    </NewTaskModalHost>
+    <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
+    </NewTaskModalContext.Provider>
   );
 }
