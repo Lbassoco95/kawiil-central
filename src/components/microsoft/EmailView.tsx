@@ -834,7 +834,9 @@ export function EmailView() {
                     <span className="text-xs text-muted-foreground hidden sm:inline">&lt;{emailDetail.from?.emailAddress?.address}&gt;</span>
                   </div>
                   <p className="text-xs text-muted-foreground truncate">
-                    Para: {emailDetail.toRecipients?.map((r: any) => r.emailAddress?.name || r.emailAddress?.address).join(", ")}
+                    Para:{" "}
+                    {emailDetail.toRecipients?.map((r: any) => recipientToFieldDisplay(r)).filter(Boolean).join(", ") ||
+                      "—"}
                   </p>
                 </div>
                 <span className="text-xs text-muted-foreground shrink-0 pt-1">
@@ -1270,6 +1272,15 @@ function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: st
 
 function stripTags(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Para: evita alias técnico (sin espacios ni @) y muestra el email real */
+function recipientToFieldDisplay(r: { emailAddress?: { name?: string; address?: string } } | null | undefined): string {
+  const name = (r?.emailAddress?.name || "").trim();
+  const address = (r?.emailAddress?.address || "").trim();
+  const display =
+    name && (name.includes(" ") || name.includes("@")) ? name : address || name;
+  return display;
 }
 
 /** Cuerpo del mensaje Graph como texto plano para IA */

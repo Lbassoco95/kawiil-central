@@ -1,5 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+/* Ocultar badge Lovable si se inyecta por script o tagger */
+[data-lovable-badge],
+.lovable-badge,
+a[href*="lovable.dev"][class*="badge"] {
+  display: none !important;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
