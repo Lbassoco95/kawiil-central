@@ -30,22 +30,26 @@ const Microsoft365Correo = () => {
         <div className="absolute -bottom-1/4 -left-1/4 w-[500px] h-[500px] rounded-full bg-accent/[0.03] blur-3xl" />
       </div>
       <AppSidebar />
-      <main className="relative z-10 flex-1 flex flex-col overflow-hidden w-full h-screen">
-        {/* Compact header */}
-        <div className={`shrink-0 bg-background/80 backdrop-blur-sm border-b border-border/50 ${isMobile ? "px-4 pt-12 pb-2" : "px-4 py-1.5"}`}>
-          <div className="flex items-center gap-3">
-            {!isMobile && <GlobalAISearch />}
-            <div className="flex items-center gap-2">
+      <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden w-full h-screen">
+        {/* Cabecera: búsqueda en bloque aparte para alinear con el área de correo */}
+        <div className={`shrink-0 bg-background/80 backdrop-blur-sm border-b border-border/50 ${isMobile ? "px-4 pt-12 pb-2" : "px-4 py-2"}`}>
+          {!isMobile && (
+            <div className="mb-2 w-full max-w-2xl">
+              <GlobalAISearch className="w-full max-w-full shrink-0 flex-none" />
+            </div>
+          )}
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2">
               <h1 className="text-sm font-medium text-foreground">Correo</h1>
               {profile && (
-                <span className="text-xs text-muted-foreground">
+                <span className="truncate text-xs text-muted-foreground">
                   · {profile.displayName || profile.mail || ""}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-              <Clock className="h-3.5 w-3.5 text-muted-foreground hidden sm:block" />
-              <p className="text-xs font-medium text-foreground capitalize hidden sm:block">
+            <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+              <Clock className="hidden h-3.5 w-3.5 text-muted-foreground sm:block" />
+              <p className="hidden text-xs font-medium capitalize text-foreground sm:block">
                 {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
               </p>
               <span className="text-xs text-muted-foreground">
@@ -77,7 +81,7 @@ const Microsoft365Correo = () => {
             </div>
           ) : (
             <ErrorBoundary>
-              <div className="h-full animate-fade-in">
+              <div className="h-full min-h-0 min-w-0 w-full animate-fade-in">
                 <EmailView />
               </div>
             </ErrorBoundary>

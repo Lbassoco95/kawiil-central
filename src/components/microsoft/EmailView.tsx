@@ -212,7 +212,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv3";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv4-grid";
 
 export function EmailView() {
   const [search, setSearch] = useState("");
@@ -495,12 +495,21 @@ export function EmailView() {
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
 
   return (
-    <div className="flex h-full overflow-hidden bg-background">
+    <div
+      className={cn(
+        "h-full min-h-0 min-w-0 w-full overflow-hidden bg-background",
+        isMobile ? "flex" : "grid grid-cols-[13.5rem_minmax(18rem,28rem)_minmax(0,1fr)]",
+      )}
+    >
       {/* Folder sidebar — collapsible on mobile */}
-      <div className={cn(
-        "shrink-0 border-r border-border bg-muted/30 flex flex-col transition-all duration-200",
-        isMobile ? (showFolders ? "w-56 absolute z-30 h-full shadow-xl" : "w-0 overflow-hidden") : "w-52"
-      )}>
+      <div
+        className={cn(
+          "flex min-h-0 shrink-0 flex-col border-r border-border bg-muted/30 transition-all duration-200",
+          isMobile
+            ? cn(showFolders ? "absolute z-30 h-full w-56 shadow-xl" : "w-0 overflow-hidden border-0")
+            : "w-full min-w-0",
+        )}
+      >
         <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carpetas</span>
           {isMobile && (
@@ -509,7 +518,7 @@ export function EmailView() {
             </Button>
           )}
         </div>
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="py-1">
             {sortedFolders.map((folder: any) => {
               const Icon = getFolderIcon(folder.displayName);
@@ -583,11 +592,13 @@ export function EmailView() {
       </div>
 
       {/* Email list panel */}
-      <div className={cn(
-        "flex flex-col border-r border-border bg-background transition-all duration-200",
-        isMobile ? "flex-1" : "min-w-[350px] max-w-[450px] w-[420px] shrink-0",
-        selectedEmailId && isMobile && "hidden"
-      )}>
+      <div
+        className={cn(
+          "flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-border bg-background transition-all duration-200",
+          isMobile ? "flex-1" : "w-full",
+          selectedEmailId && isMobile && "hidden",
+        )}
+      >
         {/* Search & compose toolbar */}
         <div className="p-3 border-b border-border/50 space-y-2">
           <div className="flex items-center gap-2">
@@ -613,7 +624,7 @@ export function EmailView() {
         </div>
 
         {/* Email list — sin padding lateral; cada fila usa px-4 */}
-        <ScrollArea className="flex-1 px-0" ref={listRef}>
+        <ScrollArea className="min-h-0 flex-1 px-0" ref={listRef}>
           {isLoading ? (
             <div className="py-2 space-y-0">
               {[...Array(8)].map((_, i) => (
@@ -807,7 +818,8 @@ export function EmailView() {
       {/* Detail panel — borde izquierdo de acento: visible incluso si el HTML del correo es plano */}
       <div
         className={cn(
-          "flex-1 flex flex-col min-w-0 bg-background",
+          "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background",
+          isMobile ? "flex-1" : "h-full min-w-0",
           selectedEmailId && "border-l-4 border-l-primary shadow-[4px_0_24px_-8px_hsl(var(--primary)/0.35)]",
           !selectedEmailId && isMobile && "hidden",
         )}

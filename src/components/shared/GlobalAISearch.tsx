@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
+import { cn } from "@/lib/utils";
 
 interface SearchResult {
   type: "client" | "project" | "task" | "user";
@@ -30,7 +31,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 
-export function GlobalAISearch() {
+export function GlobalAISearch({ className }: { className?: string }) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -113,7 +114,7 @@ export function GlobalAISearch() {
   };
 
   return (
-    <div ref={containerRef} className="relative flex-1 max-w-md">
+    <div ref={containerRef} className={cn("relative flex-1 max-w-md", className)}>
       <div className="relative flex items-center">
         <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
         <Input
