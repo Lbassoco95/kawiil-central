@@ -46,6 +46,25 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
   });
 }
 
+/** Tareas del tablero (`tasks`) asignadas al usuario actual; no incluye pasos de proyecto. */
+export function useMyAssignedTasks() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["tasks", "mine", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*, clients(name), projects(name)")
+        .eq("assigned_to", user!.id)
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return data as Task[];
+    },
+    enabled: !!user?.id,
+  });
+}
+
 export function useTasksForCalendar(startDate?: string, endDate?: string) {
   const { user } = useAuth();
 

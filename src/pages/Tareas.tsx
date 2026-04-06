@@ -2,12 +2,11 @@ import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, Archive } from "lucide-react";
-import { useTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
+import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, Archive, UserCheck, ChevronRight } from "lucide-react";
+import { useTasks, useMyAssignedTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
@@ -24,6 +23,11 @@ import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const statusLabels = TASK_STATUS_CONFIG;
 
@@ -41,6 +45,7 @@ const Tareas = () => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [showAllSteps, setShowAllSteps] = useState(false);
+  const [showAllMyOpen, setShowAllMyOpen] = useState(false);
   const deleteTask = useDeleteTask();
   const { canDeleteTasks } = useUserRole();
   const { areaOptions, areaLabelMap, getCelulaLabel } = useAreaOptions();
@@ -104,6 +109,30 @@ const Tareas = () => {
     area: area !== "todas" ? area : undefined,
     search: search || undefined,
   });
+
+  const { data: myAssignedRaw = [], isLoading: myAssignedLoading } = useMyAssignedTasks();
+
+  const myOpenTasks = useMemo(() => {
+    const open = myAssignedRaw.filter((t) => !isTaskClosedStatus(t.status));
+    const pr = { urgente: 0, alta: 1, media: 2, baja: 3 } as Record<string, number>;
+    return [...open].sort((a, b) => {
+      const oa = a.due_date && isPastDueCalendarMX(a.due_date) ? 0 : 1;
+      const ob = b.due_date && isPastDueCalendarMX(b.due_date) ? 0 : 1;
+      if (oa !== ob) return oa - ob;
+      const da = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const db = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      if (da !== db) return da - db;
+      return (pr[a.priority] ?? 4) - (pr[b.priority] ?? 4);
+    });
+  }, [myAssignedRaw]);
+
+  const myClosedTasks = useMemo(() => {
+    const closed = myAssignedRaw.filter((t) => isTaskClosedStatus(t.status));
+    return [...closed].sort(
+      (a, b) =>
+        new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+    );
+  }, [myAssignedRaw]);
 
   const openTasks = useMemo(() => tasks?.filter((t: any) => !isTaskClosedStatus(t.status)) ?? [], [tasks]);
   const closedTasks = useMemo(() => {
@@ -222,6 +251,138 @@ INSTRUCCIONES:
           ready={!!tasks && tasks.length > 0}
           userId={user?.id}
         />
+
+        <section className="animate-fade-in rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-transparent p-4 shadow-sm">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between mb-3">
+            <div className="flex items-start gap-2 min-w-0">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <UserCheck className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-semibold text-foreground">Mis tareas del tablero</h2>
+                  <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium tabular-nums">
+                    {myOpenTasks.length} en curso
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug max-w-xl">
+                  Solo tareas internas donde eres responsable. Los pasos dentro de proyectos (constitución, gestoría, etc.) están en la sección de abajo.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {myAssignedLoading ? (
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-14 rounded-xl bg-secondary/40 animate-pulse" />
+              ))}
+            </div>
+          ) : myOpenTasks.length === 0 && myClosedTasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6 px-2">
+              No tienes tareas del tablero asignadas. Pueden asignártelas desde el detalle de una tarea o al crearla.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {myOpenTasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-3">No tienes tareas del tablero en curso.</p>
+              ) : (
+                <>
+                  {(showAllMyOpen ? myOpenTasks : myOpenTasks.slice(0, 10)).map((task, i) => (
+                    <div
+                      key={task.id}
+                      className={cn(
+                        "flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer border border-border/50 bg-background/80 hover:bg-background card-hover-subtle",
+                        getPriorityBar(task.priority),
+                        (task as any).delay_category && "bg-warning/[0.04]"
+                      )}
+                      style={{ animationDelay: `${Math.min(i, 8) * 25}ms` }}
+                      onClick={() => openTask(task.id)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <h3 className="text-sm font-medium text-foreground truncate">{task.title}</h3>
+                          {(task as any).criticality_level === "critico" && <span className="text-[10px] shrink-0" title="Crítico">🔴</span>}
+                          {(task as any).criticality_level === "atencion" && <span className="text-[10px] shrink-0" title="Atención">🟡</span>}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge className={cn("text-[10px] border-0 px-1.5 py-0", statusLabels[task.status]?.color)} variant="secondary">
+                            {statusLabels[task.status]?.label}
+                          </Badge>
+                          {task.area && (
+                            <span className="text-[10px] text-muted-foreground bg-secondary/50 px-1.5 py-0 rounded">{getCelulaLabel(task.area)}</span>
+                          )}
+                          {(task as any).clients?.name && (
+                            <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{(task as any).clients.name}</span>
+                          )}
+                          {(task as any).projects?.name && (
+                            <span className="text-[10px] text-muted-foreground/80 truncate max-w-[120px]">{(task as any).projects.name}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {task.due_date && (
+                          <span className={cn("text-xs flex items-center gap-1", getDateColor(task.due_date))}>
+                            <Calendar className="h-3 w-3" />
+                            {formatMX(task.due_date, "dd MMM")}
+                          </span>
+                        )}
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
+                      </div>
+                    </div>
+                  ))}
+                  {myOpenTasks.length > 10 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllMyOpen(!showAllMyOpen)}
+                      className="text-xs text-primary hover:text-primary/80 text-center py-1 w-full transition-colors"
+                    >
+                      {showAllMyOpen ? "Mostrar menos" : `+${myOpenTasks.length - 10} tareas más — ver todas`}
+                    </button>
+                  )}
+                </>
+              )}
+
+              {myClosedTasks.length > 0 && (
+                <Collapsible defaultOpen={false} className="group rounded-lg border border-border/40 bg-muted/20 overflow-hidden">
+                  <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors">
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    Mi historial del tablero — completadas o canceladas ({myClosedTasks.length})
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="space-y-1 px-2 pb-2 pt-0 border-t border-border/30">
+                      {myClosedTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={cn(
+                            "flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-muted/50 text-muted-foreground",
+                            task.status === "cancelada" && "opacity-80"
+                          )}
+                          onClick={() => openTask(task.id)}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className={cn("text-[13px] font-medium truncate", task.status === "cancelada" && "line-through")}>
+                              {task.title}
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 mt-0.5">
+                              <Badge className={cn("text-[9px] border-0 px-1 py-0", statusLabels[task.status]?.color)} variant="secondary">
+                                {statusLabels[task.status]?.label}
+                              </Badge>
+                              {task.area && (
+                                <span className="text-[10px]">{getCelulaLabel(task.area)}</span>
+                              )}
+                            </div>
+                          </div>
+                          <ArrowRight className="h-3 w-3 shrink-0 opacity-40" />
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </div>
+          )}
+        </section>
 
         {assignedSteps.length > 0 && (
           <section className="animate-fade-in glass-card p-4">
