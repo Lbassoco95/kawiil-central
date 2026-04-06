@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
-import { logActivity } from "@/lib/activityLog";
+import { logEntityActivity } from "@/lib/activityLog";
 import { createNotifications } from "@/lib/notificationHelpers";
 
 export type Task = Tables<"tasks"> & {
@@ -254,10 +254,16 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
+      queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       toast.success("Tarea creada exitosamente");
 
-      if (data) {
-        logActivity({ entityType: "task", entityId: data.id, action: "created", details: { title: data.title, area: data.area, priority: data.priority } });
+      if (data && data.organization_id) {
+        void logEntityActivity(user!.id, data.organization_id, {
+          entityType: "task",
+          entityId: data.id,
+          action: "created",
+          details: { title: data.title, area: data.area, priority: data.priority },
+        });
         sendSlackNotification("task_created", {
           title: data.title,
           priority: data.priority,
@@ -377,6 +383,21 @@ export function useUpdateTask() {
       }
       const { error } = await supabase.from("tasks").update(updates).eq("id", id);
       if (error) throw error;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .single();
+      if (profile?.organization_id) {
+        const changeKeys = Object.keys(updates).filter((k) => k !== "id");
+        void logEntityActivity(user!.id, profile.organization_id, {
+          entityType: "task",
+          entityId: id,
+          action: "updated",
+          details: { changes: changeKeys },
+        });
+      }
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -385,13 +406,12 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
+      queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       if (vars.title) {
         queryClient.invalidateQueries({ queryKey: ["linked-task-titles"] });
         queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
         queryClient.invalidateQueries({ queryKey: ["annual-declarations"] });
       }
-      logActivity({ entityType: "task", entityId: vars.id, action: "updated", details: { changes: Object.keys(vars).filter(k => k !== "id") } });
-
       if (vars.status) {
         sendSlackNotification("task_updated", {
           title: vars.title || "Tarea",
@@ -416,10 +436,23 @@ export function useUpdateTask() {
 
 export function useDeleteTask() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .single();
       const { error } = await supabase.from("tasks").delete().eq("id", id);
       if (error) throw error;
+      if (profile?.organization_id) {
+        void logEntityActivity(user!.id, profile.organization_id, {
+          entityType: "task",
+          entityId: id,
+          action: "deleted",
+        });
+      }
     },
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -427,7 +460,7 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
-      logActivity({ entityType: "task", entityId: id, action: "deleted" });
+      queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       toast.success("Tarea eliminada");
     },
     onError: (err: Error) => toast.error("Error al eliminar tarea: " + err.message),

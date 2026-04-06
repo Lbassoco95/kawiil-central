@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
+import { PersonalRendimientoMetrics } from "@/components/dashboard/PersonalRendimientoMetrics";
 import { DailyBriefing } from "@/components/dashboard/DailyBriefing";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,7 @@ const SECTION_LABELS: Record<string, string> = {
   notificaciones: "Notificaciones",
   correo: "Correo",
   calendario: "Calendario",
+  hub: "Hub",
 };
 
 function formatSectionLabel(raw: string): string {
@@ -877,6 +879,7 @@ export function PersonalDashboard() {
 
         {/* Rendimiento */}
         <TabsContent value="rendimiento" className="mt-4 space-y-6 animate-fade-in">
+          <PersonalRendimientoMetrics pendingTasks={pendingTasksSnapshot} />
           <PerformanceChart />
           <MonthlyPerformance />
         </TabsContent>

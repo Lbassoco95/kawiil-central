@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { logEntityActivity } from "@/lib/activityLog";
 
 const INTERNAL_PROCEDURES_PATH = "internal/procedures";
 
@@ -100,10 +101,18 @@ export function useCreateInternalProcedure() {
         change_notes: "Versión inicial",
       });
 
+      void logEntityActivity(user!.id, profile.organization_id, {
+        entityType: "hub",
+        entityId: data.id,
+        action: "hub_procedure_created",
+        details: { title: data.title },
+      });
+
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["internal-procedures"] });
+      queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-hub-log"] });
       toast.success("Procedimiento subido");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -146,11 +155,26 @@ export function useUploadNewVersion() {
         })
         .eq("id", input.procedureId);
 
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .single();
+      if (profile?.organization_id) {
+        void logEntityActivity(user!.id, profile.organization_id, {
+          entityType: "hub",
+          entityId: input.procedureId,
+          action: "hub_procedure_version",
+          details: { version: newVersion },
+        });
+      }
+
       return newVersion;
     },
     onSuccess: (version) => {
       queryClient.invalidateQueries({ queryKey: ["internal-procedures"] });
       queryClient.invalidateQueries({ queryKey: ["procedure-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-hub-log"] });
       toast.success(`Versión ${version} subida`);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -266,10 +290,19 @@ export function useCreateInternalComunicado() {
         .select()
         .single();
       if (error) throw error;
+
+      void logEntityActivity(user!.id, profile.organization_id, {
+        entityType: "hub",
+        entityId: data.id,
+        action: "hub_comunicado_created",
+        details: { title: data.title },
+      });
+
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["internal-comunicados"] });
+      queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-hub-log"] });
       toast.success("Comunicado publicado");
     },
     onError: (e: Error) => toast.error(e.message),
