@@ -211,6 +211,9 @@ function getAvatarColor(email?: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
+/** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv2";
+
 export function EmailView() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -826,9 +829,16 @@ export function EmailView() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : emailDetail ? (
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div
+            className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-muted/25 via-background to-background"
+            data-email-layout={EMAIL_VIEW_LAYOUT_VERSION}
+          >
+            <div
+              className="h-1 shrink-0 bg-gradient-to-r from-primary via-blue-500 to-sky-400 opacity-90"
+              aria-hidden
+            />
             {/* Detail header */}
-            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-border/50 shrink-0">
+            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-border/50 shrink-0 bg-background/80 backdrop-blur-sm shadow-sm">
               {isMobile && (
                 <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-xs" onClick={() => setSelectedEmailId(null)}>
                   <ChevronRight className="h-3.5 w-3.5 mr-1 rotate-180" /> Volver
@@ -1095,17 +1105,23 @@ export function EmailView() {
               </div>
             )}
 
-            {/* Email body + thread */}
+            {/* Email body + thread — columna centrada estilo lector premium */}
             <ScrollArea className="flex-1">
-              <div className="px-3 sm:px-6 py-4 sm:py-5 space-y-5">
-                {emailDetail.body?.contentType === "html" ? (
-                  <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
-                ) : (
-                  <pre className="whitespace-pre-wrap text-sm p-2 leading-relaxed">{emailDetail.body?.content}</pre>
-                )}
+              <div className="px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+                <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border border-border/70 bg-card/90 shadow-sm ring-1 ring-black/[0.04] dark:ring-white/[0.06] overflow-hidden">
+                  <div className="px-4 py-5 sm:px-7 sm:py-7">
+                    {emailDetail.body?.contentType === "html" ? (
+                      <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
+                    ) : (
+                      <pre className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {emailDetail.body?.content}
+                      </pre>
+                    )}
+                  </div>
+                </div>
 
                 {attachments.length > 0 && (
-                  <div className="rounded-xl border border-border/50 p-4 space-y-2.5 bg-muted/20">
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-xl border border-border/50 p-4 space-y-2.5 bg-muted/30">
                     <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                       <Paperclip className="h-3.5 w-3.5" /> {attachments.length} adjunto{attachments.length > 1 ? "s" : ""}
                     </p>
@@ -1139,7 +1155,7 @@ export function EmailView() {
                 )}
 
                 {otherThreadEmails.length > 0 && (
-                  <div className="border-t border-border/50 pt-5">
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full border-t border-border/50 pt-5">
                     <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
                       {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} anterior{otherThreadEmails.length > 1 ? "es" : ""}
                     </p>
@@ -1259,9 +1275,43 @@ function ThreadEmailItem({ email }: { email: any }) {
   );
 }
 
+/** Tema oscuro según clase `dark` en &lt;html&gt; (shadcn sin ThemeProvider). */
+function useDocumentDarkClass(): boolean {
+  const [dark, setDark] = useState(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+  );
+  useEffect(() => {
+    const el = document.documentElement;
+    const sync = () => setDark(el.classList.contains("dark"));
+    sync();
+    const mo = new MutationObserver(sync);
+    mo.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => mo.disconnect();
+  }, []);
+  return dark;
+}
+
 function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: string; minH?: number }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(minH);
+  const isDark = useDocumentDarkClass();
+
+  const srcDoc = useMemo(() => {
+    const bodyBg = isDark ? "#0f1419" : "#f8fafc";
+    const bodyFg = isDark ? "#e8eaed" : "#1e293b";
+    const link = isDark ? "#60a5fa" : "#2563eb";
+    const quoteBorder = isDark ? "#334155" : "#e2e8f0";
+    const quoteFg = isDark ? "#94a3b8" : "#64748b";
+    const safe = html.replace(/<\/script/gi, "<\\/script");
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${isDark ? "dark" : "light"}"><style>
+      html,body{margin:0;padding:0}
+      body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;background:${bodyBg};color:${bodyFg};padding:16px 4px;word-wrap:break-word;line-height:1.65;overflow:hidden;box-sizing:border-box}
+      img,video{max-width:100%;height:auto}
+      a{color:${link}}
+      table{max-width:100%;border-collapse:collapse}
+      blockquote{border-left:3px solid ${quoteBorder};margin:8px 0;padding:4px 12px;color:${quoteFg}}
+    </style></head><body>${safe}</body></html>`;
+  }, [html, isDark]);
 
   const resizeIframe = useCallback(() => {
     const iframe = iframeRef.current;
@@ -1275,12 +1325,16 @@ function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: st
     } catch { /* cross-origin guard */ }
   }, [minH]);
 
+  useEffect(() => {
+    resizeIframe();
+  }, [srcDoc, resizeIframe]);
+
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:-apple-system,system-ui,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#333;margin:0;padding:12px;word-wrap:break-word;line-height:1.6;overflow:hidden;}img{max-width:100%;height:auto;}a{color:hsl(221,83%,53%);}table{max-width:100%;border-collapse:collapse;}blockquote{border-left:3px solid #ddd;margin:8px 0;padding:4px 12px;color:#666;}</style></head><body>${html}</body></html>`}
+      srcDoc={srcDoc}
       sandbox="allow-same-origin"
-      className="w-full border-0 bg-background rounded-lg"
+      className="w-full border-0 bg-transparent rounded-md"
       style={{ height: `${height}px` }}
       title={title}
       onLoad={resizeIframe}
