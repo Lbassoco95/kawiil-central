@@ -11,7 +11,7 @@ import { useTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
-import { useNewTaskModal } from "@/contexts/NewTaskModalContext";
+import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
@@ -37,7 +37,6 @@ const Tareas = () => {
   useTasksRealtime();
   const [area, setArea] = useState(() => searchParams.get("area") || "todas");
   const [search, setSearch] = useState("");
-  const { openNewTask } = useNewTaskModal();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [showAllSteps, setShowAllSteps] = useState(false);
@@ -150,16 +149,35 @@ INSTRUCCIONES:
           title="Tareas"
           description="Gestión de tareas y actividades internas"
           actions={
-            <Button type="button" size="sm" onClick={openNewTask}>
+            <Button type="button" size="sm" onClick={() => openNewTaskModal()}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
             </Button>
           }
         />
 
-        <QuickTaskInput
-          area={area !== "todas" ? area : undefined}
-          placeholder="Crear tarea rápida... (Enter para crear)"
-        />
+        <div className="space-y-1.5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <QuickTaskInput
+                area={area !== "todas" ? area : undefined}
+                placeholder="Crear tarea rápida... (Enter para crear)"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 w-full sm:w-auto"
+              onClick={() => openNewTaskModal()}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Formulario completo
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Arriba: creación rápida. «Formulario completo» o «Nueva tarea» abren todas las opciones (cliente, proyecto, descripción, enlaces…).
+          </p>
+        </div>
 
         <AISummaryCard
           cacheKey={`tasks-${user?.id}-${area}`}
@@ -319,7 +337,7 @@ INSTRUCCIONES:
             </div>
             <h3 className="text-sm font-medium text-foreground">Sin tareas aún</h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">Crea tu primera tarea para comenzar a organizar el trabajo del equipo.</p>
-            <Button type="button" className="mt-4" size="sm" onClick={openNewTask}>
+            <Button type="button" className="mt-4" size="sm" onClick={() => openNewTaskModal()}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
             </Button>
           </div>

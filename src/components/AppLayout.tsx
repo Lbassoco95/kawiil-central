@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect, useCallback, useMemo } from "react";
+import { ReactNode, useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NewTaskModalContext } from "@/contexts/NewTaskModalContext";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
@@ -12,6 +12,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { nowMX } from "@/lib/dateUtils";
+import { OPEN_NEW_TASK_MODAL_EVENT, openNewTaskModal } from "@/lib/openNewTaskModal";
 import { Clock } from "lucide-react";
 
 export function AppLayout({ children }: { children: ReactNode }) {
@@ -51,12 +52,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState(() => nowMX());
 
   const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const openNewTask = useCallback(() => setNewTaskOpen(true), []);
-  const newTaskModalValue = useMemo(() => ({ openNewTask }), [openNewTask]);
+  const newTaskModalValue = useMemo(() => ({ openNewTask: openNewTaskModal }), []);
 
   useEffect(() => {
     const interval = setInterval(() => setCurrentTime(nowMX()), 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const onOpenEvent = () => setNewTaskOpen(true);
+    window.addEventListener(OPEN_NEW_TASK_MODAL_EVENT, onOpenEvent);
+    return () => window.removeEventListener(OPEN_NEW_TASK_MODAL_EVENT, onOpenEvent);
   }, []);
 
   useEffect(() => {
@@ -67,7 +73,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       const tag = t.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || t.isContentEditable) return;
       e.preventDefault();
-      setNewTaskOpen(true);
+      window.dispatchEvent(new CustomEvent(OPEN_NEW_TASK_MODAL_EVENT));
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
