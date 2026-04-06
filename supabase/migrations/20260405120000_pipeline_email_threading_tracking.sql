@@ -6,6 +6,15 @@
 
 ALTER TABLE public.email_log DROP CONSTRAINT IF EXISTS email_log_status_check;
 
+-- Normalizar filas legacy antes del CHECK (evita fallo si hay status fuera de la lista)
+UPDATE public.email_log
+SET status = 'failed'
+WHERE status IS NULL
+   OR btrim(status) = ''
+   OR status NOT IN (
+     'queued', 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed', 'cancelled', 'received'
+   );
+
 ALTER TABLE public.email_log ADD CONSTRAINT email_log_status_check
   CHECK (status IN (
     'queued', 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed', 'cancelled', 'received'

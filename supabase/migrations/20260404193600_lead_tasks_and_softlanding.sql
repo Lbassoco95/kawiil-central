@@ -31,15 +31,19 @@ CREATE INDEX IF NOT EXISTS idx_lead_tasks_overdue ON lead_tasks(due_date, is_com
 -- RLS
 ALTER TABLE lead_tasks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "team_can_view_tasks" ON lead_tasks;
 CREATE POLICY "team_can_view_tasks" ON lead_tasks
   FOR SELECT TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "team_can_create_tasks" ON lead_tasks;
 CREATE POLICY "team_can_create_tasks" ON lead_tasks
   FOR INSERT TO authenticated WITH CHECK (true);
 
+DROP POLICY IF EXISTS "team_can_update_tasks" ON lead_tasks;
 CREATE POLICY "team_can_update_tasks" ON lead_tasks
   FOR UPDATE TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "team_can_delete_tasks" ON lead_tasks;
 CREATE POLICY "team_can_delete_tasks" ON lead_tasks
   FOR DELETE TO authenticated USING (
     created_by = auth.uid() OR assigned_to = auth.uid()
@@ -54,12 +58,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_lead_tasks_updated_at ON lead_tasks;
 CREATE TRIGGER update_lead_tasks_updated_at
   BEFORE UPDATE ON lead_tasks
   FOR EACH ROW EXECUTE FUNCTION update_lead_tasks_timestamp();
 
--- Habilitar Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE lead_tasks;
+-- Habilitar Realtime (idempotente si ya estaba en publicación)
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE lead_tasks;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =================================================================
 -- 2. Campos Softlanding en tabla leads
