@@ -31,6 +31,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.meta-webhook-leads]
     verify_jwt = false
+  [functions.calendly-webhook]
+    verify_jwt = false
   [functions.sync-inbox-emails]
     verify_jwt = false
   [functions.email-tracking]

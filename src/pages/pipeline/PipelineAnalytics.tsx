@@ -28,6 +28,28 @@ export default function PipelineAnalytics() {
     name: s.name,
     value: Number(byStage[s.slug]) || 0,
   }));
+  const byCountryRaw = (data?.by_country as Record<string, number> | undefined) || {};
+  const countryChartData = Object.entries(byCountryRaw)
+    .map(([name, value]) => ({ name, value: Number(value) || 0 }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 16);
+
+  const emailReply = (data?.email_reply as Record<string, unknown> | undefined) || {};
+  const replyContacted = Number(emailReply.contacted) || 0;
+  const replyReplied = Number(emailReply.replied) || 0;
+  const replyRate = Number(emailReply.reply_rate) || 0;
+  const avgReplyHours = Number(emailReply.avg_reply_hours) || 0;
+  const medianReplyHours = Number(emailReply.median_reply_hours) || 0;
+  const replyHistogram = (Array.isArray(emailReply.histogram) ? emailReply.histogram : []) as {
+    label?: string;
+    count?: number;
+  }[];
+  const histogramChart = replyHistogram.map((h) => ({
+    name: String(h.label ?? ""),
+    value: Number(h.count) || 0,
+  }));
+
   const newLeads = Number(data?.new_leads) || 0;
   const active = Number(data?.active_leads) || 0;
   const openRate = Number(data?.email_open_rate) || 0;
@@ -110,6 +132,44 @@ export default function PipelineAnalytics() {
         </Card>
       </div>
 
+      {/* Email reply metrics (primer outbound en el rango → primera respuesta inbound) */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Contactados (email saliente)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{replyContacted}</p>
+            <p className="text-xs text-muted-foreground mt-1">En el periodo del filtro (30 días por defecto)</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Respondieron</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{replyReplied}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Tasa de respuesta</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{(replyRate * 100).toFixed(1)}%</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Tiempo a respuesta (mediana)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">{medianReplyHours.toFixed(1)} h</p>
+            <p className="text-xs text-muted-foreground mt-1">Media: {avgReplyHours.toFixed(1)} h</p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Row 2: Operational metrics */}
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
@@ -136,6 +196,66 @@ export default function PipelineAnalytics() {
             <p className="text-2xl font-bold">
               {registradoStage ? leads.filter((l) => l.stage_id === registradoStage.id).length : 0}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="min-h-[380px]">
+          <CardHeader>
+            <CardTitle>Leads por país</CardTitle>
+            <p className="text-xs text-muted-foreground font-normal">
+              País del formulario, origen manual o código; activos en pipeline.
+            </p>
+          </CardHeader>
+          <CardContent className="h-[320px]">
+            {countryChartData.length === 0 ? (
+              <p className="text-muted-foreground text-sm">Sin datos de país</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  layout="vertical"
+                  data={countryChartData}
+                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={108}
+                    tick={{ fontSize: 10 }}
+                    interval={0}
+                  />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} opacity={0.85} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-[380px]">
+          <CardHeader>
+            <CardTitle>Tiempo hasta primera respuesta</CardTitle>
+            <p className="text-xs text-muted-foreground font-normal">
+              Distribución (horas desde primer envío outbound hasta primer inbound en el mismo hilo).
+            </p>
+          </CardHeader>
+          <CardContent className="h-[320px]">
+            {histogramChart.length === 0 || histogramChart.every((x) => x.value === 0) ? (
+              <p className="text-muted-foreground text-sm">Sin respuestas registradas en el periodo</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={histogramChart} margin={{ top: 8, right: 8, left: 8, bottom: 24 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>

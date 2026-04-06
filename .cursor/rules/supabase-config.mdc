@@ -27,7 +27,7 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - dropbox-token-exchange
 - auth-email-hook, activate-recovery-link
 - backup-data, process-document, generate-phrase
-- savio-webhook, slack-events
+- savio-webhook, slack-events, calendly-webhook
 
 ## Si algo se rompe despues de publicar desde Lovable:
 

@@ -1405,6 +1405,9 @@ export type Database = {
           is_active: boolean
           notes: string | null
           updated_at: string
+          calendly_booked_at: string | null
+          calendly_event_uri: string | null
+          calendly_status: string | null
         }
         Insert: {
           id?: string
@@ -1432,6 +1435,9 @@ export type Database = {
           is_active?: boolean
           notes?: string | null
           updated_at?: string
+          calendly_booked_at?: string | null
+          calendly_event_uri?: string | null
+          calendly_status?: string | null
         }
         Update: {
           id?: string
@@ -1459,6 +1465,9 @@ export type Database = {
           is_active?: boolean
           notes?: string | null
           updated_at?: string
+          calendly_booked_at?: string | null
+          calendly_event_uri?: string | null
+          calendly_status?: string | null
         }
         Relationships: []
       }
@@ -2449,6 +2458,17 @@ export type Database = {
       }
       get_pipeline_stats: {
         Args: { p_date_from?: string | null; p_date_to?: string | null }
+        Returns: Json
+      }
+      pipeline_calendly_apply_system: {
+        Args: {
+          p_booked_at?: string | null
+          p_event_uri?: string | null
+          p_lead_id: string
+          p_new_stage_id?: string | null
+          p_organization_id: string
+          p_status: string
+        }
         Returns: Json
       }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
