@@ -21,6 +21,9 @@ interface Props {
   receivedDate?: string;
 }
 
+const UNASSIGNED_VALUE = "__unassigned__";
+const NO_CLIENT_VALUE = "__none__";
+
 export function CreateTaskFromEmailDialog({
   open,
   onOpenChange,
@@ -33,8 +36,8 @@ export function CreateTaskFromEmailDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("media");
-  const [assignedTo, setAssignedTo] = useState("");
-  const [clientId, setClientId] = useState("");
+  const [assignedTo, setAssignedTo] = useState(UNASSIGNED_VALUE);
+  const [clientId, setClientId] = useState(NO_CLIENT_VALUE);
 
   const createTask = useCreateTask();
   const { data: clients } = useClients();
@@ -49,8 +52,8 @@ export function CreateTaskFromEmailDialog({
       if (bodyPreview) parts.push(`\n${bodyPreview.substring(0, 500)}`);
       setDescription(parts.join("\n"));
       setPriority("media");
-      setAssignedTo("");
-      setClientId("");
+      setAssignedTo(UNASSIGNED_VALUE);
+      setClientId(NO_CLIENT_VALUE);
     }
   }, [open, emailSubject, senderName, senderEmail, bodyPreview, receivedDate]);
 
@@ -61,8 +64,8 @@ export function CreateTaskFromEmailDialog({
         title: title.trim(),
         description: description.trim() || undefined,
         priority,
-        assigned_to: assignedTo || undefined,
-        client_id: clientId || undefined,
+        assigned_to: assignedTo === UNASSIGNED_VALUE ? undefined : assignedTo,
+        client_id: clientId === NO_CLIENT_VALUE ? undefined : clientId,
       },
       {
         onSuccess: () => {
@@ -107,6 +110,7 @@ export function CreateTaskFromEmailDialog({
               <Select value={assignedTo} onValueChange={setAssignedTo}>
                 <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={UNASSIGNED_VALUE}>Sin asignar</SelectItem>
                   {users?.filter((u) => u.is_active).map((u) => (
                     <SelectItem key={u.user_id} value={u.user_id}>{u.full_name}</SelectItem>
                   ))}
@@ -119,6 +123,7 @@ export function CreateTaskFromEmailDialog({
             <Select value={clientId} onValueChange={setClientId}>
               <SelectTrigger><SelectValue placeholder="Sin cliente" /></SelectTrigger>
               <SelectContent>
+                <SelectItem value={NO_CLIENT_VALUE}>Sin cliente</SelectItem>
                 {clients?.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
