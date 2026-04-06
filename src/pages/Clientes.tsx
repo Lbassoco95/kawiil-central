@@ -22,6 +22,9 @@ import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientStatus = Database["public"]["Enums"]["client_status"];
+type ClientType = Database["public"]["Enums"]["client_type"];
+
+type ClientTypeFilter = "all" | ClientType;
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
@@ -49,6 +52,7 @@ const Clientes = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [groupMode, setGroupMode] = useState<GroupMode>("area");
+  const [clientTypeFilter, setClientTypeFilter] = useState<ClientTypeFilter>("all");
   const { data: clients, isLoading } = useClients();
   const { data: clientGroups } = useClientGroups();
   const deleteClient = useDeleteClient();
@@ -66,15 +70,19 @@ const Clientes = () => {
 
   const filtered = useMemo(() => {
     if (!clients) return [];
-    if (!search.trim()) return clients;
+    let list = clients;
+    if (clientTypeFilter !== "all") {
+      list = list.filter((c) => c.client_type === clientTypeFilter);
+    }
+    if (!search.trim()) return list;
     const q = search.toLowerCase();
-    return clients.filter(
+    return list.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.rfc?.toLowerCase().includes(q) ||
         c.email?.toLowerCase().includes(q)
     );
-  }, [clients, search]);
+  }, [clients, search, clientTypeFilter]);
 
   const groupedByArea = useMemo(() => {
     const groups: Record<string, typeof filtered> = {};
@@ -181,6 +189,29 @@ const Clientes = () => {
               <Building2 className="h-3 w-3" /> Grupo
             </button>
           </div>
+          <div className="flex items-center gap-1 flex-wrap" role="group" aria-label="Filtrar por tipo de persona">
+            <button
+              type="button"
+              onClick={() => setClientTypeFilter("all")}
+              className={`tab-pill ${clientTypeFilter === "all" ? "tab-pill-active" : "tab-pill-inactive"}`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setClientTypeFilter("persona_fisica")}
+              className={`tab-pill ${clientTypeFilter === "persona_fisica" ? "tab-pill-active" : "tab-pill-inactive"}`}
+            >
+              Persona Física
+            </button>
+            <button
+              type="button"
+              onClick={() => setClientTypeFilter("persona_moral")}
+              className={`tab-pill ${clientTypeFilter === "persona_moral" ? "tab-pill-active" : "tab-pill-inactive"}`}
+            >
+              Persona Moral
+            </button>
+          </div>
           <span className="text-xs text-muted-foreground">
             {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}
           </span>
@@ -198,12 +229,14 @@ const Clientes = () => {
               <Users className="h-8 w-8 text-primary/60" />
             </div>
             <h3 className="text-sm font-medium text-foreground">
-              {search ? "Sin resultados" : "Sin clientes aún"}
+              {search.trim() || clientTypeFilter !== "all" ? "Sin resultados" : "Sin clientes aún"}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
-              {search ? "Intenta con otro término de búsqueda." : "Agrega tu primer cliente para comenzar."}
+              {search.trim() || clientTypeFilter !== "all"
+                ? "Prueba otro término de búsqueda o cambia el filtro de tipo de persona."
+                : "Agrega tu primer cliente para comenzar."}
             </p>
-            {!search && (
+            {!search.trim() && clientTypeFilter === "all" && (
               <Button className="mt-4" size="sm" onClick={() => setDialogOpen(true)}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Agregar cliente
