@@ -212,7 +212,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv6-toolbar";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv7-flex";
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 
@@ -522,12 +522,6 @@ export function EmailView() {
   const isSending = replyEmail.isPending || forwardEmail.isPending || sendDraft.isPending;
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
 
-  const desktopGridTemplateColumns =
-    !isMobile &&
-    `${foldersCollapsed ? "3.25rem" : "13.5rem"} ${
-      listPaneCollapsed && selectedEmailId ? "0fr" : "minmax(18rem, min(28rem, 32vw))"
-    } minmax(0, 1fr)`;
-
   const folderRow = (folder: any) => {
     const Icon = getFolderIcon(folder.displayName);
     const label = getFolderLabel(folder.displayName);
@@ -559,11 +553,10 @@ export function EmailView() {
   return (
     <>
       <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background">
-        {!isMobile && (
-          <div
-            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/50 px-3 py-2"
-            data-kawiil-email-toolbar="1"
-          >
+        <div
+          className="hidden shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/50 px-3 py-2 md:flex"
+          data-kawiil-email-toolbar="1"
+        >
             <span className="text-xs font-medium text-muted-foreground">Paneles</span>
             <Button
               type="button"
@@ -613,26 +606,18 @@ export function EmailView() {
             >
               {EMAIL_VIEW_LAYOUT_VERSION}
             </span>
-          </div>
-        )}
-        <div
-          className={cn(
-            "min-h-0 min-w-0 flex-1 w-full overflow-hidden bg-background",
-            isMobile ? "flex" : "grid",
-          )}
-          style={
-            typeof desktopGridTemplateColumns === "string"
-              ? { gridTemplateColumns: desktopGridTemplateColumns }
-              : undefined
-          }
-        >
+        </div>
+        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-row overflow-hidden bg-background">
       {/* Folder sidebar — móvil: overlay; escritorio: expandible o riel de iconos */}
       <div
         className={cn(
-          "flex min-h-0 shrink-0 flex-col border-r border-border bg-muted/30 transition-[width,opacity] duration-200 ease-out",
+          "relative z-[1] flex min-h-0 flex-col border-r border-border bg-muted/30 transition-[width] duration-200 ease-out",
           isMobile
-            ? cn(showFolders ? "absolute z-30 h-full w-56 shadow-xl" : "w-0 overflow-hidden border-0")
-            : "w-full min-w-0 overflow-hidden",
+            ? cn(showFolders ? "absolute z-30 h-full w-56 shadow-xl" : "w-0 shrink-0 overflow-hidden border-0")
+            : cn(
+                "shrink-0 overflow-hidden",
+                foldersCollapsed ? "w-[3.25rem]" : "w-[13.5rem]",
+              ),
         )}
       >
         {isMobile ? (
@@ -854,13 +839,19 @@ export function EmailView() {
         )}
       </div>
 
-      {/* Email list panel */}
+      {/* Email list panel — flex + anchos fijos en escritorio (evita solapes tipo iframe/Lovable) */}
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-border bg-background transition-[opacity,grid-template] duration-200 ease-out",
-          isMobile ? "flex-1" : "w-full",
+          "relative z-[2] flex min-h-0 flex-col overflow-hidden border-r border-border bg-background transition-[width,opacity] duration-200 ease-out",
+          isMobile
+            ? "min-w-0 flex-1"
+            : cn(
+                "shrink-0",
+                listPaneCollapsed && selectedEmailId
+                  ? "pointer-events-none w-0 min-w-0 shrink-0 overflow-hidden border-0 p-0 opacity-0"
+                  : "w-[min(28rem,40vw)] min-w-[17.5rem] max-w-[28rem]",
+              ),
           selectedEmailId && isMobile && "hidden",
-          !isMobile && listPaneCollapsed && selectedEmailId && "pointer-events-none border-0 opacity-0",
         )}
       >
         {/* Search & compose toolbar */}
@@ -1084,8 +1075,7 @@ export function EmailView() {
       {/* Detail panel — borde izquierdo de acento: visible incluso si el HTML del correo es plano */}
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-hidden bg-background",
-          isMobile ? "flex-1" : "h-full min-w-0",
+          "relative z-[3] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
           selectedEmailId && "border-l-4 border-l-primary shadow-[4px_0_24px_-8px_hsl(var(--primary)/0.35)]",
           !selectedEmailId && isMobile && "hidden",
         )}
