@@ -1,4 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  closestCorners,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,12 +35,17 @@ export interface Phase {
   color?: string;
 }
 
+const DROPPABLE_PREFIX = "phase-drop-";
+const TASK_DRAG_PREFIX = "task-";
+
 interface PhaseManagerProps {
   phases: Phase[];
   tasks: any[];
   profileMap: Map<string, string>;
   onPhasesChange: (phases: Phase[]) => void;
   onTaskClick: (taskId: string) => void;
+  /** Persistir `phase_key` al soltar una tarea en una fase (o null en «sin fase»). */
+  onTaskPhaseAssign?: (taskId: string, phaseKey: string | null) => void | Promise<void>;
   onAddTask?: (phaseKey?: string) => void;
   canDeleteTasks?: boolean;
   onDeleteTask?: (taskId: string) => void;
@@ -98,6 +113,76 @@ function TaskRow({
   );
 }
 
+function DraggableOpenTaskRow({
+  task,
+  profileMap,
+  onClick,
+  canDelete,
+  onDelete,
+  selectionMode,
+  isSelected,
+  onToggle,
+  showCleanTitle,
+  dragEnabled,
+}: {
+  task: any;
+  profileMap: Map<string, string>;
+  onClick: () => void;
+  canDelete?: boolean;
+  onDelete?: () => void;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggle?: () => void;
+  showCleanTitle?: boolean;
+  dragEnabled: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `${TASK_DRAG_PREFIX}${task.id}`,
+    disabled: !dragEnabled,
+    data: { type: "project-task", taskId: task.id },
+  });
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "flex items-stretch rounded-lg border border-transparent",
+        isDragging && "opacity-45 z-[1] bg-background/80 shadow-sm"
+      )}
+    >
+      {dragEnabled && (
+        <button
+          type="button"
+          className="shrink-0 flex items-center px-1.5 rounded-l-lg hover:bg-muted/60 cursor-grab active:cursor-grabbing touch-none border-0 bg-transparent text-muted-foreground"
+          aria-label="Arrastrar a otra fase"
+          onClick={(e) => e.stopPropagation()}
+          {...listeners}
+          {...attributes}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      )}
+      <div className="flex-1 min-w-0">
+        <TaskRow
+          task={task}
+          profileMap={profileMap}
+          onClick={onClick}
+          canDelete={canDelete}
+          onDelete={onDelete}
+          selectionMode={selectionMode}
+          isSelected={isSelected}
+          onToggle={onToggle}
+          showCleanTitle={showCleanTitle}
+        />
+      </div>
+    </div>
+  );
+}
+
 function ClosedTasksCollapsible({
   tasks: closedTasks,
   profileMap,
@@ -147,8 +232,36 @@ function ClosedTasksCollapsible({
   );
 }
 
+function DroppablePhaseShell({
+  phaseKey,
+  className,
+  children,
+  enabled,
+}: {
+  phaseKey: string;
+  className?: string;
+  children: React.ReactNode;
+  enabled: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `${DROPPABLE_PREFIX}${phaseKey}`,
+    disabled: !enabled,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        className,
+        enabled && isOver && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function PhaseManager({
-  phases, tasks, profileMap, onPhasesChange, onTaskClick, onAddTask,
+  phases, tasks, profileMap, onPhasesChange, onTaskClick, onTaskPhaseAssign, onAddTask,
   canDeleteTasks, onDeleteTask, selectionMode, selectedTaskIds, onToggleTaskSelection,
 }: PhaseManagerProps) {
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
@@ -228,8 +341,47 @@ export function PhaseManager({
     return Math.round((completed / phaseTasks.length) * 100);
   };
 
+  const showDnd = phases.length > 0 && !!onTaskPhaseAssign;
+  const canDragTasks = showDnd && !selectionMode;
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  const handleDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      if (!onTaskPhaseAssign) return;
+      const overId = e.over?.id;
+      if (overId == null) return;
+      const overStr = String(overId);
+      if (!overStr.startsWith(DROPPABLE_PREFIX)) return;
+      const targetRaw = overStr.slice(DROPPABLE_PREFIX.length);
+      const targetKey = targetRaw === "__none__" ? null : targetRaw;
+
+      const activeStr = String(e.active.id);
+      if (!activeStr.startsWith(TASK_DRAG_PREFIX)) return;
+      const taskId = activeStr.slice(TASK_DRAG_PREFIX.length);
+
+      const task = tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      const cur = task.phase_key ?? null;
+      if (cur === targetKey) return;
+
+      void Promise.resolve(onTaskPhaseAssign(taskId, targetKey)).catch(() => {});
+    },
+    [onTaskPhaseAssign, tasks]
+  );
+
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragEnd={showDnd ? handleDragEnd : () => {}}
+    >
     <div className="space-y-3">
+      {showDnd ? (
+        <p className="text-[11px] text-muted-foreground px-0.5 -mt-1 mb-1">
+          Arrastra una tarea por el ícono <GripVertical className="inline h-3 w-3 align-text-bottom mx-0.5" aria-hidden /> para asignarla a una fase o a «sin fase».
+        </p>
+      ) : null}
       {sortedPhases.map((phase, idx) => {
         const phaseTasks = tasksByPhase.get(phase.key) || [];
         const openInPhase = phaseTasks.filter((t) => !isTaskClosedStatus(t.status));
@@ -239,9 +391,10 @@ export function PhaseManager({
         const progress = phaseProgress(phaseTasks);
         const completedCount = phaseTasks.filter((t) => t.status === "completada").length;
         const colorClass = PHASE_COLORS[idx % PHASE_COLORS.length];
+        const shellClass = `rounded-xl border ${colorClass} overflow-hidden`;
 
-        return (
-          <div key={phase.key} className={`rounded-xl border ${colorClass} overflow-hidden`}>
+        const phaseBody = (
+          <>
             <div className="flex items-center gap-2 px-3 py-2.5">
               <button onClick={() => toggleCollapse(phase.key)} className="shrink-0">
                 {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
@@ -306,20 +459,36 @@ export function PhaseManager({
                         No hay tareas en curso en esta fase.
                       </p>
                     )}
-                    {openInPhase.map((t) => (
-                      <TaskRow
-                        key={t.id}
-                        task={t}
-                        profileMap={profileMap}
-                        onClick={() => onTaskClick(t.id)}
-                        canDelete={canDeleteTasks}
-                        onDelete={() => onDeleteTask?.(t.id)}
-                        selectionMode={selectionMode}
-                        isSelected={selectedTaskIds?.has(t.id)}
-                        onToggle={() => onToggleTaskSelection?.(t.id)}
-                        showCleanTitle
-                      />
-                    ))}
+                    {openInPhase.map((t) =>
+                      showDnd ? (
+                        <DraggableOpenTaskRow
+                          key={t.id}
+                          task={t}
+                          profileMap={profileMap}
+                          onClick={() => onTaskClick(t.id)}
+                          canDelete={canDeleteTasks}
+                          onDelete={() => onDeleteTask?.(t.id)}
+                          selectionMode={selectionMode}
+                          isSelected={selectedTaskIds?.has(t.id)}
+                          onToggle={() => onToggleTaskSelection?.(t.id)}
+                          showCleanTitle
+                          dragEnabled={canDragTasks}
+                        />
+                      ) : (
+                        <TaskRow
+                          key={t.id}
+                          task={t}
+                          profileMap={profileMap}
+                          onClick={() => onTaskClick(t.id)}
+                          canDelete={canDeleteTasks}
+                          onDelete={() => onDeleteTask?.(t.id)}
+                          selectionMode={selectionMode}
+                          isSelected={selectedTaskIds?.has(t.id)}
+                          onToggle={() => onToggleTaskSelection?.(t.id)}
+                          showCleanTitle
+                        />
+                      )
+                    )}
                     <ClosedTasksCollapsible
                       tasks={closedInPhase}
                       profileMap={profileMap}
@@ -340,47 +509,108 @@ export function PhaseManager({
                 )}
               </div>
             )}
+          </>
+        );
+
+        return showDnd ? (
+          <DroppablePhaseShell key={phase.key} phaseKey={phase.key} enabled className={shellClass}>
+            {phaseBody}
+          </DroppablePhaseShell>
+        ) : (
+          <div key={phase.key} className={shellClass}>
+            {phaseBody}
           </div>
         );
       })}
 
-      {/* Unassigned tasks */}
-      {unassignedTasks.length > 0 && phases.length > 0 && (
-        <div className="rounded-xl border border-border/50 overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/30">
-            <button onClick={() => toggleCollapse("__none__")} className="shrink-0">
-              {collapsedPhases.has("__none__") ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-            </button>
-            <CheckSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-sm font-medium text-muted-foreground flex-1">Sin fase asignada</span>
-            <Badge variant="secondary" className="text-[10px]">{unassignedTasks.length}</Badge>
-          </div>
-          {!collapsedPhases.has("__none__") && (
-            <div className="px-2 pb-2 space-y-0.5">
-              {unassignedOpen.length === 0 && unassignedClosed.length > 0 && (
-                <p className="text-[11px] text-muted-foreground text-center py-2 px-2">No hay tareas en curso sin fase.</p>
-              )}
-              {unassignedOpen.map((t) => (
-                <TaskRow
-                  key={t.id} task={t} profileMap={profileMap} onClick={() => onTaskClick(t.id)}
-                  canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
-                  selectionMode={selectionMode} isSelected={selectedTaskIds?.has(t.id)}
-                  onToggle={() => onToggleTaskSelection?.(t.id)}
-                />
-              ))}
-              <ClosedTasksCollapsible
-                tasks={unassignedClosed}
-                profileMap={profileMap}
-                onTaskClick={onTaskClick}
-                canDeleteTasks={canDeleteTasks}
-                onDeleteTask={onDeleteTask}
-                selectionMode={selectionMode}
-                selectedTaskIds={selectedTaskIds}
-                onToggleTaskSelection={onToggleTaskSelection}
-              />
+      {/* Unassigned tasks — siempre visible con fases para poder soltar y quitar fase */}
+      {phases.length > 0 && (
+        showDnd ? (
+          <DroppablePhaseShell key="__unassigned__" phaseKey="__none__" enabled className="rounded-xl border border-border/50 overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/30">
+              <button type="button" onClick={() => toggleCollapse("__none__")} className="shrink-0">
+                {collapsedPhases.has("__none__") ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              </button>
+              <CheckSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm font-medium text-muted-foreground flex-1">Sin fase asignada</span>
+              <Badge variant="secondary" className="text-[10px]">{unassignedTasks.length}</Badge>
             </div>
-          )}
-        </div>
+            {!collapsedPhases.has("__none__") && (
+              <div className="px-2 pb-2 space-y-0.5">
+                {unassignedOpen.length === 0 && unassignedClosed.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-4 px-2">
+                    Arrastra tareas aquí para quitarles la fase, o desde aquí hacia una fase de arriba.
+                  </p>
+                )}
+                {unassignedOpen.length === 0 && unassignedClosed.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground text-center py-2 px-2">No hay tareas en curso sin fase.</p>
+                )}
+                {unassignedOpen.map((t) => (
+                  <DraggableOpenTaskRow
+                    key={t.id}
+                    task={t}
+                    profileMap={profileMap}
+                    onClick={() => onTaskClick(t.id)}
+                    canDelete={canDeleteTasks}
+                    onDelete={() => onDeleteTask?.(t.id)}
+                    selectionMode={selectionMode}
+                    isSelected={selectedTaskIds?.has(t.id)}
+                    onToggle={() => onToggleTaskSelection?.(t.id)}
+                    dragEnabled={canDragTasks}
+                  />
+                ))}
+                <ClosedTasksCollapsible
+                  tasks={unassignedClosed}
+                  profileMap={profileMap}
+                  onTaskClick={onTaskClick}
+                  canDeleteTasks={canDeleteTasks}
+                  onDeleteTask={onDeleteTask}
+                  selectionMode={selectionMode}
+                  selectedTaskIds={selectedTaskIds}
+                  onToggleTaskSelection={onToggleTaskSelection}
+                />
+              </div>
+            )}
+          </DroppablePhaseShell>
+        ) : (
+          (unassignedTasks.length > 0 ? (
+            <div key="unassigned-no-dnd" className="rounded-xl border border-border/50 overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/30">
+                <button type="button" onClick={() => toggleCollapse("__none__")} className="shrink-0">
+                  {collapsedPhases.has("__none__") ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </button>
+                <CheckSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium text-muted-foreground flex-1">Sin fase asignada</span>
+                <Badge variant="secondary" className="text-[10px]">{unassignedTasks.length}</Badge>
+              </div>
+              {!collapsedPhases.has("__none__") && (
+                <div className="px-2 pb-2 space-y-0.5">
+                  {unassignedOpen.length === 0 && unassignedClosed.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground text-center py-2 px-2">No hay tareas en curso sin fase.</p>
+                  )}
+                  {unassignedOpen.map((t) => (
+                    <TaskRow
+                      key={t.id} task={t} profileMap={profileMap} onClick={() => onTaskClick(t.id)}
+                      canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
+                      selectionMode={selectionMode} isSelected={selectedTaskIds?.has(t.id)}
+                      onToggle={() => onToggleTaskSelection?.(t.id)}
+                    />
+                  ))}
+                  <ClosedTasksCollapsible
+                    tasks={unassignedClosed}
+                    profileMap={profileMap}
+                    onTaskClick={onTaskClick}
+                    canDeleteTasks={canDeleteTasks}
+                    onDeleteTask={onDeleteTask}
+                    selectionMode={selectionMode}
+                    selectedTaskIds={selectedTaskIds}
+                    onToggleTaskSelection={onToggleTaskSelection}
+                  />
+                </div>
+              )}
+            </div>
+          ) : null)
+        )
       )}
 
       {/* No phases: flat list */}
@@ -434,5 +664,6 @@ export function PhaseManager({
         </Button>
       )}
     </div>
+    </DndContext>
   );
 }

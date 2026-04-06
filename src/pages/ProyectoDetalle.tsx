@@ -26,7 +26,7 @@ type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { PROJECT_STATUS_CONFIG } from "@/lib/statusStyles";
-import { useProfiles, useDeleteTask } from "@/hooks/useTasks";
+import { useProfiles, useDeleteTask, useUpdateTask } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,6 +57,7 @@ const ProyectoDetalle = () => {
   const [showMinutesDialog, setShowMinutesDialog] = useState(false);
   const { canDeleteTasks } = useUserRole();
   const deleteTask = useDeleteTask();
+  const updateTask = useUpdateTask();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -101,6 +102,17 @@ const ProyectoDetalle = () => {
     setTaskFormPhaseKey(phaseKey);
     setShowTaskForm(true);
   }, []);
+
+  const handleTaskPhaseAssign = useCallback(
+    async (taskId: string, phaseKey: string | null) => {
+      try {
+        await updateTask.mutateAsync({ id: taskId, phase_key: phaseKey });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo actualizar la fase de la tarea");
+      }
+    },
+    [updateTask]
+  );
 
   const toggleTaskSelection = useCallback((taskId: string) => {
     setSelectedTaskIds(prev => {
@@ -385,6 +397,7 @@ const ProyectoDetalle = () => {
                 profileMap={profileMap}
                 onPhasesChange={handlePhasesChange}
                 onTaskClick={(taskId) => setSelectedTaskId(taskId)}
+                onTaskPhaseAssign={handleTaskPhaseAssign}
                 onAddTask={handleAddTaskForPhase}
                 canDeleteTasks={canDeleteTasks}
                 onDeleteTask={(taskId) => setDeleteTargetId(taskId)}
