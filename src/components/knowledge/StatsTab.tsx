@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Database, FileText, MessageSquare, BookOpen, BrainCircuit,
-  Sparkles, BarChart3, Building2, FolderKanban, Layers,
+  Sparkles, BarChart3, Building2, FolderKanban, Layers, ThumbsDown,
 } from "lucide-react";
 
 export function StatsTab() {
@@ -26,6 +26,19 @@ export function StatsTab() {
 
   const { data: clientStats, isLoading: clientLoading } = useClientKnowledgeStats();
   const { data: projectStats, isLoading: projectLoading } = useProjectKnowledgeStats();
+
+  const { data: learningStats, isLoading: learningLoading } = useQuery({
+    queryKey: ["ai-learning-stats", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_ai_learning_stats_for_org");
+      if (error) throw error;
+      return data as {
+        feedback_down_by_category?: { category: string; n: number }[];
+        user_memories_by_type?: { memory_type: string; n: number }[];
+      } | null;
+    },
+    enabled: !!user,
+  });
 
   const totalChunks = embeddingStats?.reduce((s, r) => s + (r.chunk_count || 0), 0) ?? 0;
 
@@ -118,6 +131,56 @@ export function StatsTab() {
             ))}
           </>
         )}
+      </div>
+
+      {/* Feedback IA + memorias automáticas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ThumbsDown className="h-4 w-4 text-muted-foreground" /> Feedback negativo por categoría
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {learningLoading ? (
+              <Skeleton className="h-20 rounded" />
+            ) : !learningStats?.feedback_down_by_category?.length ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">Sin datos aún</p>
+            ) : (
+              <div className="space-y-2">
+                {learningStats.feedback_down_by_category.map((r) => (
+                  <div key={r.category} className="flex justify-between text-xs">
+                    <span className="truncate max-w-[70%]">{r.category.replace(/_/g, " ")}</span>
+                    <span className="font-medium">{r.n}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <BrainCircuit className="h-4 w-4" /> Memorias automáticas por tipo
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {learningLoading ? (
+              <Skeleton className="h-20 rounded" />
+            ) : !learningStats?.user_memories_by_type?.length ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">Sin memorias extraídas aún</p>
+            ) : (
+              <div className="space-y-2">
+                {learningStats.user_memories_by_type.map((r) => (
+                  <div key={r.memory_type} className="flex justify-between text-xs">
+                    <span className="capitalize">{r.memory_type}</span>
+                    <span className="font-medium">{r.n}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Client coverage */}

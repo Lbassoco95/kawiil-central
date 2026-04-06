@@ -2,6 +2,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { UserManagement } from "@/components/admin/UserManagement";
 import { CelulaManagement } from "@/components/admin/CelulaManagement";
 import { CatalogManagement } from "@/components/admin/CatalogManagement";
+import { AdoptionAnalyticsTab } from "@/components/admin/AdoptionAnalyticsTab";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +17,7 @@ const tabs = [
   { key: "usuarios", label: "Kawiilers" },
   { key: "celulas", label: "Células" },
   { key: "catalogos", label: "Catálogos" },
+  { key: "adopcion", label: "Adopción" },
   { key: "permisos", label: "Permisos" },
 ] as const;
 
@@ -101,6 +103,7 @@ const Admin = () => {
           {tab === "usuarios" && <UserManagement />}
           {tab === "celulas" && <CelulaManagement />}
           {tab === "catalogos" && <CatalogManagement />}
+          {tab === "adopcion" && <AdoptionAnalyticsTab />}
           {tab === "permisos" && <PermissionsTab />}
         </div>
       </div>

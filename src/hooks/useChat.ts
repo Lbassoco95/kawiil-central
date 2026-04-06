@@ -538,8 +538,9 @@ export function useChat() {
 
       pushProgress("persist", "Guardando el mensaje en tu conversación…");
 
+      let userMessageId: string | undefined;
       try {
-        await saveMessage(convId, "user", text, savedMeta.length ? savedMeta : null);
+        userMessageId = await saveMessage(convId, "user", text, savedMeta.length ? savedMeta : null);
       } catch (persistErr: any) {
         console.error(persistErr);
         toast.error(persistErr?.message || "No se pudo guardar el mensaje");
@@ -548,6 +549,12 @@ export function useChat() {
         progressStepsRef.current = [];
         setMessages((prev) => prev.slice(0, -1));
         return;
+      }
+
+      if (userMessageId) {
+        void supabase.functions
+          .invoke("analyze-improvement-suggestions", { body: { message_id: userMessageId } })
+          .catch(() => {});
       }
 
       const refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
@@ -678,6 +685,9 @@ export function useChat() {
                 return prev;
               });
             }
+            void supabase.functions
+              .invoke("extract-ai-memories", { body: { conversation_id: convId } })
+              .catch(() => {});
             qc.invalidateQueries({ queryKey: ["chat-conversations"] });
           } else {
             throw new Error("El servidor respondió sin contenido de texto.");
@@ -793,6 +803,9 @@ export function useChat() {
               return prev;
             });
           }
+          void supabase.functions
+            .invoke("extract-ai-memories", { body: { conversation_id: convId } })
+            .catch(() => {});
           qc.invalidateQueries({ queryKey: ["chat-conversations"] });
         } else {
           const errText =

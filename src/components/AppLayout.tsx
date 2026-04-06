@@ -9,7 +9,7 @@ import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { GlobalAISearch } from "@/components/shared/GlobalAISearch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
-import { useSectionActivityLogger } from "@/hooks/useSectionActivityLogger";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { nowMX } from "@/lib/dateUtils";
 import { Clock } from "lucide-react";
 
@@ -18,7 +18,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const qc = useQueryClient();
   useTasksRealtime();
-  useSectionActivityLogger();
+  useActivityTracker();
 
   useEffect(() => {
     if (!user?.id) return;

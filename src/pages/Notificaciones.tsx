@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useDueDateAlerts } from "@/hooks/useNotifications";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import {
   useMentionNotifications,
   useMarkAsRead,
@@ -12,9 +15,12 @@ import { formatMX } from "@/lib/dateUtils";
 import {
   AlertTriangle, CalendarClock, ArrowRight,
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
-  Bot, BrainCircuit, Settings,
+  Bot, BrainCircuit, Settings, Sparkles, Lightbulb,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
@@ -29,16 +35,82 @@ function getNotificationIcon(type: string) {
   if (type.startsWith("knowledge")) return <Bot className="h-3.5 w-3.5 text-violet-500" />;
   if (type === "deadline_overdue_task") return <AlertTriangle className="h-3.5 w-3.5 text-destructive" />;
   if (type === "deadline_due_tomorrow_task") return <CalendarClock className="h-3.5 w-3.5 text-amber-600" />;
+  if (type === "improvement_suggestion") return <Lightbulb className="h-3.5 w-3.5 text-amber-500" />;
+  if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-primary" />;
   return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
+}
+
+function NotificationAiPreferences() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const { data: profile } = useQuery({
+    queryKey: ["profile-proactive-ai", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("proactive_ai_notifications")
+        .eq("user_id", user!.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const updatePref = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ proactive_ai_notifications: enabled })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-proactive-ai", user?.id] });
+    },
+  });
+
+  if (!user) return null;
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" /> IA proactiva
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex items-center justify-between gap-4">
+        <div className="space-y-0.5">
+          <Label className="text-sm font-medium">Resumen diario en notificaciones</Label>
+          <p className="text-xs text-muted-foreground max-w-md">
+            Cuando tengas tareas próximas a vencer o atrasadas, podemos enviarte una sugerencia breve por la mañana (zona Ciudad de México).
+          </p>
+        </div>
+        <Switch
+          checked={profile?.proactive_ai_notifications !== false}
+          disabled={updatePref.isPending || !profile}
+          onCheckedChange={(v) => updatePref.mutate(v)}
+        />
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Notificaciones() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: alerts, isLoading: loadingAlerts } = useDueDateAlerts();
   const { data: allNotifications = [], isLoading: loadingMentions } = useMentionNotifications();
   const markAsRead = useMarkAsRead();
   const markAllAsRead = useMarkAllAsRead();
   const [tab, setTab] = useState<Tab>("menciones");
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "sistema" || t === "actividad" || t === "menciones" || t === "vencimientos") {
+      setTab(t as Tab);
+    }
+  }, [searchParams]);
 
   const mentions = allNotifications.filter((n) => MENTION_TYPES.includes(n.type));
   const activityItems = allNotifications.filter((n) => ACTIVITY_TYPES.includes(n.type));
@@ -72,6 +144,10 @@ export default function Notificaciones() {
     } else if (m.type === "deadline_overdue_task" || m.type === "deadline_due_tomorrow_task") {
       if (m.entity_id) navigate(`/tareas?taskId=${m.entity_id}`);
       else navigate("/tareas");
+    } else if (m.type === "improvement_suggestion") {
+      navigate("/conocimiento?tab=sugerencias");
+    } else if (m.type === "ai_proactive_tip") {
+      navigate("/");
     }
   };
 
@@ -331,6 +407,8 @@ export default function Notificaciones() {
                 </section>
               </div>
             )}
+
+            <NotificationAiPreferences />
           </>
         )}
       </div>

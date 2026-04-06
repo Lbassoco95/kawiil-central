@@ -1891,9 +1891,29 @@ serve(async (req) => {
       }
     }
 
+    let userMemoriesBlock = "";
+    if (!(simple && insightLite) && orgId) {
+      const { data: userMems } = await svc
+        .from("ai_user_memories")
+        .select("memory_type, content")
+        .eq("user_id", user.id)
+        .eq("organization_id", orgId)
+        .eq("enabled", true)
+        .order("created_at", { ascending: false })
+        .limit(24);
+      if (userMems?.length) {
+        userMemoriesBlock = "\n\n## Notas automáticas sobre este usuario (memoria conversacional)\n";
+        userMemoriesBlock +=
+          "Úsalas como contexto; no contradigas herramientas ni datos frescos. Si el usuario cambia de idea, prioriza lo actual.\n";
+        for (const um of userMems) {
+          userMemoriesBlock += `\n- [${um.memory_type}] ${String(um.content || "").replace(/\n/g, " ").slice(0, 280)}`;
+        }
+      }
+    }
+
     let systemPrompt = simple && insightLite
       ? LITE_SYSTEM_PROMPT
-      : buildSystemPrompt(profile) + workSnapshot + projectContext;
+      : buildSystemPrompt(profile) + workSnapshot + userMemoriesBlock + projectContext;
 
     const indexedNames = Array.isArray(indexed_attachment_names)
       ? indexed_attachment_names.filter((n: unknown) => typeof n === "string" && n.trim().length > 0)

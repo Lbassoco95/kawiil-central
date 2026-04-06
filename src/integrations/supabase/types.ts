@@ -117,6 +117,8 @@ export type Database = {
           chat_message_id: string | null
           rating: string
           created_at: string
+          feedback_category: string | null
+          feedback_comment: string | null
         }
         Insert: {
           id?: string
@@ -125,6 +127,8 @@ export type Database = {
           chat_message_id?: string | null
           rating: string
           created_at?: string
+          feedback_category?: string | null
+          feedback_comment?: string | null
         }
         Update: {
           id?: string
@@ -133,10 +137,106 @@ export type Database = {
           chat_message_id?: string | null
           rating?: string
           created_at?: string
+          feedback_category?: string | null
+          feedback_comment?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "ai_feedback_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_user_memories: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          memory_type: string
+          content: string
+          content_hash: string
+          source_conversation_id: string | null
+          enabled: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          memory_type: string
+          content: string
+          content_hash: string
+          source_conversation_id?: string | null
+          enabled?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          memory_type?: string
+          content?: string
+          content_hash?: string
+          source_conversation_id?: string | null
+          enabled?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_user_memories_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      improvement_suggestions: {
+        Row: {
+          id: string
+          organization_id: string
+          user_id: string
+          conversation_id: string
+          chat_message_id: string
+          suggestion_text: string
+          category: string
+          summary: Json | null
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          user_id: string
+          conversation_id: string
+          chat_message_id: string
+          suggestion_text: string
+          category: string
+          summary?: Json | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          user_id?: string
+          conversation_id?: string
+          chat_message_id?: string
+          suggestion_text?: string
+          category?: string
+          summary?: Json | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "improvement_suggestions_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1794,6 +1894,7 @@ export type Database = {
           onboarding_status: string
           organization_id: string
           phone: string | null
+          proactive_ai_notifications: boolean
           updated_at: string
           user_id: string
         }
@@ -1812,6 +1913,7 @@ export type Database = {
           onboarding_status?: string
           organization_id: string
           phone?: string | null
+          proactive_ai_notifications?: boolean
           updated_at?: string
           user_id: string
         }
@@ -1830,6 +1932,7 @@ export type Database = {
           onboarding_status?: string
           organization_id?: string
           phone?: string | null
+          proactive_ai_notifications?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -2444,6 +2547,14 @@ export type Database = {
           p_organization_id: string
           p_sequence_id: string
         }
+        Returns: Json
+      }
+      get_activity_adoption_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_ai_learning_stats_for_org: {
+        Args: Record<PropertyKey, never>
         Returns: Json
       }
       get_celula_mood_stats: {

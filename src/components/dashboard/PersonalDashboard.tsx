@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useReminders } from "@/hooks/useReminders";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
@@ -28,6 +28,7 @@ import {
   Moon,
   Sunrise,
   BarChart3,
+  X,
 } from "lucide-react";
 import {
   formatDateMX,
@@ -41,6 +42,7 @@ import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useNavigate } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const PHRASE_FALLBACK =
   "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results";
@@ -68,6 +70,7 @@ export function PersonalDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const today = useMexicoToday();
   const { data: orgUsers } = useOrgUsers();
   const userCelula = useMemo(() => {
@@ -111,6 +114,34 @@ export function PersonalDashboard() {
       return data;
     },
     enabled: !!user,
+  });
+
+  const { data: proactiveTip } = useQuery({
+    queryKey: ["dashboard-ai-proactive-tip", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id, title, body")
+        .eq("user_id", user!.id)
+        .eq("type", "ai_proactive_tip")
+        .eq("is_read", false)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const dismissProactive = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dashboard-ai-proactive-tip", user?.id] });
+    },
   });
 
   // Fetch personalized phrase (backend aplica reglas de actualización/caché)
@@ -401,7 +432,32 @@ export function PersonalDashboard() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(280px,340px)] gap-6 min-w-0">
       {/* ═══ LEFT COLUMN ═══ */}
-      <div className="space-y-6 min-w-0">
+      <div className="space-y-4 min-w-0">
+
+        {proactiveTip?.id && (
+          <Alert className="border-primary/25 bg-primary/[0.04] pr-10 relative">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <AlertTitle className="text-sm">{proactiveTip.title || "Sugerencia del día"}</AlertTitle>
+            <AlertDescription className="text-xs mt-1">
+              {proactiveTip.body}
+              <button
+                type="button"
+                className="block mt-2 text-primary font-medium hover:underline"
+                onClick={() => navigate("/notificaciones?tab=sistema")}
+              >
+                Ver notificaciones
+              </button>
+            </AlertDescription>
+            <button
+              type="button"
+              className="absolute right-3 top-3 p-1 rounded-md text-muted-foreground hover:bg-secondary"
+              aria-label="Cerrar"
+              onClick={() => dismissProactive.mutate(proactiveTip.id)}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </Alert>
+        )}
 
         {/* Hero greeting */}
         <div className="animate-fade-in">
@@ -502,7 +558,7 @@ export function PersonalDashboard() {
         )}
 
         {/* Tabs for sections */}
-      <Tabs defaultValue="resumen" className="w-full min-w-0">
+      <Tabs defaultValue="resumen" className="w-full min-w-0 mt-1">
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
           <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
             <TabsTrigger
@@ -545,7 +601,7 @@ export function PersonalDashboard() {
         </div>
 
         {/* Resumen */}
-        <TabsContent value="resumen" className="mt-6 space-y-6 animate-fade-in">
+        <TabsContent value="resumen" className="mt-4 space-y-4 animate-fade-in">
           <DailyBriefing
             tasksCount={totalPending}
             completedToday={completedToday ?? 0}
@@ -604,7 +660,7 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Tareas */}
-        <TabsContent value="tareas" className="mt-6 animate-fade-in">
+        <TabsContent value="tareas" className="mt-4 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Tareas pendientes
@@ -648,7 +704,7 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Mis Clientes */}
-        <TabsContent value="clientes" className="mt-6 animate-fade-in">
+        <TabsContent value="clientes" className="mt-4 animate-fade-in">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Clientes asignados
@@ -685,7 +741,7 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Recordatorios */}
-        <TabsContent value="recordatorios" className="mt-6 animate-fade-in">
+        <TabsContent value="recordatorios" className="mt-4 animate-fade-in">
           <div className="flex items-center gap-2 mb-4">
             <Input
               placeholder="Agregar recordatorio..."
@@ -752,7 +808,7 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Mi semana */}
-        <TabsContent value="mi-semana" className="mt-6 space-y-6 animate-fade-in">
+        <TabsContent value="mi-semana" className="mt-4 space-y-4 animate-fade-in">
           <div className="flex items-center gap-2 text-muted-foreground">
             <CalendarRange className="h-4 w-4 shrink-0" />
             <p className="text-xs">{weekBounds.weekLabel} · semana en horario CDMX</p>
@@ -820,7 +876,7 @@ export function PersonalDashboard() {
         </TabsContent>
 
         {/* Rendimiento */}
-        <TabsContent value="rendimiento" className="mt-6 space-y-8 animate-fade-in">
+        <TabsContent value="rendimiento" className="mt-4 space-y-6 animate-fade-in">
           <PerformanceChart />
           <MonthlyPerformance />
         </TabsContent>

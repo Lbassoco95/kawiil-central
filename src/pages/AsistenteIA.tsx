@@ -96,6 +96,24 @@ const AsistenteIA = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMobile = useIsMobile();
 
+  const { data: proactiveChatHint } = useQuery({
+    queryKey: ["asistente-proactive-hint", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("body")
+        .eq("user_id", user!.id)
+        .eq("type", "ai_proactive_tip")
+        .eq("is_read", false)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.body as string | null | undefined;
+    },
+    enabled: !!user,
+  });
+
   const { data: dynamicSuggestions = FALLBACK_SUGGESTIONS } = useQuery({
     queryKey: ["asistente-sugerencias", user?.id],
     enabled: !!user && !activeAiProjectId,
@@ -536,6 +554,14 @@ const AsistenteIA = () => {
                     <p className="text-sm text-muted-foreground text-center mb-6">
                       Puedo ayudarte con redacción de correos, documentos, consultas fiscales y priorización de tareas.
                     </p>
+                    {proactiveChatHint && (
+                      <div className="w-full max-w-md mb-6 rounded-xl border border-primary/20 bg-primary/[0.06] px-4 py-3 text-left">
+                        <p className="text-[11px] font-medium text-primary mb-1 flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" /> Sugerencia del día
+                        </p>
+                        <p className="text-xs text-foreground/90 leading-relaxed">{proactiveChatHint}</p>
+                      </div>
+                    )}
                   </>
                 )}
                 <div className="grid gap-2 w-full grid-cols-1 sm:grid-cols-2">

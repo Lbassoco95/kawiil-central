@@ -4,17 +4,18 @@ import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
-  BookOpen, Building2, FolderKanban, Bot, BarChart3, Users,
+  BookOpen, Building2, FolderKanban, Bot, BarChart3, Users, Lightbulb,
 } from "lucide-react";
 import { ClientsLearningTab } from "@/components/knowledge/ClientsLearningTab";
 import { ProjectsLearningTab } from "@/components/knowledge/ProjectsLearningTab";
 import { CelulasLearningTab } from "@/components/knowledge/CelulasLearningTab";
 import { AgentsTab } from "@/components/knowledge/AgentsTab";
 import { StatsTab } from "@/components/knowledge/StatsTab";
+import { SuggestionsTab } from "@/components/knowledge/SuggestionsTab";
 
-type TabKey = "clientes" | "proyectos" | "celulas" | "agentes" | "estadisticas";
+type TabKey = "clientes" | "proyectos" | "celulas" | "agentes" | "estadisticas" | "sugerencias";
 
-const VALID_TABS: TabKey[] = ["clientes", "proyectos", "celulas", "agentes", "estadisticas"];
+const VALID_TABS: TabKey[] = ["clientes", "proyectos", "celulas", "agentes", "estadisticas", "sugerencias"];
 
 const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
   { key: "clientes", label: "Por Cliente", icon: Building2 },
@@ -22,6 +23,7 @@ const tabs: { key: TabKey; label: string; icon: typeof Building2 }[] = [
   { key: "celulas", label: "Por Célula", icon: Users },
   { key: "agentes", label: "Agentes", icon: Bot },
   { key: "estadisticas", label: "Estadísticas", icon: BarChart3 },
+  { key: "sugerencias", label: "Sugerencias", icon: Lightbulb },
 ];
 
 const BaseConocimiento = () => {
@@ -71,6 +73,7 @@ const BaseConocimiento = () => {
           {activeTab === "celulas" && <CelulasLearningTab />}
           {activeTab === "agentes" && <AgentsTab />}
           {activeTab === "estadisticas" && <StatsTab />}
+          {activeTab === "sugerencias" && <SuggestionsTab />}
         </div>
       </div>
     </AppLayout>
