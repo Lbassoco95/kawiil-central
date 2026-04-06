@@ -666,11 +666,13 @@ export function useSendNewEmail() {
     mutationFn: async ({
       to,
       cc,
+      bcc,
       subject,
       bodyHtml,
     }: {
       to: string[];
       cc?: string[];
+      bcc?: string[];
       subject: string;
       bodyHtml: string;
     }) => {
@@ -681,6 +683,9 @@ export function useSendNewEmail() {
       };
       if (cc?.length) {
         message.ccRecipients = cc.map((e) => ({ emailAddress: { address: e.trim() } }));
+      }
+      if (bcc?.length) {
+        message.bccRecipients = bcc.map((e) => ({ emailAddress: { address: e.trim() } }));
       }
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "send-email", params: { message } },

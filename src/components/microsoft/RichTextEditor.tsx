@@ -1,25 +1,49 @@
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, forwardRef, useImperativeHandle, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Bold, Italic, List, ListOrdered, Link2, Undo, Redo } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type RichTextEditorHandle = {
+  setHtml: (html: string) => void;
+  focus: () => void;
+};
 
 interface Props {
   initialHtml?: string;
   placeholder?: string;
   className?: string;
   onHtmlChange?: (html: string) => void;
+  /** Contenido extra al final de la barra (p. ej. botón IA) */
+  toolbarEndSlot?: ReactNode;
 }
 
-export function RichTextEditor({ initialHtml, placeholder, className, onHtmlChange }: Props) {
+export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(function RichTextEditor(
+  { initialHtml, placeholder, className, onHtmlChange, toolbarEndSlot },
+  ref
+) {
   const editorRef = useRef<HTMLDivElement>(null);
 
-  const exec = useCallback((cmd: string, value?: string) => {
-    document.execCommand(cmd, false, value);
-    editorRef.current?.focus();
-    if (onHtmlChange && editorRef.current) {
-      onHtmlChange(editorRef.current.innerHTML);
-    }
-  }, [onHtmlChange]);
+  useImperativeHandle(ref, () => ({
+    setHtml(html: string) {
+      if (!editorRef.current) return;
+      editorRef.current.innerHTML = html;
+      onHtmlChange?.(html);
+    },
+    focus() {
+      editorRef.current?.focus();
+    },
+  }));
+
+  const exec = useCallback(
+    (cmd: string, value?: string) => {
+      document.execCommand(cmd, false, value);
+      editorRef.current?.focus();
+      if (onHtmlChange && editorRef.current) {
+        onHtmlChange(editorRef.current.innerHTML);
+      }
+    },
+    [onHtmlChange]
+  );
 
   const handleInput = useCallback(() => {
     if (onHtmlChange && editorRef.current) {
@@ -62,6 +86,7 @@ export function RichTextEditor({ initialHtml, placeholder, className, onHtmlChan
             <Icon className="h-3.5 w-3.5" />
           </Button>
         ))}
+        {toolbarEndSlot ? <div className="ml-auto flex items-center shrink-0">{toolbarEndSlot}</div> : null}
       </div>
       <div
         ref={editorRef}
@@ -75,4 +100,4 @@ export function RichTextEditor({ initialHtml, placeholder, className, onHtmlChan
       />
     </div>
   );
-}
+});
