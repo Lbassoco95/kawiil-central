@@ -20,7 +20,7 @@ import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatMX } from "@/lib/dateUtils";
+import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
@@ -91,11 +91,11 @@ const Tareas = () => {
     });
 
     // Build assigned steps context
-    const overdueSteps = assignedSteps.filter(s => s.dueDate && new Date(s.dueDate) < new Date());
+    const overdueSteps = assignedSteps.filter((s) => isPastDueCalendarMX(s.dueDate));
     const stepsContext = assignedSteps.length > 0 ? `
 PASOS DE PROYECTO ASIGNADOS A MÍ (${assignedSteps.length} total, ${overdueSteps.length} vencidos):
 ${assignedSteps.slice(0, 8).map(s => {
-  const isOverdue = s.dueDate && new Date(s.dueDate) < new Date();
+  const isOverdue = isPastDueCalendarMX(s.dueDate);
   return `  ${isOverdue ? "⚠️" : "📋"} ${s.stepLabel} — Proyecto: ${s.projectName} [${s.sourceLabel}]${s.dueDate ? ` vence: ${s.dueDate}` : ""}${s.isCollaborator ? " (colaborador)" : ""}`;
 }).join("\n")}` : "";
 
@@ -196,7 +196,7 @@ INSTRUCCIONES:
             </div>
             <div className="space-y-1">
               {assignedSteps.slice(0, showAllSteps ? undefined : 10).map((step) => {
-                const isOverdue = step.dueDate && new Date(step.dueDate) < new Date();
+                const isOverdue = isPastDueCalendarMX(step.dueDate);
                 return (
                   <div
                     key={step.id}

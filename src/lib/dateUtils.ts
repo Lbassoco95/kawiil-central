@@ -61,6 +61,20 @@ export function toDateStringMX(date?: Date): string {
 }
 
 /**
+ * Vencimiento por calendario en CDMX (compara solo día, evita desfaces UTC en ISO).
+ */
+export function isPastDueCalendarMX(due: string | null | undefined): boolean {
+  if (due == null || String(due).trim() === "") return false;
+  try {
+    const dueYmd = toDateStringMX(toMXDate(due));
+    const todayYmd = toDateStringMX(nowMX());
+    return dueYmd < todayYmd;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Inicio del día calendario `ymd` (YYYY-MM-DD) en CDMX y fin exclusivo del día siguiente, en ISO (UTC).
  * Para filtrar timestamptz en Supabase: .gte("col", start).lt("col", endExclusive).
  */

@@ -30,6 +30,24 @@ export function useTasksRealtime() {
         () => {
           queryClient.invalidateQueries({ queryKey: ["projects"] });
           queryClient.invalidateQueries({ queryKey: ["project"] });
+          // lawsuit_details, constitution_details, etc. alimentan "Mis pasos" en Tareas
+          queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "accounting_periods" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
+          queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "annual_declarations" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["annual-declarations"] });
+          queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
         }
       )
       .on(

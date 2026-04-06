@@ -24,6 +24,13 @@ const SOURCE_LABELS: Record<string, string> = {
   juicio: "Juicio",
 };
 
+/** Fecha límite efectiva en JSON de pasos (snake_case, camelCase legacy o campo date). */
+function pickStepDueDate(s: any): string | null {
+  const raw = s?.due_date ?? s?.dueDate ?? s?.date ?? null;
+  if (raw == null || raw === "") return null;
+  return typeof raw === "string" ? raw : String(raw);
+}
+
 /** Check if a step is assigned to or has the user as collaborator */
 function isUserInvolved(step: any, userId: string): "assigned" | "collaborator" | false {
   if (step.assigned_to === userId) return "assigned";
@@ -59,7 +66,7 @@ export function useAssignedSteps() {
                   stepKey: s.key,
                   stepLabel: s.label,
                   status: s.status || "pendiente",
-                  dueDate: s.due_date || s.date || null,
+                  dueDate: pickStepDueDate(s),
                   sourceType: type as any,
                   sourceLabel: SOURCE_LABELS[type],
                   projectId: p.id,
@@ -91,8 +98,7 @@ export function useAssignedSteps() {
                   stepKey: s.key,
                   stepLabel: s.label,
                   status: s.status || "pendiente",
-                  // Misma prioridad que LawsuitDashboard.stageToStep / UnifiedStepRow (due_date es la fuente al editar)
-                  dueDate: s.due_date || s.date || null,
+                  dueDate: pickStepDueDate(s),
                   sourceType: "juicio",
                   sourceLabel: SOURCE_LABELS.juicio,
                   projectId: p.id,
@@ -130,7 +136,7 @@ export function useAssignedSteps() {
                 stepKey: s.key,
                 stepLabel: s.label,
                 status: s.step_status || (s.completed ? "completado" : "pendiente"),
-                dueDate: s.due_date || s.date || null,
+                dueDate: pickStepDueDate(s),
                 sourceType: "contabilidad",
                 sourceLabel: SOURCE_LABELS.contabilidad,
                 projectId: period.project_id,
@@ -167,7 +173,7 @@ export function useAssignedSteps() {
                 stepKey: s.key,
                 stepLabel: s.label,
                 status: s.step_status || (s.completed ? "completado" : "pendiente"),
-                dueDate: s.due_date || s.date || null,
+                dueDate: pickStepDueDate(s),
                 sourceType: "declaracion_anual",
                 sourceLabel: SOURCE_LABELS.declaracion_anual,
                 projectId: decl.project_id,
@@ -190,5 +196,8 @@ export function useAssignedSteps() {
         });
     },
     enabled: !!user,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
