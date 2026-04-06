@@ -165,56 +165,65 @@ const Clientes = () => {
           }
         />
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar clientes..."
-              className="pl-9 h-9 text-sm bg-secondary/30 border-0 focus-visible:ring-1"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar clientes..."
+                className="pl-9 h-9 text-sm bg-secondary/30 border-0 focus-visible:ring-1"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setGroupMode("area")}
+                className={`tab-pill ${groupMode === "area" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1 whitespace-nowrap`}
+              >
+                <Layers className="h-3 w-3 shrink-0" /> Área
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupMode("grupo")}
+                className={`tab-pill ${groupMode === "grupo" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1 whitespace-nowrap`}
+              >
+                <Building2 className="h-3 w-3 shrink-0" /> Grupo
+              </button>
+            </div>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}
+            </span>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setGroupMode("area")}
-              className={`tab-pill ${groupMode === "area" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1`}
-            >
-              <Layers className="h-3 w-3" /> Área
-            </button>
-            <button
-              onClick={() => setGroupMode("grupo")}
-              className={`tab-pill ${groupMode === "grupo" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1`}
-            >
-              <Building2 className="h-3 w-3" /> Grupo
-            </button>
+
+          <div
+            className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+            role="group"
+            aria-label="Filtrar por tipo de persona"
+          >
+            <span className="text-xs font-medium text-muted-foreground shrink-0">Tipo de cliente</span>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  { value: "all" as const, label: "Todos" },
+                  { value: "persona_fisica" as const, label: "Persona Física" },
+                  { value: "persona_moral" as const, label: "Persona Moral" },
+                ] as const
+              ).map(({ value, label }) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={clientTypeFilter === value ? "default" : "outline"}
+                  className="h-8 text-xs"
+                  onClick={() => setClientTypeFilter(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-1 flex-wrap" role="group" aria-label="Filtrar por tipo de persona">
-            <button
-              type="button"
-              onClick={() => setClientTypeFilter("all")}
-              className={`tab-pill ${clientTypeFilter === "all" ? "tab-pill-active" : "tab-pill-inactive"}`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setClientTypeFilter("persona_fisica")}
-              className={`tab-pill ${clientTypeFilter === "persona_fisica" ? "tab-pill-active" : "tab-pill-inactive"}`}
-            >
-              Persona Física
-            </button>
-            <button
-              type="button"
-              onClick={() => setClientTypeFilter("persona_moral")}
-              className={`tab-pill ${clientTypeFilter === "persona_moral" ? "tab-pill-active" : "tab-pill-inactive"}`}
-            >
-              Persona Moral
-            </button>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}
-          </span>
         </div>
 
         {isLoading ? (
