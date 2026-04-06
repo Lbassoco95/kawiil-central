@@ -616,7 +616,7 @@ export function EmailView() {
             ? cn(showFolders ? "absolute z-30 h-full w-56 shadow-xl" : "w-0 shrink-0 overflow-hidden border-0")
             : cn(
                 "shrink-0 overflow-hidden",
-                foldersCollapsed ? "w-[3.25rem]" : "w-[13.5rem]",
+                foldersCollapsed ? "w-[3.25rem]" : "w-[15rem]",
               ),
         )}
       >
@@ -629,7 +629,7 @@ export function EmailView() {
               </Button>
             </div>
             <ScrollArea className="min-h-0 flex-1">
-              <div className="py-1">
+              <div className="py-1 pr-2.5 pl-1">
                 {sortedFolders.map((folder: any) => {
                   const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
                   return (
@@ -637,7 +637,7 @@ export function EmailView() {
                       key={folder.id}
                       type="button"
                       className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-all hover:bg-accent/60 text-left rounded-none",
+                        "flex min-w-0 w-full items-center gap-2 py-2 pl-2 pr-1 text-sm transition-all hover:bg-accent/60 text-left rounded-none",
                         isActive && "bg-accent text-accent-foreground font-medium border-l-2 border-primary",
                         dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
                       )}
@@ -645,9 +645,9 @@ export function EmailView() {
                       {...dragHandlers}
                     >
                       <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate flex-1 text-sm">{label}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
                       {folderBadge != null && folderBadge > 0 && (
-                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold bg-primary/15 text-primary">
+                        <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-bold tabular-nums bg-primary/15 text-primary">
                           {folderBadge}
                         </Badge>
                       )}
@@ -707,7 +707,7 @@ export function EmailView() {
                   </Tooltip>
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
-                  <div className="flex flex-col items-center gap-0.5 py-1 px-0.5">
+                  <div className="flex flex-col items-center gap-0.5 py-1 pl-0.5 pr-1">
                     {sortedFolders.map((folder: any) => {
                       const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
                       return (
@@ -716,7 +716,7 @@ export function EmailView() {
                             <button
                               type="button"
                               className={cn(
-                                "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-accent/60",
+                                "relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-md transition-colors hover:bg-accent/60",
                                 isActive && "bg-accent text-accent-foreground ring-1 ring-primary",
                                 dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
                               )}
@@ -725,7 +725,7 @@ export function EmailView() {
                             >
                               <Icon className="h-4 w-4 text-muted-foreground" />
                               {folderBadge != null && folderBadge > 0 && (
-                                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold text-primary-foreground">
+                                <span className="absolute right-0 top-0 flex h-4 min-w-[1.125rem] translate-x-0.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold tabular-nums text-primary-foreground">
                                   {folderBadge > 9 ? "9+" : folderBadge}
                                 </span>
                               )}
@@ -777,7 +777,7 @@ export function EmailView() {
                   </Tooltip>
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
-                  <div className="py-1">
+                  <div className="py-1 pr-2.5 pl-1">
                     {sortedFolders.map((folder: any) => {
                       const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
                       return (
@@ -785,7 +785,7 @@ export function EmailView() {
                           key={folder.id}
                           type="button"
                           className={cn(
-                            "flex w-full items-center gap-2.5 rounded-none px-3 py-2 text-left text-sm transition-all hover:bg-accent/60",
+                            "flex min-w-0 w-full items-center gap-2 rounded-none py-2 pl-2 pr-1 text-left text-sm transition-all hover:bg-accent/60",
                             isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
                             dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
                           )}
@@ -793,9 +793,9 @@ export function EmailView() {
                           {...dragHandlers}
                         >
                           <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span className="flex-1 truncate text-sm">{label}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
                           {folderBadge != null && folderBadge > 0 && (
-                            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold bg-primary/15 text-primary">
+                            <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-bold tabular-nums bg-primary/15 text-primary">
                               {folderBadge}
                             </Badge>
                           )}
