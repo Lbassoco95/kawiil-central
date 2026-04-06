@@ -1,8 +1,13 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Plus, ChevronDown, ChevronRight, Layers, GripVertical,
   Pencil, Check, X, Trash2, User, Calendar, CheckSquare,
@@ -10,6 +15,8 @@ import {
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { formatMX } from "@/lib/dateUtils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 
 export interface Phase {
   key: string;
@@ -42,17 +49,22 @@ const PHASE_COLORS = [
 ];
 
 function TaskRow({
-  task, profileMap, onClick, canDelete, onDelete, selectionMode, isSelected, onToggle, showCleanTitle,
+  task, profileMap, onClick, canDelete, onDelete, selectionMode, isSelected, onToggle, showCleanTitle, archived,
 }: {
   task: any; profileMap: Map<string, string>; onClick: () => void;
   canDelete?: boolean; onDelete?: () => void;
   selectionMode?: boolean; isSelected?: boolean; onToggle?: () => void;
   showCleanTitle?: boolean;
+  archived?: boolean;
 }) {
   const title = showCleanTitle && task.phase_key ? task.title.replace(/^\[[^\]]+\]\s*/, "") : task.title;
   return (
     <div
-      className={`flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isSelected ? "bg-primary/5" : ""}`}
+      className={cn(
+        "flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer",
+        isSelected && "bg-primary/5",
+        archived && "opacity-75 hover:opacity-90"
+      )}
       onClick={() => selectionMode && onToggle ? onToggle() : onClick()}
     >
       {selectionMode && (
@@ -60,7 +72,7 @@ function TaskRow({
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="text-[13px] font-medium truncate">{title}</span>
+          <span className={cn("text-[13px] font-medium truncate", archived && "line-through text-muted-foreground")}>{title}</span>
           <Badge className={`text-[9px] border-0 px-1 py-0 ${PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`} variant="secondary">
             {PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.label || task.priority}
           </Badge>
@@ -83,6 +95,55 @@ function TaskRow({
         </Button>
       )}
     </div>
+  );
+}
+
+function ClosedTasksCollapsible({
+  tasks: closedTasks,
+  profileMap,
+  onTaskClick,
+  canDeleteTasks,
+  onDeleteTask,
+  selectionMode,
+  selectedTaskIds,
+  onToggleTaskSelection,
+  showCleanTitle,
+}: {
+  tasks: any[];
+  profileMap: Map<string, string>;
+  onTaskClick: (id: string) => void;
+  canDeleteTasks?: boolean;
+  onDeleteTask?: (id: string) => void;
+  selectionMode?: boolean;
+  selectedTaskIds?: Set<string>;
+  onToggleTaskSelection?: (id: string) => void;
+  showCleanTitle?: boolean;
+}) {
+  if (closedTasks.length === 0) return null;
+  return (
+    <Collapsible defaultOpen={false} className="group mt-1 border-t border-border/30 pt-1">
+      <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors">
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+        Completadas o canceladas ({closedTasks.length})
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-0.5 pt-1 pb-1">
+        {closedTasks.map((t) => (
+          <TaskRow
+            key={t.id}
+            task={t}
+            profileMap={profileMap}
+            archived
+            onClick={() => onTaskClick(t.id)}
+            canDelete={canDeleteTasks}
+            onDelete={() => onDeleteTask?.(t.id)}
+            selectionMode={selectionMode}
+            isSelected={selectedTaskIds?.has(t.id)}
+            onToggle={() => onToggleTaskSelection?.(t.id)}
+            showCleanTitle={showCleanTitle}
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -113,6 +174,11 @@ export function PhaseManager({
   [phases]);
 
   const unassignedTasks = tasksByPhase.get("__none__") || [];
+  const unassignedOpen = unassignedTasks.filter((t) => !isTaskClosedStatus(t.status));
+  const unassignedClosed = unassignedTasks.filter((t) => isTaskClosedStatus(t.status));
+
+  const flatOpenTasks = phases.length === 0 ? tasks.filter((t) => !isTaskClosedStatus(t.status)) : [];
+  const flatClosedTasks = phases.length === 0 ? tasks.filter((t) => isTaskClosedStatus(t.status)) : [];
 
   const toggleCollapse = (key: string) => {
     setCollapsedPhases((prev) => {
@@ -166,6 +232,8 @@ export function PhaseManager({
     <div className="space-y-3">
       {sortedPhases.map((phase, idx) => {
         const phaseTasks = tasksByPhase.get(phase.key) || [];
+        const openInPhase = phaseTasks.filter((t) => !isTaskClosedStatus(t.status));
+        const closedInPhase = phaseTasks.filter((t) => isTaskClosedStatus(t.status));
         const isCollapsed = collapsedPhases.has(phase.key);
         const isEditing = editingPhase === phase.key;
         const progress = phaseProgress(phaseTasks);
@@ -233,7 +301,12 @@ export function PhaseManager({
                   <p className="text-xs text-muted-foreground text-center py-4">Sin tareas en esta fase</p>
                 ) : (
                   <div className="space-y-0.5">
-                    {phaseTasks.map((t) => (
+                    {openInPhase.length === 0 && closedInPhase.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground text-center py-2 px-2">
+                        No hay tareas en curso en esta fase.
+                      </p>
+                    )}
+                    {openInPhase.map((t) => (
                       <TaskRow
                         key={t.id}
                         task={t}
@@ -247,6 +320,17 @@ export function PhaseManager({
                         showCleanTitle
                       />
                     ))}
+                    <ClosedTasksCollapsible
+                      tasks={closedInPhase}
+                      profileMap={profileMap}
+                      onTaskClick={onTaskClick}
+                      canDeleteTasks={canDeleteTasks}
+                      onDeleteTask={onDeleteTask}
+                      selectionMode={selectionMode}
+                      selectedTaskIds={selectedTaskIds}
+                      onToggleTaskSelection={onToggleTaskSelection}
+                      showCleanTitle
+                    />
                   </div>
                 )}
                 {onAddTask && (
@@ -272,8 +356,11 @@ export function PhaseManager({
             <Badge variant="secondary" className="text-[10px]">{unassignedTasks.length}</Badge>
           </div>
           {!collapsedPhases.has("__none__") && (
-            <div className="px-2 pb-2">
-              {unassignedTasks.map((t) => (
+            <div className="px-2 pb-2 space-y-0.5">
+              {unassignedOpen.length === 0 && unassignedClosed.length > 0 && (
+                <p className="text-[11px] text-muted-foreground text-center py-2 px-2">No hay tareas en curso sin fase.</p>
+              )}
+              {unassignedOpen.map((t) => (
                 <TaskRow
                   key={t.id} task={t} profileMap={profileMap} onClick={() => onTaskClick(t.id)}
                   canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
@@ -281,6 +368,16 @@ export function PhaseManager({
                   onToggle={() => onToggleTaskSelection?.(t.id)}
                 />
               ))}
+              <ClosedTasksCollapsible
+                tasks={unassignedClosed}
+                profileMap={profileMap}
+                onTaskClick={onTaskClick}
+                canDeleteTasks={canDeleteTasks}
+                onDeleteTask={onDeleteTask}
+                selectionMode={selectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleTaskSelection={onToggleTaskSelection}
+              />
             </div>
           )}
         </div>
@@ -289,7 +386,10 @@ export function PhaseManager({
       {/* No phases: flat list */}
       {phases.length === 0 && (
         <div className="space-y-0.5">
-          {tasks.map((t) => (
+          {flatOpenTasks.length === 0 && flatClosedTasks.length > 0 && (
+            <p className="text-[11px] text-muted-foreground text-center py-2">No hay tareas en curso.</p>
+          )}
+          {flatOpenTasks.map((t) => (
             <TaskRow
               key={t.id} task={t} profileMap={profileMap} onClick={() => onTaskClick(t.id)}
               canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
@@ -297,6 +397,16 @@ export function PhaseManager({
               onToggle={() => onToggleTaskSelection?.(t.id)}
             />
           ))}
+          <ClosedTasksCollapsible
+            tasks={flatClosedTasks}
+            profileMap={profileMap}
+            onTaskClick={onTaskClick}
+            canDeleteTasks={canDeleteTasks}
+            onDeleteTask={onDeleteTask}
+            selectionMode={selectionMode}
+            selectedTaskIds={selectedTaskIds}
+            onToggleTaskSelection={onToggleTaskSelection}
+          />
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useClientDetail } from "@/hooks/useClientDetail";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Mail, Phone, MapPin, User, FileText,
-  CheckSquare, FolderOpen, Pencil, Shield, Building2,
+  CheckSquare, FolderOpen, Pencil, Shield, Building2, ChevronRight,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
@@ -25,6 +25,13 @@ type TaskPriority = Database["public"]["Enums"]["task_priority"];
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 
 import { CLIENT_STATUS_CONFIG, TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 
 const STATUS_STYLES: Record<ClientStatus, string> = Object.fromEntries(
   Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -80,7 +87,14 @@ const ClienteDetalle = () => {
     );
   }
 
-  const activeTasks = tasks.filter((t) => t.status !== "completada" && t.status !== "cancelada");
+  const activeTasks = tasks.filter((t) => !isTaskClosedStatus(t.status));
+  const closedTasks = useMemo(() => {
+    const list = tasks.filter((t) => isTaskClosedStatus(t.status));
+    return [...list].sort(
+      (a, b) =>
+        new Date(b.updated_at || "").getTime() - new Date(a.updated_at || "").getTime()
+    );
+  }, [tasks]);
 
   return (
     <AppLayout>
@@ -228,33 +242,74 @@ const ClienteDetalle = () => {
 
         {/* Tasks */}
         {tab === "tareas" && (
-          activeTasks.length === 0 ? (
-            <div className="text-center py-16">
-              <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
-              <p className="mt-3 text-sm text-muted-foreground">Sin tareas pendientes.</p>
-            </div>
-          ) : (
-            <div className="glass-card divide-y divide-border/30 overflow-hidden">
-              {activeTasks.map((t) => (
-                <div key={t.id} onClick={() => setSelectedTaskId(t.id)} className="flex items-center justify-between gap-3 py-3 px-4 cursor-pointer hover:bg-secondary/20 transition-colors duration-200">
-                  <div className="min-w-0">
-                    <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
-                    {t.due_date && (
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Vence: {formatDateMX(t.due_date)}</p>
-                    )}
+          <div className="space-y-3">
+            {activeTasks.length === 0 && closedTasks.length === 0 ? (
+              <div className="text-center py-16">
+                <CheckSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
+                <p className="mt-3 text-sm text-muted-foreground">Sin tareas para este cliente.</p>
+              </div>
+            ) : (
+              <>
+                {activeTasks.length > 0 ? (
+                  <div className="glass-card divide-y divide-border/30 overflow-hidden">
+                    <p className="text-[11px] text-muted-foreground px-4 py-2 bg-muted/20">En curso</p>
+                    {activeTasks.map((t) => (
+                      <div key={t.id} onClick={() => setSelectedTaskId(t.id)} className="flex items-center justify-between gap-3 py-3 px-4 cursor-pointer hover:bg-secondary/20 transition-colors duration-200">
+                        <div className="min-w-0">
+                          <h4 className="text-[13px] font-medium text-foreground truncate">{t.title}</h4>
+                          {t.due_date && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">Vence: {formatDateMX(t.due_date)}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${TASK_PRIORITY_STYLES[t.priority]}`}>
+                            {t.priority}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
+                            {TASK_STATUS_LABELS[t.status]}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 ${TASK_PRIORITY_STYLES[t.priority]}`}>
-                      {t.priority}
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
-                      {TASK_STATUS_LABELS[t.status]}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">Sin tareas en curso.</p>
+                )}
+
+                {closedTasks.length > 0 && (
+                  <Collapsible defaultOpen={false} className="group rounded-xl border border-border/40 overflow-hidden bg-muted/10 [&[data-state=open]]:border-border/60">
+                    <CollapsibleTrigger className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-muted-foreground hover:bg-muted/30 transition-colors">
+                      <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                      Historial — completadas o canceladas ({closedTasks.length})
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="divide-y divide-border/30 border-t border-border/30">
+                        {closedTasks.map((t) => (
+                          <div
+                            key={t.id}
+                            onClick={() => setSelectedTaskId(t.id)}
+                            className="flex items-center justify-between gap-3 py-3 px-4 cursor-pointer hover:bg-secondary/20 transition-colors duration-200 opacity-85"
+                          >
+                            <div className="min-w-0">
+                              <h4 className={cn("text-[13px] font-medium truncate text-muted-foreground", t.status === "cancelada" && "line-through")}>
+                                {t.title}
+                              </h4>
+                              {t.due_date && (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Vence: {formatDateMX(t.due_date)}</p>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                              {TASK_STATUS_LABELS[t.status]}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </>
+            )}
+          </div>
         )}
 
         {/* Documents */}

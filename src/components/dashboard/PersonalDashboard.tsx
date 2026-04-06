@@ -510,7 +510,7 @@ export function PersonalDashboard() {
             </div>
           </button>
           <button
-            onClick={() => navigate("/tareas?status=completada")}
+            onClick={() => navigate("/tareas?vista=historial")}
             className={`stat-card text-left group relative overflow-hidden ${(completedToday ?? 0) > 0 ? "border-accent/30" : ""}`}
           >
             <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${(completedToday ?? 0) > 0 ? "from-accent to-accent/50" : "from-muted to-muted"}`} />
@@ -821,7 +821,7 @@ export function PersonalDashboard() {
             </div>
             <button
               type="button"
-              onClick={() => navigate("/tareas?status=completada")}
+              onClick={() => navigate("/tareas?vista=historial")}
               className="glass-card p-4 text-left row-hover transition-colors"
             >
               <CheckCircle2 className="h-4 w-4 text-accent mb-2" />

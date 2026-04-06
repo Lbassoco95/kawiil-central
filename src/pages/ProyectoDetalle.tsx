@@ -33,6 +33,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -75,6 +76,9 @@ const ProyectoDetalle = () => {
     },
     enabled: !!user && !!id,
   });
+
+  const openTaskCount = useMemo(() => tasks.filter((t) => !isTaskClosedStatus(t.status)).length, [tasks]);
+  const closedTaskCount = useMemo(() => tasks.filter((t) => isTaskClosedStatus(t.status)).length, [tasks]);
 
   const projectPhases: Phase[] = useMemo(() => {
     const raw = (project as any)?.phases;
@@ -205,7 +209,13 @@ const ProyectoDetalle = () => {
   if (hasAccounting) projectTabs.push({ key: "declaracion_anual", label: "Declaración Anual", icon: FileSpreadsheet });
   if (isLawsuit) projectTabs.push({ key: "juicio", label: "Juicio", icon: Scale });
   if (isCumplimiento) projectTabs.push({ key: "cumplimiento", label: "Cumplimiento", icon: Shield });
-  projectTabs.push({ key: "tareas", label: `Tareas (${tasks.length})` });
+  projectTabs.push({
+    key: "tareas",
+    label:
+      closedTaskCount > 0
+        ? `Tareas (${openTaskCount} · ${closedTaskCount} cerr.)`
+        : `Tareas (${openTaskCount})`,
+  });
   projectTabs.push({ key: "comentarios", label: "Comentarios", icon: MessageSquare });
   projectTabs.push({ key: "firmas", label: "Firmas", icon: PenTool });
 
@@ -325,8 +335,14 @@ const ProyectoDetalle = () => {
 
         {tab === "tareas" && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-medium text-muted-foreground">Tareas del proyecto</h3>
+            <div className="flex justify-between items-center gap-2 flex-wrap">
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Tareas del proyecto</h3>
+                <p className="text-[11px] text-muted-foreground/90 mt-0.5">
+                  {openTaskCount} en curso
+                  {closedTaskCount > 0 ? ` · ${closedTaskCount} completadas o canceladas (plegable por fase)` : ""}
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 {canDeleteTasks && tasks.length > 0 && (
                   <Button

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, EyeOff } from "lucide-react";
+import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, Archive } from "lucide-react";
 import { useTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
@@ -23,6 +23,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 
 const statusLabels = TASK_STATUS_CONFIG;
 
@@ -47,7 +48,14 @@ const Tareas = () => {
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
 
-  const [showCanceled, setShowCanceled] = useState(false);
+  const [vistaTareas, setVistaTareas] = useState<"activas" | "historial">(() => {
+    if (typeof window === "undefined") return "activas";
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("vista") === "historial") return "historial";
+    const st = p.get("status");
+    if (st === "completada" || st === "cancelada") return "historial";
+    return "activas";
+  });
 
   // Sync selectedTaskId with URL query param for deep links
   useEffect(() => {
@@ -58,6 +66,13 @@ const Tareas = () => {
     const urlArea = searchParams.get("area");
     if (urlArea && urlArea !== area) {
       setArea(urlArea);
+    }
+    const v = searchParams.get("vista");
+    const st = searchParams.get("status");
+    if (v === "historial" || st === "completada" || st === "cancelada") {
+      setVistaTareas("historial");
+    } else {
+      setVistaTareas("activas");
     }
   }, [searchParams]);
 
@@ -70,17 +85,38 @@ const Tareas = () => {
     setSearchParams((prev) => { const p = new URLSearchParams(prev); p.delete("taskId"); return p; });
   };
 
+  const setVistaTareasAndUrl = (next: "activas" | "historial") => {
+    setVistaTareas(next);
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (next === "historial") {
+        p.set("vista", "historial");
+        p.delete("status");
+      } else {
+        p.delete("vista");
+        p.delete("status");
+      }
+      return p;
+    });
+  };
+
   const { data: tasks, isLoading } = useTasks({
     area: area !== "todas" ? area : undefined,
     search: search || undefined,
   });
 
-  const activeTasks = useMemo(() => tasks?.filter((t: any) => t.status !== "cancelada") ?? [], [tasks]);
-  const canceledTasks = useMemo(() => tasks?.filter((t: any) => t.status === "cancelada") ?? [], [tasks]);
+  const openTasks = useMemo(() => tasks?.filter((t: any) => !isTaskClosedStatus(t.status)) ?? [], [tasks]);
+  const closedTasks = useMemo(() => {
+    const list = tasks?.filter((t: any) => isTaskClosedStatus(t.status)) ?? [];
+    return [...list].sort(
+      (a: any, b: any) =>
+        new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+    );
+  }, [tasks]);
 
   const tasksSummaryPrompt = useMemo(() => {
     if (!tasks) return "";
-    const pending = tasks.filter((t: any) => ["pendiente", "en_progreso", "en_revision"].includes(t.status));
+    const pending = tasks.filter((t: any) => !isTaskClosedStatus(t.status));
     const overdue = pending.filter((t: any) => t.due_date && new Date(t.due_date) < new Date());
     const critical = tasks.filter((t: any) => (t as any).criticality_level === "critico");
     const byPriority: Record<string, number> = {};
@@ -266,44 +302,146 @@ INSTRUCCIONES:
           />
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={vistaTareas === "activas" ? "default" : "outline"}
+            className="h-8 text-xs"
+            onClick={() => setVistaTareasAndUrl("activas")}
+          >
+            En curso
+            <span className="ml-1.5 tabular-nums opacity-80">({openTasks.length})</span>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={vistaTareas === "historial" ? "default" : "outline"}
+            className="h-8 text-xs"
+            onClick={() => setVistaTareasAndUrl("historial")}
+          >
+            <Archive className="mr-1.5 h-3.5 w-3.5" />
+            Historial
+            <span className="ml-1.5 tabular-nums opacity-80">({closedTasks.length})</span>
+          </Button>
+        </div>
+
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="h-16 rounded-2xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
-        ) : activeTasks.length > 0 ? (
+        ) : vistaTareas === "activas" ? (
+          openTasks.length > 0 ? (
+            <div className="space-y-2">
+              {openTasks.map((task, i) => (
+                <div
+                  key={task.id}
+                  className={cn(
+                    "flex items-center gap-4 py-3 px-4 page-list-card cursor-pointer animate-fade-in",
+                    getPriorityBar(task.priority),
+                    (task as any).delay_category && "bg-warning/[0.03]"
+                  )}
+                  style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
+                  onClick={() => openTask(task.id)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-sm font-medium text-foreground truncate">{task.title}</h3>
+                      {(task as any).criticality_level === "critico" && <span className="text-[10px]" title="Crítico">🔴</span>}
+                      {(task as any).criticality_level === "atencion" && <span className="text-[10px]" title="Atención">🟡</span>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge className={cn("text-[10px] border-0 px-1.5 py-0", statusLabels[task.status]?.color)} variant="secondary">
+                        {statusLabels[task.status]?.label}
+                      </Badge>
+                      {task.area && (
+                        <span className="text-xs text-muted-foreground">{getCelulaLabel(task.area)}</span>
+                      )}
+                      {task.assigned_to && profileMap.get(task.assigned_to) ? (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <User className="h-3 w-3" />{profileMap.get(task.assigned_to)}
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs text-destructive/70 font-medium">Sin responsable</span>
+                      )}
+                      {(task as any).clients?.name && (
+                        <span className="text-xs text-muted-foreground/70">{(task as any).clients.name}</span>
+                      )}
+                      {(task as any).projects?.name && <span className="text-xs text-muted-foreground">{(task as any).projects.name}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {task.due_date && (
+                      <span className={cn("text-xs flex items-center gap-1", getDateColor(task.due_date))}>
+                        <Calendar className="h-3 w-3" />
+                        {formatMX(task.due_date, "dd MMM")}
+                      </span>
+                    )}
+                    {canDeleteTasks && (
+                      <button
+                        className="p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16 animate-scale-in">
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                <CheckSquare className="h-8 w-8 text-primary/60" />
+              </div>
+              <h3 className="text-sm font-medium text-foreground">
+                {tasks && tasks.length > 0 ? "Nada en curso" : "Sin tareas aún"}
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+                {tasks && tasks.length > 0 && closedTasks.length > 0
+                  ? "Todas las tareas visibles están completadas o canceladas. Revísalas en Historial."
+                  : "Crea tu primera tarea para comenzar a organizar el trabajo del equipo."}
+              </p>
+              {tasks && tasks.length > 0 && closedTasks.length > 0 ? (
+                <Button type="button" className="mt-4" size="sm" variant="outline" onClick={() => setVistaTareasAndUrl("historial")}>
+                  <Archive className="mr-1.5 h-3.5 w-3.5" /> Ver historial ({closedTasks.length})
+                </Button>
+              ) : (
+                <Button type="button" className="mt-4" size="sm" onClick={() => openNewTaskModal()}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
+                </Button>
+              )}
+            </div>
+          )
+        ) : closedTasks.length > 0 ? (
           <div className="space-y-2">
-            {activeTasks.map((task, i) => (
+            {closedTasks.map((task, i) => (
               <div
                 key={task.id}
                 className={cn(
-                  "flex items-center gap-4 py-3 px-4 page-list-card cursor-pointer animate-fade-in",
-                  getPriorityBar(task.priority),
-                  (task as any).delay_category && "bg-warning/[0.03]"
+                  "flex items-center gap-4 py-3 px-4 page-list-card cursor-pointer animate-fade-in opacity-90 hover:opacity-100 border-border/60 bg-muted/20",
+                  task.status === "cancelada" && "border-dashed"
                 )}
                 style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
                 onClick={() => openTask(task.id)}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-sm font-medium text-foreground truncate">{task.title}</h3>
-                    {(task as any).criticality_level === "critico" && <span className="text-[10px]" title="Crítico">🔴</span>}
-                    {(task as any).criticality_level === "atencion" && <span className="text-[10px]" title="Atención">🟡</span>}
+                    <h3 className={cn("text-sm font-medium truncate text-muted-foreground", task.status === "cancelada" && "line-through")}>
+                      {task.title}
+                    </h3>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge className={cn("text-[10px] border-0 px-1.5 py-0", statusLabels[task.status]?.color)} variant="secondary">
                       {statusLabels[task.status]?.label}
                     </Badge>
-                    {task.area && (
-                      <span className="text-xs text-muted-foreground">{getCelulaLabel(task.area)}</span>
-                    )}
-                    {task.assigned_to && profileMap.get(task.assigned_to) ? (
+                    {task.area && <span className="text-xs text-muted-foreground">{getCelulaLabel(task.area)}</span>}
+                    {task.assigned_to && profileMap.get(task.assigned_to) && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <User className="h-3 w-3" />{profileMap.get(task.assigned_to)}
                       </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-xs text-destructive/70 font-medium">Sin responsable</span>
                     )}
                     {(task as any).clients?.name && (
                       <span className="text-xs text-muted-foreground/70">{(task as any).clients.name}</span>
@@ -311,68 +449,29 @@ INSTRUCCIONES:
                     {(task as any).projects?.name && <span className="text-xs text-muted-foreground">{(task as any).projects.name}</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {task.due_date && (
-                    <span className={cn("text-xs flex items-center gap-1", getDateColor(task.due_date))}>
+                <div className="flex flex-col items-end gap-0.5 shrink-0 text-[10px] text-muted-foreground">
+                  {(task as any).completed_at && task.status === "completada" && (
+                    <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {formatMX(task.due_date, "dd MMM")}
+                      {formatMX((task as any).completed_at, "dd MMM yyyy")}
                     </span>
                   )}
-                  {canDeleteTasks && (
-                    <button
-                      className="p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: task.id, title: task.title }); }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                  {task.due_date && (
+                    <span className="flex items-center gap-1 opacity-80">
+                      Vence: {formatMX(task.due_date, "dd MMM")}
+                    </span>
                   )}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-16 animate-scale-in">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-              <CheckSquare className="h-8 w-8 text-primary/60" />
-            </div>
-            <h3 className="text-sm font-medium text-foreground">Sin tareas aún</h3>
-            <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">Crea tu primera tarea para comenzar a organizar el trabajo del equipo.</p>
-            <Button type="button" className="mt-4" size="sm" onClick={() => openNewTaskModal()}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
+          <div className="text-center py-14">
+            <Archive className="mx-auto h-9 w-9 text-muted-foreground/40 mb-3" />
+            <p className="text-sm text-muted-foreground">No hay tareas completadas ni canceladas en esta vista.</p>
+            <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => setVistaTareasAndUrl("activas")}>
+              Volver a En curso
             </Button>
-          </div>
-        )}
-
-        {canceledTasks.length > 0 && (
-          <div className="mt-4">
-            <button
-              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setShowCanceled(!showCanceled)}
-            >
-              <EyeOff className="h-3.5 w-3.5" />
-              {showCanceled ? "Ocultar" : "Mostrar"} canceladas ({canceledTasks.length})
-            </button>
-            {showCanceled && (
-              <div className="space-y-1 mt-2 opacity-50">
-                {canceledTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center gap-4 py-2.5 px-4 page-list-card cursor-pointer opacity-70 hover:opacity-100"
-                    onClick={() => openTask(task.id)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-foreground truncate line-through">{task.title}</h3>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                        {task.area && <span>{getCelulaLabel(task.area)}</span>}
-                        {task.due_date && (
-                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM yyyy")}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </div>

@@ -28,6 +28,21 @@ import { ComplianceTaskGeneratorModal } from "@/components/compliance/Compliance
 import { ComplianceTaskRow } from "@/components/projects/ComplianceTaskRow";
 import { formatMX, nowMX } from "@/lib/dateUtils";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
+import { isTaskOpenStatus } from "@/lib/taskStatusGroups";
+
+function sortComplianceTasksForList(a: ComplianceTask, b: ComplianceTask) {
+  const rank = (s: string) => {
+    if (isTaskOpenStatus(s)) return 0;
+    if (s === "completada") return 1;
+    if (s === "cancelada") return 2;
+    return 0;
+  };
+  const d = rank(a.status) - rank(b.status);
+  if (d !== 0) return d;
+  const ad = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+  const bd = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+  return ad - bd;
+}
 
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -143,13 +158,16 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath, pr
       groups[cat].push(t);
     }
     return Object.entries(groups)
-      .map(([key, tasks]) => ({
-        key,
-        label: CATEGORY_LABELS[key] || key,
-        tasks,
-        completed: tasks.filter((t) => t.status === "completada").length,
-        total: tasks.length,
-      }))
+      .map(([key, taskList]) => {
+        const tasks = [...taskList].sort(sortComplianceTasksForList);
+        return {
+          key,
+          label: CATEGORY_LABELS[key] || key,
+          tasks,
+          completed: tasks.filter((t) => t.status === "completada").length,
+          total: tasks.length,
+        };
+      })
       .sort((a, b) => {
         const order = Object.keys(CATEGORY_LABELS);
         return order.indexOf(a.key) - order.indexOf(b.key);
@@ -160,7 +178,7 @@ export function ComplianceDashboard({ projectId, clientId, clientDropboxPath, pr
   const completedTasks = tasks.filter((t) => t.status === "completada").length;
   const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const urgentTasks = tasks.filter((t) => {
-    if (t.status === "completada" || !t.due_date) return false;
+    if (t.status === "completada" || t.status === "cancelada" || !t.due_date) return false;
     const daysUntil = Math.ceil((new Date(t.due_date).getTime() - today.getTime()) / 86400000);
     return daysUntil <= 7;
   }).length;
