@@ -40,7 +40,8 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [projectId, setProjectId] = useState(defaultProjectId || "");
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  /** Al abrir el modal mostramos todas las opciones (descripción, cliente, proyecto…); la rápida queda en QuickTaskInput. */
+  const [showAdvanced, setShowAdvanced] = useState(true);
 
   const createTask = useCreateTask();
   const { data: profiles } = useProfiles();
@@ -55,9 +56,13 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
 
   useEffect(() => {
     if (!open) return;
+    setShowAdvanced(true);
     if (user?.id) setAssignedTo(user.id);
     setDueDate(defaultDueDatePlusThreeBusinessDays());
-  }, [open, user?.id]);
+    if (defaultArea !== undefined) setArea(defaultArea || "");
+    if (defaultClientId !== undefined) setClientId(defaultClientId || "");
+    if (defaultProjectId !== undefined) setProjectId(defaultProjectId || "");
+  }, [open, user?.id, defaultArea, defaultClientId, defaultProjectId]);
 
   const profileOptions = useMemo(
     () =>
@@ -126,6 +131,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     setTitle(""); setDescription(""); setArea(""); setPriority("media");
     setDueDate(""); setAssignedTo(""); setAdditionalAssignees([]);
     setClientId(""); setProjectId(""); setDropboxLinks([]); setNewLink("");
+    setShowAdvanced(true);
   };
 
   const addAssignee = (userId: string) => {
@@ -157,7 +163,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nueva tarea</DialogTitle>
+          <DialogTitle>Nueva tarea — formulario completo</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Essential fields */}
