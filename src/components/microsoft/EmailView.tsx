@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, type DragEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ import {
   Sparkles, Languages, ListTodo, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
-  Keyboard, ArrowDown,
+  Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List,
 } from "lucide-react";
 import {
   formatDistanceToNow,
@@ -212,7 +212,18 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv4-grid";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv5-collapse";
+
+const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
+
+function readFoldersCollapsedPref(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(LS_EMAIL_FOLDERS_COLLAPSED) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export function EmailView() {
   const [search, setSearch] = useState("");
@@ -235,8 +246,25 @@ export function EmailView() {
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [showFolders, setShowFolders] = useState(false);
+  /** Escritorio: panel de carpetas estrecho solo con iconos */
+  const [foldersCollapsed, setFoldersCollapsed] = useState(readFoldersCollapsedPref);
+  /** Escritorio: oculta la lista al leer un correo para ampliar el lector */
+  const [listPaneCollapsed, setListPaneCollapsed] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(LS_EMAIL_FOLDERS_COLLAPSED, foldersCollapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [foldersCollapsed]);
+
+  useEffect(() => {
+    if (!selectedEmailId) setListPaneCollapsed(false);
+  }, [selectedEmailId]);
 
   const { data: folders = [] } = useMailFolders();
   const { data: inboxUnread = 0 } = useUnreadEmailCount();
@@ -494,133 +522,330 @@ export function EmailView() {
   const isSending = replyEmail.isPending || forwardEmail.isPending || sendDraft.isPending;
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
 
+  const desktopGridTemplateColumns =
+    !isMobile &&
+    `${foldersCollapsed ? "3.25rem" : "13.5rem"} ${
+      listPaneCollapsed && selectedEmailId ? "0fr" : "minmax(18rem, min(28rem, 32vw))"
+    } minmax(0, 1fr)`;
+
+  const folderRow = (folder: any) => {
+    const Icon = getFolderIcon(folder.displayName);
+    const label = getFolderLabel(folder.displayName);
+    const isActive = selectedFolderId === folder.id;
+    const folderBadge = getFolderSidebarBadge(folder, inboxUnread);
+    const dragHandlers = {
+      onDragOver: (e: DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragOverFolderId(folder.id);
+      },
+      onDragLeave: () => setDragOverFolderId(null),
+      onDrop: (e: DragEvent) => {
+        e.preventDefault();
+        setDragOverFolderId(null);
+        const messageId = e.dataTransfer.getData("text/email-id");
+        if (messageId && folder.id !== selectedFolderId) handleMoveEmail(messageId, folder.id);
+      },
+    };
+    const onSelect = () => {
+      setSelectedFolderId(folder.id);
+      setSelectedEmailId(null);
+      resetAction();
+      if (isMobile) setShowFolders(false);
+    };
+    return { Icon, label, isActive, folderBadge, dragHandlers, onSelect };
+  };
+
   return (
     <div
       className={cn(
         "h-full min-h-0 min-w-0 w-full overflow-hidden bg-background",
-        isMobile ? "flex" : "grid grid-cols-[13.5rem_minmax(18rem,28rem)_minmax(0,1fr)]",
+        isMobile ? "flex" : "grid",
       )}
+      style={
+        typeof desktopGridTemplateColumns === "string"
+          ? { gridTemplateColumns: desktopGridTemplateColumns }
+          : undefined
+      }
     >
-      {/* Folder sidebar — collapsible on mobile */}
+      {/* Folder sidebar — móvil: overlay; escritorio: expandible o riel de iconos */}
       <div
         className={cn(
-          "flex min-h-0 shrink-0 flex-col border-r border-border bg-muted/30 transition-all duration-200",
+          "flex min-h-0 shrink-0 flex-col border-r border-border bg-muted/30 transition-[width,opacity] duration-200 ease-out",
           isMobile
             ? cn(showFolders ? "absolute z-30 h-full w-56 shadow-xl" : "w-0 overflow-hidden border-0")
-            : "w-full min-w-0",
+            : "w-full min-w-0 overflow-hidden",
         )}
       >
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carpetas</span>
-          {isMobile && (
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowFolders(false)}>
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="py-1">
-            {sortedFolders.map((folder: any) => {
-              const Icon = getFolderIcon(folder.displayName);
-              const label = getFolderLabel(folder.displayName);
-              const isActive = selectedFolderId === folder.id;
-              const folderBadge = getFolderSidebarBadge(folder, inboxUnread);
-              return (
-                <button
-                  key={folder.id}
-                  className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-all hover:bg-accent/60 text-left rounded-none",
-                    isActive && "bg-accent text-accent-foreground font-medium border-l-2 border-primary",
-                    dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary"
-                  )}
-                  onClick={() => {
-                    setSelectedFolderId(folder.id);
-                    setSelectedEmailId(null);
-                    resetAction();
-                    if (isMobile) setShowFolders(false);
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverFolderId(folder.id); }}
-                  onDragLeave={() => setDragOverFolderId(null)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDragOverFolderId(null);
-                    const messageId = e.dataTransfer.getData("text/email-id");
-                    if (messageId && folder.id !== selectedFolderId) handleMoveEmail(messageId, folder.id);
-                  }}
-                >
-                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate flex-1 text-sm">{label}</span>
-                  {folderBadge != null && folderBadge > 0 && (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold bg-primary/15 text-primary">
-                      {folderBadge}
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </ScrollArea>
-        <div className="shrink-0 border-t border-border p-2">
-          {creatingFolder ? (
-            <div className="flex items-center gap-1">
-              <Input
-                autoFocus placeholder="Nombre..." className="h-7 text-xs flex-1"
-                value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newFolderName.trim()) {
-                    createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } });
-                  }
-                  if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
-                }}
-              />
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                onClick={() => { if (newFolderName.trim()) createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } }); }}
-                disabled={createMailFolder.isPending}
-              >
-                {createMailFolder.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-              </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}>
-                <X className="h-3 w-3" />
+        {isMobile ? (
+          <>
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carpetas</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowFolders(false)}>
+                <X className="h-3.5 w-3.5" />
               </Button>
             </div>
-          ) : (
-            <Button variant="ghost" size="sm" className="w-full h-7 text-xs justify-start gap-2" onClick={() => setCreatingFolder(true)}>
-              <FolderPlus className="h-3.5 w-3.5" /> Nueva carpeta
-            </Button>
-          )}
-        </div>
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="py-1">
+                {sortedFolders.map((folder: any) => {
+                  const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
+                  return (
+                    <button
+                      key={folder.id}
+                      type="button"
+                      className={cn(
+                        "w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-all hover:bg-accent/60 text-left rounded-none",
+                        isActive && "bg-accent text-accent-foreground font-medium border-l-2 border-primary",
+                        dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
+                      )}
+                      onClick={onSelect}
+                      {...dragHandlers}
+                    >
+                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate flex-1 text-sm">{label}</span>
+                      {folderBadge != null && folderBadge > 0 && (
+                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold bg-primary/15 text-primary">
+                          {folderBadge}
+                        </Badge>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+            <div className="shrink-0 border-t border-border p-2">
+              {creatingFolder ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    autoFocus placeholder="Nombre..." className="h-7 text-xs flex-1"
+                    value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newFolderName.trim()) {
+                        createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } });
+                      }
+                      if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
+                    }}
+                  />
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                    onClick={() => { if (newFolderName.trim()) createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } }); }}
+                    disabled={createMailFolder.isPending}
+                  >
+                    {createMailFolder.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="ghost" size="sm" className="w-full h-7 text-xs justify-start gap-2" onClick={() => setCreatingFolder(true)}>
+                  <FolderPlus className="h-3.5 w-3.5" /> Nueva carpeta
+                </Button>
+              )}
+            </div>
+          </>
+        ) : (
+          <TooltipProvider delayDuration={250}>
+            {foldersCollapsed ? (
+              <>
+                <div className="flex justify-center border-b border-border/50 py-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 shrink-0"
+                        aria-label="Mostrar nombres de carpetas"
+                        onClick={() => setFoldersCollapsed(false)}
+                      >
+                        <ChevronsRight className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Expandir carpetas</TooltipContent>
+                  </Tooltip>
+                </div>
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="flex flex-col items-center gap-0.5 py-1 px-0.5">
+                    {sortedFolders.map((folder: any) => {
+                      const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
+                      return (
+                        <Tooltip key={folder.id}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className={cn(
+                                "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-accent/60",
+                                isActive && "bg-accent text-accent-foreground ring-1 ring-primary",
+                                dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
+                              )}
+                              onClick={onSelect}
+                              {...dragHandlers}
+                            >
+                              <Icon className="h-4 w-4 text-muted-foreground" />
+                              {folderBadge != null && folderBadge > 0 && (
+                                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold text-primary-foreground">
+                                  {folderBadge > 9 ? "9+" : folderBadge}
+                                </span>
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">{label}</TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+                <div className="flex shrink-0 justify-center border-t border-border p-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        aria-label="Nueva carpeta"
+                        onClick={() => {
+                          setFoldersCollapsed(false);
+                          setCreatingFolder(true);
+                        }}
+                      >
+                        <FolderPlus className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Nueva carpeta</TooltipContent>
+                  </Tooltip>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-1 border-b border-border/50 px-2 py-2">
+                  <span className="truncate text-xs font-semibold uppercase tracking-wider text-muted-foreground">Carpetas</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        aria-label="Contraer panel de carpetas"
+                        onClick={() => setFoldersCollapsed(true)}
+                      >
+                        <ChevronsLeft className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Solo iconos</TooltipContent>
+                  </Tooltip>
+                </div>
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="py-1">
+                    {sortedFolders.map((folder: any) => {
+                      const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
+                      return (
+                        <button
+                          key={folder.id}
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2.5 rounded-none px-3 py-2 text-left text-sm transition-all hover:bg-accent/60",
+                            isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
+                            dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
+                          )}
+                          onClick={onSelect}
+                          {...dragHandlers}
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="flex-1 truncate text-sm">{label}</span>
+                          {folderBadge != null && folderBadge > 0 && (
+                            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold bg-primary/15 text-primary">
+                              {folderBadge}
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+                <div className="shrink-0 border-t border-border p-2">
+                  {creatingFolder ? (
+                    <div className="flex items-center gap-1">
+                      <Input
+                        autoFocus placeholder="Nombre..." className="h-7 flex-1 text-xs"
+                        value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newFolderName.trim()) {
+                            createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } });
+                          }
+                          if (e.key === "Escape") { setCreatingFolder(false); setNewFolderName(""); }
+                        }}
+                      />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                        onClick={() => { if (newFolderName.trim()) createMailFolder.mutate(newFolderName.trim(), { onSuccess: () => { setCreatingFolder(false); setNewFolderName(""); } }); }}
+                        disabled={createMailFolder.isPending}
+                      >
+                        {createMailFolder.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => { setCreatingFolder(false); setNewFolderName(""); }}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button variant="ghost" size="sm" className="h-7 w-full justify-start gap-2 text-xs" onClick={() => setCreatingFolder(true)}>
+                      <FolderPlus className="h-3.5 w-3.5" /> Nueva carpeta
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </TooltipProvider>
+        )}
       </div>
 
       {/* Email list panel */}
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-border bg-background transition-all duration-200",
+          "flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-border bg-background transition-[opacity,grid-template] duration-200 ease-out",
           isMobile ? "flex-1" : "w-full",
           selectedEmailId && isMobile && "hidden",
+          !isMobile && listPaneCollapsed && selectedEmailId && "pointer-events-none border-0 opacity-0",
         )}
       >
         {/* Search & compose toolbar */}
-        <div className="p-3 border-b border-border/50 space-y-2">
-          <div className="flex items-center gap-2">
-            {isMobile && (
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setShowFolders(true)}>
-                <FolderOpen className="h-4 w-4" />
+        <div className="space-y-2 border-b border-border/50 p-3">
+          <TooltipProvider delayDuration={250}>
+            <div className="flex items-center gap-2">
+              {isMobile && (
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setShowFolders(true)}>
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+              )}
+              <div className="relative min-w-0 flex-1">
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar correos..."
+                  className="h-9 border-0 bg-muted/40 pl-9 text-sm focus-visible:ring-1"
+                  value={search}
+                  onChange={(e) => handleSearch(e.target.value)}
+                />
+              </div>
+              <Button size="sm" className="h-9 shrink-0 gap-2 px-4" onClick={() => setComposeOpen(true)}>
+                <Send className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Redactar</span>
               </Button>
-            )}
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar correos..."
-                className="pl-9 h-9 text-sm bg-muted/40 border-0 focus-visible:ring-1"
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
+              {!isMobile && selectedEmailId && !listPaneCollapsed && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
+                      aria-label="Ampliar lector"
+                      onClick={() => setListPaneCollapsed(true)}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Ocultar lista y ampliar lector</TooltipContent>
+                </Tooltip>
+              )}
             </div>
-            <Button size="sm" className="h-9 px-4 gap-2 shrink-0" onClick={() => setComposeOpen(true)}>
-              <Send className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Redactar</span>
-            </Button>
-          </div>
+          </TooltipProvider>
         </div>
 
         {/* Email list — sin padding lateral; cada fila usa px-4 */}
@@ -826,7 +1051,7 @@ export function EmailView() {
       >
         {!selectedEmailId ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-xs">
+            <div className="max-w-md text-center px-2">
               <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-muted/40 mb-4">
                 <Mail className="h-9 w-9 text-muted-foreground/30" />
               </div>
@@ -837,6 +1062,11 @@ export function EmailView() {
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">r</kbd> responder</span>
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">e</kbd> archivar</span>
               </div>
+              {!isMobile && (
+                <p className="mt-4 max-w-sm text-center text-[11px] leading-relaxed text-muted-foreground/70">
+                  Puedes contraer el panel de carpetas (««) o, al abrir un mensaje, ampliar el lector para ocultar la lista.
+                </p>
+              )}
             </div>
           </div>
         ) : detailLoading ? (
@@ -854,10 +1084,20 @@ export function EmailView() {
             />
             {/* Detail header */}
             <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-border/50 shrink-0 bg-background/80 backdrop-blur-sm shadow-sm">
-              {isMobile && (
-                <Button variant="ghost" size="sm" className="mb-2 -ml-2 text-xs" onClick={() => setSelectedEmailId(null)}>
-                  <ChevronRight className="h-3.5 w-3.5 mr-1 rotate-180" /> Volver
-                </Button>
+              {(isMobile || (!isMobile && listPaneCollapsed)) && (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  {!isMobile && listPaneCollapsed && (
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setListPaneCollapsed(false)}>
+                      <List className="h-3.5 w-3.5" />
+                      Mostrar lista
+                    </Button>
+                  )}
+                  {isMobile && (
+                    <Button variant="ghost" size="sm" className="-ml-2 text-xs" onClick={() => setSelectedEmailId(null)}>
+                      <ChevronRight className="mr-1 h-3.5 w-3.5 rotate-180" /> Volver
+                    </Button>
+                  )}
+                </div>
               )}
               <h2 className="text-lg font-semibold text-foreground leading-tight mb-3">
                 {emailDetail.subject || "(sin asunto)"}
