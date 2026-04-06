@@ -308,8 +308,8 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
                       )}
                     </div>
                   )}
-                  <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => openAddTaskForPhase(phase.number)}>
-                    <Plus className="h-3 w-3 mr-1" /> Agregar tarea
+                  <Button variant="default" size="sm" className="w-full text-xs font-medium shadow-sm" onClick={() => openAddTaskForPhase(phase.number)}>
+                    <Plus className="h-3.5 w-3.5 mr-1.5" /> Agregar tarea
                   </Button>
                 </div>
               );

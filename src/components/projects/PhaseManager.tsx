@@ -416,6 +416,7 @@ export function PhaseManager({
         const completedCount = phaseTasks.filter((t) => t.status === "completada").length;
         const colorClass = projectPhaseColorClass(idx);
         const shellClass = `rounded-xl border ${colorClass} overflow-hidden`;
+        const phaseFooter = renderPhaseFooter?.(phase.key);
 
         const phaseBody = (
           <>
@@ -549,12 +550,28 @@ export function PhaseManager({
                     />
                   </div>
                 )}
-                {onAddTask && (
-                  <Button variant="outline" size="sm" className="w-full mt-2 text-xs" onClick={() => onAddTask(phase.key)}>
-                    <Plus className="h-3 w-3 mr-1" /> Agregar tarea
-                  </Button>
+                {(phaseFooter || onAddTask) && (
+                  <div
+                    className={cn(
+                      "space-y-2",
+                      phaseTasks.length > 0 || phaseFooter
+                        ? "border-t border-border/40 mt-3 pt-3"
+                        : onAddTask && "mt-2"
+                    )}
+                  >
+                    {phaseFooter}
+                    {onAddTask && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full text-xs font-medium shadow-sm"
+                        onClick={() => onAddTask(phase.key)}
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-1.5" /> Agregar tarea
+                      </Button>
+                    )}
+                  </div>
                 )}
-                {renderPhaseFooter?.(phase.key)}
               </div>
             )}
           </>
