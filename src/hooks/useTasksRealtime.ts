@@ -22,6 +22,7 @@ export function useTasksRealtime() {
           queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
           queryClient.invalidateQueries({ queryKey: ["projects"] });
           queryClient.invalidateQueries({ queryKey: ["project"] });
+          queryClient.invalidateQueries({ queryKey: ["my-active-projects-progress"] });
         }
       )
       .on(
@@ -32,6 +33,7 @@ export function useTasksRealtime() {
           queryClient.invalidateQueries({ queryKey: ["project"] });
           // lawsuit_details, constitution_details, etc. alimentan "Mis pasos" en Tareas
           queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+          queryClient.invalidateQueries({ queryKey: ["my-active-projects-progress"] });
         }
       )
       .on(
@@ -40,6 +42,7 @@ export function useTasksRealtime() {
         () => {
           queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
           queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+          queryClient.invalidateQueries({ queryKey: ["my-active-projects-progress"] });
         }
       )
       .on(
@@ -48,6 +51,7 @@ export function useTasksRealtime() {
         () => {
           queryClient.invalidateQueries({ queryKey: ["annual-declarations"] });
           queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
+          queryClient.invalidateQueries({ queryKey: ["my-active-projects-progress"] });
         }
       )
       .on(

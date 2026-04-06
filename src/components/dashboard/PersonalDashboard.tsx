@@ -12,7 +12,10 @@ import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
 import { PersonalRendimientoMetrics } from "@/components/dashboard/PersonalRendimientoMetrics";
+import { PersonalProjectsProgress } from "@/components/dashboard/PersonalProjectsProgress";
 import { DailyBriefing } from "@/components/dashboard/DailyBriefing";
+import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { useMyActiveProjectsProgress } from "@/hooks/useMyActiveProjectsProgress";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -61,6 +64,10 @@ const SECTION_LABELS: Record<string, string> = {
   correo: "Correo",
   calendario: "Calendario",
   hub: "Hub",
+  task: "Detalle de tarea",
+  pipeline: "Pipeline",
+  conocimiento: "Conocimiento",
+  admin: "Administración",
 };
 
 function formatSectionLabel(raw: string): string {
@@ -321,6 +328,8 @@ export function PersonalDashboard() {
     return Math.round((sum / weekMoods.length) * 10) / 10;
   }, [weekMoods]);
 
+  const { data: myProjectProgress } = useMyActiveProjectsProgress();
+
   // My clients
   const { data: myClients } = useQuery({
     queryKey: ["personal-clients", user?.id],
@@ -423,6 +432,64 @@ export function PersonalDashboard() {
   const dailyTotal = dueTodayPending + (completedToday ?? 0);
   const dailyProgress =
     dailyTotal > 0 ? Math.round(((completedToday ?? 0) / dailyTotal) * 100) : 0;
+
+  const weekCoachPrompt = useMemo(() => {
+    const lines = (myProjectProgress ?? [])
+      .map(
+        (r) =>
+          `- ${r.name}${r.clientName ? ` (${r.clientName})` : ""}: ${r.primaryLabel} ${
+            r.primaryTotal > 0 ? `${r.primaryPct}% (${r.primaryDone}/${r.primaryTotal})` : "sin medición de pasos"
+          }${r.taskTotal > 0 && r.primaryKind !== "tareas" ? `; tareas en tablero ${r.taskPct}% (${r.taskDone}/${r.taskTotal})` : ""}`,
+      )
+      .join("\n");
+    return `Eres coach de productividad de Kawiil (despacho en México, tono cercano y profesional, español).
+
+Contexto de la semana ${weekBounds.weekLabel} (horario CDMX):
+- Registros de navegación en la app: ${weekActivity?.total ?? 0}
+- Tareas del tablero completadas en la semana: ${weekCompletedCount}
+- Promedio de ánimo (1-5) en check-ins: ${weekMoodAverage ?? "sin datos"}
+- Tareas pendientes asignadas ahora: ${totalPending} (vencidas: ${overdueTasks})
+
+Proyectos activos donde eres responsable y su avance principal:
+${lines || "(ninguno)"}
+
+Instrucciones: escribe UN solo mensaje breve (máximo 130 palabras) reconociendo logros concretos si los hay, mencionando 1 o 2 focos útiles para los próximos días y un cierre motivador sin clichés vacíos. Usa Markdown (**negritas** opcional; una viñeta corta si encaja). Sin saludo de «estimado» ni firma.`;
+  }, [
+    weekBounds.weekLabel,
+    weekActivity?.total,
+    weekCompletedCount,
+    weekMoodAverage,
+    totalPending,
+    overdueTasks,
+    myProjectProgress,
+  ]);
+
+  /** Evita reutilizar en localStorage un resumen del mismo día si cambió el contexto. */
+  const promptFingerprint = (text: string) => {
+    let h = 0;
+    for (let i = 0; i < text.length; i++) h = (Math.imul(31, h) + text.charCodeAt(i)) | 0;
+    return String(h);
+  };
+
+  const rendimientoCoachPrompt = useMemo(() => {
+    const lines = (myProjectProgress ?? [])
+      .map(
+        (r) =>
+          `- ${r.name}: ${r.primaryLabel} ${
+            r.primaryTotal > 0 ? `${r.primaryPct}% (${r.primaryDone}/${r.primaryTotal})` : ""
+          }${r.taskTotal > 0 ? `; tareas tablero ${r.taskDone}/${r.taskTotal}` : ""}`,
+      )
+      .join("\n");
+    return `Eres coach de productividad de Kawiil (México, tono cercano y profesional, español).
+
+Panorama actual del usuario:
+- Tareas pendientes en tablero: ${totalPending}; con fecha vencida: ${overdueTasks}
+- Completadas hoy: ${completedToday ?? 0}; pendientes con vencimiento hoy: ${dueTodayPending}
+- Proyectos activos como responsable:
+${lines || "(ninguno)"}
+
+Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su rendimiento, celebre avances reales en proyectos o tareas si existen, y deje 1 recomendación prioritaria si hay atrasos; tono motivador sin demagogia. Markdown permitido (**negritas**). Sin saludo formal ni firma.`;
+  }, [myProjectProgress, totalPending, overdueTasks, completedToday, dueTodayPending]);
 
   const TimeIcon = (() => {
     const h = today.getHours();
@@ -838,6 +905,17 @@ export function PersonalDashboard() {
               <p className="text-xs text-muted-foreground mt-0.5">Promedio ánimo (1–5)</p>
             </div>
           </div>
+
+          <PersonalProjectsProgress rows={myProjectProgress} />
+
+          <AISummaryCard
+            cacheKey={`personal-week-coach-${user?.id ?? ""}-${promptFingerprint(weekCoachPrompt)}`}
+            contextPrompt={weekCoachPrompt}
+            title="Cómo va tu semana — Kawiil AI"
+            ready={!!user && weekActivity !== undefined && myProjectProgress !== undefined}
+            requestDelayMs={350}
+          />
+
           {weekActivity && weekActivity.bySectionSorted.length > 0 && (
             <div>
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
@@ -880,6 +958,14 @@ export function PersonalDashboard() {
         {/* Rendimiento */}
         <TabsContent value="rendimiento" className="mt-4 space-y-6 animate-fade-in">
           <PersonalRendimientoMetrics pendingTasks={pendingTasksSnapshot} />
+          <PersonalProjectsProgress rows={myProjectProgress} title="Avance en proyectos activos" compact />
+          <AISummaryCard
+            cacheKey={`personal-rendimiento-coach-${user?.id ?? ""}-${promptFingerprint(rendimientoCoachPrompt)}`}
+            contextPrompt={rendimientoCoachPrompt}
+            title="Tu rendimiento — Kawiil AI"
+            ready={!!user && myProjectProgress !== undefined}
+            requestDelayMs={450}
+          />
           <PerformanceChart />
           <MonthlyPerformance />
         </TabsContent>
