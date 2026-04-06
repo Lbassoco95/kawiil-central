@@ -212,7 +212,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv5-collapse";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv6-toolbar";
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 
@@ -557,17 +557,75 @@ export function EmailView() {
   };
 
   return (
-    <div
-      className={cn(
-        "h-full min-h-0 min-w-0 w-full overflow-hidden bg-background",
-        isMobile ? "flex" : "grid",
-      )}
-      style={
-        typeof desktopGridTemplateColumns === "string"
-          ? { gridTemplateColumns: desktopGridTemplateColumns }
-          : undefined
-      }
-    >
+    <>
+      <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background">
+        {!isMobile && (
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/50 px-3 py-2"
+            data-kawiil-email-toolbar="1"
+          >
+            <span className="text-xs font-medium text-muted-foreground">Paneles</span>
+            <Button
+              type="button"
+              variant={foldersCollapsed ? "default" : "outline"}
+              size="sm"
+              className="h-8 gap-1.5 text-xs font-medium shadow-sm"
+              onClick={() => setFoldersCollapsed((c) => !c)}
+            >
+              {foldersCollapsed ? (
+                <>
+                  <ChevronsRight className="h-3.5 w-3.5" />
+                  Ver carpetas
+                </>
+              ) : (
+                <>
+                  <ChevronsLeft className="h-3.5 w-3.5" />
+                  Solo iconos
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant={listPaneCollapsed ? "default" : "outline"}
+              size="sm"
+              className="h-8 gap-1.5 text-xs font-medium shadow-sm"
+              disabled={!selectedEmailId}
+              title={!selectedEmailId ? "Abre un correo para usar esta opción" : undefined}
+              onClick={() => {
+                if (selectedEmailId) setListPaneCollapsed((c) => !c);
+              }}
+            >
+              {listPaneCollapsed ? (
+                <>
+                  <List className="h-3.5 w-3.5" />
+                  Mostrar lista
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  Ampliar lector
+                </>
+              )}
+            </Button>
+            <span
+              className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums"
+              title="Si no cambia tras deploy, Lovable aún muestra un bundle antiguo."
+            >
+              {EMAIL_VIEW_LAYOUT_VERSION}
+            </span>
+          </div>
+        )}
+        <div
+          className={cn(
+            "min-h-0 min-w-0 flex-1 w-full overflow-hidden bg-background",
+            isMobile ? "flex" : "grid",
+          )}
+          style={
+            typeof desktopGridTemplateColumns === "string"
+              ? { gridTemplateColumns: desktopGridTemplateColumns }
+              : undefined
+          }
+        >
       {/* Folder sidebar — móvil: overlay; escritorio: expandible o riel de iconos */}
       <div
         className={cn(
@@ -827,23 +885,6 @@ export function EmailView() {
                 <Send className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Redactar</span>
               </Button>
-              {!isMobile && selectedEmailId && !listPaneCollapsed && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0"
-                      aria-label="Ampliar lector"
-                      onClick={() => setListPaneCollapsed(true)}
-                    >
-                      <Maximize2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Ocultar lista y ampliar lector</TooltipContent>
-                </Tooltip>
-              )}
             </div>
           </TooltipProvider>
         </div>
@@ -1491,6 +1532,8 @@ export function EmailView() {
           </div>
         ) : null}
       </div>
+      </div>
+    </div>
 
       <CreateTaskFromEmailDialog
         open={createTaskOpen}
@@ -1502,7 +1545,7 @@ export function EmailView() {
         receivedDate={emailDetail?.receivedDateTime ? formatDistanceToNow(parseISO(emailDetail.receivedDateTime), { addSuffix: true, locale: es }) : undefined}
       />
       <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} />
-    </div>
+    </>
   );
 }
 
