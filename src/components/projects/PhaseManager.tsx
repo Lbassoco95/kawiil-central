@@ -495,12 +495,11 @@ export function PhaseManager({
             </div>
 
             {!isCollapsed && (
-              <div className="px-2 pb-2">
-                {phaseTasks.length === 0 ? (
-                  <div className="min-h-[72px] flex items-center justify-center px-2 py-3">
-                    <p className="text-xs text-muted-foreground text-center">Sin tareas en esta fase — suelta aquí una tarea para asignarla</p>
-                  </div>
-                ) : (
+              <div className="px-2 pb-2 space-y-2">
+                {/* Pie de fase (p. ej. seguimiento de etapa en juicio) y tareas del tablero en el mismo flujo */}
+                {phaseFooter}
+
+                {phaseTasks.length > 0 ? (
                   <div className="space-y-0.5">
                     {openInPhase.length === 0 && closedInPhase.length > 0 && (
                       <p className="text-[11px] text-muted-foreground text-center py-2 px-2">
@@ -549,28 +548,23 @@ export function PhaseManager({
                       showCleanTitle
                     />
                   </div>
-                )}
-                {(phaseFooter || onAddTask) && (
-                  <div
-                    className={cn(
-                      "space-y-2",
-                      phaseTasks.length > 0 || phaseFooter
-                        ? "border-t border-border/40 mt-3 pt-3"
-                        : onAddTask && "mt-2"
-                    )}
-                  >
-                    {phaseFooter}
-                    {onAddTask && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="w-full text-xs font-medium shadow-sm"
-                        onClick={() => onAddTask(phase.key)}
-                      >
-                        <Plus className="h-3.5 w-3.5 mr-1.5" /> Agregar tarea
-                      </Button>
-                    )}
+                ) : !phaseFooter ? (
+                  <div className="min-h-[72px] flex items-center justify-center px-2 py-3 rounded-lg bg-muted/15">
+                    <p className="text-xs text-muted-foreground text-center">
+                      Sin tareas en esta fase — suelta aquí una tarea para asignarla
+                    </p>
                   </div>
+                ) : null}
+
+                {onAddTask && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="w-full text-xs font-medium shadow-sm"
+                    onClick={() => onAddTask(phase.key)}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1.5" /> Agregar tarea
+                  </Button>
                 )}
               </div>
             )}

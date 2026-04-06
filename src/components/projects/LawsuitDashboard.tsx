@@ -738,25 +738,20 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
               if (!stage) return null;
               const idx = localDetails.stages.findIndex((s) => s.key === phaseKey);
               return (
-                <div className="mt-2 pt-2 border-t border-border/50 space-y-2">
-                  <p className="text-[10px] font-medium text-muted-foreground px-1">
-                    Seguimiento de la etapa (plazo, asignación, evidencias)
-                  </p>
-                  <UnifiedStepRow
-                    step={stageToStep(stage)}
-                    index={idx}
-                    projectId={projectId}
-                    clientDropboxPath={dropboxInitialPath || undefined}
-                    clientId={clientId}
-                    showTimer={true}
-                    showCheckbox={true}
-                    onToggle={(checked) => handleStageToggle(stage.key, checked)}
-                    onSave={(updates) => handleStageSave(stage.key, updates)}
-                    saving={updateLawsuit.isPending}
-                    extraFields={buildStageExtraFields(stage)}
-                    rootClassName="border-border/50 shadow-sm"
-                  />
-                </div>
+                <UnifiedStepRow
+                  step={stageToStep(stage)}
+                  index={idx}
+                  projectId={projectId}
+                  clientDropboxPath={dropboxInitialPath || undefined}
+                  clientId={clientId}
+                  showTimer={true}
+                  showCheckbox={true}
+                  onToggle={(checked) => handleStageToggle(stage.key, checked)}
+                  onSave={(updates) => handleStageSave(stage.key, updates)}
+                  saving={updateLawsuit.isPending}
+                  extraFields={buildStageExtraFields(stage)}
+                  rootClassName="border-border/50 shadow-sm bg-background/90"
+                />
               );
             }}
             hideBuiltInAddPhase
