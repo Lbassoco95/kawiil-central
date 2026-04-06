@@ -434,12 +434,26 @@ export function EmailView() {
     }
   }, [emailDetail, closeDetailAiPanel]);
 
-  // Keyboard navigation (Superhuman style)
+  // Keyboard navigation (Superhuman style) + c = Redactar (checklist PDF)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!allEmails.length) return;
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+
+      if (
+        e.key === "c" &&
+        !emailAction &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.shiftKey
+      ) {
+        e.preventDefault();
+        setComposeOpen(true);
+        return;
+      }
+
+      if (!allEmails.length) return;
 
       const currentIdx = allEmails.findIndex((em: any) => em.id === selectedEmailId);
       if (e.key === "ArrowDown" || e.key === "j") {
@@ -568,7 +582,7 @@ export function EmailView() {
       {/* Email list panel */}
       <div className={cn(
         "flex flex-col border-r border-border bg-background transition-all duration-200",
-        isMobile ? "flex-1" : "min-w-[350px] max-w-[450px] w-[400px] shrink-0",
+        isMobile ? "flex-1" : "min-w-[350px] max-w-[450px] w-[420px] shrink-0",
         selectedEmailId && isMobile && "hidden"
       )}>
         {/* Search & compose toolbar */}
@@ -637,6 +651,7 @@ export function EmailView() {
                     className={cn(
                       "group flex cursor-pointer transition-colors border-b border-border/40 px-4 py-2.5",
                       isActive && "bg-accent border-l-2 border-l-blue-500",
+                      unread && !isActive && "bg-blue-50/50 dark:bg-blue-950/20",
                       !isActive && "hover:bg-muted/50",
                     )}
                     onClick={() => handleOpenEmail(email)}
@@ -753,7 +768,7 @@ export function EmailView() {
                           )}
                           <p className="min-w-0 flex-1 truncate text-sm">
                             <span className={cn(unread && "font-semibold")}>{subject}</span>
-                            <span className="text-muted-foreground"> · {bodyPreview}</span>
+                            <span className="text-muted-foreground font-normal"> - {bodyPreview}</span>
                           </p>
                         </div>
                       </div>
@@ -798,8 +813,9 @@ export function EmailView() {
                 <Mail className="h-9 w-9 text-muted-foreground/30" />
               </div>
               <p className="text-base font-medium text-muted-foreground mb-2">Selecciona un correo</p>
-              <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground/50">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">j</kbd><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">k</kbd> navegar</span>
+                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">c</kbd> redactar</span>
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">r</kbd> responder</span>
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">e</kbd> archivar</span>
               </div>
@@ -1039,10 +1055,10 @@ export function EmailView() {
             </TooltipProvider>
 
             {detailAiPanel && (
-              <div className="px-3 sm:px-6 py-3 border-b border-border/50 shrink-0 bg-muted/15">
-                <div className="rounded-lg border border-border bg-card text-card-foreground shadow-sm p-4 space-y-3">
+              <div className="px-3 sm:px-6 py-3 border-b border-border/50 shrink-0">
+                <div className="rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/30 p-4 space-y-3 shadow-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold">
+                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
                       {detailAiPanel === "summarize" ? "Resumen" : "Traducción"}
                     </span>
                     <Button type="button" variant="outline" size="sm" onClick={closeDetailAiPanel}>
@@ -1050,9 +1066,11 @@ export function EmailView() {
                     </Button>
                   </div>
                   {detailAiLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-2">
                       <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                      <span>Generando…</span>
+                      <span>
+                        {detailAiPanel === "summarize" ? "Resumiendo…" : "Traduciendo…"}
+                      </span>
                     </div>
                   ) : (
                     <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
