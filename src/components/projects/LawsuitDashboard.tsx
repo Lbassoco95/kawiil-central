@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { DropboxFilePicker } from "./DropboxFilePicker";
 import { StepComments } from "./StepComments";
 import { sendSlackNotification } from "@/lib/slackNotifications";
@@ -41,8 +41,9 @@ import {
   ExternalLink,
   FolderOpen,
 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { isPast, isToday, addDays, isBefore } from "date-fns";
 import { formatMX } from "@/lib/dateUtils";
@@ -50,10 +51,14 @@ import { StepAssigneeSelect } from "./StepAssigneeSelect";
 import { StepFileManager } from "./StepFileManager";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
 import { UnifiedStepRow } from "./UnifiedStepRow";
-import { ProjectPhaseStageCard } from "./ProjectPhaseStageCard";
+import { PhaseManager, type Phase } from "./PhaseManager";
 import type { AccountingStep, StepStatus } from "@/hooks/useAccountingPeriods";
 
-import { useProfiles } from "@/hooks/useTasks";
+import { useProfiles, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
+import { useUserRole } from "@/hooks/useUserRole";
+import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { UserOrTextMulti } from "./UserOrTextInput";
 
 interface StageAttachment {
@@ -159,6 +164,29 @@ const STAGE_STATUS_TO_STEP: Record<string, StepStatus> = {
 };
 
 export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath, lockDropboxToInitialPath = false, clientId }: LawsuitDashboardProps) {
+  const { user } = useAuth();
+  const { canDeleteTasks } = useUserRole();
+  const updateTask = useUpdateTask();
+  const deleteTask = useDeleteTask();
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskFormPhaseKey, setTaskFormPhaseKey] = useState<string | undefined>();
+
+  const { data: lawsuitTasks = [] } = useQuery({
+    queryKey: ["project-tasks", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!projectId,
+  });
+
   const [expandedDeadline, setExpandedDeadline] = useState<string | null>(null);
   const [deadlineDialogOpen, setDeadlineDialogOpen] = useState(false);
   const [stageDialogOpen, setStageDialogOpen] = useState(false);
@@ -184,6 +212,10 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
   }, [lawsuitDetails.court, lawsuitDetails.case_number, lawsuitDetails.plaintiff, lawsuitDetails.defendant]);
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
+  const lawsuitProfileMap = useMemo(
+    () => new Map(profiles.map((p) => [p.user_id, p.full_name])),
+    [profiles]
+  );
 
   // Local source of truth — useState so UI re-renders from it
   const [localDetails, setLocalDetails] = useState<LawsuitDetails>(lawsuitDetails);
@@ -208,14 +240,16 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
 
   const updateLawsuit = useMutation({
     mutationFn: async (updated: LawsuitDetails) => {
+      const phases = updated.stages.map((s, i) => ({ key: s.key, name: s.label, order: i }));
       const { error } = await supabase
         .from("projects")
-        .update({ lawsuit_details: updated } as any)
+        .update({ lawsuit_details: updated, phases } as any)
         .eq("id", projectId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
     },
     onError: (e) => toast.error("Error: " + e.message),
@@ -233,14 +267,16 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
       const newName = opponent
         ? `Juicio ${typeLabel} - ${clientName} vs ${opponent}`
         : `Juicio ${typeLabel} - ${clientName}`;
+      const phases = details.stages.map((s, i) => ({ key: s.key, name: s.label, order: i }));
       const { error } = await supabase
         .from("projects")
-        .update({ lawsuit_details: details, name: newName } as any)
+        .update({ lawsuit_details: details, name: newName, phases } as any)
         .eq("id", projectId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
     },
@@ -267,15 +303,6 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     setStageDialogOpen(false);
     setNewStageCustomLabel("");
     toast.success("Etapa agregada");
-  };
-
-  const removeStage = (key: string) => {
-    const current = localDetails;
-    persistDetails({
-      ...current,
-      stages: current.stages.filter((s) => s.key !== key),
-    });
-    toast.success("Etapa eliminada");
   };
 
   const addAttachment = (stageKey: string) => {
@@ -423,16 +450,6 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
     persistDetails({ ...current, stages: updatedStages });
   };
 
-  const lawsuitStageCardMetrics = (stage: LawsuitStage) => {
-    if (stage.status === "completado" || stage.status === "no_aplica") {
-      return { pct: 100, completed: 1, total: 1 };
-    }
-    if (stage.status === "en_progreso") {
-      return { pct: 50, completed: 0, total: 1 };
-    }
-    return { pct: 0, completed: 0, total: 1 };
-  };
-
   const handleStageToggle = (stageKey: string, completed: boolean) => {
     const current = localDetails;
     const updatedStages = current.stages.map((s) =>
@@ -441,6 +458,107 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
         : s
     );
     persistDetails({ ...current, stages: updatedStages });
+  };
+
+  const lawsuitPhases: Phase[] = useMemo(
+    () => localDetails.stages.map((s, i) => ({ key: s.key, name: s.label, order: i })),
+    [localDetails.stages]
+  );
+
+  const handleLawsuitPhasesChange = useCallback(
+    (newPhases: Phase[]) => {
+      const byKey = new Map(localDetails.stages.map((s) => [s.key, s]));
+      const newStages: LawsuitStage[] = newPhases.map((p) => {
+        const ex = byKey.get(p.key);
+        if (ex) return { ...ex, label: p.name };
+        return {
+          key: p.key,
+          label: p.name,
+          status: "pendiente",
+          date: null,
+          notes: "",
+          completed_at: null,
+          attachments: [],
+          checklist: [],
+        };
+      });
+      persistDetails({ ...localDetails, stages: newStages });
+    },
+    [localDetails, persistDetails]
+  );
+
+  const handleTaskPhaseAssign = useCallback(
+    async (taskId: string, phaseKey: string | null) => {
+      try {
+        await updateTask.mutateAsync({ id: taskId, phase_key: phaseKey });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo mover la tarea");
+      }
+    },
+    [updateTask]
+  );
+
+  const handleAddTaskForPhase = useCallback((phaseKey?: string) => {
+    setTaskFormPhaseKey(phaseKey);
+    setShowTaskForm(true);
+  }, []);
+
+  const buildStageExtraFields = (stage: LawsuitStage) => {
+    const attachments = stage.attachments || [];
+    return (
+      <div className="space-y-3">
+        {attachments.length > 0 && (
+          <div className="space-y-2">
+            <Label className="text-xs flex items-center gap-1">
+              <FolderOpen className="h-3 w-3" /> Links vinculados
+            </Label>
+            <div className="space-y-1">
+              {attachments.map((att) => (
+                <div key={att.id} className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs bg-muted/30">
+                  {att.type === "dropbox" ? (
+                    <FolderOpen className="h-3 w-3 text-blue-500 shrink-0" />
+                  ) : (
+                    <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                  )}
+                  <span className="flex-1 truncate">{att.name}</span>
+                  <a
+                    href={att.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeAttachment(stage.key, att.id);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 text-xs px-2"
+          onClick={(e) => {
+            e.stopPropagation();
+            setAttachmentDialogOpen(stage.key);
+          }}
+        >
+          <Plus className="h-3 w-3 mr-1" /> Agregar link externo
+        </Button>
+      </div>
+    );
   };
 
   const completedStages = localDetails.stages.filter((s) => s.status === "completado").length;
@@ -587,76 +705,64 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
         </CardContent>
       </Card>
 
-      {/* Etapas procesales — mismo diseño de fases que el resto del sistema (tab Tareas) */}
+      {/* Etapas y tareas — mismo diseño visual que Precios de transferencia / tab Tareas */}
       <div className="space-y-3">
-        <div className="flex flex-row items-center justify-between gap-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Etapas procesales</h3>
+        <div className="flex flex-row items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground">Etapas procesales</h3>
+            <p className="text-[11px] text-muted-foreground/90 mt-0.5 max-w-xl">
+              Tareas por etapa, arrastre entre fases y seguimiento de cada etapa debajo.
+            </p>
+          </div>
           <Button size="sm" variant="outline" onClick={() => setStageDialogOpen(true)}>
             <Plus className="h-3 w-3 mr-1" /> Agregar etapa
           </Button>
         </div>
-        <div className="space-y-3">
-          {localDetails.stages.map((stage, idx) => {
-            const attachments = stage.attachments || [];
-            const metrics = lawsuitStageCardMetrics(stage);
-
-            const stageExtraFields = (
-              <div className="space-y-3">
-                {/* Legacy attachments */}
-                {attachments.length > 0 && (
-                  <div className="space-y-2">
-                    <Label className="text-xs flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Links vinculados</Label>
-                    <div className="space-y-1">
-                      {attachments.map((att) => (
-                        <div key={att.id} className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs bg-muted/30">
-                          {att.type === "dropbox" ? <FolderOpen className="h-3 w-3 text-blue-500 shrink-0" /> : <Link2 className="h-3 w-3 text-muted-foreground shrink-0" />}
-                          <span className="flex-1 truncate">{att.name}</span>
-                          <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline shrink-0" onClick={(e) => e.stopPropagation()}><ExternalLink className="h-3 w-3" /></a>
-                          <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={(e) => { e.stopPropagation(); removeAttachment(stage.key, att.id); }}><Trash2 className="h-3 w-3" /></Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={(e) => { e.stopPropagation(); setAttachmentDialogOpen(stage.key); }}>
-                  <Plus className="h-3 w-3 mr-1" /> Agregar link externo
-                </Button>
-                <div className="flex justify-end">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => removeStage(stage.key)}>
-                    <Trash2 className="h-3 w-3 mr-1" /> Eliminar etapa
-                  </Button>
+        {localDetails.stages.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8 border border-dashed rounded-lg">
+            Sin etapas. Usa «Agregar etapa» para crear la primera.
+          </p>
+        ) : (
+          <PhaseManager
+            phases={lawsuitPhases}
+            tasks={lawsuitTasks}
+            profileMap={lawsuitProfileMap}
+            onPhasesChange={handleLawsuitPhasesChange}
+            onTaskClick={(tid) => setSelectedTaskId(tid)}
+            onTaskPhaseAssign={handleTaskPhaseAssign}
+            onAddTask={handleAddTaskForPhase}
+            canDeleteTasks={canDeleteTasks}
+            onDeleteTask={(tid) => setDeleteTargetId(tid)}
+            renderPhaseFooter={(phaseKey) => {
+              const stage = localDetails.stages.find((s) => s.key === phaseKey);
+              if (!stage) return null;
+              const idx = localDetails.stages.findIndex((s) => s.key === phaseKey);
+              return (
+                <div className="mt-2 pt-2 border-t border-border/50 space-y-2">
+                  <p className="text-[10px] font-medium text-muted-foreground px-1">
+                    Seguimiento de la etapa (plazo, asignación, evidencias)
+                  </p>
+                  <UnifiedStepRow
+                    step={stageToStep(stage)}
+                    index={idx}
+                    projectId={projectId}
+                    clientDropboxPath={dropboxInitialPath || undefined}
+                    clientId={clientId}
+                    showTimer={true}
+                    showCheckbox={true}
+                    onToggle={(checked) => handleStageToggle(stage.key, checked)}
+                    onSave={(updates) => handleStageSave(stage.key, updates)}
+                    saving={updateLawsuit.isPending}
+                    extraFields={buildStageExtraFields(stage)}
+                    rootClassName="border-border/50 shadow-sm"
+                  />
                 </div>
-              </div>
-            );
-
-            return (
-              <ProjectPhaseStageCard
-                key={stage.key}
-                colorIndex={idx}
-                title={`${idx + 1}. ${stage.label}`}
-                progressPercent={metrics.pct}
-                completedCount={metrics.completed}
-                totalCount={metrics.total}
-                defaultOpen={stage.status !== "completado"}
-              >
-                <UnifiedStepRow
-                  step={stageToStep(stage)}
-                  index={idx}
-                  projectId={projectId}
-                  clientDropboxPath={dropboxInitialPath || undefined}
-                  clientId={clientId}
-                  showTimer={true}
-                  showCheckbox={true}
-                  onToggle={(checked) => handleStageToggle(stage.key, checked)}
-                  onSave={(updates) => handleStageSave(stage.key, updates)}
-                  saving={updateLawsuit.isPending}
-                  extraFields={stageExtraFields}
-                  rootClassName="border-border/50 shadow-sm"
-                />
-              </ProjectPhaseStageCard>
-            );
-          })}
-        </div>
+              );
+            }}
+            hideBuiltInAddPhase
+            showTaskDragHint
+          />
+        )}
       </div>
 
       {/* Deadlines / Términos */}
@@ -1001,6 +1107,40 @@ export function LawsuitDashboard({ projectId, lawsuitDetails, dropboxInitialPath
         </DialogContent>
       </Dialog>
 
+      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <TaskFormDialog
+        open={showTaskForm}
+        onOpenChange={(o) => {
+          setShowTaskForm(o);
+          if (!o) {
+            setTaskFormPhaseKey(undefined);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+          }
+        }}
+        defaultProjectId={projectId}
+        defaultClientId={clientId}
+        defaultArea="juicios"
+        defaultPhaseKey={taskFormPhaseKey}
+      />
+      <DeleteConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTargetId(null);
+        }}
+        title="¿Eliminar esta tarea?"
+        description="Se eliminará permanentemente esta tarea y todos sus datos asociados."
+        onConfirm={async () => {
+          try {
+            await deleteTask.mutateAsync(deleteTargetId!);
+            toast.success("Tarea eliminada");
+            setDeleteTargetId(null);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+          } catch (e: unknown) {
+            toast.error("Error al eliminar: " + (e instanceof Error ? e.message : String(e)));
+          }
+        }}
+        isPending={deleteTask.isPending}
+      />
     </div>
   );
 }

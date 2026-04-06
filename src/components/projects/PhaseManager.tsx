@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, type ReactNode } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -29,6 +29,7 @@ import {
 import { TASK_STATUS_CONFIG, PRIORITY_CONFIG } from "@/lib/statusStyles";
 import { formatMX } from "@/lib/dateUtils";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { projectPhaseColorClass } from "./projectPhaseVisual";
@@ -57,6 +58,12 @@ interface PhaseManagerProps {
   selectionMode?: boolean;
   selectedTaskIds?: Set<string>;
   onToggleTaskSelection?: (taskId: string) => void;
+  /** Contenido bajo «Agregar tarea» (p. ej. seguimiento de etapa en juicios) */
+  renderPhaseFooter?: (phaseKey: string) => ReactNode;
+  /** Oculta el bloque inferior «Agregar fase» (p. ej. juicios usan otro diálogo) */
+  hideBuiltInAddPhase?: boolean;
+  /** Mostrar texto de ayuda del arrastre de tareas */
+  showTaskDragHint?: boolean;
 }
 
 /** Evita fallos al soltar: el puntero debe caer dentro de la fase; si no, por intersección de rectángulos. */
@@ -66,7 +73,7 @@ const phaseDropCollision: CollisionDetection = (args) => {
   return rectIntersection(args);
 };
 
-function TaskRow({
+export function PhaseTaskRow({
   task, profileMap, onClick, canDelete, onDelete, selectionMode, isSelected, onToggle, showCleanTitle, archived,
   grabCursor,
 }: {
@@ -178,7 +185,7 @@ function DraggableOpenTaskRow({
         </span>
       )}
       <div className="flex-1 min-w-0">
-        <TaskRow
+        <PhaseTaskRow
           task={task}
           profileMap={profileMap}
           onClick={onClick}
@@ -225,7 +232,7 @@ function ClosedTasksCollapsible({
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-0.5 pt-1 pb-1">
         {closedTasks.map((t) => (
-          <TaskRow
+          <PhaseTaskRow
             key={t.id}
             task={t}
             profileMap={profileMap}
@@ -275,6 +282,7 @@ function DroppablePhaseShell({
 export function PhaseManager({
   phases, tasks, profileMap, onPhasesChange, onTaskClick, onTaskPhaseAssign, onAddTask,
   canDeleteTasks, onDeleteTask, selectionMode, selectedTaskIds, onToggleTaskSelection,
+  renderPhaseFooter, hideBuiltInAddPhase, showTaskDragHint = true,
 }: PhaseManagerProps) {
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [editingPhase, setEditingPhase] = useState<string | null>(null);
@@ -393,7 +401,7 @@ export function PhaseManager({
       onDragEnd={showDnd ? handleDragEnd : () => {}}
     >
     <div className="space-y-3">
-      {showDnd ? (
+      {showDnd && showTaskDragHint ? (
         <p className="text-[11px] text-muted-foreground px-0.5 -mt-1 mb-1">
           Mantén pulsada la fila de la tarea (≈6px) y suéltala sobre la fase destino o sobre «Sin fase asignada». En móvil, mantén presionado un instante antes de arrastrar.
         </p>
@@ -453,6 +461,27 @@ export function PhaseManager({
                 </Badge>
                 {!isEditing && (
                   <>
+                    {onAddTask && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className="h-7 w-7 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddTask(phase.key);
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">
+                          Agregar tarea en esta fase
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => { setEditingPhase(phase.key); setEditName(phase.name); }}>
                       <Pencil className="h-3 w-3" />
                     </Button>
@@ -493,7 +522,7 @@ export function PhaseManager({
                           dragEnabled={canDragTasks}
                         />
                       ) : (
-                        <TaskRow
+                        <PhaseTaskRow
                           key={t.id}
                           task={t}
                           profileMap={profileMap}
@@ -521,10 +550,11 @@ export function PhaseManager({
                   </div>
                 )}
                 {onAddTask && (
-                  <Button variant="ghost" size="sm" className="w-full mt-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => onAddTask(phase.key)}>
+                  <Button variant="outline" size="sm" className="w-full mt-2 text-xs" onClick={() => onAddTask(phase.key)}>
                     <Plus className="h-3 w-3 mr-1" /> Agregar tarea
                   </Button>
                 )}
+                {renderPhaseFooter?.(phase.key)}
               </div>
             )}
           </>
@@ -587,6 +617,11 @@ export function PhaseManager({
                   selectedTaskIds={selectedTaskIds}
                   onToggleTaskSelection={onToggleTaskSelection}
                 />
+                {onAddTask && (
+                  <Button variant="outline" size="sm" className="w-full mt-2 text-xs" onClick={() => onAddTask()}>
+                    <Plus className="h-3 w-3 mr-1" /> Agregar tarea sin fase
+                  </Button>
+                )}
               </div>
             )}
           </DroppablePhaseShell>
@@ -607,7 +642,7 @@ export function PhaseManager({
                     <p className="text-[11px] text-muted-foreground text-center py-2 px-2">No hay tareas en curso sin fase.</p>
                   )}
                   {unassignedOpen.map((t) => (
-                    <TaskRow
+                    <PhaseTaskRow
                       key={t.id} task={t} profileMap={profileMap} onClick={() => onTaskClick(t.id)}
                       canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
                       selectionMode={selectionMode} isSelected={selectedTaskIds?.has(t.id)}
@@ -624,6 +659,11 @@ export function PhaseManager({
                     selectedTaskIds={selectedTaskIds}
                     onToggleTaskSelection={onToggleTaskSelection}
                   />
+                  {onAddTask && (
+                    <Button variant="outline" size="sm" className="w-full mt-2 text-xs" onClick={() => onAddTask()}>
+                      <Plus className="h-3 w-3 mr-1" /> Agregar tarea sin fase
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -638,7 +678,7 @@ export function PhaseManager({
             <p className="text-[11px] text-muted-foreground text-center py-2">No hay tareas en curso.</p>
           )}
           {flatOpenTasks.map((t) => (
-            <TaskRow
+            <PhaseTaskRow
               key={t.id} task={t} profileMap={profileMap} onClick={() => onTaskClick(t.id)}
               canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
               selectionMode={selectionMode} isSelected={selectedTaskIds?.has(t.id)}
@@ -659,7 +699,7 @@ export function PhaseManager({
       )}
 
       {/* Add phase button */}
-      {addingPhase ? (
+      {!hideBuiltInAddPhase && (addingPhase ? (
         <div className="flex items-center gap-2 px-2">
           <Input
             value={newPhaseName}
@@ -680,7 +720,7 @@ export function PhaseManager({
         <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setAddingPhase(true)}>
           <Plus className="h-3.5 w-3.5 mr-1.5" /> Agregar fase
         </Button>
-      )}
+      ))}
     </div>
     </DndContext>
   );

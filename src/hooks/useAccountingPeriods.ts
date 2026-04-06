@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { ensureAccountingPeriodPhasesOnProject } from "@/lib/projectPhaseSync";
 
 export type StepStatus = "pendiente" | "en_progreso" | "en_espera_cliente" | "completado";
 
@@ -163,7 +164,15 @@ export function useCreateAccountingPeriod() {
 
       return data;
     },
-    onSuccess: (_, vars) => {
+    onSuccess: async (created, vars) => {
+      try {
+        const changed = await ensureAccountingPeriodPhasesOnProject(vars.projectId, [
+          { id: created.id, month: vars.month, year: vars.year },
+        ]);
+        if (changed) queryClient.invalidateQueries({ queryKey: ["project", vars.projectId] });
+      } catch {
+        /* no bloquear el alta del periodo si falla la sync de fases */
+      }
       queryClient.invalidateQueries({ queryKey: ["accounting-periods", vars.projectId] });
       toast.success("Periodo contable creado");
     },

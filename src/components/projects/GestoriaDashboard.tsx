@@ -1,17 +1,31 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import {
-  FileText, Receipt, KeyRound, Send, Save, ClipboardList, Phone, CalendarClock,
+  FileText, Receipt, KeyRound, Send, Save, ClipboardList, Phone, CalendarClock, Plus, ChevronRight,
 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import { UnifiedStepRow } from "./UnifiedStepRow";
 import { CriticalityDelayCard } from "./CriticalityDelayCard";
 import { ProjectPhaseStageCard } from "./ProjectPhaseStageCard";
+import { PhaseTaskRow } from "./PhaseManager";
+import { useProfiles, useDeleteTask } from "@/hooks/useTasks";
+import { useUserRole } from "@/hooks/useUserRole";
+import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
+import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { gestoriaPhaseKey, ensureGestoriaPhasesOnProject } from "@/lib/projectPhaseSync";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 import type { AccountingStep } from "@/hooks/useAccountingPeriods";
 
@@ -51,7 +65,45 @@ interface Props {
 }
 
 export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserId, clientDropboxPath, clientId }: Props) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { canDeleteTasks } = useUserRole();
+  const deleteTask = useDeleteTask();
+  const { data: profiles = [] } = useProfiles();
+  const profileMap = useMemo(() => new Map(profiles.map((p) => [p.user_id, p.full_name])), [profiles]);
+
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskFormPhaseKey, setTaskFormPhaseKey] = useState<string | undefined>();
+
+  const { data: projectTasks = [] } = useQuery({
+    queryKey: ["project-tasks", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("tasks").select("*").eq("project_id", projectId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!projectId && !!gestoriaDetails,
+  });
+
+  useEffect(() => {
+    if (!gestoriaDetails || !projectId) return;
+    let cancelled = false;
+    ensureGestoriaPhasesOnProject(projectId)
+      .then((changed) => {
+        if (!cancelled && changed) queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [gestoriaDetails, projectId, queryClient]);
+
+  const openAddTaskForPhase = useCallback((phaseNumber: number) => {
+    setTaskFormPhaseKey(gestoriaPhaseKey(phaseNumber));
+    setShowTaskForm(true);
+  }, []);
 
   // Local source of truth — useState so UI re-renders from it
   const [localGestoria, setLocalGestoria] = useState(gestoriaDetails);
@@ -207,9 +259,99 @@ export function GestoriaDashboard({ projectId, gestoriaDetails, responsibleUserI
                 />
               );
             })}
+            {(() => {
+              const pk = gestoriaPhaseKey(phase.number);
+              const phaseTasks = projectTasks.filter((t: { phase_key?: string | null }) => t.phase_key === pk);
+              const openT = phaseTasks.filter((t: { status: string }) => !isTaskClosedStatus(t.status));
+              const closedT = phaseTasks.filter((t: { status: string }) => isTaskClosedStatus(t.status));
+              return (
+                <div className="border-t border-border/40 pt-3 mt-3 space-y-2">
+                  <p className="text-[10px] font-medium text-muted-foreground px-1">Tareas del proyecto (esta fase)</p>
+                  {phaseTasks.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-2 px-1">
+                      Sin tareas. Crea una para seguimiento adicional; también aparecen en el tab Tareas.
+                    </p>
+                  ) : (
+                    <div className="space-y-0.5">
+                      {openT.map((t: { id: string }) => (
+                        <PhaseTaskRow
+                          key={t.id}
+                          task={t}
+                          profileMap={profileMap}
+                          onClick={() => setSelectedTaskId(t.id)}
+                          canDelete={canDeleteTasks}
+                          onDelete={() => setDeleteTargetId(t.id)}
+                          showCleanTitle
+                        />
+                      ))}
+                      {closedT.length > 0 && (
+                        <Collapsible defaultOpen={false} className="group mt-1 border-t border-border/30 pt-1">
+                          <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs font-medium text-muted-foreground hover:bg-muted/40">
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" />
+                            Completadas o canceladas ({closedT.length})
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="space-y-0.5 pt-1 pb-1">
+                            {closedT.map((t: { id: string }) => (
+                              <PhaseTaskRow
+                                key={t.id}
+                                task={t}
+                                profileMap={profileMap}
+                                archived
+                                onClick={() => setSelectedTaskId(t.id)}
+                                canDelete={canDeleteTasks}
+                                onDelete={() => setDeleteTargetId(t.id)}
+                                showCleanTitle
+                              />
+                            ))}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+                    </div>
+                  )}
+                  <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => openAddTaskForPhase(phase.number)}>
+                    <Plus className="h-3 w-3 mr-1" /> Agregar tarea
+                  </Button>
+                </div>
+              );
+            })()}
           </ProjectPhaseStageCard>
         );
       })}
+
+      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <TaskFormDialog
+        open={showTaskForm}
+        onOpenChange={(o) => {
+          setShowTaskForm(o);
+          if (!o) {
+            setTaskFormPhaseKey(undefined);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+          }
+        }}
+        defaultProjectId={projectId}
+        defaultClientId={clientId}
+        defaultArea="gestoria"
+        defaultPhaseKey={taskFormPhaseKey}
+      />
+      <DeleteConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTargetId(null);
+        }}
+        title="¿Eliminar esta tarea?"
+        description="Se eliminará permanentemente esta tarea y todos sus datos asociados."
+        onConfirm={async () => {
+          try {
+            await deleteTask.mutateAsync(deleteTargetId!);
+            toast.success("Tarea eliminada");
+            setDeleteTargetId(null);
+            queryClient.invalidateQueries({ queryKey: ["project-tasks", projectId] });
+          } catch (e: unknown) {
+            toast.error("Error al eliminar: " + (e instanceof Error ? e.message : String(e)));
+          }
+        }}
+        isPending={deleteTask.isPending}
+      />
     </div>
   );
 }

@@ -84,6 +84,15 @@ const ProyectoDetalle = () => {
   const projectPhases: Phase[] = useMemo(() => {
     const raw = (project as any)?.phases;
     if (Array.isArray(raw) && raw.length > 0) return raw as Phase[];
+    const lawsuit = (project as any)?.lawsuit_details;
+    const stages = lawsuit?.stages;
+    if (project?.area === "juicios" && Array.isArray(stages) && stages.length > 0) {
+      return stages.map((s: { key: string; label?: string; name?: string }, i: number) => ({
+        key: s.key,
+        name: s.label ?? s.name ?? `Etapa ${i + 1}`,
+        order: i,
+      }));
+    }
     const titlePhases = new Set<string>();
     for (const t of tasks) {
       const match = t.title?.match(/^\[([^\]]+)\]/);
@@ -92,10 +101,40 @@ const ProyectoDetalle = () => {
     return Array.from(titlePhases).map((name, i) => ({ key: `legacy_${name.toLowerCase().replace(/\s+/g, "_")}`, name, order: i }));
   }, [project, tasks]);
 
-  const handlePhasesChange = useCallback(async (newPhases: Phase[]) => {
-    await supabase.from("projects").update({ phases: newPhases } as any).eq("id", id!);
-    queryClient.invalidateQueries({ queryKey: ["project", id] });
-  }, [id, queryClient]);
+  const handlePhasesChange = useCallback(
+    async (newPhases: Phase[]) => {
+      const lawsuit = (project as any)?.lawsuit_details;
+      const isLawsuitProject = project?.area === "juicios" && lawsuit && Array.isArray(lawsuit.stages);
+      if (isLawsuitProject) {
+        const byKey = new Map(lawsuit.stages.map((s: { key: string }) => [s.key, s]));
+        const newStages = newPhases.map((p) => {
+          const ex = byKey.get(p.key) as Record<string, unknown> | undefined;
+          if (ex) return { ...ex, label: p.name };
+          return {
+            key: p.key,
+            label: p.name,
+            status: "pendiente",
+            date: null,
+            notes: "",
+            completed_at: null,
+            attachments: [],
+            checklist: [],
+          };
+        });
+        await supabase
+          .from("projects")
+          .update({
+            phases: newPhases,
+            lawsuit_details: { ...lawsuit, stages: newStages },
+          } as any)
+          .eq("id", id!);
+      } else {
+        await supabase.from("projects").update({ phases: newPhases } as any).eq("id", id!);
+      }
+      queryClient.invalidateQueries({ queryKey: ["project", id] });
+    },
+    [id, queryClient, project]
+  );
 
   const [taskFormPhaseKey, setTaskFormPhaseKey] = useState<string | undefined>();
   const handleAddTaskForPhase = useCallback((phaseKey?: string) => {
@@ -324,7 +363,12 @@ const ProyectoDetalle = () => {
         )}
 
         {tab === "contabilidad" && hasAccounting && (
-          <AccountingDashboard projectId={project.id} clientDropboxPath={effectiveDropboxPath} clientId={project.client_id || undefined} />
+          <AccountingDashboard
+            projectId={project.id}
+            clientDropboxPath={effectiveDropboxPath}
+            clientId={project.client_id || undefined}
+            projectArea={project.area || undefined}
+          />
         )}
 
         {tab === "declaracion_anual" && hasAccounting && (
