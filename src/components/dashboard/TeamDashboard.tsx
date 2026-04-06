@@ -84,6 +84,11 @@ export function TeamDashboard() {
       const overdue = userTasks.filter(
         (t) => ["pendiente", "en_progreso", "en_revision"].includes(t.status) && t.due_date && new Date(t.due_date) < today
       ).length;
+      const assignedClients =
+        clients
+          ?.filter((c) => c.status === "activo" && c.responsible_user_id === u.user_id)
+          .map((c) => ({ id: c.id, name: c.name }))
+          .sort((a, b) => a.name.localeCompare(b.name, "es")) ?? [];
       return {
         userId: u.user_id,
         name: u.full_name,
@@ -94,9 +99,12 @@ export function TeamDashboard() {
         pct,
         overdue,
         isMe: u.user_id === user?.id,
+        assignedClients,
       };
-    }).filter((u) => u.total > 0).sort((a, b) => b.pending - a.pending);
-  }, [orgUsers, allTasks, user, today]);
+    })
+      .filter((u) => u.total > 0 || u.assignedClients.length > 0)
+      .sort((a, b) => b.pending - a.pending);
+  }, [orgUsers, allTasks, clients, user, today]);
 
   const projectProgress = useMemo(() => {
     if (!projects || !allTasks) return [];
@@ -419,7 +427,7 @@ Formato obligatorio: Markdown. Usa **negritas** para el hallazgo principal; viñ
                   requestDelayMs={TEAM_AI_STAGGER_MS * 2}
                   contextPrompt={`Eres el analista de un despacho. Analiza la carga de trabajo y da UNA recomendación accionable (máximo 50 palabras).
 
-Datos: ${teamWorkload.slice(0, 5).map(m => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas`).join("; ")}
+Datos: ${teamWorkload.slice(0, 5).map((m) => `${m.name}: ${m.pending} pendientes, ${m.overdue} vencidas${m.assignedClients.length ? `; clientes: ${m.assignedClients.map((c) => c.name).join(", ")}` : ""}`).join("; ")}
 
 Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñetas si listas varias personas o acciones; emojis opcionales (ej. ⚠️ 🔥). Sin saludo.`}
                 />
@@ -448,6 +456,30 @@ Formato obligatorio: Markdown. **Negritas** para alertas o acciones clave; viñe
                         <span>{m.completed} hechas</span>
                         {m.overdue > 0 && <span className="text-destructive font-medium">{m.overdue} vencidas</span>}
                       </div>
+                      {m.assignedClients.length > 0 && (
+                        <div className="mt-2.5 pt-2.5 border-t border-border/50 text-left">
+                          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                            Clientes asignados
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {m.assignedClients.slice(0, 6).map((c) => (
+                              <Badge
+                                key={c.id}
+                                variant="outline"
+                                className="text-[10px] font-normal max-w-full truncate px-1.5 py-0 h-5"
+                                title={c.name}
+                              >
+                                {c.name}
+                              </Badge>
+                            ))}
+                            {m.assignedClients.length > 6 && (
+                              <span className="text-[10px] text-muted-foreground self-center">
+                                +{m.assignedClients.length - 6} más
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </button>
                   ))}
                 </div>
