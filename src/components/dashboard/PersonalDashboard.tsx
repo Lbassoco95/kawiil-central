@@ -906,8 +906,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             </div>
           </div>
 
-          <PersonalProjectsProgress rows={myProjectProgress} />
-
           <AISummaryCard
             cacheKey={`personal-week-coach-${user?.id ?? ""}-${promptFingerprint(weekCoachPrompt)}`}
             contextPrompt={weekCoachPrompt}
@@ -915,6 +913,8 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             ready={!!user && weekActivity !== undefined && myProjectProgress !== undefined}
             requestDelayMs={350}
           />
+
+          <PersonalProjectsProgress rows={myProjectProgress} />
 
           {weekActivity && weekActivity.bySectionSorted.length > 0 && (
             <div>
@@ -958,7 +958,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         {/* Rendimiento */}
         <TabsContent value="rendimiento" className="mt-4 space-y-6 animate-fade-in">
           <PersonalRendimientoMetrics pendingTasks={pendingTasksSnapshot} />
-          <PersonalProjectsProgress rows={myProjectProgress} title="Avance en proyectos activos" compact />
           <AISummaryCard
             cacheKey={`personal-rendimiento-coach-${user?.id ?? ""}-${promptFingerprint(rendimientoCoachPrompt)}`}
             contextPrompt={rendimientoCoachPrompt}
@@ -966,6 +965,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             ready={!!user && myProjectProgress !== undefined}
             requestDelayMs={450}
           />
+          <PersonalProjectsProgress rows={myProjectProgress} title="Avance en proyectos activos" compact />
           <PerformanceChart />
           <MonthlyPerformance />
         </TabsContent>
