@@ -490,8 +490,9 @@ export function EmailView() {
       </div>
 
       {/* Email list panel */}
-      <div className={cn("flex flex-col border-r border-border bg-background transition-all duration-200",
-        isMobile ? "flex-1" : "w-[320px] lg:w-[380px] shrink-0",
+      <div className={cn(
+        "flex flex-col border-r border-border bg-background transition-all duration-200",
+        isMobile ? "flex-1" : "min-w-[350px] max-w-[450px] w-[400px] shrink-0",
         selectedEmailId && isMobile && "hidden"
       )}>
         {/* Search & compose toolbar */}
@@ -518,17 +519,19 @@ export function EmailView() {
           </div>
         </div>
 
-        {/* Email list */}
-        <ScrollArea className="flex-1" ref={listRef}>
+        {/* Email list — sin padding lateral; cada fila usa px-4 */}
+        <ScrollArea className="flex-1 px-0" ref={listRef}>
           {isLoading ? (
-            <div className="p-4 space-y-3">
+            <div className="py-2 space-y-0">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="flex gap-3 animate-pulse">
-                  <div className="h-10 w-10 rounded-full bg-secondary/40 shrink-0" />
-                  <div className="flex-1 space-y-2 pt-1">
-                    <div className="h-3.5 bg-secondary/40 rounded w-3/4" />
+                <div key={i} className="flex gap-2.5 px-4 py-2.5 border-b border-border/40 animate-pulse">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="w-2 h-2 rounded-full bg-transparent shrink-0" />
+                    <div className="h-8 w-8 rounded-full bg-secondary/40 shrink-0" />
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-2 pt-0.5">
+                    <div className="h-3.5 bg-secondary/40 rounded w-2/3" />
                     <div className="h-3 bg-secondary/30 rounded w-full" />
-                    <div className="h-2.5 bg-secondary/20 rounded w-2/3" />
                   </div>
                 </div>
               ))}
@@ -542,119 +545,142 @@ export function EmailView() {
               <p className="text-xs text-muted-foreground/60 mt-1">Esta carpeta está vacía</p>
             </div>
           ) : (
-            <div>
+            <div className="px-0">
               {allEmails.map((email: any) => {
                 const isActive = selectedEmailId === email.id;
+                const unread = !email.isRead;
                 const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address || "Desconocido";
                 const senderEmail = email.from?.emailAddress?.address || "";
+                const subject = email.subject || "(sin asunto)";
+                const bodyPreview = (email.bodyPreview || "").trim() || "…";
                 return (
                   <div
                     key={email.id}
                     draggable
                     onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
-                      "group flex flex-col px-3 py-2.5 cursor-pointer transition-colors border-b border-border/30",
-                      !email.isRead && !isActive && "bg-blue-50/40 dark:bg-blue-950/20",
-                      isActive && "bg-accent border-l-2 border-l-primary",
-                      !isActive && "hover:bg-accent/40",
+                      "group flex cursor-pointer transition-colors border-b border-border/40 px-4 py-2.5",
+                      isActive && "bg-accent border-l-2 border-l-blue-500",
+                      !isActive && "hover:bg-muted/50",
                     )}
                     onClick={() => handleOpenEmail(email)}
                   >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={cn(
-                          "w-2 h-2 rounded-full shrink-0 mt-4",
-                          !email.isRead ? "bg-blue-500" : "bg-transparent",
-                        )}
-                        aria-hidden
-                      />
-                      <div
-                        className={cn(
-                          "h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0 mt-0.5",
-                          getAvatarColor(senderEmail),
-                        )}
-                      >
-                        {getInitials(senderName, senderEmail)}
+                    <div className="flex gap-2.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 shrink-0 self-start">
+                        <div
+                          className={cn(
+                            "w-2 h-2 rounded-full shrink-0",
+                            unread ? "bg-blue-500" : "bg-transparent",
+                          )}
+                          aria-hidden
+                        />
+                        <div
+                          className={cn(
+                            "h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-semibold shrink-0",
+                            getAvatarColor(senderEmail),
+                          )}
+                        >
+                          {getInitials(senderName, senderEmail)}
+                        </div>
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <div className="flex items-center justify-between gap-2 min-w-0">
                           <span
                             className={cn(
-                              "truncate font-semibold text-sm",
-                              !email.isRead ? "text-foreground" : "text-foreground/80",
+                              "truncate text-sm text-foreground",
+                              unread ? "font-bold" : "font-normal text-foreground/85",
                             )}
                           >
                             {senderName}
                           </span>
-                          <span className="text-xs text-muted-foreground font-normal whitespace-nowrap ml-2 shrink-0">
-                            {formatEmailDate(emailListTimestamp(email))}
-                          </span>
-                        </div>
-                        <p
-                          className={cn(
-                            "text-sm truncate leading-snug",
-                            !email.isRead ? "font-semibold text-foreground" : "font-normal text-muted-foreground",
-                          )}
-                        >
-                          {email.subject || "(sin asunto)"}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-xs truncate mt-0.5 leading-relaxed",
-                            !email.isRead ? "text-foreground" : "text-muted-foreground",
-                          )}
-                        >
-                          {email.bodyPreview?.substring(0, 100)}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-col items-center gap-1 shrink-0 pt-1">
-                        {email.hasAttachments && <Paperclip className="h-3.5 w-3.5 text-muted-foreground/50" />}
-                        {email.importance === "high" && <div className="h-2 w-2 rounded-full bg-destructive" />}
-                      </div>
-                    </div>
-
-                    {/* Quick actions — always visible on mobile, hover on desktop */}
-                    <div className={cn(
-                      "items-center gap-1 mt-1.5 ml-14",
-                      isMobile ? "flex" : "hidden group-hover:flex"
-                    )}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            className="p-1.5 sm:p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={(e) => { e.stopPropagation(); handleArchive(email.id); }}
-                          >
-                            <Archive className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            className="p-1.5 sm:p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-destructive transition-colors"
-                            onClick={(e) => { e.stopPropagation(); handleDelete(email.id); }}
-                          >
-                            <Trash2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
-                      </Tooltip>
-                      {email.isRead ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              className="p-1.5 sm:p-1 rounded hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
-                              onClick={(e) => { e.stopPropagation(); markUnread.mutate(email.id); }}
+                          <div className="relative flex shrink-0 items-center justify-end min-h-5 min-w-[4.5rem]">
+                            <span
+                              className={cn(
+                                "text-xs text-muted-foreground tabular-nums whitespace-nowrap transition-opacity",
+                                !isActive &&
+                                  "max-md:opacity-100 md:opacity-100 md:group-hover:pointer-events-none md:group-hover:opacity-0",
+                              )}
                             >
-                              <Mail className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="text-xs">Marcar no leído (u)</TooltipContent>
-                        </Tooltip>
-                      ) : null}
+                              {formatEmailDate(emailListTimestamp(email))}
+                            </span>
+                            {!isActive && (
+                              <div
+                                className={cn(
+                                  "flex items-center gap-0.5 rounded-sm bg-background/90 dark:bg-background/90 px-0.5",
+                                  "opacity-0 group-hover:opacity-100 transition-opacity",
+                                  "max-md:opacity-100 max-md:static max-md:ml-1",
+                                  "md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2",
+                                )}
+                              >
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+                                      onClick={(e) => { e.stopPropagation(); handleArchive(email.id); }}
+                                    >
+                                      <Archive className="h-3.5 w-3.5" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive"
+                                      onClick={(e) => { e.stopPropagation(); handleDelete(email.id); }}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
+                                </Tooltip>
+                                {email.isRead ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+                                        onClick={(e) => { e.stopPropagation(); markUnread.mutate(email.id); }}
+                                      >
+                                        <Mail className="h-3.5 w-3.5" />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" className="text-xs">Marcar no leído (u)</TooltipContent>
+                                  </Tooltip>
+                                ) : (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+                                        onClick={(e) => { e.stopPropagation(); markRead.mutate(email.id); }}
+                                      >
+                                        <MailOpen className="h-3.5 w-3.5" />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" className="text-xs">Marcar leído</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1">
+                          {email.hasAttachments && (
+                            <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden />
+                          )}
+                          {email.importance === "high" && (
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden />
+                          )}
+                          <p className="min-w-0 flex-1 truncate text-sm">
+                            <span className={cn(unread && "font-semibold")}>{subject}</span>
+                            <span className="text-muted-foreground"> · {bodyPreview}</span>
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 );
