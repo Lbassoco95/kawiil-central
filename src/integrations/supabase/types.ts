@@ -2280,6 +2280,7 @@ export type Database = {
           is_recurring: boolean
           organization_id: string
           priority: Database["public"]["Enums"]["task_priority"]
+          phase_key: string | null
           project_id: string | null
           recurrence_pattern: string | null
           started_at: string | null
@@ -2311,6 +2312,7 @@ export type Database = {
           is_recurring?: boolean
           organization_id: string
           priority?: Database["public"]["Enums"]["task_priority"]
+          phase_key?: string | null
           project_id?: string | null
           recurrence_pattern?: string | null
           started_at?: string | null
@@ -2342,6 +2344,7 @@ export type Database = {
           is_recurring?: boolean
           organization_id?: string
           priority?: Database["public"]["Enums"]["task_priority"]
+          phase_key?: string | null
           project_id?: string | null
           recurrence_pattern?: string | null
           started_at?: string | null

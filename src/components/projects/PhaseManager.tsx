@@ -2,12 +2,16 @@ import { useState, useMemo, useCallback } from "react";
 import {
   DndContext,
   DragEndEvent,
+  MouseSensor,
   PointerSensor,
-  closestCorners,
+  TouchSensor,
+  pointerWithin,
+  rectIntersection,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
 } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +58,13 @@ interface PhaseManagerProps {
   onToggleTaskSelection?: (taskId: string) => void;
 }
 
+/** Evita fallos al soltar: el puntero debe caer dentro de la fase; si no, por intersección de rectángulos. */
+const phaseDropCollision: CollisionDetection = (args) => {
+  const inside = pointerWithin(args);
+  if (inside.length > 0) return inside;
+  return rectIntersection(args);
+};
+
 const PHASE_COLORS = [
   "bg-blue-500/10 border-blue-500/30",
   "bg-emerald-500/10 border-emerald-500/30",
@@ -65,25 +76,35 @@ const PHASE_COLORS = [
 
 function TaskRow({
   task, profileMap, onClick, canDelete, onDelete, selectionMode, isSelected, onToggle, showCleanTitle, archived,
+  grabCursor,
 }: {
   task: any; profileMap: Map<string, string>; onClick: () => void;
   canDelete?: boolean; onDelete?: () => void;
   selectionMode?: boolean; isSelected?: boolean; onToggle?: () => void;
   showCleanTitle?: boolean;
   archived?: boolean;
+  /** Cursor de arrastre cuando la fila vive dentro de un draggable de fases */
+  grabCursor?: boolean;
 }) {
   const title = showCleanTitle && task.phase_key ? task.title.replace(/^\[[^\]]+\]\s*/, "") : task.title;
   return (
     <div
       className={cn(
-        "flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer",
+        "flex items-center gap-3 py-2.5 px-3 rounded-lg hover:bg-muted/50 transition-colors",
+        grabCursor ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         isSelected && "bg-primary/5",
         archived && "opacity-75 hover:opacity-90"
       )}
       onClick={() => selectionMode && onToggle ? onToggle() : onClick()}
     >
       {selectionMode && (
-        <Checkbox checked={isSelected} onCheckedChange={onToggle} onClick={(e) => e.stopPropagation()} className="shrink-0" />
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={onToggle}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="shrink-0"
+        />
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
@@ -105,7 +126,13 @@ function TaskRow({
         </div>
       </div>
       {canDelete && onDelete && (
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive/60 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-destructive/60 hover:text-destructive"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       )}
@@ -136,35 +163,27 @@ function DraggableOpenTaskRow({
   showCleanTitle?: boolean;
   dragEnabled: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `${TASK_DRAG_PREFIX}${task.id}`,
     disabled: !dragEnabled,
     data: { type: "project-task", taskId: task.id },
   });
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      {...(dragEnabled ? listeners : {})}
+      {...(dragEnabled ? attributes : {})}
       className={cn(
         "flex items-stretch rounded-lg border border-transparent",
-        isDragging && "opacity-45 z-[1] bg-background/80 shadow-sm"
+        dragEnabled && "cursor-grab active:cursor-grabbing touch-manipulation select-none",
+        isDragging && "opacity-50 z-[1] ring-1 ring-primary/50 bg-muted/30"
       )}
     >
       {dragEnabled && (
-        <button
-          type="button"
-          className="shrink-0 flex items-center px-1.5 rounded-l-lg hover:bg-muted/60 cursor-grab active:cursor-grabbing touch-none border-0 bg-transparent text-muted-foreground"
-          aria-label="Arrastrar a otra fase"
-          onClick={(e) => e.stopPropagation()}
-          {...listeners}
-          {...attributes}
-        >
+        <span className="shrink-0 flex items-center pl-1 pr-0.5 text-muted-foreground pointer-events-none" aria-hidden>
           <GripVertical className="h-4 w-4" />
-        </button>
+        </span>
       )}
       <div className="flex-1 min-w-0">
         <TaskRow
@@ -177,6 +196,7 @@ function DraggableOpenTaskRow({
           isSelected={isSelected}
           onToggle={onToggle}
           showCleanTitle={showCleanTitle}
+          grabCursor={dragEnabled}
         />
       </div>
     </div>
@@ -344,7 +364,11 @@ export function PhaseManager({
   const showDnd = phases.length > 0 && !!onTaskPhaseAssign;
   const canDragTasks = showDnd && !selectionMode;
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
+  );
 
   const handleDragEnd = useCallback(
     (e: DragEndEvent) => {
@@ -373,13 +397,13 @@ export function PhaseManager({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={phaseDropCollision}
       onDragEnd={showDnd ? handleDragEnd : () => {}}
     >
     <div className="space-y-3">
       {showDnd ? (
         <p className="text-[11px] text-muted-foreground px-0.5 -mt-1 mb-1">
-          Arrastra una tarea por el ícono <GripVertical className="inline h-3 w-3 align-text-bottom mx-0.5" aria-hidden /> para asignarla a una fase o a «sin fase».
+          Mantén pulsada la fila de la tarea (≈6px) y suéltala sobre la fase destino o sobre «Sin fase asignada». En móvil, mantén presionado un instante antes de arrastrar.
         </p>
       ) : null}
       {sortedPhases.map((phase, idx) => {
@@ -451,7 +475,9 @@ export function PhaseManager({
             {!isCollapsed && (
               <div className="px-2 pb-2">
                 {phaseTasks.length === 0 ? (
-                  <p className="text-xs text-muted-foreground text-center py-4">Sin tareas en esta fase</p>
+                  <div className="min-h-[72px] flex items-center justify-center px-2 py-3">
+                    <p className="text-xs text-muted-foreground text-center">Sin tareas en esta fase — suelta aquí una tarea para asignarla</p>
+                  </div>
                 ) : (
                   <div className="space-y-0.5">
                     {openInPhase.length === 0 && closedInPhase.length > 0 && (
