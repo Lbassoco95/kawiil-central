@@ -41,8 +41,7 @@ import {
 } from "@/hooks/useMicrosoft";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import {
-  base64ToBlobUrl,
-  fetchMessageAttachmentContent,
+  fetchMessageAttachmentBlob,
   inferMimeFromFileName,
   type OutlookAttachment,
 } from "@/lib/outlookEmailMedia";
@@ -233,7 +232,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv14-attachment-fetch-text";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv15-attachment-binary";
 
 type AttachmentPreviewState = {
   url: string;
@@ -1748,14 +1747,14 @@ function EmailAttachmentTile({
     setBlobUrl(null);
     (async () => {
       try {
-        const r = await fetchMessageAttachmentContent(messageId, att.id);
+        const r = await fetchMessageAttachmentBlob(messageId, att.id);
         const fromApi = (r.contentType || "").toLowerCase();
         const inferred = inferMimeFromFileName(att.name || r.name || "");
         const mime =
           fromApi && fromApi !== "application/octet-stream"
-            ? r.contentType!
+            ? r.contentType
             : inferred || att.contentType || "application/octet-stream";
-        created = base64ToBlobUrl(r.contentBytes, mime);
+        created = URL.createObjectURL(new Blob([r.blob], { type: mime }));
         if (alive) setBlobUrl(created);
       } catch (e) {
         if (alive) {

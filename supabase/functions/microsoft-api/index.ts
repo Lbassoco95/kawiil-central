@@ -102,6 +102,70 @@ async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow
   return data.access_token;
 }
 
+/** Descarga metadatos + bytes del adjunto (fileAttachment) vía Graph /$value. */
+async function loadMessageFileAttachmentFromGraph(
+  accessToken: string,
+  rawMessageId: string | undefined,
+  rawAttachmentId: string | undefined,
+): Promise<{
+  body: Uint8Array;
+  contentType: string;
+  name: string;
+  size?: unknown;
+  isInline?: unknown;
+  contentId?: unknown;
+}> {
+  const messageId = normalizeGraphMessageOrAttachmentId(rawMessageId);
+  const attachmentId = normalizeGraphMessageOrAttachmentId(rawAttachmentId);
+  if (!messageId || !attachmentId) {
+    throw new Error("messageId y attachmentId son requeridos");
+  }
+  const metaPath =
+    `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
+  const att = await graphRequest(accessToken, metaPath, {
+    headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+  });
+  const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
+  if (odataType && String(odataType).includes("itemAttachment")) {
+    throw new Error("Este tipo de adjunto no se puede previsualizar");
+  }
+  if (odataType && String(odataType).includes("referenceAttachment")) {
+    throw new Error("Este tipo de adjunto no se puede previsualizar");
+  }
+
+  let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
+
+  const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+  const valueRes = await fetch(valueUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/octet-stream",
+      ...GRAPH_MAIL_PREFER_IMMUTABLE,
+    },
+  });
+  if (!valueRes.ok) {
+    const errText = await valueRes.text();
+    throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
+  }
+  const buf = new Uint8Array(await valueRes.arrayBuffer());
+  const hdr = valueRes.headers.get("content-type");
+  if (hdr) {
+    const main = hdr.split(";")[0].trim().toLowerCase();
+    if (main && main !== "application/octet-stream") {
+      contentType = hdr.split(";")[0].trim();
+    }
+  }
+
+  return {
+    body: buf,
+    contentType,
+    name: String((att as Record<string, unknown>).name ?? "adjunto"),
+    size: (att as Record<string, unknown>).size,
+    isInline: (att as Record<string, unknown>).isInline,
+    contentId: (att as Record<string, unknown>).contentId,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -748,58 +812,31 @@ Deno.serve(async (req) => {
       }
 
       case "message-attachment-content": {
-        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
-        const attachmentId = normalizeGraphMessageOrAttachmentId(params?.attachmentId);
-        if (!messageId || !attachmentId) {
-          throw new Error("messageId y attachmentId son requeridos");
-        }
-        /** Misma convención que email-detail: sin encodeURIComponent en el path (evita ITEM_NOT_FOUND por doble escape). */
-        const metaPath =
-          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
-        const att = await graphRequest(accessToken, metaPath, {
-          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
-        });
-        const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
-        if (odataType && String(odataType).includes("itemAttachment")) {
-          throw new Error("Este tipo de adjunto no se puede previsualizar");
-        }
-        if (odataType && String(odataType).includes("referenceAttachment")) {
-          throw new Error("Este tipo de adjunto no se puede previsualizar");
-        }
-
-        let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
-
-        const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
-        const valueRes = await fetch(valueUrl, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/octet-stream",
-            ...GRAPH_MAIL_PREFER_IMMUTABLE,
-          },
-        });
-        if (!valueRes.ok) {
-          const errText = await valueRes.text();
-          throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
-        }
-        const buf = new Uint8Array(await valueRes.arrayBuffer());
-        const contentBytes = uint8ArrayToBase64(buf);
-        const hdr = valueRes.headers.get("content-type");
-        if (hdr) {
-          const main = hdr.split(";")[0].trim().toLowerCase();
-          if (main && main !== "application/octet-stream") {
-            contentType = hdr.split(";")[0].trim();
-          }
-        }
-
+        /** JSON + base64: puede superar límites del gateway; preferir message-attachment-binary en el cliente. */
+        const r = await loadMessageFileAttachmentFromGraph(accessToken, params?.messageId, params?.attachmentId);
         result = {
-          name: (att as Record<string, unknown>).name,
-          contentType,
-          contentBytes,
-          size: (att as Record<string, unknown>).size,
-          isInline: (att as Record<string, unknown>).isInline,
-          contentId: (att as Record<string, unknown>).contentId,
+          name: r.name,
+          contentType: r.contentType,
+          contentBytes: uint8ArrayToBase64(r.body),
+          size: r.size,
+          isInline: r.isInline,
+          contentId: r.contentId,
         };
         break;
+      }
+
+      /** Cuerpo binario sin base64 (evita respuestas JSON vacías/truncadas con PDFs grandes). */
+      case "message-attachment-binary": {
+        const r = await loadMessageFileAttachmentFromGraph(accessToken, params?.messageId, params?.attachmentId);
+        return new Response(r.body, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": r.contentType || "application/octet-stream",
+            "X-Kawiil-Attachment-Name": encodeURIComponent(r.name),
+            "Access-Control-Expose-Headers": "Content-Type, X-Kawiil-Attachment-Name",
+          },
+        });
       }
 
       case "email-attachments": {

@@ -10,13 +10,35 @@ type AttachmentPayload = {
   size?: number;
 };
 
-function hasContentBytes(data: unknown): data is AttachmentPayload {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    typeof (data as AttachmentPayload).contentBytes === "string" &&
-    (data as AttachmentPayload).contentBytes.length > 0
-  );
+/** Misma estrategia por chunks que la edge (evita stack con binarios grandes). */
+function uint8ArrayToBase64Client(bytes: Uint8Array): string {
+  const CHUNK = 0x2000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+async function parseMicrosoftApiErrorResponse(res: Response): Promise<string> {
+  const text = await res.text();
+  const trimmed = text.trim();
+  if (!trimmed) return `Error HTTP ${res.status}`;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && parsed !== null && "code" in parsed) {
+      const code = String((parsed as { code: unknown }).code);
+      if (code === "ITEM_NOT_FOUND") {
+        return "El mensaje o el adjunto ya no coinciden con Microsoft (IDs desactualizados o elemento movido). Vuelve a la lista y abre el correo de nuevo.";
+      }
+    }
+    if (parsed && typeof parsed === "object" && parsed !== null && "error" in parsed) {
+      return String((parsed as { error: unknown }).error);
+    }
+  } catch {
+    return trimmed.slice(0, 400);
+  }
+  return trimmed.slice(0, 400);
 }
 
 /** Metadatos de adjunto devueltos por Graph (lista de mensaje). */
@@ -100,11 +122,14 @@ export function base64ToBlobUrl(contentBytes: string, contentType: string): stri
 }
 
 /**
- * Descarga bytes del adjunto vía microsoft-api (Graph /$value en el servidor).
- * No usa `functions.invoke`: el cliente de Supabase hace `response.json()` y falla con cuerpo vacío o truncado.
+ * Descarga el adjunto como Blob (cuerpo binario desde microsoft-api, sin JSON/base64).
+ * Evita límites de tamaño que dejaban el cuerpo vacío en previsualizaciones de PDF.
  */
-export async function fetchMessageAttachmentContent(messageId: string, attachmentId: string): Promise<AttachmentPayload> {
-  const body = { action: "message-attachment-content", params: { messageId, attachmentId } };
+export async function fetchMessageAttachmentBlob(
+  messageId: string,
+  attachmentId: string,
+): Promise<{ blob: Blob; name: string; contentType: string }> {
+  const body = { action: "message-attachment-binary", params: { messageId, attachmentId } };
 
   const session = await supabase.auth.getSession();
   const token = session.data.session?.access_token;
@@ -122,46 +147,57 @@ export async function fetchMessageAttachmentContent(messageId: string, attachmen
     body: JSON.stringify(body),
   });
 
-  const text = await res.text();
-  const trimmed = text.trim();
-  let parsed: unknown = null;
-  if (trimmed) {
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      throw new Error(`Respuesta inválida del servidor (${res.status}). ${trimmed.slice(0, 160)}`);
-    }
-  }
-
   if (!res.ok) {
-    const code =
-      parsed && typeof parsed === "object" && parsed !== null && "code" in parsed
-        ? String((parsed as { code: unknown }).code)
-        : null;
-    if (code === "ITEM_NOT_FOUND") {
-      throw new Error(
-        "El mensaje o el adjunto ya no coinciden con Microsoft (IDs desactualizados o elemento movido). Vuelve a la lista y abre el correo de nuevo.",
-      );
-    }
-    const errMsg =
-      parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
-        ? String((parsed as { error: unknown }).error)
-        : trimmed.slice(0, 400) || `Error HTTP ${res.status}`;
-    throw new Error(errMsg);
+    throw new Error(await parseMicrosoftApiErrorResponse(res));
   }
 
-  if (!hasContentBytes(parsed)) {
-    const serverErr =
-      parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
-        ? String((parsed as { error: unknown }).error)
-        : null;
+  const ct = res.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    const errText = await res.text();
+    const trimmed = errText.trim();
+    let parsed: unknown = null;
+    if (trimmed) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        throw new Error(`Respuesta inválida (${res.status}). ${trimmed.slice(0, 160)}`);
+      }
+    }
+    if (parsed && typeof parsed === "object" && parsed !== null && "error" in parsed) {
+      throw new Error(String((parsed as { error: unknown }).error));
+    }
     throw new Error(
-      serverErr ||
-        (trimmed
-          ? "El servidor respondió sin datos del adjunto (cuerpo incompleto o demasiado grande)."
-          : "El servidor respondió vacío. Comprueba que microsoft-api esté desplegada."),
+      "La función devolvió JSON en lugar del archivo. Despliega la última versión de microsoft-api (message-attachment-binary).",
     );
   }
 
-  return parsed;
+  const nameEnc = res.headers.get("x-kawiil-attachment-name");
+  const blob = await res.blob();
+  if (blob.size === 0) {
+    throw new Error(
+      "El adjunto llegó vacío. Si persiste, despliega microsoft-api y vuelve a abrir el correo.",
+    );
+  }
+
+  return {
+    blob,
+    name: nameEnc ? decodeURIComponent(nameEnc) : "adjunto",
+    contentType: ct.split(";")[0].trim() || "application/octet-stream",
+  };
+}
+
+/**
+ * Igual que fetchMessageAttachmentBlob pero devuelve base64 (p. ej. cid en HTML).
+ * Para tarjetas de adjunto usa fetchMessageAttachmentBlob y Object URL.
+ */
+export async function fetchMessageAttachmentContent(messageId: string, attachmentId: string): Promise<AttachmentPayload> {
+  const { blob, name, contentType } = await fetchMessageAttachmentBlob(messageId, attachmentId);
+  const buf = await blob.arrayBuffer();
+  const contentBytes = uint8ArrayToBase64Client(new Uint8Array(buf));
+  return {
+    contentBytes,
+    contentType,
+    name,
+    size: blob.size,
+  };
 }
