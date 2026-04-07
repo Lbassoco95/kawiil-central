@@ -81,9 +81,23 @@ const Tareas = () => {
     }
   }, [searchParams]);
 
-  const openTask = (id: string) => {
-    setSelectedTaskId(id);
-    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set("taskId", id); return p; });
+  /** Si la tarea pertenece a un proyecto, abre el proyecto en pestaña Tareas con el detalle; si no, modal en /tareas. */
+  const openTask = (task: { id: string; project_id?: string | null; phase_key?: string | null }) => {
+    const pid = task.project_id;
+    if (pid) {
+      const p = new URLSearchParams();
+      p.set("tab", "tareas");
+      p.set("taskId", task.id);
+      if (task.phase_key) p.set("phaseKey", task.phase_key);
+      navigate(`/proyectos/${pid}?${p.toString()}`);
+      return;
+    }
+    setSelectedTaskId(task.id);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("taskId", task.id);
+      return next;
+    });
   };
   const closeTask = () => {
     setSelectedTaskId(null);
@@ -297,7 +311,7 @@ INSTRUCCIONES:
                         (task as any).delay_category && "bg-warning/[0.04]"
                       )}
                       style={{ animationDelay: `${Math.min(i, 8) * 25}ms` }}
-                      onClick={() => openTask(task.id)}
+                      onClick={() => openTask(task)}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
@@ -358,7 +372,7 @@ INSTRUCCIONES:
                             "flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-muted/50 text-muted-foreground",
                             task.status === "cancelada" && "opacity-80"
                           )}
-                          onClick={() => openTask(task.id)}
+                          onClick={() => openTask(task)}
                         >
                           <div className="flex-1 min-w-0">
                             <p className={cn("text-[13px] font-medium truncate", task.status === "cancelada" && "line-through")}>
@@ -505,7 +519,7 @@ INSTRUCCIONES:
                     (task as any).delay_category && "bg-warning/[0.03]"
                   )}
                   style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
-                  onClick={() => openTask(task.id)}
+                  onClick={() => openTask(task)}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -586,7 +600,7 @@ INSTRUCCIONES:
                   task.status === "cancelada" && "border-dashed"
                 )}
                 style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
-                onClick={() => openTask(task.id)}
+                onClick={() => openTask(task)}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">

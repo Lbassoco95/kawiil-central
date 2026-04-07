@@ -101,6 +101,44 @@ const ProyectoDetalle = () => {
     return Array.from(titlePhases).map((name, i) => ({ key: `legacy_${name.toLowerCase().replace(/\s+/g, "_")}`, name, order: i }));
   }, [project, tasks]);
 
+  /** Desde /tareas: ubicar la fase de la tarea (URL phaseKey, phase_key, o prefijo [Nombre fase] en el título). */
+  const expandPhaseKeyForDeepLink = useMemo(() => {
+    const tid = searchParams.get("taskId");
+    if (!tid || tasks.length === 0 || projectPhases.length === 0) return null;
+    const urlPk = searchParams.get("phaseKey");
+    if (urlPk) {
+      if (urlPk === "__none__") return "__none__";
+      if (projectPhases.some((p) => p.key === urlPk)) return urlPk;
+    }
+    const t = tasks.find((x) => x.id === tid);
+    if (!t) return null;
+    if (
+      t.phase_key &&
+      (t.phase_key === "__none__" || projectPhases.some((p) => p.key === t.phase_key))
+    ) {
+      return t.phase_key;
+    }
+    if (typeof t.title === "string") {
+      const m = t.title.match(/^\[([^\]]+)\]\s*/);
+      if (m) {
+        const want = m[1].trim().toLowerCase();
+        const ph = projectPhases.find((p) => (p.name || "").trim().toLowerCase() === want);
+        if (ph) return ph.key;
+      }
+    }
+    return "__none__";
+  }, [searchParams, tasks, projectPhases]);
+
+  const closeTaskDialog = useCallback(() => {
+    setSelectedTaskId(null);
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.delete("taskId");
+      p.delete("phaseKey");
+      return p;
+    }, { replace: true });
+  }, [setSearchParams]);
+
   const handlePhasesChange = useCallback(
     async (newPhases: Phase[]) => {
       const lawsuit = (project as any)?.lawsuit_details;
@@ -448,6 +486,7 @@ const ProyectoDetalle = () => {
                 selectionMode={selectionMode}
                 selectedTaskIds={selectedTaskIds}
                 onToggleTaskSelection={toggleTaskSelection}
+                expandPhaseKey={expandPhaseKeyForDeepLink}
               />
             )}
 
@@ -543,7 +582,7 @@ const ProyectoDetalle = () => {
           </div>
         )}
       </div>
-      <TaskDetailDialog taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      <TaskDetailDialog taskId={selectedTaskId} onClose={closeTaskDialog} />
       <DeleteConfirmDialog
         open={!!deleteTargetId}
         onOpenChange={(o) => { if (!o) setDeleteTargetId(null); }}

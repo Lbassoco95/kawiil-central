@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, type ReactNode } from "react";
+import { useState, useMemo, useCallback, useEffect, type ReactNode } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -64,6 +64,8 @@ interface PhaseManagerProps {
   hideBuiltInAddPhase?: boolean;
   /** Mostrar texto de ayuda del arrastre de tareas */
   showTaskDragHint?: boolean;
+  /** Al enlazar desde /tareas: expandir esta fase (o `__none__`) y hacer scroll */
+  expandPhaseKey?: string | null;
 }
 
 /** Evita fallos al soltar: el puntero debe caer dentro de la fase; si no, por intersección de rectángulos. */
@@ -268,6 +270,7 @@ function DroppablePhaseShell({
   });
   return (
     <div
+      id={`project-phase-${phaseKey}`}
       ref={setNodeRef}
       className={cn(
         className,
@@ -282,13 +285,30 @@ function DroppablePhaseShell({
 export function PhaseManager({
   phases, tasks, profileMap, onPhasesChange, onTaskClick, onTaskPhaseAssign, onAddTask,
   canDeleteTasks, onDeleteTask, selectionMode, selectedTaskIds, onToggleTaskSelection,
-  renderPhaseFooter, hideBuiltInAddPhase, showTaskDragHint = true,
+  renderPhaseFooter, hideBuiltInAddPhase, showTaskDragHint = true, expandPhaseKey,
 }: PhaseManagerProps) {
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [editingPhase, setEditingPhase] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [addingPhase, setAddingPhase] = useState(false);
   const [newPhaseName, setNewPhaseName] = useState("");
+
+  useEffect(() => {
+    if (!expandPhaseKey) return;
+    setCollapsedPhases((prev) => {
+      if (!prev.has(expandPhaseKey)) return prev;
+      const next = new Set(prev);
+      next.delete(expandPhaseKey);
+      return next;
+    });
+    const timer = window.setTimeout(() => {
+      document.getElementById(`project-phase-${expandPhaseKey}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [expandPhaseKey]);
 
   const tasksByPhase = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -576,7 +596,7 @@ export function PhaseManager({
             {phaseBody}
           </DroppablePhaseShell>
         ) : (
-          <div key={phase.key} className={shellClass}>
+          <div key={phase.key} id={`project-phase-${phase.key}`} className={shellClass}>
             {phaseBody}
           </div>
         );
@@ -638,7 +658,7 @@ export function PhaseManager({
           </DroppablePhaseShell>
         ) : (
           (unassignedTasks.length > 0 ? (
-            <div key="unassigned-no-dnd" className="rounded-xl border border-border/50 overflow-hidden">
+            <div key="unassigned-no-dnd" id="project-phase-__none__" className="rounded-xl border border-border/50 overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/30">
                 <button type="button" onClick={() => toggleCollapse("__none__")} className="shrink-0">
                   {collapsedPhases.has("__none__") ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}

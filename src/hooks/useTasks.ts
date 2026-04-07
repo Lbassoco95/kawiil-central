@@ -115,33 +115,43 @@ export function useTasksForCalendar(startDate?: string, endDate?: string) {
     queryKey: ["tasks-calendar", user?.id, startDate, endDate],
     queryFn: async () => {
       const selectCols =
-        "id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)";
+        "id, title, due_date, status, priority, area, client_id, project_id, assigned_to, is_subtask, clients(name), projects(name)";
 
-      const applyCommonFilters = <Q extends ReturnType<typeof supabase.from>>(chain: Q) => {
-        let q = chain as any;
-        q = q.not("due_date", "is", null).neq("status", "completada").neq("status", "cancelada");
-        if (startDate) q = q.gte("due_date", startDate);
-        if (endDate) q = q.lte("due_date", endDate);
-        return q.order("due_date", { ascending: true });
-      };
+      let query = supabase
+        .from("tasks")
+        .select(selectCols)
+        .not("due_date", "is", null)
+        .neq("status", "completada" as any)
+        .neq("status", "cancelada" as any)
+        .order("due_date", { ascending: true });
 
-      // Dos consultas: PostgREST a veces falla con `and(...)` dentro de `.or()` en una sola cadena.
-      const boardQuery = applyCommonFilters(
-        supabase.from("tasks").select(selectCols).or("is_subtask.eq.false,is_subtask.is.null")
-      );
-      const mySubtasksQuery = applyCommonFilters(
-        supabase.from("tasks").select(selectCols).eq("is_subtask", true).eq("assigned_to", user!.id)
-      );
+      if (startDate) query = query.gte("due_date", startDate);
+      if (endDate) query = query.lte("due_date", endDate);
 
-      const [boardRes, subRes] = await Promise.all([boardQuery, mySubtasksQuery]);
-      if (boardRes.error) throw boardRes.error;
-      if (subRes.error) throw subRes.error;
+      let { data, error } = await query;
 
-      const byId = new Map<string, CalendarTaskRow>();
-      for (const row of boardRes.data ?? []) byId.set(row.id, row as CalendarTaskRow);
-      for (const row of subRes.data ?? []) byId.set(row.id, row as CalendarTaskRow);
+      // Si falla (columna is_subtask ausente, caché de esquema, etc.), misma consulta sin ese campo.
+      if (error) {
+        let q2 = supabase
+          .from("tasks")
+          .select(
+            "id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)"
+          )
+          .not("due_date", "is", null)
+          .neq("status", "completada" as any)
+          .neq("status", "cancelada" as any)
+          .order("due_date", { ascending: true });
+        if (startDate) q2 = q2.gte("due_date", startDate);
+        if (endDate) q2 = q2.lte("due_date", endDate);
+        const r2 = await q2;
+        if (r2.error) throw r2.error;
+        return (r2.data ?? []) as CalendarTaskRow[];
+      }
 
-      return Array.from(byId.values()).sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
+      const rows = (data ?? []) as (CalendarTaskRow & { is_subtask?: boolean | null })[];
+      const uid = user?.id;
+      // Subtareas de checklist: solo en calendario si las tiene asignadas el usuario (evita ruido).
+      return rows.filter((t) => t.is_subtask !== true || (uid != null && t.assigned_to === uid));
     },
     enabled: !!user && !!startDate && !!endDate,
   });
