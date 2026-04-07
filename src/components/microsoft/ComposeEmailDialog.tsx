@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/microsoft/RichTextEditor";
-import { useSendNewEmail } from "@/hooks/useMicrosoft";
+import { useSendNewEmail, useOutlookComposeSignature } from "@/hooks/useMicrosoft";
 import { useOrgUsers, type OrgUser } from "@/hooks/useOrgUsers";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, Paperclip, X } from "lucide-react";
@@ -135,11 +135,14 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
   const lastInstructionRef = useRef("");
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
+  const signatureAppliedRef = useRef(false);
   const sendEmail = useSendNewEmail();
   const { data: orgUsers = [] } = useOrgUsers();
+  const { data: composeSignature } = useOutlookComposeSignature(open);
 
   useEffect(() => {
     if (open) {
+      signatureAppliedRef.current = false;
       setEditorKey((k) => k + 1);
     } else {
       setTo("");
@@ -157,6 +160,25 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
       setAttachments([]);
     }
   }, [open]);
+
+  /** Firma desde perfil Microsoft (/me); Graph no expone la firma HTML de Outlook de forma oficial. */
+  useEffect(() => {
+    if (!open || !composeSignature?.html) return;
+    const t = window.setTimeout(() => {
+      if (signatureAppliedRef.current) return;
+      const raw = bodyRef.current || "";
+      const textOnly = raw.replace(/<[^>]+>/g, " ").replace(/\s|&nbsp;/gi, "").trim();
+      if (textOnly.length > 0) {
+        signatureAppliedRef.current = true;
+        return;
+      }
+      const html = `${composeSignature.html}<p><br></p>`;
+      editorRef.current?.setHtml(html);
+      bodyRef.current = html;
+      signatureAppliedRef.current = true;
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [open, editorKey, composeSignature]);
 
   const runAiDraft = useCallback(async (instruction: string) => {
     const trimmed = instruction.trim();
@@ -399,6 +421,7 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
               type="file"
               multiple
               className="hidden"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.msg,.eml"
               onChange={(e) => void handleAttachmentPick(e.target.files)}
             />
             <div
@@ -410,7 +433,9 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
               }}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs">Adjuntos (arrastra aquí o usa el botón)</span>
+                <span className="text-xs">
+                  Adjuntos (documentos, imágenes, zip…). La firma del nuevo correo usa tu perfil de Microsoft 365.
+                </span>
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
                   <Paperclip className="h-3.5 w-3.5 mr-1" />
                   Adjuntar

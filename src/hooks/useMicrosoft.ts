@@ -471,6 +471,39 @@ export function useCreateReplyDraft() {
   });
 }
 
+export function useCreateForwardDraft() {
+  return useMutation({
+    mutationFn: async ({ messageId }: { messageId: string }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "create-forward-draft", params: { messageId } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+  });
+}
+
+/** Firma para redactar correo nuevo: perfil Microsoft (/me) + heurística opcional con borrador. */
+export function useOutlookComposeSignature(enabled: boolean) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["outlook-compose-signature"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "get-email-signature-html" },
+      });
+      if (isNotConnectedError(data, error)) return null;
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { html: string; source?: string; displayName?: string; mail?: string };
+    },
+    enabled: !!user && enabled,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
 export function useSendDraft() {
   const queryClient = useQueryClient();
 
@@ -479,15 +512,20 @@ export function useSendDraft() {
       draftId,
       body,
       attachments,
+      toRecipients,
     }: {
       draftId: string;
       body?: { contentType: string; content: string };
       attachments?: ComposerAttachment[];
+      /** Para reenvíos: destinatarios del borrador antes de enviar. */
+      toRecipients?: { emailAddress: { address: string } }[];
     }) => {
-      // If body provided, update draft first
-      if (body) {
+      const patch: Record<string, unknown> = {};
+      if (body) patch.body = body;
+      if (toRecipients?.length) patch.toRecipients = toRecipients;
+      if (Object.keys(patch).length > 0) {
         const { error: updateError } = await supabase.functions.invoke("microsoft-api", {
-          body: { action: "update-draft", params: { draftId, payload: { body } } },
+          body: { action: "update-draft", params: { draftId, payload: patch } },
         });
         if (updateError) throw updateError;
       }

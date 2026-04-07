@@ -31,6 +31,7 @@ import {
   useMailFolders,
   useEmailConversation,
   useCreateReplyDraft,
+  useCreateForwardDraft,
   useSendDraft,
   useCreateMailFolder,
   useMoveEmail,
@@ -218,7 +219,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv8-editor-ltr";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv9-signature-forward";
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 
@@ -284,6 +285,7 @@ export function EmailView() {
   const markUnread = useMarkEmailUnread();
   const archiveEmail = useArchiveEmail();
   const createReplyDraft = useCreateReplyDraft();
+  const createForwardDraft = useCreateForwardDraft();
   const sendDraft = useSendDraft();
   const createMailFolder = useCreateMailFolder();
   const moveEmail = useMoveEmail();
@@ -338,7 +340,19 @@ export function EmailView() {
     setDraftId(null);
     setDraftHtml("");
     setReplyAttachments([]);
-    if (action === "forward") return;
+    if (action === "forward") {
+      try {
+        const draft = await createForwardDraft.mutateAsync({ messageId: selectedEmailId });
+        if (draft?.id) {
+          setDraftId(draft.id);
+          setDraftHtml(draft.body?.content || "");
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo preparar el reenvío con firma");
+        setEmailAction(null);
+      }
+      return;
+    }
     try {
       const draft = await createReplyDraft.mutateAsync({
         messageId: selectedEmailId,
@@ -360,10 +374,27 @@ export function EmailView() {
         toast.error(error);
         return;
       }
-      forwardEmail.mutate(
-        { messageId: selectedEmailId, comment: stripTags(draftHtml), toRecipients: forwardRecipients, attachments: replyAttachments },
-        { onSuccess: resetAction }
-      );
+      if (draftId) {
+        sendDraft.mutate(
+          {
+            draftId,
+            body: { contentType: "HTML", content: draftHtml },
+            attachments: replyAttachments,
+            toRecipients: forwardRecipients.map((email) => ({ emailAddress: { address: email } })),
+          },
+          { onSuccess: resetAction }
+        );
+      } else {
+        forwardEmail.mutate(
+          {
+            messageId: selectedEmailId,
+            comment: stripTags(draftHtml),
+            toRecipients: forwardRecipients,
+            attachments: replyAttachments,
+          },
+          { onSuccess: resetAction }
+        );
+      }
       return;
     }
     if (draftId) {
@@ -576,7 +607,11 @@ export function EmailView() {
     resetAction,
   ]);
 
-  const isSending = replyEmail.isPending || forwardEmail.isPending || sendDraft.isPending;
+  const isSending =
+    replyEmail.isPending ||
+    forwardEmail.isPending ||
+    sendDraft.isPending ||
+    createForwardDraft.isPending;
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
 
   const folderRow = (folder: any) => {
@@ -1554,9 +1589,10 @@ export function EmailView() {
                   />
                 )}
 
-                {createReplyDraft.isPending ? (
+                {createReplyDraft.isPending || createForwardDraft.isPending ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Preparando respuesta con firma...
+                    <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                    {emailAction === "forward" ? "Preparando reenvío con firma…" : "Preparando respuesta con firma…"}
                   </div>
                 ) : (
                   <>

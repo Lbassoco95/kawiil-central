@@ -567,6 +567,120 @@ Deno.serve(async (req) => {
         break;
       }
 
+      /** Borrador de reenvío (incluye plantilla y firma de Outlook como en el cliente). */
+      case "create-forward-draft": {
+        const messageId = params?.messageId;
+        if (!messageId) throw new Error("messageId required");
+        const res = await fetch(`${GRAPH_BASE}/me/messages/${messageId}/createForward`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ comment: "" }),
+        });
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`CreateForwardDraft failed [${res.status}]: ${errBody}`);
+        }
+        result = await res.json();
+        break;
+      }
+
+      /**
+       * Firma para “Nuevo correo”: Graph no expone la firma HTML de Outlook de forma oficial.
+       * Construimos HTML desde el perfil /me (Microsoft) y, si es posible, intentamos leer un borrador
+       * temporal por si el servidor inyectó contenido adicional.
+       */
+      case "get-email-signature-html": {
+        const escapeHtml = (s: string) =>
+          s
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+
+        const me = await graphRequest(
+          accessToken,
+          "/me?$select=displayName,mail,userPrincipalName,jobTitle,mobilePhone,officeLocation",
+        );
+        const displayName = String(me?.displayName || "").trim();
+        const mail = String(me?.mail || me?.userPrincipalName || "").trim();
+        const title = String(me?.jobTitle || "").trim();
+        const phone = String(me?.mobilePhone || "").trim();
+        const office = String(me?.officeLocation || "").trim();
+
+        let fallbackHtml = `<p><br></p><p style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#333;">`;
+        if (displayName) fallbackHtml += `<strong>${escapeHtml(displayName)}</strong><br/>`;
+        if (title) fallbackHtml += `${escapeHtml(title)}<br/>`;
+        if (office) fallbackHtml += `${escapeHtml(office)}<br/>`;
+        if (mail) {
+          fallbackHtml += `<a href="mailto:${escapeHtml(mail)}">${escapeHtml(mail)}</a>`;
+        }
+        if (phone) fallbackHtml += `<br/>${escapeHtml(phone)}`;
+        fallbackHtml += `</p>`;
+
+        let draftProbeId: string | null = null;
+        try {
+          const createRes = await fetch(`${GRAPH_BASE}/me/messages`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              subject: "",
+              body: {
+                contentType: "HTML",
+                content: '<p id="kawiil-sig-anchor"></p>',
+              },
+              isDraft: true,
+            }),
+          });
+          if (createRes.ok) {
+            const created = await createRes.json();
+            draftProbeId = created?.id || null;
+            if (draftProbeId) {
+              await new Promise((r) => setTimeout(r, 450));
+              const msg = await graphRequest(
+                accessToken,
+                `/me/messages/${draftProbeId}?$select=body`,
+              );
+              const content = String(msg?.body?.content || "");
+              await fetch(`${GRAPH_BASE}/me/messages/${draftProbeId}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${accessToken}` },
+              });
+              draftProbeId = null;
+              const trimmed = content.replace(/\s/g, "");
+              if (
+                trimmed.length > 120 &&
+                (content.includes("<table") ||
+                  content.toLowerCase().includes("mso") ||
+                  content.split(/<br\s*\/?>/i).length > 4)
+              ) {
+                result = { html: content, source: "draft_probe", displayName, mail };
+                break;
+              }
+            }
+          }
+        } catch {
+          if (draftProbeId) {
+            try {
+              await fetch(`${GRAPH_BASE}/me/messages/${draftProbeId}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${accessToken}` },
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+
+        result = { html: fallbackHtml, source: "microsoft_profile", displayName, mail };
+        break;
+      }
+
       case "update-draft": {
         const draftId = params?.draftId;
         const payload = params?.payload;

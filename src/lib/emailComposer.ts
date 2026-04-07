@@ -16,17 +16,86 @@ export type ComposerAttachment = {
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_ATTACHMENT_COUNT = 10;
-const ALLOWED_FILE_TYPES = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/plain",
-  "application/zip",
-];
+
+/** Extensiones habituales de ofimática e imágenes (si el navegador no envía MIME). */
+const ALLOWED_EXTENSIONS = new Set([
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "txt",
+  "csv",
+  "zip",
+  "rar",
+  "7z",
+  "msg",
+  "eml",
+  "rtf",
+  "pages",
+  "numbers",
+  "key",
+  "mp4",
+  "mov",
+  "mp3",
+  "wav",
+]);
+
+function extensionOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
+}
+
+/** Mapa común extensión → MIME cuando `File.type` viene vacío. */
+const EXT_TO_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain",
+  csv: "text/csv",
+  zip: "application/zip",
+  rar: "application/vnd.rar",
+  "7z": "application/x-7z-compressed",
+  msg: "application/vnd.ms-outlook",
+  eml: "message/rfc822",
+  rtf: "application/rtf",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+};
+
+function resolveContentType(file: File): string {
+  if (file.type && file.type !== "application/octet-stream") return file.type;
+  const ext = extensionOf(file.name);
+  return EXT_TO_MIME[ext] || "application/octet-stream";
+}
+
+function isAllowedAttachment(file: File): boolean {
+  const ext = extensionOf(file.name);
+  if (ALLOWED_EXTENSIONS.has(ext)) return true;
+  if (file.type && file.type.startsWith("image/")) return true;
+  if (file.type && file.type.startsWith("video/")) return true;
+  if (file.type && file.type.startsWith("audio/")) return true;
+  if (file.type === "application/octet-stream" && ext) return ALLOWED_EXTENSIONS.has(ext);
+  return false;
+}
 
 export function parseRecipients(value: string): string[] {
   return value
@@ -92,12 +161,15 @@ export async function filesToComposerAttachments(files: FileList | File[]): Prom
     if (file.size > MAX_FILE_SIZE_BYTES) {
       throw new Error(`El archivo ${file.name} supera 10MB`);
     }
-    if (file.type && !ALLOWED_FILE_TYPES.includes(file.type)) {
-      throw new Error(`Tipo de archivo no permitido: ${file.name}`);
+    if (!isAllowedAttachment(file)) {
+      throw new Error(
+        `Tipo de archivo no permitido: ${file.name}. Usa documentos, imágenes, zip u ofimática habituales.`,
+      );
     }
+    const contentType = resolveContentType(file);
     attachments.push({
       name: file.name,
-      contentType: file.type || "application/octet-stream",
+      contentType,
       size: file.size,
       contentBytes: await fileToBase64(file),
     });
