@@ -115,7 +115,7 @@ export function useTasksForCalendar(startDate?: string, endDate?: string) {
     queryKey: ["tasks-calendar", user?.id, startDate, endDate],
     queryFn: async () => {
       const selectCols =
-        "id, title, due_date, status, priority, area, client_id, project_id, assigned_to, is_subtask, clients(name), projects(name)";
+        "id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)";
 
       let query = supabase
         .from("tasks")
@@ -128,30 +128,9 @@ export function useTasksForCalendar(startDate?: string, endDate?: string) {
       if (startDate) query = query.gte("due_date", startDate);
       if (endDate) query = query.lte("due_date", endDate);
 
-      let { data, error } = await query;
-
-      // Si falla (columna is_subtask ausente, caché de esquema, etc.), misma consulta sin ese campo.
-      if (error) {
-        let q2 = supabase
-          .from("tasks")
-          .select(
-            "id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)"
-          )
-          .not("due_date", "is", null)
-          .neq("status", "completada" as any)
-          .neq("status", "cancelada" as any)
-          .order("due_date", { ascending: true });
-        if (startDate) q2 = q2.gte("due_date", startDate);
-        if (endDate) q2 = q2.lte("due_date", endDate);
-        const r2 = await q2;
-        if (r2.error) throw r2.error;
-        return (r2.data ?? []) as CalendarTaskRow[];
-      }
-
-      const rows = (data ?? []) as (CalendarTaskRow & { is_subtask?: boolean | null })[];
-      const uid = user?.id;
-      // Subtareas de checklist: solo en calendario si las tiene asignadas el usuario (evita ruido).
-      return rows.filter((t) => t.is_subtask !== true || (uid != null && t.assigned_to === uid));
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as CalendarTaskRow[];
     },
     enabled: !!user && !!startDate && !!endDate,
   });

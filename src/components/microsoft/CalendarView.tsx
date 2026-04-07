@@ -104,6 +104,14 @@ function taskDetailHref(taskId: string) {
   return `/tareas?taskId=${encodeURIComponent(taskId)}`;
 }
 
+/** Fecha de vencimiento como yyyy-MM-dd (evita desajuste si due_date viene con hora/Z). */
+function taskDueDateKey(due: string | null | undefined): string | null {
+  if (!due || typeof due !== "string") return null;
+  const s = due.trim();
+  if (s.length >= 10) return s.slice(0, 10);
+  return null;
+}
+
 export function CalendarView() {
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
@@ -267,8 +275,8 @@ export function CalendarView() {
     const map = new Map<string, any[]>();
     if (!showKawiilTasks) return map;
     kawiilTasks.forEach((task: any) => {
-      if (!task.due_date) return;
-      const dateKey = task.due_date;
+      const dateKey = taskDueDateKey(task.due_date);
+      if (!dateKey) return;
       if (!map.has(dateKey)) map.set(dateKey, []);
       map.get(dateKey)!.push(task);
     });
@@ -283,8 +291,9 @@ export function CalendarView() {
   const todayEvents = getEventsForDay(new Date());
   const todayTasks = getTasksForDay(new Date());
   const upcomingTasks = kawiilTasks.filter((t: any) => {
-    if (!t.due_date) return false;
-    const d = differenceInDays(parseISO(t.due_date), new Date());
+    const dk = taskDueDateKey(t.due_date);
+    if (!dk) return false;
+    const d = differenceInDays(parseISO(dk), new Date());
     return d >= 0 && d <= 7;
   }).slice(0, 8);
 
