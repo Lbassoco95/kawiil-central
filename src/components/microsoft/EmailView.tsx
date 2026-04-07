@@ -218,7 +218,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv7-flex";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv8-editor-ltr";
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 

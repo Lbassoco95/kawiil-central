@@ -15,6 +15,7 @@ import {
   Undo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { stripBidiControlChars } from "@/lib/emailComposer";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -23,6 +24,27 @@ import UnderlineExtension from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import { TextStyle } from "@tiptap/extension-text-style";
+
+const FontSizeExtension = Extension.create({
+  name: "fontSize",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["textStyle"],
+        attributes: {
+          fontSize: {
+            default: null,
+            parseHTML: (element) => element.style.fontSize?.replace("px", "") || null,
+            renderHTML: (attributes) => {
+              if (!attributes.fontSize) return {};
+              return { style: `font-size: ${attributes.fontSize}px` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
 
 export type RichTextEditorHandle = {
   setHtml: (html: string) => void;
@@ -37,62 +59,58 @@ interface Props {
   onHtmlChange?: (html: string) => void;
   /** Contenido extra al final de la barra (p. ej. botón IA) */
   toolbarEndSlot?: ReactNode;
+  /**
+   * Dirección del texto en el área editable. Por defecto `ltr` para evitar que el borrador
+   * de Outlook/HTML herede RTL y el cursor escriba “al revés” (dir=auto + unicode-bidi).
+   */
+  textDirection?: "ltr" | "rtl" | "auto";
 }
 
 export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(function RichTextEditor(
-  { initialHtml, placeholder, className, onHtmlChange, toolbarEndSlot },
+  { initialHtml, placeholder, className, onHtmlChange, toolbarEndSlot, textDirection = "ltr" },
   ref
 ) {
-  const FontSize = Extension.create({
-    name: "fontSize",
-    addGlobalAttributes() {
-      return [
-        {
-          types: ["textStyle"],
-          attributes: {
-            fontSize: {
-              default: null,
-              parseHTML: (element) => element.style.fontSize?.replace("px", "") || null,
-              renderHTML: (attributes) => {
-                if (!attributes.fontSize) return {};
-                return { style: `font-size: ${attributes.fontSize}px` };
-              },
-            },
-          },
-        },
-      ];
-    },
-  });
-
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit,
       TextStyle,
-      FontSize,
+      FontSizeExtension,
       UnderlineExtension,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Link.configure({ openOnClick: false, autolink: true, linkOnPaste: true }),
       Placeholder.configure({ placeholder: placeholder || "Escribe aquí..." }),
     ],
-    content: initialHtml || "<p></p>",
+    content: stripBidiControlChars(initialHtml || "") || "<p></p>",
     editorProps: {
       attributes: {
         class:
           "min-h-[120px] max-h-[300px] overflow-y-auto px-3 py-2 text-sm focus:outline-none prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary",
-        dir: "auto",
-        style: "unicode-bidi: plaintext;",
+        dir: textDirection,
+        // LTR por defecto: evita orden visual inverso al escribir cuando el HTML del borrador trae RTL.
+        style:
+          textDirection === "ltr"
+            ? "direction: ltr; unicode-bidi: isolate;"
+            : textDirection === "rtl"
+              ? "direction: rtl; unicode-bidi: isolate;"
+              : undefined,
+      },
+      transformPastedHTML(html) {
+        return stripBidiControlChars(html);
+      },
+      transformPastedText(text) {
+        return stripBidiControlChars(text);
       },
     },
     onUpdate: ({ editor: instance }) => {
       onHtmlChange?.(instance.getHTML());
     },
-  });
+  }, [textDirection, placeholder]);
 
   useImperativeHandle(ref, () => ({
     setHtml(html: string) {
       if (!editor) return;
-      editor.commands.setContent(html || "<p></p>", false);
+      editor.commands.setContent(stripBidiControlChars(html || "") || "<p></p>", false);
       onHtmlChange?.(editor.getHTML());
     },
     focus() {
@@ -109,7 +127,15 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(function R
   };
 
   return (
-    <div className={cn("border border-input rounded-md bg-background", className)}>
+    <div
+      className={cn(
+        "border border-input rounded-md bg-background kawiil-email-editor",
+        textDirection === "ltr" && "[&_.ProseMirror]:[direction:ltr] [&_.ProseMirror_p]:[direction:ltr]",
+        textDirection === "rtl" && "[&_.ProseMirror]:[direction:rtl]",
+        className,
+      )}
+      dir={textDirection === "auto" ? undefined : textDirection}
+    >
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border bg-muted/30 flex-wrap">
         <Select
           value={activeFontSize}

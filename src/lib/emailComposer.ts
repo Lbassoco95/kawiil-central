@@ -1,3 +1,11 @@
+/**
+ * Elimina marcas de dirección Unicode invisibles (RLO, LRO, PDF, etc.) que a veces vienen
+ * pegadas desde correos y hacen que el cursor escriba “al revés”.
+ */
+export function stripBidiControlChars(input: string): string {
+  return input.replace(/[\u202A-\u202E\u2066-\u2069]/g, "");
+}
+
 export type ComposerAttachment = {
   name: string;
   contentType: string;
