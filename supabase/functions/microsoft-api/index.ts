@@ -17,6 +17,26 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+/** Igual que en email-detail: evita doble codificación (%252F) y alinea rutas con /me/messages/{id} sin encodeURIComponent. */
+function normalizeGraphMessageOrAttachmentId(raw: string | undefined): string {
+  if (!raw || typeof raw !== "string") return "";
+  let s = raw.trim();
+  if (!s) return "";
+  for (let i = 0; i < 2; i++) {
+    if (!/%[0-9A-Fa-f]{2}/.test(s)) break;
+    try {
+      const d = decodeURIComponent(s);
+      if (d === s) break;
+      s = d;
+    } catch {
+      break;
+    }
+  }
+  return s;
+}
+
+const GRAPH_MAIL_PREFER_IMMUTABLE = { Prefer: 'IdType="ImmutableId"' };
+
 async function graphRequest(accessToken: string, path: string, init?: RequestInit) {
   const res = await fetch(`${GRAPH_BASE}${path}`, {
     ...init,
@@ -296,6 +316,7 @@ Deno.serve(async (req) => {
         result = await graphRequest(
           accessToken,
           `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${search}`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;
       }
@@ -327,10 +348,11 @@ Deno.serve(async (req) => {
       }
 
       case "email-detail": {
-        result = await graphRequest(
-          accessToken,
-          `/me/messages/${params.messageId}`
-        );
+        const mid = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        if (!mid) throw new Error("messageId required");
+        result = await graphRequest(accessToken, `/me/messages/${mid}`, {
+          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+        });
         break;
       }
 
@@ -551,7 +573,8 @@ Deno.serve(async (req) => {
         // Use $search instead of $filter to avoid InefficientFilter error
         const data = await graphRequest(
           accessToken,
-          `/me/messages?$search="conversationId:${convId}"&$top=20`
+          `/me/messages?$search="conversationId:${convId}"&$top=20`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         result = data?.value || [];
         break;
@@ -725,17 +748,17 @@ Deno.serve(async (req) => {
       }
 
       case "message-attachment-content": {
-        const messageId = params?.messageId;
-        const attachmentId = params?.attachmentId;
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const attachmentId = normalizeGraphMessageOrAttachmentId(params?.attachmentId);
         if (!messageId || !attachmentId) {
           throw new Error("messageId y attachmentId son requeridos");
         }
-        const mid = encodeURIComponent(messageId);
-        const aid = encodeURIComponent(attachmentId);
-        /** No pedir contentBytes en $select: Graph a veces falla u omite; el binario va por /$value. */
+        /** Misma convención que email-detail: sin encodeURIComponent en el path (evita ITEM_NOT_FOUND por doble escape). */
         const metaPath =
-          `/me/messages/${mid}/attachments/${aid}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
-        const att = await graphRequest(accessToken, metaPath);
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
+        const att = await graphRequest(accessToken, metaPath, {
+          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+        });
         const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
         if (odataType && String(odataType).includes("itemAttachment")) {
           throw new Error("Este tipo de adjunto no se puede previsualizar");
@@ -746,11 +769,12 @@ Deno.serve(async (req) => {
 
         let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
 
-        const valueUrl = `${GRAPH_BASE}/me/messages/${mid}/attachments/${aid}/$value`;
+        const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
         const valueRes = await fetch(valueUrl, {
           headers: {
             Authorization: `Bearer ${accessToken}`,
             Accept: "application/octet-stream",
+            ...GRAPH_MAIL_PREFER_IMMUTABLE,
           },
         });
         if (!valueRes.ok) {
@@ -779,11 +803,12 @@ Deno.serve(async (req) => {
       }
 
       case "email-attachments": {
-        const messageId = params?.messageId;
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
         if (!messageId) throw new Error("messageId required");
         result = await graphRequest(
           accessToken,
-          `/me/messages/${encodeURIComponent(messageId)}/attachments`,
+          `/me/messages/${messageId}/attachments?$top=100`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;
       }

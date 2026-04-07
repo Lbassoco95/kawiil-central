@@ -134,6 +134,15 @@ export async function fetchMessageAttachmentContent(messageId: string, attachmen
   }
 
   if (!res.ok) {
+    const code =
+      parsed && typeof parsed === "object" && parsed !== null && "code" in parsed
+        ? String((parsed as { code: unknown }).code)
+        : null;
+    if (code === "ITEM_NOT_FOUND") {
+      throw new Error(
+        "El mensaje o el adjunto ya no coinciden con Microsoft (IDs desactualizados o elemento movido). Vuelve a la lista y abre el correo de nuevo.",
+      );
+    }
     const errMsg =
       parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
         ? String((parsed as { error: unknown }).error)
