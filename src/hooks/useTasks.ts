@@ -312,6 +312,8 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ["project"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["briefing-team-deadlines"] });
       toast.success("Tarea creada exitosamente");
 
       if (data && data.organization_id) {
@@ -488,6 +490,8 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["briefing-team-deadlines"] });
       if (vars.title) {
         queryClient.invalidateQueries({ queryKey: ["linked-task-titles"] });
         queryClient.invalidateQueries({ queryKey: ["accounting-periods"] });
@@ -555,6 +559,8 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: ["project"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["briefing-team-deadlines"] });
       toast.success("Tarea eliminada");
     },
     onError: (err: Error) => toast.error("Error al eliminar tarea: " + err.message),

@@ -56,10 +56,10 @@ export function TeamDashboard() {
   const { data: allTasks } = useQuery({
     queryKey: ["dashboard-all-tasks"],
     queryFn: async () => {
+      // Incluye subtareas: el tablero /tareas filtra is_subtask; las métricas de equipo deben reflejar toda la carga.
       const { data, error } = await supabase
         .from("tasks")
         .select("id, title, status, priority, due_date, assigned_to, project_id, client_id, area")
-        .or("is_subtask.eq.false,is_subtask.is.null")
         .order("due_date", { ascending: true });
       if (error) throw error;
       return data;
