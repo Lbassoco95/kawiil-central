@@ -776,6 +776,21 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Microsoft API error:", error);
     const message = (error as Error).message || "Unknown error";
+    const lower = message.toLowerCase();
+    /** Red de seguridad: si createReply escapó sin mapear, no devolver 500 (evita runtime en cliente / Lovable). */
+    if (lower.includes("createreplydraft") && lower.includes("errorinvalidreferenceitem")) {
+      return new Response(
+        JSON.stringify({
+          code: "REFERENCE_NOT_SUPPORTED",
+          error:
+            "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.",
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     if (message.startsWith("MICROSOFT_PERMISSION_REQUIRED:")) {
       return new Response(JSON.stringify({

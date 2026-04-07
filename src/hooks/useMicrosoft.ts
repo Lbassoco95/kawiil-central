@@ -477,7 +477,26 @@ async function readSupabaseFunctionErrorBody(error: unknown): Promise<string> {
   return "";
 }
 
-function textImpliesInvalidReplyReference(...parts: string[]): boolean {
+function serializeUnknownError(err: unknown): string {
+  if (err == null) return "";
+  if (err instanceof Error) {
+    const cause = "cause" in err ? (err as Error & { cause?: unknown }).cause : undefined;
+    return `${err.message}\n${serializeUnknownError(cause)}`;
+  }
+  if (typeof err === "object") {
+    try {
+      return JSON.stringify(err, Object.getOwnPropertyNames(err as object));
+    } catch {
+      return String(err);
+    }
+  }
+  return String(err);
+}
+
+const UNSUPPORTED_REPLY_MSG =
+  "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.";
+
+function mergedPayloadImpliesInvalidReplyReference(...parts: string[]): boolean {
   const t = parts.join("\n").toLowerCase();
   return t.includes("errorinvalidreferenceitem") || t.includes("reference_not_supported");
 }
@@ -485,32 +504,43 @@ function textImpliesInvalidReplyReference(...parts: string[]): boolean {
 export function useCreateReplyDraft() {
   return useMutation({
     mutationFn: async ({ messageId, replyAll }: { messageId: string; replyAll?: boolean }) => {
-      const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "create-reply-draft", params: { messageId, replyAll } },
-      });
-      const errBody = await readSupabaseFunctionErrorBody(error);
-      const dataStr =
-        data !== null && data !== undefined && typeof data === "object" ? JSON.stringify(data) : String(data ?? "");
-      const msg = String((error as Error)?.message ?? "");
-      const dataErr = typeof (data as { error?: unknown })?.error === "string" ? (data as { error: string }).error : "";
+      try {
+        const { data, error } = await supabase.functions.invoke("microsoft-api", {
+          body: { action: "create-reply-draft", params: { messageId, replyAll } },
+        });
+        const errBody = await readSupabaseFunctionErrorBody(error);
+        const errSerialized = serializeUnknownError(error);
+        const dataStr =
+          data !== null && data !== undefined && typeof data === "object" ? JSON.stringify(data) : String(data ?? "");
+        const msg = String((error as Error)?.message ?? "");
+        const rawDataErr = (data as { error?: unknown } | null)?.error;
+        const dataErr =
+          typeof rawDataErr === "string" ? rawDataErr : rawDataErr !== undefined ? JSON.stringify(rawDataErr) : "";
 
-      if ((data as { code?: string } | null)?.code === "REFERENCE_NOT_SUPPORTED") {
-        return {
-          unsupported: true as const,
-          message: String((data as { error?: string }).error || "Este mensaje no admite respuesta con borrador."),
-        };
+        if ((data as { code?: string } | null)?.code === "REFERENCE_NOT_SUPPORTED") {
+          return {
+            unsupported: true as const,
+            message: String((data as { error?: string }).error || "Este mensaje no admite respuesta con borrador."),
+          };
+        }
+
+        const merged = [dataStr, msg, errBody, dataErr, errSerialized].join("\n");
+        if (mergedPayloadImpliesInvalidReplyReference(merged)) {
+          return { unsupported: true as const, message: UNSUPPORTED_REPLY_MSG };
+        }
+
+        if (error) throw error;
+        if (data && typeof data === "object" && "error" in data && rawDataErr !== undefined && rawDataErr !== null) {
+          throw new Error(typeof rawDataErr === "string" ? rawDataErr : JSON.stringify(rawDataErr));
+        }
+        return data as CreateReplyDraftResult;
+      } catch (e) {
+        const s = `${e instanceof Error ? e.message : String(e)}\n${serializeUnknownError(e)}`.toLowerCase();
+        if (s.includes("errorinvalidreferenceitem")) {
+          return { unsupported: true as const, message: UNSUPPORTED_REPLY_MSG };
+        }
+        throw e;
       }
-      if (textImpliesInvalidReplyReference(dataStr, msg, errBody, dataErr)) {
-        return {
-          unsupported: true as const,
-          message: "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.",
-        };
-      }
-      if (error) throw error;
-      if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
-        throw new Error((data as { error: string }).error);
-      }
-      return data as CreateReplyDraftResult;
     },
   });
 }
