@@ -31,7 +31,6 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
         .from("tasks")
         .select("title, status, priority, due_date, area, clients(name)")
         .eq("assigned_to", user!.id)
-        .eq("is_subtask", false)
         .in("status", ["pendiente", "en_progreso", "en_revision"])
         .order("due_date", { ascending: true })
         .limit(15);
@@ -48,7 +47,7 @@ export function DailyBriefing({ tasksCount, completedToday, overdueCount, remind
       const { data, error } = await supabase
         .from("tasks")
         .select("title, priority, due_date, assigned_to")
-        .eq("is_subtask", false)
+        .or("is_subtask.eq.false,is_subtask.is.null")
         .in("status", ["pendiente", "en_progreso"])
         .gte("due_date", todayKey)
         .lte("due_date", futureDate.toISOString().split("T")[0])

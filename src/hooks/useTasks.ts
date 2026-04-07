@@ -63,7 +63,7 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
       let query = supabase
         .from("tasks")
         .select("*, clients(name), projects(name)")
-        .eq("is_subtask", false)
+        .or("is_subtask.eq.false,is_subtask.is.null")
         .order("created_at", { ascending: false });
 
       if (filters?.area && filters.area !== "todas") {
@@ -84,7 +84,7 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
   });
 }
 
-/** Tareas del tablero (`tasks`) asignadas al usuario actual; no incluye pasos de proyecto. */
+/** Tareas del tablero (`tasks`) asignadas al usuario (incluye subtareas para que sigan visibles en “Mis tareas”). */
 export function useMyAssignedTasks() {
   const { user } = useAuth();
 
@@ -95,7 +95,6 @@ export function useMyAssignedTasks() {
         .from("tasks")
         .select("*, clients(name), projects(name)")
         .eq("assigned_to", user!.id)
-        .eq("is_subtask", false)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return data as Task[];
@@ -108,16 +107,19 @@ export function useTasksForCalendar(startDate?: string, endDate?: string) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["tasks-calendar", startDate, endDate],
+    queryKey: ["tasks-calendar", user?.id, startDate, endDate],
     queryFn: async () => {
       let query = supabase
         .from("tasks")
         .select("id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)")
-        .eq("is_subtask", false)
         .not("due_date", "is", null)
         .neq("status", "completada" as any)
         .neq("status", "cancelada" as any)
         .order("due_date", { ascending: true });
+
+      query = query.or(
+        `is_subtask.eq.false,is_subtask.is.null,and(is_subtask.eq.true,assigned_to.eq.${user!.id})`
+      );
 
       if (startDate) query = query.gte("due_date", startDate);
       if (endDate) query = query.lte("due_date", endDate);
