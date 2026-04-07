@@ -3,20 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-async function readFunctionsHttpErrorBody(error: unknown): Promise<string> {
-  if (!error || typeof error !== "object") return "";
-  const e = error as Record<string, unknown>;
-  const resp = e.context ?? e.response;
-  if (resp instanceof Response) {
-    try {
-      return await resp.clone().text();
-    } catch {
-      return "";
-    }
-  }
-  return "";
-}
-
 type AttachmentPayload = {
   contentBytes: string;
   contentType: string;
@@ -114,45 +100,59 @@ export function base64ToBlobUrl(contentBytes: string, contentType: string): stri
 }
 
 /**
- * Descarga bytes del adjunto vía microsoft-api (siempre binario Graph /$value en el servidor).
+ * Descarga bytes del adjunto vía microsoft-api (Graph /$value en el servidor).
+ * No usa `functions.invoke`: el cliente de Supabase hace `response.json()` y falla con cuerpo vacío o truncado.
  */
 export async function fetchMessageAttachmentContent(messageId: string, attachmentId: string): Promise<AttachmentPayload> {
   const body = { action: "message-attachment-content", params: { messageId, attachmentId } };
 
-  let { data, error } = await supabase.functions.invoke("microsoft-api", { body });
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  if (!token || !SUPABASE_URL || !SUPABASE_ANON) {
+    throw new Error("Sesión no disponible para cargar adjuntos.");
+  }
 
-  if (!hasContentBytes(data)) {
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (token && SUPABASE_URL && SUPABASE_ANON) {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/microsoft-api`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          apikey: SUPABASE_ANON,
-        },
-        body: JSON.stringify(body),
-      });
-      const json = (await res.json().catch(() => null)) as unknown;
-      if (res.ok && hasContentBytes(json)) {
-        data = json;
-        error = null;
-      }
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/microsoft-api`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      apikey: SUPABASE_ANON,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  const trimmed = text.trim();
+  let parsed: unknown = null;
+  if (trimmed) {
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      throw new Error(`Respuesta inválida del servidor (${res.status}). ${trimmed.slice(0, 160)}`);
     }
   }
 
-  if (hasContentBytes(data)) {
-    return data;
+  if (!res.ok) {
+    const errMsg =
+      parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
+        ? String((parsed as { error: unknown }).error)
+        : trimmed.slice(0, 400) || `Error HTTP ${res.status}`;
+    throw new Error(errMsg);
   }
 
-  const extra = await readFunctionsHttpErrorBody(error);
-  const hint = [extra, typeof data === "object" && data && "error" in data ? String((data as { error: unknown }).error) : "", error instanceof Error ? error.message : ""]
-    .filter(Boolean)
-    .join(" ")
-    .slice(0, 500);
+  if (!hasContentBytes(parsed)) {
+    const serverErr =
+      parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
+        ? String((parsed as { error: unknown }).error)
+        : null;
+    throw new Error(
+      serverErr ||
+        (trimmed
+          ? "El servidor respondió sin datos del adjunto (cuerpo incompleto o demasiado grande)."
+          : "El servidor respondió vacío. Comprueba que microsoft-api esté desplegada."),
+    );
+  }
 
-  throw new Error(
-    hint || "No se pudo cargar el adjunto. Comprueba la conexión con Microsoft y que la función microsoft-api esté desplegada.",
-  );
+  return parsed;
 }

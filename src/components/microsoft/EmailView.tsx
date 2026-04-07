@@ -233,7 +233,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv13-attachment-value-only";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv14-attachment-fetch-text";
 
 type AttachmentPreviewState = {
   url: string;
