@@ -472,7 +472,10 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
   const dropboxLinks = (task?.dropbox_links as any[]) ?? [];
   const areaLabel = task?.area ? getCelulaLabel(task.area) : null;
-  const parentTask = (task as Task & { parent_task?: { id: string; title: string } | null }).parent_task;
+  const parentTask =
+    task != null
+      ? ((task as Task & { parent_task?: { id: string; title: string } | null }).parent_task ?? null)
+      : null;
 
   const goToParentTask = (parentId: string) => {
     navigate(`/tareas?taskId=${parentId}`);
