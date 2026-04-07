@@ -106,27 +106,42 @@ export function useMyAssignedTasks() {
 export function useTasksForCalendar(startDate?: string, endDate?: string) {
   const { user } = useAuth();
 
+  type CalendarTaskRow = Pick<
+    Task,
+    "id" | "title" | "due_date" | "status" | "priority" | "area" | "client_id" | "project_id" | "assigned_to"
+  > & { clients?: { name: string } | null; projects?: { name: string } | null };
+
   return useQuery({
     queryKey: ["tasks-calendar", user?.id, startDate, endDate],
     queryFn: async () => {
-      let query = supabase
-        .from("tasks")
-        .select("id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)")
-        .not("due_date", "is", null)
-        .neq("status", "completada" as any)
-        .neq("status", "cancelada" as any)
-        .order("due_date", { ascending: true });
+      const selectCols =
+        "id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)";
 
-      query = query.or(
-        `is_subtask.eq.false,is_subtask.is.null,and(is_subtask.eq.true,assigned_to.eq.${user!.id})`
+      const applyCommonFilters = <Q extends ReturnType<typeof supabase.from>>(chain: Q) => {
+        let q = chain as any;
+        q = q.not("due_date", "is", null).neq("status", "completada").neq("status", "cancelada");
+        if (startDate) q = q.gte("due_date", startDate);
+        if (endDate) q = q.lte("due_date", endDate);
+        return q.order("due_date", { ascending: true });
+      };
+
+      // Dos consultas: PostgREST a veces falla con `and(...)` dentro de `.or()` en una sola cadena.
+      const boardQuery = applyCommonFilters(
+        supabase.from("tasks").select(selectCols).or("is_subtask.eq.false,is_subtask.is.null")
+      );
+      const mySubtasksQuery = applyCommonFilters(
+        supabase.from("tasks").select(selectCols).eq("is_subtask", true).eq("assigned_to", user!.id)
       );
 
-      if (startDate) query = query.gte("due_date", startDate);
-      if (endDate) query = query.lte("due_date", endDate);
+      const [boardRes, subRes] = await Promise.all([boardQuery, mySubtasksQuery]);
+      if (boardRes.error) throw boardRes.error;
+      if (subRes.error) throw subRes.error;
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as (Pick<Task, "id" | "title" | "due_date" | "status" | "priority" | "area" | "client_id" | "project_id" | "assigned_to"> & { clients?: { name: string } | null; projects?: { name: string } | null })[];
+      const byId = new Map<string, CalendarTaskRow>();
+      for (const row of boardRes.data ?? []) byId.set(row.id, row as CalendarTaskRow);
+      for (const row of subRes.data ?? []) byId.set(row.id, row as CalendarTaskRow);
+
+      return Array.from(byId.values()).sort((a, b) => (a.due_date || "").localeCompare(b.due_date || ""));
     },
     enabled: !!user && !!startDate && !!endDate,
   });
