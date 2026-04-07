@@ -462,19 +462,33 @@ export type CreateReplyDraftResult =
   | (Record<string, unknown> & { id: string })
   | { unsupported: true; message: string };
 
+function isReplyDraftInvalidReference(data: unknown, fnError: unknown): boolean {
+  if (data && typeof data === "object" && (data as { code?: string }).code === "REFERENCE_NOT_SUPPORTED") {
+    return true;
+  }
+  const blob = `${typeof data === "object" && data !== null ? JSON.stringify(data) : String(data ?? "")} ${String((fnError as Error)?.message ?? "")}`;
+  return blob.includes("ErrorInvalidReferenceItem");
+}
+
 export function useCreateReplyDraft() {
   return useMutation({
     mutationFn: async ({ messageId, replyAll }: { messageId: string; replyAll?: boolean }) => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "create-reply-draft", params: { messageId, replyAll } },
       });
-      if (error) throw error;
       if (data?.code === "REFERENCE_NOT_SUPPORTED") {
         return {
           unsupported: true as const,
           message: String(data.error || "Este mensaje no admite respuesta con borrador."),
         };
       }
+      if (isReplyDraftInvalidReference(data, error)) {
+        return {
+          unsupported: true as const,
+          message: "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.",
+        };
+      }
+      if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data as CreateReplyDraftResult;
     },
