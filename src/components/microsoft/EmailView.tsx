@@ -64,6 +64,12 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  filesToComposerAttachments,
+  parseRecipients,
+  validateRecipientGroups,
+  type ComposerAttachment,
+} from "@/lib/emailComposer";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
@@ -245,6 +251,7 @@ export function EmailView() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [replyAttachments, setReplyAttachments] = useState<ComposerAttachment[]>([]);
   const [showFolders, setShowFolders] = useState(false);
   /** Escritorio: panel de carpetas estrecho solo con iconos */
   const [foldersCollapsed, setFoldersCollapsed] = useState(readFoldersCollapsedPref);
@@ -330,6 +337,7 @@ export function EmailView() {
     setShowFullAI(false);
     setDraftId(null);
     setDraftHtml("");
+    setReplyAttachments([]);
     if (action === "forward") return;
     try {
       const draft = await createReplyDraft.mutateAsync({
@@ -346,16 +354,21 @@ export function EmailView() {
   const handleSendReply = async () => {
     if (!selectedEmailId) return;
     if (emailAction === "forward") {
-      if (!forwardTo.trim()) return;
+      const forwardRecipients = parseRecipients(forwardTo);
+      const error = validateRecipientGroups({ to: forwardRecipients });
+      if (error) {
+        toast.error(error);
+        return;
+      }
       forwardEmail.mutate(
-        { messageId: selectedEmailId, comment: stripTags(draftHtml), toRecipients: forwardTo.split(",").map((s) => s.trim()) },
+        { messageId: selectedEmailId, comment: stripTags(draftHtml), toRecipients: forwardRecipients, attachments: replyAttachments },
         { onSuccess: resetAction }
       );
       return;
     }
     if (draftId) {
       sendDraft.mutate(
-        { draftId, body: { contentType: "HTML", content: draftHtml } },
+        { draftId, body: { contentType: "HTML", content: draftHtml }, attachments: replyAttachments },
         { onSuccess: resetAction }
       );
     } else {
@@ -372,6 +385,25 @@ export function EmailView() {
     setDraftId(null);
     setForwardTo("");
     setShowFullAI(false);
+    setReplyAttachments([]);
+  };
+
+  const handleReplyAttachmentPick = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try {
+      const parsed = await filesToComposerAttachments(files);
+      setReplyAttachments((prev) => {
+        const merged = [...prev];
+        for (const item of parsed) {
+          if (!merged.some((existing) => existing.name === item.name && existing.size === item.size)) {
+            merged.push(item);
+          }
+        }
+        return merged;
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
+    }
   };
 
   const handleArchive = useCallback((emailId: string) => {
@@ -469,6 +501,16 @@ export function EmailView() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
+      if ((e.key === "Enter" && (e.metaKey || e.ctrlKey)) && emailAction) {
+        e.preventDefault();
+        void handleSendReply();
+        return;
+      }
+      if (e.key === "Escape" && emailAction) {
+        e.preventDefault();
+        resetAction();
+        return;
+      }
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
       if (
@@ -517,7 +559,22 @@ export function EmailView() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [allEmails, selectedEmailId, handleOpenEmail, emailAction, handleArchive, handleDelete]);
+  }, [
+    allEmails,
+    selectedEmailId,
+    handleOpenEmail,
+    emailAction,
+    handleArchive,
+    handleDelete,
+    draftHtml,
+    draftId,
+    forwardTo,
+    replyAttachments,
+    handleSendReply,
+    handleStartReply,
+    markUnread,
+    resetAction,
+  ]);
 
   const isSending = replyEmail.isPending || forwardEmail.isPending || sendDraft.isPending;
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
@@ -1502,12 +1559,45 @@ export function EmailView() {
                     <Loader2 className="h-4 w-4 animate-spin" /> Preparando respuesta con firma...
                   </div>
                 ) : (
-                  <RichTextEditor
-                    key={draftId || "new"}
-                    initialHtml={draftHtml}
-                    placeholder={emailAction === "forward" ? "Mensaje al reenviar..." : "Escribe tu respuesta..."}
-                    onHtmlChange={setDraftHtml}
-                  />
+                  <>
+                    <RichTextEditor
+                      key={draftId || "new"}
+                      initialHtml={draftHtml}
+                      placeholder={emailAction === "forward" ? "Mensaje al reenviar..." : "Escribe tu respuesta..."}
+                      onHtmlChange={setDraftHtml}
+                    />
+                    <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs">Adjuntos de respuesta</span>
+                        <label className="inline-flex cursor-pointer items-center rounded-md border px-2 py-1 text-xs">
+                          <Paperclip className="mr-1 h-3.5 w-3.5" />
+                          Adjuntar
+                          <input
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={(e) => void handleReplyAttachmentPick(e.target.files)}
+                          />
+                        </label>
+                      </div>
+                      {replyAttachments.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {replyAttachments.map((file) => (
+                            <div key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                              <span className="max-w-[180px] truncate">{file.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setReplyAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)))}
+                                aria-label={`Quitar ${file.name}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
 
                 <div className="flex justify-between items-center pt-1">

@@ -13,8 +13,14 @@ import { RichTextEditor, type RichTextEditorHandle } from "@/components/microsof
 import { useSendNewEmail } from "@/hooks/useMicrosoft";
 import { useOrgUsers, type OrgUser } from "@/hooks/useOrgUsers";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw } from "lucide-react";
+import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  filesToComposerAttachments,
+  parseRecipients,
+  validateRecipientGroups,
+  type ComposerAttachment,
+} from "@/lib/emailComposer";
 
 interface ComposeEmailDialogProps {
   open: boolean;
@@ -124,6 +130,8 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [hasAiDraft, setHasAiDraft] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastInstructionRef = useRef("");
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -146,6 +154,7 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
       setHasAiDraft(false);
       lastInstructionRef.current = "";
       bodyRef.current = "";
+      setAttachments([]);
     }
   }, [open]);
 
@@ -183,11 +192,14 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
   }, [subject, to]);
 
   const handleSend = async () => {
-    const toList = to.split(",").map((e) => e.trim()).filter(Boolean);
-    if (!toList.length) return;
-
-    const ccList = cc ? cc.split(",").map((e) => e.trim()).filter(Boolean) : [];
-    const bccList = bcc ? bcc.split(",").map((e) => e.trim()).filter(Boolean) : [];
+    const toList = parseRecipients(to);
+    const ccList = parseRecipients(cc);
+    const bccList = parseRecipients(bcc);
+    const recipientsError = validateRecipientGroups({ to: toList, cc: ccList, bcc: bccList });
+    if (recipientsError) {
+      toast.error(recipientsError);
+      return;
+    }
 
     await sendEmail.mutateAsync({
       to: toList,
@@ -195,9 +207,28 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
       bcc: bccList.length ? bccList : undefined,
       subject: subject || "(Sin asunto)",
       bodyHtml: bodyRef.current || "<p></p>",
+      attachments,
     });
 
     onOpenChange(false);
+  };
+
+  const handleAttachmentPick = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try {
+      const parsed = await filesToComposerAttachments(files);
+      setAttachments((prev) => {
+        const merged = [...prev];
+        for (const item of parsed) {
+          if (!merged.some((existing) => existing.name === item.name && existing.size === item.size)) {
+            merged.push(item);
+          }
+        }
+        return merged;
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
+    }
   };
 
   const iaToolbarButton = (
@@ -219,7 +250,15 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
         <DialogHeader>
           <DialogTitle>Nuevo correo</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 px-0">
+        <div
+          className="space-y-3 px-0"
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              void handleSend();
+            }
+          }}
+        >
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <Label htmlFor="compose-to" className="w-12 text-right text-sm text-muted-foreground shrink-0">
@@ -354,6 +393,46 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
               className="min-h-[200px]"
               toolbarEndSlot={iaToolbarButton}
             />
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => void handleAttachmentPick(e.target.files)}
+            />
+            <div
+              className="rounded-md border border-dashed p-3 text-sm text-muted-foreground"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                void handleAttachmentPick(e.dataTransfer.files);
+              }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs">Adjuntos (arrastra aquí o usa el botón)</span>
+                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="h-3.5 w-3.5 mr-1" />
+                  Adjuntar
+                </Button>
+              </div>
+              {attachments.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {attachments.map((file) => (
+                    <div key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                      <span className="max-w-[180px] truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)))}
+                        aria-label={`Quitar ${file.name}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

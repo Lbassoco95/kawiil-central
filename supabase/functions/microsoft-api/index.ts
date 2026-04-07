@@ -333,7 +333,11 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({ message: params.message }),
         });
-        result = { success: res.ok };
+        if (!res.ok) {
+          const errBody = await res.text();
+          throw new Error(`SendMail failed [${res.status}]: ${errBody}`);
+        }
+        result = { success: true };
         break;
       }
 
@@ -585,6 +589,26 @@ Deno.serve(async (req) => {
           const errBody = await res.text();
           throw new Error(`SendDraft failed [${res.status}]: ${errBody}`);
         }
+        result = { success: true };
+        break;
+      }
+
+      case "add-draft-attachment": {
+        const draftId = params?.draftId;
+        const attachment = params?.attachment;
+        if (!draftId || !attachment?.name || !attachment?.contentBytes) {
+          throw new Error("draftId y attachment son requeridos");
+        }
+        await graphRequest(accessToken, `/me/messages/${draftId}/attachments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: attachment.name,
+            contentType: attachment.contentType || "application/octet-stream",
+            contentBytes: attachment.contentBytes,
+          }),
+        });
         result = { success: true };
         break;
       }

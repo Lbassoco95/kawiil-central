@@ -8,6 +8,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import type { ComposerAttachment } from "@/lib/emailComposer";
 
 /** No leídos de Bandeja de entrada (Graph `mailFolders/inbox.unreadItemCount`). Sidebar + módulo correo. */
 export const INBOX_UNREAD_QUERY_KEY = ["inbox-unread-count"] as const;
@@ -28,6 +29,24 @@ function isNotConnectedError(data: any, error: any) {
     errorMessage.includes("not_connected") ||
     errorMessage.includes("microsoft not connected")
   );
+}
+
+function getActionableError(err: Error): string {
+  const message = String(err?.message || "");
+  const lower = message.toLowerCase();
+  if (lower.includes("permission_required")) {
+    return "Faltan permisos de Microsoft. Reconecta tu cuenta de Microsoft 365.";
+  }
+  if (lower.includes("not_connected")) {
+    return "Tu cuenta no está conectada. Vuelve a conectar Microsoft 365.";
+  }
+  if (lower.includes("invalid") || lower.includes("recipient")) {
+    return "Hay destinatarios inválidos. Revisa los correos en Para/CC/BCC.";
+  }
+  if (lower.includes("attachment") || lower.includes("size")) {
+    return "No se pudo adjuntar el archivo. Verifica tipo/tamaño e inténtalo de nuevo.";
+  }
+  return message;
 }
 
 export function useMicrosoftConnection() {
@@ -456,13 +475,29 @@ export function useSendDraft() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ draftId, body }: { draftId: string; body?: { contentType: string; content: string } }) => {
+    mutationFn: async ({
+      draftId,
+      body,
+      attachments,
+    }: {
+      draftId: string;
+      body?: { contentType: string; content: string };
+      attachments?: ComposerAttachment[];
+    }) => {
       // If body provided, update draft first
       if (body) {
         const { error: updateError } = await supabase.functions.invoke("microsoft-api", {
           body: { action: "update-draft", params: { draftId, payload: { body } } },
         });
         if (updateError) throw updateError;
+      }
+      if (attachments?.length) {
+        for (const attachment of attachments) {
+          const { error: attachError } = await supabase.functions.invoke("microsoft-api", {
+            body: { action: "add-draft-attachment", params: { draftId, attachment } },
+          });
+          if (attachError) throw attachError;
+        }
       }
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "send-draft", params: { draftId } },
@@ -475,7 +510,7 @@ export function useSendDraft() {
       invalidateInboxUnreadAndMailFolders(queryClient);
       toast.success("Correo enviado");
     },
-    onError: (err: Error) => toast.error("Error al enviar: " + err.message),
+    onError: (err: Error) => toast.error("Error al enviar: " + getActionableError(err)),
   });
 }
 
@@ -513,7 +548,7 @@ export function useReplyEmail() {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       toast.success("Respuesta enviada");
     },
-    onError: (err: Error) => toast.error("Error al responder: " + err.message),
+    onError: (err: Error) => toast.error("Error al responder: " + getActionableError(err)),
   });
 }
 
@@ -575,7 +610,17 @@ export function useForwardEmail() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ messageId, comment, toRecipients }: { messageId: string; comment: string; toRecipients: string[] }) => {
+    mutationFn: async ({
+      messageId,
+      comment,
+      toRecipients,
+      attachments,
+    }: {
+      messageId: string;
+      comment: string;
+      toRecipients: string[];
+      attachments?: ComposerAttachment[];
+    }) => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: {
           action: "forward",
@@ -583,6 +628,7 @@ export function useForwardEmail() {
             messageId,
             comment,
             toRecipients: toRecipients.map((email) => ({ emailAddress: { address: email } })),
+            attachments,
           },
         },
       });
@@ -592,7 +638,7 @@ export function useForwardEmail() {
     onSuccess: () => {
       toast.success("Correo reenviado");
     },
-    onError: (err: Error) => toast.error("Error al reenviar: " + err.message),
+    onError: (err: Error) => toast.error("Error al reenviar: " + getActionableError(err)),
   });
 }
 
@@ -669,12 +715,14 @@ export function useSendNewEmail() {
       bcc,
       subject,
       bodyHtml,
+      attachments,
     }: {
       to: string[];
       cc?: string[];
       bcc?: string[];
       subject: string;
       bodyHtml: string;
+      attachments?: ComposerAttachment[];
     }) => {
       const message: any = {
         subject,
@@ -687,6 +735,14 @@ export function useSendNewEmail() {
       if (bcc?.length) {
         message.bccRecipients = bcc.map((e) => ({ emailAddress: { address: e.trim() } }));
       }
+      if (attachments?.length) {
+        message.attachments = attachments.map((attachment) => ({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: attachment.name,
+          contentType: attachment.contentType,
+          contentBytes: attachment.contentBytes,
+        }));
+      }
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "send-email", params: { message } },
       });
@@ -698,7 +754,7 @@ export function useSendNewEmail() {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       toast.success("Correo enviado");
     },
-    onError: (err: Error) => toast.error("Error al enviar correo: " + err.message),
+    onError: (err: Error) => toast.error("Error al enviar correo: " + getActionableError(err)),
   });
 }
 

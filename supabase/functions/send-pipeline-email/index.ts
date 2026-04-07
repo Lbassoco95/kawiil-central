@@ -123,6 +123,11 @@ Deno.serve(async (req) => {
       subject?: string;
       body_html?: string;
       in_reply_to?: string;
+      attachments?: Array<{
+        name: string;
+        contentType: string;
+        contentBytes: string;
+      }>;
     };
 
     if (!body.lead_id) {
@@ -220,6 +225,14 @@ Deno.serve(async (req) => {
       body: { contentType: "HTML", content: htmlToSend },
       toRecipients: [{ emailAddress: { address: to } }],
     };
+    if (body.attachments?.length) {
+      messagePayload.attachments = body.attachments.map((attachment) => ({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        name: attachment.name,
+        contentType: attachment.contentType || "application/octet-stream",
+        contentBytes: attachment.contentBytes,
+      }));
+    }
 
     if (body.in_reply_to) {
       const om = await fetch(

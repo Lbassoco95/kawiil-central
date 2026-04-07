@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -29,6 +28,9 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { pipelineQueryKeys, useEmailTemplates } from "@/hooks/usePipeline";
 import { Mail, Eye } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
+import { RichTextEditor } from "@/components/microsoft/RichTextEditor";
+import { filesToComposerAttachments, type ComposerAttachment } from "@/lib/emailComposer";
 
 const emailSchema = z.object({
   to_email: z.string().email("Email inválido"),
@@ -72,6 +74,8 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
   const { data: templates = [] } = useEmailTemplates();
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<EmailForm>({
     resolver: zodResolver(emailSchema),
@@ -96,6 +100,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
     form.setValue("template_id", undefined);
     form.setValue("schedule_follow_up", false);
     setShowPreview(false);
+    setAttachments([]);
   }, [open, leadEmail, replyTo, form]);
 
   const watchFollowUp = form.watch("schedule_follow_up");
@@ -136,6 +141,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
             subject: data.subject,
             body_html: data.body_html,
             in_reply_to: replyTo?.graph_message_id || undefined,
+            attachments,
           },
         },
       );
@@ -168,6 +174,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
       onClose();
       form.reset({ to_email: leadEmail || "", subject: "", body_html: "", schedule_follow_up: false });
       setShowPreview(false);
+      setAttachments([]);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Error al enviar email");
     } finally {
@@ -176,6 +183,24 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
   });
 
   const activeTemplates = templates.filter((t) => t.is_active);
+
+  const handleAttachmentPick = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try {
+      const parsed = await filesToComposerAttachments(files);
+      setAttachments((prev) => {
+        const merged = [...prev];
+        for (const item of parsed) {
+          if (!merged.some((existing) => existing.name === item.name && existing.size === item.size)) {
+            merged.push(item);
+          }
+        }
+        return merged;
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -269,16 +294,57 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
                 }}
               />
             ) : (
-              <Textarea
-                rows={6}
-                {...form.register("body_html")}
-                placeholder="Contenido del email (soporta HTML)…"
+              <RichTextEditor
+                initialHtml={watchBody}
+                placeholder="Contenido del correo..."
+                onHtmlChange={(html) => form.setValue("body_html", html, { shouldValidate: true })}
+                className="min-h-[180px]"
               />
             )}
             <p className="text-xs text-muted-foreground mt-1">
               Variables en plantillas y cuerpo:{" "}
               <code className="text-[10px]">{"{{nombre}} {{email}} {{empresa}} {{pais}} {{campana}}"}</code>
             </p>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => void handleAttachmentPick(e.target.files)}
+          />
+          <div
+            className="rounded-md border border-dashed p-3 text-sm text-muted-foreground"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              void handleAttachmentPick(e.dataTransfer.files);
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs">Adjuntos</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Paperclip className="h-3.5 w-3.5 mr-1" />
+                Adjuntar
+              </Button>
+            </div>
+            {attachments.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {attachments.map((file) => (
+                  <div key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                    <span className="max-w-[180px] truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)))}
+                      aria-label={`Quitar ${file.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {replyTo?.body_html ? (
