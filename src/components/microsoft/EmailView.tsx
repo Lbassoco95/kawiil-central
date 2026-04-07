@@ -43,6 +43,7 @@ import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import {
   base64ToBlobUrl,
   fetchMessageAttachmentContent,
+  inferMimeFromFileName,
   type OutlookAttachment,
 } from "@/lib/outlookEmailMedia";
 import {
@@ -232,7 +233,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv11-inline-preview";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv12-attachment-value";
 
 type AttachmentPreviewState = {
   url: string;
@@ -1743,7 +1744,13 @@ function EmailAttachmentTile({
     (async () => {
       try {
         const r = await fetchMessageAttachmentContent(messageId, att.id);
-        created = base64ToBlobUrl(r.contentBytes, r.contentType || att.contentType);
+        const fromApi = (r.contentType || "").toLowerCase();
+        const inferred = inferMimeFromFileName(att.name || r.name || "");
+        const mime =
+          fromApi && fromApi !== "application/octet-stream"
+            ? r.contentType!
+            : inferred || att.contentType || "application/octet-stream";
+        created = base64ToBlobUrl(r.contentBytes, mime);
         if (alive) setBlobUrl(created);
       } catch {
         if (alive) setError(true);
@@ -1757,9 +1764,13 @@ function EmailAttachmentTile({
     };
   }, [messageId, att.id, att.contentType]);
 
-  const ct = (att.contentType || "").toLowerCase();
-  const isImage = ct.startsWith("image/");
-  const isPdf = ct.includes("pdf") || att.name?.toLowerCase().endsWith(".pdf");
+  const effectiveMime = (() => {
+    const a = (att.contentType || "").toLowerCase();
+    if (a && a !== "application/octet-stream") return a;
+    return (inferMimeFromFileName(att.name || "") || a || "").toLowerCase();
+  })();
+  const isImage = effectiveMime.startsWith("image/") || /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(att.name || "");
+  const isPdf = effectiveMime.includes("pdf") || att.name?.toLowerCase().endsWith(".pdf");
 
   if (loading) {
     return <div className="h-36 w-full max-w-[220px] rounded-lg border bg-muted animate-pulse" />;

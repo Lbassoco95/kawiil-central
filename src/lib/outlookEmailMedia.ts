@@ -59,6 +59,19 @@ export function replaceCidInHtml(html: string, cidRaw: string, replacementUrl: s
   return out;
 }
 
+/** Outlook a veces envía image/jpeg como application/octet-stream. */
+export function inferMimeFromFileName(name: string): string | null {
+  const n = name.trim().toLowerCase();
+  if (/\.(jpe?g)$/i.test(n)) return "image/jpeg";
+  if (/\.png$/i.test(n)) return "image/png";
+  if (/\.gif$/i.test(n)) return "image/gif";
+  if (/\.webp$/i.test(n)) return "image/webp";
+  if (/\.bmp$/i.test(n)) return "image/bmp";
+  if (/\.(tiff?)$/i.test(n)) return "image/tiff";
+  if (/\.pdf$/i.test(n)) return "application/pdf";
+  return null;
+}
+
 export function base64ToBlobUrl(contentBytes: string, contentType: string): string {
   const byteChars = atob(contentBytes);
   const byteNums = new Uint8Array(byteChars.length);

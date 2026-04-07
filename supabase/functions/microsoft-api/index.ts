@@ -7,6 +7,16 @@ const corsHeaders = {
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 
+/** Base64 para cuerpos binarios grandes (Graph suele omitir contentBytes en JSON y usar /$value). */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  const CHUNK = 0x2000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
 async function graphRequest(accessToken: string, path: string, init?: RequestInit) {
   const res = await fetch(`${GRAPH_BASE}${path}`, {
     ...init,
@@ -720,22 +730,51 @@ Deno.serve(async (req) => {
         if (!messageId || !attachmentId) {
           throw new Error("messageId y attachmentId son requeridos");
         }
-        const path =
-          `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}` +
-          "?$select=id,name,contentType,contentBytes,size,isInline,contentId";
-        const att = await graphRequest(accessToken, path);
+        const mid = encodeURIComponent(messageId);
+        const aid = encodeURIComponent(attachmentId);
+        const metaPath =
+          `/me/messages/${mid}/attachments/${aid}?$select=id,name,contentType,contentBytes,size,isInline,contentId,@odata.type`;
+        const att = await graphRequest(accessToken, metaPath);
         const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
-        if (odataType && !String(odataType).includes("fileAttachment")) {
+        if (odataType && String(odataType).includes("itemAttachment")) {
           throw new Error("Este tipo de adjunto no se puede previsualizar");
         }
-        const bytes = (att as Record<string, unknown>).contentBytes as string | undefined;
-        if (!bytes) {
+        if (odataType && String(odataType).includes("referenceAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+
+        let contentBytes = (att as Record<string, unknown>).contentBytes as string | undefined;
+        let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
+
+        const hasBytes = typeof contentBytes === "string" && contentBytes.length > 0;
+        if (!hasBytes) {
+          const valueUrl = `${GRAPH_BASE}/me/messages/${mid}/attachments/${aid}/$value`;
+          const valueRes = await fetch(valueUrl, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (!valueRes.ok) {
+            const errText = await valueRes.text();
+            throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
+          }
+          const buf = new Uint8Array(await valueRes.arrayBuffer());
+          contentBytes = uint8ArrayToBase64(buf);
+          const hdr = valueRes.headers.get("content-type");
+          if (hdr) {
+            const main = hdr.split(";")[0].trim().toLowerCase();
+            if (main && main !== "application/octet-stream") {
+              contentType = hdr.split(";")[0].trim();
+            }
+          }
+        }
+
+        if (!contentBytes) {
           throw new Error("No se pudo obtener el contenido del adjunto");
         }
+
         result = {
           name: (att as Record<string, unknown>).name,
-          contentType: (att as Record<string, unknown>).contentType || "application/octet-stream",
-          contentBytes: bytes,
+          contentType,
+          contentBytes,
           size: (att as Record<string, unknown>).size,
           isInline: (att as Record<string, unknown>).isInline,
           contentId: (att as Record<string, unknown>).contentId,
@@ -746,7 +785,10 @@ Deno.serve(async (req) => {
       case "email-attachments": {
         const messageId = params?.messageId;
         if (!messageId) throw new Error("messageId required");
-        result = await graphRequest(accessToken, `/me/messages/${messageId}/attachments`);
+        result = await graphRequest(
+          accessToken,
+          `/me/messages/${encodeURIComponent(messageId)}/attachments`,
+        );
         break;
       }
 

@@ -4,6 +4,7 @@ import {
   findAttachmentForCid,
   replaceCidInHtml,
   fetchMessageAttachmentContent,
+  inferMimeFromFileName,
   type OutlookAttachment,
 } from "@/lib/outlookEmailMedia";
 
@@ -55,7 +56,11 @@ export function useResolvedEmailHtml(
             if (cancelled) return;
             const approxBytes = Math.floor((r.contentBytes?.length || 0) * 0.75);
             if (approxBytes > MAX_INLINE_BYTES) continue;
-            const ct = r.contentType || att.contentType || "application/octet-stream";
+            const raw = (r.contentType || "").toLowerCase();
+            const ct =
+              raw && raw !== "application/octet-stream"
+                ? r.contentType!
+                : inferMimeFromFileName(att.name || r.name || "") || att.contentType || "application/octet-stream";
             const dataUrl = `data:${ct};base64,${r.contentBytes}`;
             out = replaceCidInHtml(out, cid, dataUrl);
           } catch {
