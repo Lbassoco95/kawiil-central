@@ -458,6 +458,10 @@ export function useEmailConversation(conversationId: string | null) {
   });
 }
 
+export type CreateReplyDraftResult =
+  | (Record<string, unknown> & { id: string })
+  | { unsupported: true; message: string };
+
 export function useCreateReplyDraft() {
   return useMutation({
     mutationFn: async ({ messageId, replyAll }: { messageId: string; replyAll?: boolean }) => {
@@ -465,8 +469,14 @@ export function useCreateReplyDraft() {
         body: { action: "create-reply-draft", params: { messageId, replyAll } },
       });
       if (error) throw error;
+      if (data?.code === "REFERENCE_NOT_SUPPORTED") {
+        return {
+          unsupported: true as const,
+          message: String(data.error || "Este mensaje no admite respuesta con borrador."),
+        };
+      }
       if (data?.error) throw new Error(data.error);
-      return data;
+      return data as CreateReplyDraftResult;
     },
   });
 }
@@ -501,6 +511,7 @@ export function useOutlookComposeSignature(enabled: boolean) {
     },
     enabled: !!user && enabled,
     staleTime: 60 * 60 * 1000,
+    retry: 1,
   });
 }
 

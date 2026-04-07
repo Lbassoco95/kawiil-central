@@ -219,7 +219,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv9-signature-forward";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv10-compose-sig-fix";
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 
@@ -358,11 +358,18 @@ export function EmailView() {
         messageId: selectedEmailId,
         replyAll: action === "reply-all",
       });
-      if (draft?.id) {
-        setDraftId(draft.id);
-        setDraftHtml(draft.body?.content || "");
+      if (draft && "unsupported" in draft && draft.unsupported) {
+        toast.warning(draft.message);
+        return;
       }
-    } catch { /* fallback */ }
+      const d = draft as { id?: string; body?: { content?: string } };
+      if (d?.id) {
+        setDraftId(d.id);
+        setDraftHtml(d.body?.content || "");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo preparar la respuesta");
+    }
   };
 
   const handleSendReply = async () => {

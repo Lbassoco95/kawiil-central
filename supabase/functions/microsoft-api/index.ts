@@ -561,6 +561,25 @@ Deno.serve(async (req) => {
         });
         if (!res.ok) {
           const errBody = await res.text();
+          let graphCode: string | undefined;
+          try {
+            const j = JSON.parse(errBody);
+            graphCode = j?.error?.code;
+          } catch {
+            /* ignore */
+          }
+          /** Algunos mensajes (borradores, carpetas especiales, tipos raros) no admiten createReply en Graph. */
+          if (
+            res.status === 400 &&
+            (graphCode === "ErrorInvalidReferenceItem" || graphCode === "ErrorItemNotFound")
+          ) {
+            result = {
+              code: "REFERENCE_NOT_SUPPORTED",
+              error:
+                "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.",
+            };
+            break;
+          }
           throw new Error(`CreateReplyDraft failed [${res.status}]: ${errBody}`);
         }
         result = await res.json();
@@ -589,8 +608,7 @@ Deno.serve(async (req) => {
 
       /**
        * Firma para “Nuevo correo”: Graph no expone la firma HTML de Outlook de forma oficial.
-       * Construimos HTML desde el perfil /me (Microsoft) y, si es posible, intentamos leer un borrador
-       * temporal por si el servidor inyectó contenido adicional.
+       * Solo GET /me (perfil Microsoft). No creamos borradores aquí (evita 400/500 y confusión con otras acciones).
        */
       case "get-email-signature-html": {
         const escapeHtml = (s: string) =>
@@ -619,63 +637,6 @@ Deno.serve(async (req) => {
         }
         if (phone) fallbackHtml += `<br/>${escapeHtml(phone)}`;
         fallbackHtml += `</p>`;
-
-        let draftProbeId: string | null = null;
-        try {
-          const createRes = await fetch(`${GRAPH_BASE}/me/messages`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              subject: "",
-              body: {
-                contentType: "HTML",
-                content: '<p id="kawiil-sig-anchor"></p>',
-              },
-              isDraft: true,
-            }),
-          });
-          if (createRes.ok) {
-            const created = await createRes.json();
-            draftProbeId = created?.id || null;
-            if (draftProbeId) {
-              await new Promise((r) => setTimeout(r, 450));
-              const msg = await graphRequest(
-                accessToken,
-                `/me/messages/${draftProbeId}?$select=body`,
-              );
-              const content = String(msg?.body?.content || "");
-              await fetch(`${GRAPH_BASE}/me/messages/${draftProbeId}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${accessToken}` },
-              });
-              draftProbeId = null;
-              const trimmed = content.replace(/\s/g, "");
-              if (
-                trimmed.length > 120 &&
-                (content.includes("<table") ||
-                  content.toLowerCase().includes("mso") ||
-                  content.split(/<br\s*\/?>/i).length > 4)
-              ) {
-                result = { html: content, source: "draft_probe", displayName, mail };
-                break;
-              }
-            }
-          }
-        } catch {
-          if (draftProbeId) {
-            try {
-              await fetch(`${GRAPH_BASE}/me/messages/${draftProbeId}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${accessToken}` },
-              });
-            } catch {
-              /* ignore */
-            }
-          }
-        }
 
         result = { html: fallbackHtml, source: "microsoft_profile", displayName, mail };
         break;
