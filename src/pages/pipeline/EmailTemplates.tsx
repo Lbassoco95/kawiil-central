@@ -26,6 +26,11 @@ import { toast } from "sonner";
 import { Plus, Pencil } from "lucide-react";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
+const SOFTLANDING_SUGGESTED_BODY_HTML = `<p>Hola {{nombre}},</p>
+<p>Gracias por tu interés en Kawiil. Te adjuntamos el documento <strong>Kawiil – Softlanding Hub en México</strong>, con información sobre cómo acompañamos a empresas en su implantación en el país.</p>
+<p>Encontrarás un resumen de servicios, contexto regulatorio y posibles siguientes pasos. Si en <strong>{{empresa}}</strong> quieren profundizar en algún tema concreto, responde a este correo y coordinamos una llamada.</p>
+<p>Saludos cordiales,<br/>Equipo Kawiil</p>`;
+
 export default function EmailTemplates() {
   const qc = useQueryClient();
   const { data: templates = [], isLoading } = useEmailTemplates();
@@ -35,6 +40,7 @@ export default function EmailTemplates() {
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
   const [category, setCategory] = useState<string>("first_contact");
+  const [defaultAttachmentKey, setDefaultAttachmentKey] = useState<string>("__none__");
 
   const reset = () => {
     setEditId(null);
@@ -42,6 +48,7 @@ export default function EmailTemplates() {
     setSubject("");
     setBodyHtml("");
     setCategory("first_contact");
+    setDefaultAttachmentKey("__none__");
   };
 
   const save = useMutation({
@@ -55,6 +62,10 @@ export default function EmailTemplates() {
         subject: subject.trim(),
         body_html: bodyHtml,
         category: category as TablesInsert<"email_templates">["category"],
+        default_attachment_key:
+          defaultAttachmentKey === "__none__" || defaultAttachmentKey === ""
+            ? null
+            : defaultAttachmentKey,
         created_by: u.user?.id ?? null,
       };
       if (editId) {
@@ -80,6 +91,7 @@ export default function EmailTemplates() {
     setSubject(t.subject);
     setBodyHtml(t.body_html);
     setCategory(t.category);
+    setDefaultAttachmentKey(t.default_attachment_key || "__none__");
     setOpen(true);
   };
 
@@ -131,6 +143,34 @@ export default function EmailTemplates() {
                 </Select>
               </div>
               <div>
+                <Label>Adjunto fijo al enviar</Label>
+                <Select value={defaultAttachmentKey} onValueChange={setDefaultAttachmentKey}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sin adjunto del sistema</SelectItem>
+                    <SelectItem value="softlanding_hub_mexico">
+                      PDF «Softlanding Hub en México»
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  El PDF se adjunta automáticamente al enviar desde el pipeline o la cola de secuencias (no hace falta subirlo a mano).
+                </p>
+                {defaultAttachmentKey === "softlanding_hub_mexico" && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => setBodyHtml(SOFTLANDING_SUGGESTED_BODY_HTML)}
+                  >
+                    Insertar cuerpo sugerido para este PDF
+                  </Button>
+                )}
+              </div>
+              <div>
                 <Label>HTML</Label>
                 <Textarea rows={10} value={bodyHtml} onChange={(e) => setBodyHtml(e.target.value)} className="font-mono text-xs" />
               </div>
@@ -169,6 +209,9 @@ export default function EmailTemplates() {
               <CardContent className="text-sm text-muted-foreground">
                 <p className="font-medium text-foreground">{t.subject}</p>
                 <p className="mt-1 text-xs">{t.category}</p>
+                {t.default_attachment_key === "softlanding_hub_mexico" && (
+                  <p className="mt-1 text-xs text-foreground">Incluye PDF Softlanding Hub (México)</p>
+                )}
               </CardContent>
             </Card>
           ))

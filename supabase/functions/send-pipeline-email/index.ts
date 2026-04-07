@@ -4,6 +4,7 @@
  * desactivar pixel/enlaces. Deploy: `supabase functions deploy send-pipeline-email` (verify_jwt true).
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { attachmentsForTemplateKey } from "../_shared/pipeline-template-attachments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -157,6 +158,7 @@ Deno.serve(async (req) => {
 
     let subject = body.subject || "";
     let html = body.body_html || "";
+    let templateAttachmentKey: string | null = null;
 
     if (body.template_id) {
       const { data: tpl } = await svc.from("email_templates")
@@ -165,6 +167,7 @@ Deno.serve(async (req) => {
         .eq("organization_id", lead.organization_id)
         .single();
       if (tpl) {
+        templateAttachmentKey = (tpl as { default_attachment_key?: string | null }).default_attachment_key ?? null;
         subject = subject || (tpl.subject as string);
         html = html || (tpl.body_html as string);
       }
@@ -225,8 +228,11 @@ Deno.serve(async (req) => {
       body: { contentType: "HTML", content: htmlToSend },
       toRecipients: [{ emailAddress: { address: to } }],
     };
-    if (body.attachments?.length) {
-      messagePayload.attachments = body.attachments.map((attachment) => ({
+    const fromTemplate = await attachmentsForTemplateKey(templateAttachmentKey);
+    const fromClient = body.attachments ?? [];
+    const mergedAttachments = [...fromTemplate, ...fromClient];
+    if (mergedAttachments.length) {
+      messagePayload.attachments = mergedAttachments.map((attachment) => ({
         "@odata.type": "#microsoft.graph.fileAttachment",
         name: attachment.name,
         contentType: attachment.contentType || "application/octet-stream",

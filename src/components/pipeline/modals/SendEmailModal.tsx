@@ -106,6 +106,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
   const watchFollowUp = form.watch("schedule_follow_up");
   const watchTemplateId = form.watch("template_id");
   const watchBody = form.watch("body_html");
+  const selectedTemplate = templates.find((t) => t.id === watchTemplateId);
 
   const applyTemplate = (templateId: string) => {
     const tpl = templates.find((t) => t.id === templateId);
@@ -244,6 +245,13 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {selectedTemplate?.default_attachment_key === "softlanding_hub_mexico" && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/25 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+              Esta plantilla adjunta automáticamente el PDF «Kawiil – Softlanding Hub en México». No hace
+              falta volver a adjuntarlo aquí salvo que quieras enviar archivos adicionales.
             </div>
           )}
 

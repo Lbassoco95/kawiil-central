@@ -1416,6 +1416,7 @@ export type Database = {
           body_text: string | null
           category: string
           is_active: boolean
+          default_attachment_key: string | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -1429,6 +1430,7 @@ export type Database = {
           body_text?: string | null
           category?: string
           is_active?: boolean
+          default_attachment_key?: string | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -1442,6 +1444,7 @@ export type Database = {
           body_text?: string | null
           category?: string
           is_active?: boolean
+          default_attachment_key?: string | null
           created_by?: string | null
           created_at?: string
           updated_at?: string

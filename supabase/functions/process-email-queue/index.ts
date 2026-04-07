@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { attachmentsForTemplateKey } from "../_shared/pipeline-template-attachments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -166,10 +167,12 @@ Deno.serve(async (req) => {
 
       let subject = row.subject as string;
       let html = "";
+      let templateAttachmentKey: string | null = null;
 
       if (row.template_id) {
         const { data: tpl } = await svc.from("email_templates").select("*").eq("id", row.template_id).single();
         if (tpl) {
+          templateAttachmentKey = (tpl as { default_attachment_key?: string | null }).default_attachment_key ?? null;
           subject = subject || tpl.subject;
           html = tpl.body_html;
         }
@@ -198,6 +201,21 @@ Deno.serve(async (req) => {
         htmlToSend = appendOpenPixel(htmlToSend, `${trackingBase}?eid=${row.id}&t=open`);
       }
 
+      const fromTemplate = await attachmentsForTemplateKey(templateAttachmentKey);
+      const messageBody: Record<string, unknown> = {
+        subject,
+        body: { contentType: "HTML", content: htmlToSend },
+        toRecipients: [{ emailAddress: { address: lead.email } }],
+      };
+      if (fromTemplate.length) {
+        messageBody.attachments = fromTemplate.map((attachment) => ({
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: attachment.name,
+          contentType: attachment.contentType || "application/octet-stream",
+          contentBytes: attachment.contentBytes,
+        }));
+      }
+
       const graphRes = await fetch(
         `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(sender)}/sendMail`,
         {
@@ -207,11 +225,7 @@ Deno.serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            message: {
-              subject,
-              body: { contentType: "HTML", content: htmlToSend },
-              toRecipients: [{ emailAddress: { address: lead.email } }],
-            },
+            message: messageBody,
             saveToSentItems: true,
           }),
         },
