@@ -31,6 +31,7 @@ import { useProfiles } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
+import { createNotifications } from "@/lib/notificationHelpers";
 
 import { STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
@@ -190,13 +191,14 @@ export function UnifiedStepRow({
   const addChecklistItem = async () => {
     if (!newSubtask.trim()) return;
     const itemId = `sub-${Date.now()}`;
+    const subtaskTitle = newSubtask.trim();
     let taskId: string | null = null;
 
     // Create linked task in the tasks table
     try {
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
       const { data: taskData, error: taskError } = await supabase.from("tasks").insert({
-        title: newSubtask.trim(),
+        title: subtaskTitle,
         organization_id: orgId!,
         project_id: projectId,
         client_id: clientId || null,
@@ -204,15 +206,35 @@ export function UnifiedStepRow({
         due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString().split("T")[0] : null,
         created_by: user!.id,
         area: step.key,
+        is_subtask: true,
       } as any).select("id").single();
       if (!taskError && taskData) {
         taskId = taskData.id;
       }
     } catch { /* continue without linked task */ }
 
+    const assigneeId = newSubtaskAssignee || localAssignee || null;
+    if (taskId && assigneeId) {
+      const stepLabel = localLabel || step.label || step.key;
+      const { data: proj } = await supabase.from("projects").select("name").eq("id", projectId).single();
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const projectLink = origin ? `${origin}/proyectos/${projectId}` : "";
+      await createNotifications([
+        {
+          user_id: assigneeId,
+          type: "task_assigned",
+          title: `Subtarea del paso «${stepLabel}»${proj?.name ? ` · ${proj.name}` : ""}: «${subtaskTitle}»`,
+          body: projectLink ? `Abre el proyecto: ${projectLink}` : undefined,
+          entity_type: "project",
+          entity_id: projectId,
+          source_user_id: user!.id,
+        },
+      ]);
+    }
+
     const newItem: ChecklistItem = {
       id: itemId,
-      text: newSubtask.trim(),
+      text: subtaskTitle,
       completed: false,
       assigned_to: newSubtaskAssignee || localAssignee || null,
       due_date: newSubtaskDueDate ? newSubtaskDueDate.toISOString() : null,
@@ -626,6 +648,7 @@ export function UnifiedStepRow({
 
       {selectedSubtaskId && (
         <TaskDetailDialog
+          nested
           taskId={selectedSubtaskId}
           onClose={() => setSelectedSubtaskId(null)}
         />

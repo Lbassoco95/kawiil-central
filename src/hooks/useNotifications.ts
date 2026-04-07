@@ -61,6 +61,7 @@ export function useDueDateAlerts() {
           "id, title, due_date, status, priority, assigned_to, client_id, project_id, clients(name), projects(name)"
         )
         .eq("organization_id", profile.organization_id)
+        .eq("is_subtask", false)
         .not("due_date", "is", null)
         .in("status", statuses)
         .order("due_date", { ascending: true });

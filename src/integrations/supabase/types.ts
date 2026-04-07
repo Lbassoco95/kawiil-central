@@ -2278,7 +2278,9 @@ export type Database = {
           due_date: string | null
           id: string
           is_recurring: boolean
+          is_subtask: boolean
           organization_id: string
+          parent_task_id: string | null
           priority: Database["public"]["Enums"]["task_priority"]
           phase_key: string | null
           project_id: string | null
@@ -2310,7 +2312,9 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_recurring?: boolean
+          is_subtask?: boolean
           organization_id: string
+          parent_task_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]
           phase_key?: string | null
           project_id?: string | null
@@ -2342,7 +2346,9 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_recurring?: boolean
+          is_subtask?: boolean
           organization_id?: string
+          parent_task_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]
           phase_key?: string | null
           project_id?: string | null
@@ -2375,6 +2381,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_parent_task_id_fkey"
+            columns: ["parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {

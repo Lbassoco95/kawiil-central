@@ -7,6 +7,43 @@ import { sendSlackNotification } from "@/lib/slackNotifications";
 import { logEntityActivity } from "@/lib/activityLog";
 import { createNotifications } from "@/lib/notificationHelpers";
 
+/** Bloquea completar una tarea padre si el checklist tiene ítems abiertos o subtareas enlazadas no cerradas. */
+async function assertCanCompleteParentTask(taskId: string) {
+  const { data: row, error } = await supabase
+    .from("tasks")
+    .select("checklist")
+    .eq("id", taskId)
+    .single();
+  if (error) throw error;
+  const checklist = (row?.checklist as unknown as Record<string, unknown>[]) ?? [];
+  const childIds: string[] = [];
+  for (const raw of checklist) {
+    const item = raw as { completed?: boolean; task_id?: string | null };
+    if (item.task_id) {
+      childIds.push(item.task_id);
+      continue;
+    }
+    if (!item.completed) {
+      throw new Error(
+        "No puedes marcar la tarea como completada mientras haya subtareas sin marcar en la lista."
+      );
+    }
+  }
+  if (childIds.length === 0) return;
+  const unique = [...new Set(childIds)];
+  const { data: children, error: cErr } = await supabase.from("tasks").select("id, status").in("id", unique);
+  if (cErr) throw cErr;
+  const byId = new Map((children ?? []).map((c) => [c.id, c.status]));
+  for (const cid of unique) {
+    const st = byId.get(cid);
+    if (st !== "completada" && st !== "cancelada") {
+      throw new Error(
+        "No puedes marcar la tarea como completada mientras haya subtareas abiertas. Complétalas o cancélalas antes."
+      );
+    }
+  }
+}
+
 export type Task = Tables<"tasks"> & {
   clients?: { name: string } | null;
   projects?: { name: string } | null;
@@ -26,6 +63,7 @@ export function useTasks(filters?: { area?: string; status?: string; search?: st
       let query = supabase
         .from("tasks")
         .select("*, clients(name), projects(name)")
+        .eq("is_subtask", false)
         .order("created_at", { ascending: false });
 
       if (filters?.area && filters.area !== "todas") {
@@ -57,6 +95,7 @@ export function useMyAssignedTasks() {
         .from("tasks")
         .select("*, clients(name), projects(name)")
         .eq("assigned_to", user!.id)
+        .eq("is_subtask", false)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return data as Task[];
@@ -74,6 +113,7 @@ export function useTasksForCalendar(startDate?: string, endDate?: string) {
       let query = supabase
         .from("tasks")
         .select("id, title, due_date, status, priority, area, client_id, project_id, assigned_to, clients(name), projects(name)")
+        .eq("is_subtask", false)
         .not("due_date", "is", null)
         .neq("status", "completada" as any)
         .neq("status", "cancelada" as any)
@@ -114,7 +154,16 @@ export function useTaskDetail(taskId: string | undefined) {
         creator_profile = cp;
       }
 
-      return { ...data, creator_profile } as Task & { creator_profile: { full_name: string; email: string } | null };
+      let parent_task: { id: string; title: string } | null = null;
+      if (data.parent_task_id) {
+        const { data: p } = await supabase.from("tasks").select("id, title").eq("id", data.parent_task_id).single();
+        if (p) parent_task = p;
+      }
+
+      return { ...data, creator_profile, parent_task } as Task & {
+        creator_profile: { full_name: string; email: string } | null;
+        parent_task: { id: string; title: string } | null;
+      };
     },
     enabled: !!user && !!taskId,
   });
@@ -213,6 +262,8 @@ export function useCreateTask() {
       criticality_level?: string;
       delay_category?: string;
       delay_notes?: string;
+      parent_task_id?: string | null;
+      is_subtask?: boolean;
     }) => {
       const { data: profile } = await supabase
         .from("profiles")
@@ -248,7 +299,7 @@ export function useCreateTask() {
 
       return data;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -264,11 +315,13 @@ export function useCreateTask() {
           action: "created",
           details: { title: data.title, area: data.area, priority: data.priority },
         });
-        sendSlackNotification("task_created", {
-          title: data.title,
-          priority: data.priority,
-          area: data.area,
-        });
+        if (!variables.is_subtask) {
+          sendSlackNotification("task_created", {
+            title: data.title,
+            priority: data.priority,
+            area: data.area,
+          });
+        }
 
         // Notify assigned users
         const assignedIds: string[] = [];
@@ -277,14 +330,33 @@ export function useCreateTask() {
         const uniqueIds = [...new Set(assignedIds)];
 
         if (uniqueIds.length > 0) {
+          let parentTitle: string | null = null;
+          if (variables.parent_task_id) {
+            const { data: p } = await supabase.from("tasks").select("title").eq("id", variables.parent_task_id).single();
+            parentTitle = p?.title ?? null;
+          }
+          const isSub = variables.is_subtask || !!variables.parent_task_id;
+          const origin = typeof window !== "undefined" ? window.location.origin : "";
+          const parentLink =
+            variables.parent_task_id != null
+              ? `${origin}/tareas?taskId=${variables.parent_task_id}`
+              : undefined;
           createNotifications(
             uniqueIds.map((uid) => ({
               user_id: uid,
               type: "task_assigned",
-              title: `Te asignaron la tarea "${data.title}"`,
-              body: data.description?.substring(0, 200) || undefined,
-              entity_type: "task",
-              entity_id: data.id,
+              title:
+                isSub && parentTitle
+                  ? `Subtarea de «${parentTitle}»: te asignaron «${data.title}»`
+                  : `Te asignaron la tarea "${data.title}"`,
+              body:
+                isSub && parentTitle
+                  ? [data.description?.substring(0, 160), parentLink && `Tarea principal: ${parentLink}`]
+                      .filter(Boolean)
+                      .join("\n") || parentLink
+                  : data.description?.substring(0, 200) || undefined,
+              entity_type: "task" as const,
+              entity_id: variables.parent_task_id ?? data.id,
               source_user_id: user!.id,
             }))
           );
@@ -366,6 +438,9 @@ export function useUpdateTask() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; [key: string]: any }) => {
+      if (updates.status === "completada") {
+        await assertCanCompleteParentTask(id);
+      }
       // Auto-set started_at when moving away from pendiente
       if (updates.status && updates.status !== "pendiente" && updates.status !== "cancelada") {
         const { data: current } = await supabase.from("tasks").select("started_at").eq("id", id).single();
@@ -399,7 +474,7 @@ export function useUpdateTask() {
         });
       }
     },
-    onSuccess: (_, vars) => {
+    onSuccess: async (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["task"] });
       queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
@@ -421,15 +496,28 @@ export function useUpdateTask() {
 
       // Notify on reassignment
       if (vars.assigned_to) {
+        const { data: trow } = await supabase
+          .from("tasks")
+          .select("parent_task_id, title, is_subtask")
+          .eq("id", vars.id)
+          .single();
+        const taskTitle = vars.title ?? trow?.title ?? "Tarea";
+        const entityId = trow?.is_subtask && trow.parent_task_id ? trow.parent_task_id : vars.id;
+        const isSub = !!trow?.is_subtask;
         createNotifications([{
           user_id: vars.assigned_to,
           type: "task_reassigned",
-          title: `Te reasignaron la tarea "${vars.title || "Tarea"}"`,
+          title: isSub
+            ? `Te reasignaron la subtarea «${taskTitle}»`
+            : `Te reasignaron la tarea "${taskTitle}"`,
           entity_type: "task",
-          entity_id: vars.id,
+          entity_id: entityId,
           source_user_id: user!.id,
         }]);
       }
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
     },
   });
 }

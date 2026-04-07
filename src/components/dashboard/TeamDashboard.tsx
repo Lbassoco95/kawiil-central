@@ -59,6 +59,7 @@ export function TeamDashboard() {
       const { data, error } = await supabase
         .from("tasks")
         .select("id, title, status, priority, due_date, assigned_to, project_id, client_id, area")
+        .eq("is_subtask", false)
         .order("due_date", { ascending: true });
       if (error) throw error;
       return data;

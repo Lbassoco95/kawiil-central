@@ -15,7 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useTaskDetail, useAddComment, useUpdateTask } from "@/hooks/useTasks";
+import { useTaskDetail, useAddComment, useUpdateTask, type Task } from "@/hooks/useTasks";
 import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssignees";
 import { useCelulaOptions } from "@/hooks/useCelulaOptions";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Clock,
   Upload, ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
-  Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2
+  Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2, GitBranch
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
@@ -35,6 +35,8 @@ import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useDeleteTask } from "@/hooks/useTasks";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { createNotifications } from "@/lib/notificationHelpers";
+import { useNavigate } from "react-router-dom";
 
 interface CommentAttachment {
   type: "image" | "dropbox" | "link";
@@ -54,6 +56,8 @@ interface ChecklistItem {
 interface Props {
   taskId: string | null;
   onClose: () => void;
+  /** Diálogo apilado (subtarea); al ir a la tarea padre solo se cierra este nivel. */
+  nested?: boolean;
 }
 
 // Nested subtask dialog state
@@ -81,7 +85,8 @@ const DELAY_CATEGORIES = [
   { value: "otro", label: "Otro" },
 ];
 
-export function TaskDetailDialog({ taskId, onClose }: Props) {
+export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
+  const navigate = useNavigate();
   const { task, isLoading, comments, assignees, documents } = useTaskDetail(taskId ?? undefined);
   const addComment = useAddComment();
   const updateTask = useUpdateTask();
@@ -216,8 +221,24 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
     updateTask.mutate({ id: taskId, checklist: newChecklist as any });
   };
 
-  const toggleChecklistItem = (itemId: string) => {
-    updateChecklist(checklist.map((c) => c.id === itemId ? { ...c, completed: !c.completed } : c));
+  const toggleChecklistItem = async (itemId: string) => {
+    const item = checklist.find((c) => c.id === itemId);
+    if (!item) return;
+    const newCompleted = !item.completed;
+    if (item.task_id) {
+      try {
+        await supabase.from("tasks").update({
+          status: newCompleted ? "completada" : "pendiente",
+          completed_at: newCompleted ? new Date().toISOString() : null,
+        } as any).eq("id", item.task_id);
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["task", item.task_id] });
+      } catch (e: any) {
+        toast.error("No se pudo actualizar la subtarea: " + (e.message || "error"));
+        return;
+      }
+    }
+    updateChecklist(checklist.map((c) => c.id === itemId ? { ...c, completed: newCompleted } : c));
   };
 
   const addChecklistItem = async () => {
@@ -248,11 +269,30 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
           project_id: task?.project_id || null,
           status: "pendiente" as const,
           priority: "media" as const,
+          parent_task_id: taskId,
+          is_subtask: true,
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      if (assignee) {
+        const parentTitle = task?.title ?? "Tarea";
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
+        const parentLink = origin ? `${origin}/tareas?taskId=${taskId}` : "";
+        await createNotifications([
+          {
+            user_id: assignee,
+            type: "task_assigned",
+            title: `Subtarea de «${parentTitle}»: te asignaron «${text}»`,
+            body: parentLink ? `Tarea principal: ${parentLink}` : undefined,
+            entity_type: "task",
+            entity_id: taskId,
+            source_user_id: user!.id,
+          },
+        ]);
+      }
 
       const newItem: ChecklistItem = {
         id: `item-${Date.now()}`,
@@ -432,6 +472,12 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
 
   const dropboxLinks = (task?.dropbox_links as any[]) ?? [];
   const areaLabel = task?.area ? getCelulaLabel(task.area) : null;
+  const parentTask = (task as Task & { parent_task?: { id: string; title: string } | null }).parent_task;
+
+  const goToParentTask = (parentId: string) => {
+    navigate(`/tareas?taskId=${parentId}`);
+    if (nested) onClose();
+  };
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
@@ -500,6 +546,21 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                   />
                 </div>
               </div>
+
+              {parentTask && (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+                  <GitBranch className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="text-muted-foreground">Subtarea de</span>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs font-medium text-primary"
+                    onClick={() => goToParentTask(parentTask.id)}
+                  >
+                    {parentTask.title}
+                  </Button>
+                </div>
+              )}
 
               {/* Row 3: Context info */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -606,7 +667,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
                       <div key={item.id} className="flex items-start gap-2 group py-1">
                         <Checkbox
                           checked={item.completed}
-                          onCheckedChange={() => toggleChecklistItem(item.id)}
+                          onCheckedChange={() => void toggleChecklistItem(item.id)}
                           className="mt-0.5"
                         />
                       <div className="flex-1 min-w-0">
@@ -966,7 +1027,7 @@ export function TaskDetailDialog({ taskId, onClose }: Props) {
       />
       <DropboxFilePicker open={showCommentDropbox} onClose={() => setShowCommentDropbox(false)} onSelect={(file) => setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }])} />
       <DocumentPreviewDialog open={!!previewDoc} onOpenChange={(o) => { if (!o) setPreviewDoc(null); }} document={previewDoc} />
-      <TaskDetailDialog taskId={selectedSubtaskId} onClose={() => setSelectedSubtaskId(null)} />
+      <TaskDetailDialog nested taskId={selectedSubtaskId} onClose={() => setSelectedSubtaskId(null)} />
       <DeleteConfirmDialog
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
