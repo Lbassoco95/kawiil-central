@@ -66,6 +66,18 @@ const ClienteDetalle = () => {
   const [tab, setTab] = useState<string>("general");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
+  const activeTasks = useMemo(
+    () => tasks.filter((t) => !isTaskClosedStatus(t.status)),
+    [tasks]
+  );
+  const closedTasks = useMemo(() => {
+    const list = tasks.filter((t) => isTaskClosedStatus(t.status));
+    return [...list].sort(
+      (a, b) =>
+        new Date(b.updated_at || "").getTime() - new Date(a.updated_at || "").getTime()
+    );
+  }, [tasks]);
+
   if (isLoadingClient) {
     return (
       <AppLayout>
@@ -86,15 +98,6 @@ const ClienteDetalle = () => {
       </AppLayout>
     );
   }
-
-  const activeTasks = tasks.filter((t) => !isTaskClosedStatus(t.status));
-  const closedTasks = useMemo(() => {
-    const list = tasks.filter((t) => isTaskClosedStatus(t.status));
-    return [...list].sort(
-      (a, b) =>
-        new Date(b.updated_at || "").getTime() - new Date(a.updated_at || "").getTime()
-    );
-  }, [tasks]);
 
   return (
     <AppLayout>
