@@ -870,6 +870,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (result === undefined) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Acción no reconocida o microsoft-api desactualizada. Despliega: supabase functions deploy microsoft-api --no-verify-jwt",
+          code: "UNKNOWN_ACTION",
+          action: action ?? null,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

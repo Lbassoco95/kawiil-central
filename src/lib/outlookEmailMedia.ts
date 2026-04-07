@@ -20,21 +20,50 @@ function uint8ArrayToBase64Client(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function messageForMicrosoftParsedError(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== "object" || parsed === null) return null;
+  if ("code" in parsed && String((parsed as { code: unknown }).code) === "ITEM_NOT_FOUND") {
+    return "El mensaje o el adjunto ya no coinciden con Microsoft (IDs desactualizados o elemento movido). Vuelve a la lista y abre el correo de nuevo.";
+  }
+  if ("error" in parsed) {
+    return String((parsed as { error: unknown }).error);
+  }
+  return null;
+}
+
+/** Lanza si el JSON de microsoft-api es un error conocido (incl. NOT_CONNECTED, ITEM_NOT_FOUND). */
+function throwIfMicrosoftJsonIsError(parsed: unknown): void {
+  const msg = messageForMicrosoftParsedError(parsed);
+  if (msg) throw new Error(msg);
+}
+
+function jsonAttachmentPayloadToBlob(parsed: unknown): { blob: Blob; name: string; contentType: string } | null {
+  if (!parsed || typeof parsed !== "object" || parsed === null) return null;
+  const cb = (parsed as { contentBytes?: unknown }).contentBytes;
+  if (typeof cb !== "string" || cb.length === 0) return null;
+  const name = String((parsed as { name?: unknown }).name ?? "adjunto");
+  const rawCt = String((parsed as { contentType?: unknown }).contentType ?? "application/octet-stream");
+  const inferred = inferMimeFromFileName(name);
+  const mime =
+    rawCt && rawCt.toLowerCase() !== "application/octet-stream" ? rawCt : inferred || rawCt;
+  try {
+    const byteChars = atob(cb);
+    const byteNums = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+    return { blob: new Blob([byteNums], { type: mime }), name, contentType: mime };
+  } catch {
+    return null;
+  }
+}
+
 async function parseMicrosoftApiErrorResponse(res: Response): Promise<string> {
   const text = await res.text();
   const trimmed = text.trim();
   if (!trimmed) return `Error HTTP ${res.status}`;
   try {
     const parsed: unknown = JSON.parse(trimmed);
-    if (parsed && typeof parsed === "object" && parsed !== null && "code" in parsed) {
-      const code = String((parsed as { code: unknown }).code);
-      if (code === "ITEM_NOT_FOUND") {
-        return "El mensaje o el adjunto ya no coinciden con Microsoft (IDs desactualizados o elemento movido). Vuelve a la lista y abre el correo de nuevo.";
-      }
-    }
-    if (parsed && typeof parsed === "object" && parsed !== null && "error" in parsed) {
-      return String((parsed as { error: unknown }).error);
-    }
+    const msg = messageForMicrosoftParsedError(parsed);
+    if (msg) return msg;
   } catch {
     return trimmed.slice(0, 400);
   }
@@ -122,68 +151,104 @@ export function base64ToBlobUrl(contentBytes: string, contentType: string): stri
 }
 
 /**
- * Descarga el adjunto como Blob (cuerpo binario desde microsoft-api, sin JSON/base64).
- * Evita límites de tamaño que dejaban el cuerpo vacío en previsualizaciones de PDF.
+ * Descarga el adjunto como Blob.
+ * 1) Intenta `message-attachment-binary` (sin límite JSON).
+ * 2) Si el despliegue es antiguo o la respuesta es JSON, reintenta con `message-attachment-content` (base64).
  */
 export async function fetchMessageAttachmentBlob(
   messageId: string,
   attachmentId: string,
 ): Promise<{ blob: Blob; name: string; contentType: string }> {
-  const body = { action: "message-attachment-binary", params: { messageId, attachmentId } };
-
   const session = await supabase.auth.getSession();
   const token = session.data.session?.access_token;
   if (!token || !SUPABASE_URL || !SUPABASE_ANON) {
     throw new Error("Sesión no disponible para cargar adjuntos.");
   }
 
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/microsoft-api`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      apikey: SUPABASE_ANON,
-    },
-    body: JSON.stringify(body),
+  const postMicrosoftApi = (payload: object) =>
+    fetch(`${SUPABASE_URL}/functions/v1/microsoft-api`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: SUPABASE_ANON,
+      },
+      body: JSON.stringify(payload),
+    });
+
+  const resBinary = await postMicrosoftApi({
+    action: "message-attachment-binary",
+    params: { messageId, attachmentId },
   });
 
-  if (!res.ok) {
-    throw new Error(await parseMicrosoftApiErrorResponse(res));
+  const ctBinary = resBinary.headers.get("content-type") || "";
+
+  if (resBinary.ok && !ctBinary.includes("application/json")) {
+    const nameEnc = resBinary.headers.get("x-kawiil-attachment-name");
+    const blob = await resBinary.blob();
+    if (blob.size === 0) {
+      throw new Error("El adjunto llegó vacío. Vuelve a abrir el correo.");
+    }
+    return {
+      blob,
+      name: nameEnc ? decodeURIComponent(nameEnc) : "adjunto",
+      contentType: ctBinary.split(";")[0].trim() || "application/octet-stream",
+    };
   }
 
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) {
-    const errText = await res.text();
-    const trimmed = errText.trim();
-    let parsed: unknown = null;
-    if (trimmed) {
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch {
-        throw new Error(`Respuesta inválida (${res.status}). ${trimmed.slice(0, 160)}`);
+  const textBinary = await resBinary.text();
+  const trimmedBinary = textBinary.trim();
+  let parsedBinary: unknown = null;
+  if (trimmedBinary) {
+    try {
+      parsedBinary = JSON.parse(trimmedBinary);
+    } catch {
+      if (!resBinary.ok) {
+        throw new Error(trimmedBinary.slice(0, 400) || `Error HTTP ${resBinary.status}`);
       }
     }
-    if (parsed && typeof parsed === "object" && parsed !== null && "error" in parsed) {
-      throw new Error(String((parsed as { error: unknown }).error));
+  }
+
+  if (!resBinary.ok) {
+    throw new Error(
+      messageForMicrosoftParsedError(parsedBinary) ??
+        (trimmedBinary.slice(0, 400) || `Error HTTP ${resBinary.status}`),
+    );
+  }
+
+  throwIfMicrosoftJsonIsError(parsedBinary);
+  const fromBinaryJson = jsonAttachmentPayloadToBlob(parsedBinary);
+  if (fromBinaryJson) return fromBinaryJson;
+
+  const resJson = await postMicrosoftApi({
+    action: "message-attachment-content",
+    params: { messageId, attachmentId },
+  });
+  const textJson = await resJson.text();
+  const trimmedJson = textJson.trim();
+  let parsedJson: unknown = null;
+  if (trimmedJson) {
+    try {
+      parsedJson = JSON.parse(trimmedJson);
+    } catch {
+      throw new Error(`Respuesta inválida (${resJson.status}). ${trimmedJson.slice(0, 160)}`);
     }
+  }
+
+  if (!resJson.ok) {
     throw new Error(
-      "La función devolvió JSON en lugar del archivo. Despliega la última versión de microsoft-api (message-attachment-binary).",
+      messageForMicrosoftParsedError(parsedJson) ??
+        (trimmedJson.slice(0, 400) || `Error HTTP ${resJson.status}`),
     );
   }
 
-  const nameEnc = res.headers.get("x-kawiil-attachment-name");
-  const blob = await res.blob();
-  if (blob.size === 0) {
-    throw new Error(
-      "El adjunto llegó vacío. Si persiste, despliega microsoft-api y vuelve a abrir el correo.",
-    );
-  }
+  throwIfMicrosoftJsonIsError(parsedJson);
+  const fromLegacy = jsonAttachmentPayloadToBlob(parsedJson);
+  if (fromLegacy) return fromLegacy;
 
-  return {
-    blob,
-    name: nameEnc ? decodeURIComponent(nameEnc) : "adjunto",
-    contentType: ct.split(";")[0].trim() || "application/octet-stream",
-  };
+  throw new Error(
+    "El adjunto no llegó (vacío o demasiado grande para JSON). Despliega microsoft-api con message-attachment-binary: supabase functions deploy microsoft-api --no-verify-jwt",
+  );
 }
 
 /**
