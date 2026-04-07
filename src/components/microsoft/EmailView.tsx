@@ -39,12 +39,25 @@ import {
   useEmailAttachments,
   useUnreadEmailCount,
 } from "@/hooks/useMicrosoft";
+import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
+import {
+  base64ToBlobUrl,
+  fetchMessageAttachmentContent,
+  type OutlookAttachment,
+} from "@/lib/outlookEmailMedia";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Search, Mail, MailOpen, Paperclip, Loader2, Reply, ReplyAll, Forward, Send,
   Sparkles, Languages, ListTodo, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List,
+  Eye, ExternalLink,
 } from "lucide-react";
 import {
   formatDistanceToNow,
@@ -219,7 +232,13 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv10-compose-sig-fix";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv11-inline-preview";
+
+type AttachmentPreviewState = {
+  url: string;
+  name: string;
+  kind: "image" | "pdf" | "other";
+};
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 
@@ -252,6 +271,7 @@ export function EmailView() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreviewState | null>(null);
   const [replyAttachments, setReplyAttachments] = useState<ComposerAttachment[]>([]);
   const [showFolders, setShowFolders] = useState(false);
   /** Escritorio: panel de carpetas estrecho solo con iconos */
@@ -290,8 +310,11 @@ export function EmailView() {
   const createMailFolder = useCreateMailFolder();
   const moveEmail = useMoveEmail();
   const deleteEmail = useDeleteEmail();
-  const { data: attachments = [] } = useEmailAttachments(
-    emailDetail?.hasAttachments ? selectedEmailId ?? undefined : undefined
+  const { data: attachments = [] } = useEmailAttachments(selectedEmailId ?? undefined);
+  const { html: resolvedEmailHtml, loading: bodyCidLoading } = useResolvedEmailHtml(
+    selectedEmailId ?? undefined,
+    emailDetail?.body?.contentType === "html" ? emailDetail.body.content : undefined,
+    attachments,
   );
 
   const allEmails = useMemo(() => {
@@ -1505,7 +1528,11 @@ export function EmailView() {
                 <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border-2 border-primary/15 bg-card/95 shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08] overflow-hidden">
                   <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
                     {emailDetail.body?.contentType === "html" ? (
-                      <AutoResizeIframe html={emailDetail.body.content} title="Email content" />
+                      <AutoResizeIframe
+                        html={resolvedEmailHtml}
+                        title="Email content"
+                        loading={bodyCidLoading}
+                      />
                     ) : (
                       <pre className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
                         {emailDetail.body?.content}
@@ -1514,36 +1541,22 @@ export function EmailView() {
                   </div>
                 </div>
 
-                {attachments.length > 0 && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-xl border border-border/50 p-4 space-y-2.5 bg-muted/30">
+                {attachments.length > 0 && selectedEmailId && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-xl border border-border/50 p-4 space-y-3 bg-muted/30">
                     <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                       <Paperclip className="h-3.5 w-3.5" /> {attachments.length} adjunto{attachments.length > 1 ? "s" : ""}
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {attachments.map((att: any) => (
-                        <button
-                          key={att.id}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background hover:bg-secondary/40 text-sm transition-all hover:shadow-sm"
-                          onClick={() => {
-                            if (att.contentBytes) {
-                              const byteChars = atob(att.contentBytes);
-                              const byteNums = new Array(byteChars.length);
-                              for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
-                              const blob = new Blob([new Uint8Array(byteNums)], { type: att.contentType });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url; a.download = att.name; a.click();
-                              URL.revokeObjectURL(url);
-                            }
-                          }}
-                        >
-                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="truncate max-w-[180px]">{att.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {att.size > 1024 * 1024 ? `${(att.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(att.size / 1024)} KB`}
-                          </span>
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {attachments
+                        .filter((att: OutlookAttachment) => !att["@odata.type"]?.includes("itemAttachment"))
+                        .map((att: OutlookAttachment) => (
+                          <EmailAttachmentTile
+                            key={att.id}
+                            messageId={selectedEmailId}
+                            att={att}
+                            onPreview={(url, name, kind) => setAttachmentPreview({ url, name, kind })}
+                          />
+                        ))}
                     </div>
                   </div>
                 )}
@@ -1555,7 +1568,11 @@ export function EmailView() {
                     </p>
                     <div className="space-y-1.5">
                       {otherThreadEmails.map((threadEmail: any) => (
-                        <ThreadEmailItem key={threadEmail.id} email={threadEmail} />
+                        <ThreadEmailItem
+                          key={threadEmail.id}
+                          email={threadEmail}
+                          onPreviewAttachment={setAttachmentPreview}
+                        />
                       ))}
                     </div>
                   </div>
@@ -1658,6 +1675,11 @@ export function EmailView() {
       </div>
     </div>
 
+      <AttachmentPreviewDialog
+        preview={attachmentPreview}
+        onClose={() => setAttachmentPreview(null)}
+      />
+
       <CreateTaskFromEmailDialog
         open={createTaskOpen}
         onOpenChange={setCreateTaskOpen}
@@ -1672,10 +1694,160 @@ export function EmailView() {
   );
 }
 
-function ThreadEmailItem({ email }: { email: any }) {
+function AttachmentPreviewDialog({
+  preview,
+  onClose,
+}: {
+  preview: AttachmentPreviewState | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={!!preview} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="truncate pr-8">{preview?.name ?? "Vista previa"}</DialogTitle>
+        </DialogHeader>
+        {preview?.kind === "image" && (
+          <img src={preview.url} alt="" className="max-w-full h-auto mx-auto rounded-md border" />
+        )}
+        {preview?.kind === "pdf" && (
+          <iframe src={preview.url} className="w-full min-h-[70vh] rounded-md border" title={preview.name} />
+        )}
+        {preview?.kind === "other" && (
+          <p className="text-sm text-muted-foreground">
+            Vista previa no disponible para este tipo de archivo. Usa «Abrir» en la tarjeta del adjunto para verlo en
+            el navegador.
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EmailAttachmentTile({
+  messageId,
+  att,
+  onPreview,
+}: {
+  messageId: string;
+  att: OutlookAttachment;
+  onPreview: (url: string, name: string, kind: AttachmentPreviewState["kind"]) => void;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    let created: string | null = null;
+    (async () => {
+      try {
+        const r = await fetchMessageAttachmentContent(messageId, att.id);
+        created = base64ToBlobUrl(r.contentBytes, r.contentType || att.contentType);
+        if (alive) setBlobUrl(created);
+      } catch {
+        if (alive) setError(true);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [messageId, att.id, att.contentType]);
+
+  const ct = (att.contentType || "").toLowerCase();
+  const isImage = ct.startsWith("image/");
+  const isPdf = ct.includes("pdf") || att.name?.toLowerCase().endsWith(".pdf");
+
+  if (loading) {
+    return <div className="h-36 w-full max-w-[220px] rounded-lg border bg-muted animate-pulse" />;
+  }
+
+  if (error || !blobUrl) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background text-sm text-muted-foreground max-w-[220px]">
+        <FileText className="h-4 w-4 shrink-0" />
+        <span className="truncate">{att.name}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col rounded-lg border bg-background overflow-hidden max-w-[220px] shadow-sm">
+      {isImage && (
+        <button
+          type="button"
+          className="relative block w-full p-0 border-0 bg-transparent cursor-pointer group"
+          onClick={() => onPreview(blobUrl, att.name, "image")}
+        >
+          <img src={blobUrl} alt="" className="max-h-40 w-full object-contain bg-muted/30" />
+          <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/35 transition-opacity">
+            <Eye className="h-7 w-7 text-white" />
+          </span>
+        </button>
+      )}
+      {isPdf && !isImage && (
+        <div className="border-b bg-muted/20">
+          <iframe src={blobUrl} className="w-full h-44 border-0" title={att.name} />
+        </div>
+      )}
+      {!isImage && !isPdf && (
+        <div className="flex items-center justify-center h-28 bg-muted/40 border-b">
+          <FileText className="h-12 w-12 text-muted-foreground" />
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5 px-2 py-2">
+        <span className="text-xs text-muted-foreground truncate" title={att.name}>
+          {att.name}
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          {att.size > 1024 * 1024 ? `${(att.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(att.size / 1024)} KB`}
+        </span>
+        <div className="flex flex-wrap gap-1">
+          {(isImage || isPdf) && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => onPreview(blobUrl, att.name, isPdf ? "pdf" : "image")}
+            >
+              Ampliar
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => window.open(blobUrl, "_blank", "noopener,noreferrer")}
+          >
+            <ExternalLink className="h-3 w-3" /> Abrir
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThreadEmailItem({
+  email,
+  onPreviewAttachment,
+}: {
+  email: any;
+  onPreviewAttachment: (p: AttachmentPreviewState) => void;
+}) {
   const [open, setOpen] = useState(false);
   const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address;
   const senderEmail = email.from?.emailAddress?.address || "";
+  const { data: threadAttachments = [] } = useEmailAttachments(open ? email.id : undefined);
+  const { html: resolvedThreadHtml, loading: threadBodyLoading } = useResolvedEmailHtml(
+    open ? email.id : undefined,
+    email.body?.contentType === "html" ? email.body.content : undefined,
+    threadAttachments,
+  );
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -1693,11 +1865,38 @@ function ThreadEmailItem({ email }: { email: any }) {
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="ml-10 mr-2 mb-2 border border-border/50 rounded-lg overflow-hidden">
-          {email.body?.contentType === "html" ? (
-            <AutoResizeIframe html={email.body.content} title="Thread email" minH={100} />
-          ) : (
-            <pre className="whitespace-pre-wrap text-sm p-3 text-muted-foreground">{email.body?.content}</pre>
+        <div className="ml-10 mr-2 mb-2 space-y-3">
+          <div className="border border-border/50 rounded-lg overflow-hidden">
+            {email.body?.contentType === "html" ? (
+              <AutoResizeIframe
+                html={resolvedThreadHtml}
+                title="Thread email"
+                minH={100}
+                loading={threadBodyLoading}
+              />
+            ) : (
+              <pre className="whitespace-pre-wrap text-sm p-3 text-muted-foreground">{email.body?.content}</pre>
+            )}
+          </div>
+          {threadAttachments.length > 0 && email.id && (
+            <div className="rounded-xl border border-border/50 p-3 space-y-2 bg-muted/20">
+              <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                <Paperclip className="h-3 w-3" /> {threadAttachments.length} adjunto
+                {threadAttachments.length > 1 ? "s" : ""}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {threadAttachments
+                  .filter((att: OutlookAttachment) => !att["@odata.type"]?.includes("itemAttachment"))
+                  .map((att: OutlookAttachment) => (
+                    <EmailAttachmentTile
+                      key={att.id}
+                      messageId={email.id}
+                      att={att}
+                      onPreview={(url, name, kind) => onPreviewAttachment({ url, name, kind })}
+                    />
+                  ))}
+              </div>
+            </div>
           )}
         </div>
       </CollapsibleContent>
@@ -1721,7 +1920,17 @@ function useDocumentDarkClass(): boolean {
   return dark;
 }
 
-function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: string; minH?: number }) {
+function AutoResizeIframe({
+  html,
+  title,
+  minH = 200,
+  loading,
+}: {
+  html: string;
+  title: string;
+  minH?: number;
+  loading?: boolean;
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(minH);
   const isDark = useDocumentDarkClass();
@@ -1760,15 +1969,22 @@ function AutoResizeIframe({ html, title, minH = 200 }: { html: string; title: st
   }, [srcDoc, resizeIframe]);
 
   return (
-    <iframe
-      ref={iframeRef}
-      srcDoc={srcDoc}
-      sandbox="allow-same-origin"
-      className="w-full border-0 bg-transparent rounded-md"
-      style={{ height: `${height}px` }}
-      title={title}
-      onLoad={resizeIframe}
-    />
+    <div className="relative w-full">
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-md bg-background/60 backdrop-blur-[1px]">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      <iframe
+        ref={iframeRef}
+        srcDoc={srcDoc}
+        sandbox="allow-same-origin"
+        className="w-full border-0 bg-transparent rounded-md"
+        style={{ height: `${height}px` }}
+        title={title}
+        onLoad={resizeIframe}
+      />
+    </div>
   );
 }
 

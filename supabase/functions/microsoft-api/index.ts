@@ -711,6 +711,35 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "message-attachment-content": {
+        const messageId = params?.messageId;
+        const attachmentId = params?.attachmentId;
+        if (!messageId || !attachmentId) {
+          throw new Error("messageId y attachmentId son requeridos");
+        }
+        const path =
+          `/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}` +
+          "?$select=id,name,contentType,contentBytes,size,isInline,contentId";
+        const att = await graphRequest(accessToken, path);
+        const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
+        if (odataType && !String(odataType).includes("fileAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+        const bytes = (att as Record<string, unknown>).contentBytes as string | undefined;
+        if (!bytes) {
+          throw new Error("No se pudo obtener el contenido del adjunto");
+        }
+        result = {
+          name: (att as Record<string, unknown>).name,
+          contentType: (att as Record<string, unknown>).contentType || "application/octet-stream",
+          contentBytes: bytes,
+          size: (att as Record<string, unknown>).size,
+          isInline: (att as Record<string, unknown>).isInline,
+          contentId: (att as Record<string, unknown>).contentId,
+        };
+        break;
+      }
+
       case "email-attachments": {
         const messageId = params?.messageId;
         if (!messageId) throw new Error("messageId required");

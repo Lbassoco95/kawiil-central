@@ -878,6 +878,9 @@ export function useEmailAttachments(messageId: string | undefined) {
         contentType: string;
         size: number;
         contentBytes?: string;
+        contentId?: string;
+        isInline?: boolean;
+        "@odata.type"?: string;
       }>;
     },
     enabled: !!user && !!messageId,
