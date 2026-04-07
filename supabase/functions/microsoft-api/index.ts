@@ -825,15 +825,69 @@ Deno.serve(async (req) => {
         break;
       }
 
-      /** Cuerpo binario sin base64 (evita respuestas JSON vacías/truncadas con PDFs grandes). */
+      /** Cuerpo binario sin base64; reenvía el stream de Graph (sin bufferizar el PDF en la edge). */
       case "message-attachment-binary": {
-        const r = await loadMessageFileAttachmentFromGraph(accessToken, params?.messageId, params?.attachmentId);
-        return new Response(r.body, {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const attachmentId = normalizeGraphMessageOrAttachmentId(params?.attachmentId);
+        if (!messageId || !attachmentId) {
+          throw new Error("messageId y attachmentId son requeridos");
+        }
+        const metaPath =
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
+        const att = await graphRequest(accessToken, metaPath, {
+          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+        });
+        const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
+        if (odataType && String(odataType).includes("itemAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+        if (odataType && String(odataType).includes("referenceAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+
+        let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
+        const name = String((att as Record<string, unknown>).name ?? "adjunto");
+
+        const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+        const valueRes = await fetch(valueUrl, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/octet-stream",
+            ...GRAPH_MAIL_PREFER_IMMUTABLE,
+          },
+        });
+        if (!valueRes.ok) {
+          const errText = await valueRes.text();
+          throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
+        }
+        const hdr = valueRes.headers.get("content-type");
+        if (hdr) {
+          const main = hdr.split(";")[0].trim().toLowerCase();
+          if (main && main !== "application/octet-stream") {
+            contentType = hdr.split(";")[0].trim();
+          }
+        }
+
+        const streamBody = valueRes.body;
+        if (!streamBody) {
+          const buf = new Uint8Array(await valueRes.arrayBuffer());
+          return new Response(buf, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": contentType || "application/octet-stream",
+              "X-Kawiil-Attachment-Name": encodeURIComponent(name),
+              "Access-Control-Expose-Headers": "Content-Type, X-Kawiil-Attachment-Name",
+            },
+          });
+        }
+
+        return new Response(streamBody, {
           status: 200,
           headers: {
             ...corsHeaders,
-            "Content-Type": r.contentType || "application/octet-stream",
-            "X-Kawiil-Attachment-Name": encodeURIComponent(r.name),
+            "Content-Type": contentType || "application/octet-stream",
+            "X-Kawiil-Attachment-Name": encodeURIComponent(name),
             "Access-Control-Expose-Headers": "Content-Type, X-Kawiil-Attachment-Name",
           },
         });

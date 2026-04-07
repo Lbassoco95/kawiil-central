@@ -56,18 +56,45 @@ function jsonAttachmentPayloadToBlob(parsed: unknown): { blob: Blob; name: strin
   }
 }
 
-async function parseMicrosoftApiErrorResponse(res: Response): Promise<string> {
-  const text = await res.text();
-  const trimmed = text.trim();
-  if (!trimmed) return `Error HTTP ${res.status}`;
+/**
+ * El gateway de Supabase a veces pone Content-Type: application/json aunque el cuerpo sea un PDF.
+ * Miramos el primer byte real: `{` → JSON de la API; cualquier otra cosa → binario.
+ */
+async function responseBodyLooksLikeJsonObject(res: Response): Promise<boolean> {
   try {
-    const parsed: unknown = JSON.parse(trimmed);
-    const msg = messageForMicrosoftParsedError(parsed);
-    if (msg) return msg;
+    if (!res.body) return true;
+    const reader = res.clone().body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (total < 16) {
+      const { value, done } = await reader.read();
+      if (done || !value?.length) break;
+      chunks.push(value);
+      total += value.length;
+    }
+    try {
+      reader.releaseLock();
+    } catch {
+      /* ignore */
+    }
+    if (chunks.length === 0) return true;
+    const merged = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      merged.set(c, off);
+      off += c.length;
+    }
+    let i = 0;
+    if (merged.length >= 3 && merged[0] === 0xef && merged[1] === 0xbb && merged[2] === 0xbf) {
+      i = 3;
+    }
+    while (i < merged.length && [0x20, 0x09, 0x0a, 0x0d].includes(merged[i])) {
+      i++;
+    }
+    return i < merged.length && merged[i] === 0x7b;
   } catch {
-    return trimmed.slice(0, 400);
+    return true;
   }
-  return trimmed.slice(0, 400);
 }
 
 /** Metadatos de adjunto devueltos por Graph (lista de mensaje). */
@@ -181,19 +208,21 @@ export async function fetchMessageAttachmentBlob(
     params: { messageId, attachmentId },
   });
 
-  const ctBinary = resBinary.headers.get("content-type") || "";
-
-  if (resBinary.ok && !ctBinary.includes("application/json")) {
-    const nameEnc = resBinary.headers.get("x-kawiil-attachment-name");
-    const blob = await resBinary.blob();
-    if (blob.size === 0) {
-      throw new Error("El adjunto llegó vacío. Vuelve a abrir el correo.");
+  if (resBinary.ok) {
+    const looksJson = await responseBodyLooksLikeJsonObject(resBinary);
+    if (!looksJson) {
+      const nameEnc = resBinary.headers.get("x-kawiil-attachment-name");
+      const ctBinary = resBinary.headers.get("content-type") || "application/octet-stream";
+      const blob = await resBinary.blob();
+      if (blob.size === 0) {
+        throw new Error("El adjunto llegó vacío. Vuelve a abrir el correo.");
+      }
+      return {
+        blob,
+        name: nameEnc ? decodeURIComponent(nameEnc) : "adjunto",
+        contentType: ctBinary.split(";")[0].trim() || "application/octet-stream",
+      };
     }
-    return {
-      blob,
-      name: nameEnc ? decodeURIComponent(nameEnc) : "adjunto",
-      contentType: ctBinary.split(";")[0].trim() || "application/octet-stream",
-    };
   }
 
   const textBinary = await resBinary.text();

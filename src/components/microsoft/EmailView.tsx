@@ -232,7 +232,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv16-attachment-fallback";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv17-attachment-sniff";
 
 type AttachmentPreviewState = {
   url: string;
@@ -1548,7 +1548,11 @@ export function EmailView() {
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {attachments
-                        .filter((att: OutlookAttachment) => !att["@odata.type"]?.includes("itemAttachment"))
+                        .filter(
+                          (att: OutlookAttachment) =>
+                            !att["@odata.type"]?.includes("itemAttachment") &&
+                            !att["@odata.type"]?.includes("referenceAttachment"),
+                        )
                         .map((att: OutlookAttachment) => (
                           <EmailAttachmentTile
                             key={att.id}
@@ -1909,7 +1913,11 @@ function ThreadEmailItem({
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {threadAttachments
-                  .filter((att: OutlookAttachment) => !att["@odata.type"]?.includes("itemAttachment"))
+                  .filter(
+                    (att: OutlookAttachment) =>
+                      !att["@odata.type"]?.includes("itemAttachment") &&
+                      !att["@odata.type"]?.includes("referenceAttachment"),
+                  )
                   .map((att: OutlookAttachment) => (
                     <EmailAttachmentTile
                       key={att.id}
