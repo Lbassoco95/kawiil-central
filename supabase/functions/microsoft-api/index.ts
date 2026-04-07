@@ -732,8 +732,9 @@ Deno.serve(async (req) => {
         }
         const mid = encodeURIComponent(messageId);
         const aid = encodeURIComponent(attachmentId);
+        /** No pedir contentBytes en $select: Graph a veces falla u omite; el binario va por /$value. */
         const metaPath =
-          `/me/messages/${mid}/attachments/${aid}?$select=id,name,contentType,contentBytes,size,isInline,contentId,@odata.type`;
+          `/me/messages/${mid}/attachments/${aid}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
         const att = await graphRequest(accessToken, metaPath);
         const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
         if (odataType && String(odataType).includes("itemAttachment")) {
@@ -743,32 +744,27 @@ Deno.serve(async (req) => {
           throw new Error("Este tipo de adjunto no se puede previsualizar");
         }
 
-        let contentBytes = (att as Record<string, unknown>).contentBytes as string | undefined;
         let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
 
-        const hasBytes = typeof contentBytes === "string" && contentBytes.length > 0;
-        if (!hasBytes) {
-          const valueUrl = `${GRAPH_BASE}/me/messages/${mid}/attachments/${aid}/$value`;
-          const valueRes = await fetch(valueUrl, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (!valueRes.ok) {
-            const errText = await valueRes.text();
-            throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
-          }
-          const buf = new Uint8Array(await valueRes.arrayBuffer());
-          contentBytes = uint8ArrayToBase64(buf);
-          const hdr = valueRes.headers.get("content-type");
-          if (hdr) {
-            const main = hdr.split(";")[0].trim().toLowerCase();
-            if (main && main !== "application/octet-stream") {
-              contentType = hdr.split(";")[0].trim();
-            }
-          }
+        const valueUrl = `${GRAPH_BASE}/me/messages/${mid}/attachments/${aid}/$value`;
+        const valueRes = await fetch(valueUrl, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/octet-stream",
+          },
+        });
+        if (!valueRes.ok) {
+          const errText = await valueRes.text();
+          throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
         }
-
-        if (!contentBytes) {
-          throw new Error("No se pudo obtener el contenido del adjunto");
+        const buf = new Uint8Array(await valueRes.arrayBuffer());
+        const contentBytes = uint8ArrayToBase64(buf);
+        const hdr = valueRes.headers.get("content-type");
+        if (hdr) {
+          const main = hdr.split(";")[0].trim().toLowerCase();
+          if (main && main !== "application/octet-stream") {
+            contentType = hdr.split(";")[0].trim();
+          }
         }
 
         result = {

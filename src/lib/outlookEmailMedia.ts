@@ -1,5 +1,38 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+async function readFunctionsHttpErrorBody(error: unknown): Promise<string> {
+  if (!error || typeof error !== "object") return "";
+  const e = error as Record<string, unknown>;
+  const resp = e.context ?? e.response;
+  if (resp instanceof Response) {
+    try {
+      return await resp.clone().text();
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+type AttachmentPayload = {
+  contentBytes: string;
+  contentType: string;
+  name: string;
+  size?: number;
+};
+
+function hasContentBytes(data: unknown): data is AttachmentPayload {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    typeof (data as AttachmentPayload).contentBytes === "string" &&
+    (data as AttachmentPayload).contentBytes.length > 0
+  );
+}
+
 /** Metadatos de adjunto devueltos por Graph (lista de mensaje). */
 export type OutlookAttachment = {
   id: string;
@@ -80,16 +113,46 @@ export function base64ToBlobUrl(contentBytes: string, contentType: string): stri
   return URL.createObjectURL(blob);
 }
 
-export async function fetchMessageAttachmentContent(messageId: string, attachmentId: string) {
-  const { data, error } = await supabase.functions.invoke("microsoft-api", {
-    body: { action: "message-attachment-content", params: { messageId, attachmentId } },
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
-  return data as {
-    contentBytes: string;
-    contentType: string;
-    name: string;
-    size?: number;
-  };
+/**
+ * Descarga bytes del adjunto vía microsoft-api (siempre binario Graph /$value en el servidor).
+ */
+export async function fetchMessageAttachmentContent(messageId: string, attachmentId: string): Promise<AttachmentPayload> {
+  const body = { action: "message-attachment-content", params: { messageId, attachmentId } };
+
+  let { data, error } = await supabase.functions.invoke("microsoft-api", { body });
+
+  if (!hasContentBytes(data)) {
+    const session = await supabase.auth.getSession();
+    const token = session.data.session?.access_token;
+    if (token && SUPABASE_URL && SUPABASE_ANON) {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/microsoft-api`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: SUPABASE_ANON,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json().catch(() => null)) as unknown;
+      if (res.ok && hasContentBytes(json)) {
+        data = json;
+        error = null;
+      }
+    }
+  }
+
+  if (hasContentBytes(data)) {
+    return data;
+  }
+
+  const extra = await readFunctionsHttpErrorBody(error);
+  const hint = [extra, typeof data === "object" && data && "error" in data ? String((data as { error: unknown }).error) : "", error instanceof Error ? error.message : ""]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 500);
+
+  throw new Error(
+    hint || "No se pudo cargar el adjunto. Comprueba la conexión con Microsoft y que la función microsoft-api esté desplegada.",
+  );
 }

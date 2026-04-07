@@ -233,7 +233,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv12-attachment-value";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv13-attachment-value-only";
 
 type AttachmentPreviewState = {
   url: string;
@@ -1737,10 +1737,15 @@ function EmailAttachmentTile({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [errHint, setErrHint] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     let created: string | null = null;
+    setLoading(true);
+    setError(false);
+    setErrHint(null);
+    setBlobUrl(null);
     (async () => {
       try {
         const r = await fetchMessageAttachmentContent(messageId, att.id);
@@ -1752,8 +1757,11 @@ function EmailAttachmentTile({
             : inferred || att.contentType || "application/octet-stream";
         created = base64ToBlobUrl(r.contentBytes, mime);
         if (alive) setBlobUrl(created);
-      } catch {
-        if (alive) setError(true);
+      } catch (e) {
+        if (alive) {
+          setError(true);
+          setErrHint(e instanceof Error ? e.message.slice(0, 220) : "Error al cargar");
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -1778,9 +1786,14 @@ function EmailAttachmentTile({
 
   if (error || !blobUrl) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-background text-sm text-muted-foreground max-w-[220px]">
-        <FileText className="h-4 w-4 shrink-0" />
-        <span className="truncate">{att.name}</span>
+      <div className="flex flex-col gap-1 px-3 py-2 rounded-lg border bg-background text-sm text-muted-foreground max-w-[220px]">
+        <div className="flex items-center gap-2 min-w-0">
+          <FileText className="h-4 w-4 shrink-0" />
+          <span className="truncate" title={att.name}>
+            {att.name}
+          </span>
+        </div>
+        {errHint && <p className="text-[10px] leading-snug text-destructive/90 break-words">{errHint}</p>}
       </div>
     );
   }
