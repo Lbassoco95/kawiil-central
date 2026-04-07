@@ -462,12 +462,24 @@ export type CreateReplyDraftResult =
   | (Record<string, unknown> & { id: string })
   | { unsupported: true; message: string };
 
-function isReplyDraftInvalidReference(data: unknown, fnError: unknown): boolean {
-  if (data && typeof data === "object" && (data as { code?: string }).code === "REFERENCE_NOT_SUPPORTED") {
-    return true;
+/** Con HTTP ≠ 2xx el detalle a veces solo está en el body del Response (context/response), no en `data`. */
+async function readSupabaseFunctionErrorBody(error: unknown): Promise<string> {
+  if (!error || typeof error !== "object") return "";
+  const e = error as Record<string, unknown>;
+  const resp = e.context ?? e.response;
+  if (resp instanceof Response) {
+    try {
+      return await resp.clone().text();
+    } catch {
+      return "";
+    }
   }
-  const blob = `${typeof data === "object" && data !== null ? JSON.stringify(data) : String(data ?? "")} ${String((fnError as Error)?.message ?? "")}`;
-  return blob.includes("ErrorInvalidReferenceItem");
+  return "";
+}
+
+function textImpliesInvalidReplyReference(...parts: string[]): boolean {
+  const t = parts.join("\n").toLowerCase();
+  return t.includes("errorinvalidreferenceitem") || t.includes("reference_not_supported");
 }
 
 export function useCreateReplyDraft() {
@@ -476,20 +488,28 @@ export function useCreateReplyDraft() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "create-reply-draft", params: { messageId, replyAll } },
       });
-      if (data?.code === "REFERENCE_NOT_SUPPORTED") {
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      const dataStr =
+        data !== null && data !== undefined && typeof data === "object" ? JSON.stringify(data) : String(data ?? "");
+      const msg = String((error as Error)?.message ?? "");
+      const dataErr = typeof (data as { error?: unknown })?.error === "string" ? (data as { error: string }).error : "";
+
+      if ((data as { code?: string } | null)?.code === "REFERENCE_NOT_SUPPORTED") {
         return {
           unsupported: true as const,
-          message: String(data.error || "Este mensaje no admite respuesta con borrador."),
+          message: String((data as { error?: string }).error || "Este mensaje no admite respuesta con borrador."),
         };
       }
-      if (isReplyDraftInvalidReference(data, error)) {
+      if (textImpliesInvalidReplyReference(dataStr, msg, errBody, dataErr)) {
         return {
           unsupported: true as const,
           message: "Este mensaje no admite respuesta con borrador. Puedes escribir y enviar; se usará envío simple.",
         };
       }
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
+        throw new Error((data as { error: string }).error);
+      }
       return data as CreateReplyDraftResult;
     },
   });

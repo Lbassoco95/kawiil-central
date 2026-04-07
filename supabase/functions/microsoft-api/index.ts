@@ -569,11 +569,12 @@ Deno.serve(async (req) => {
             /* ignore */
           }
           /** Algunos mensajes (borradores, carpetas especiales, tipos raros) no admiten createReply en Graph. */
+          const lower = errBody.toLowerCase();
           const invalidRef =
             graphCode === "ErrorInvalidReferenceItem" ||
             graphCode === "ErrorItemNotFound" ||
-            errBody.includes("ErrorInvalidReferenceItem") ||
-            errBody.includes("ErrorItemNotFound");
+            lower.includes("errorinvalidreferenceitem") ||
+            lower.includes("erroritemnotfound");
           if (invalidRef) {
             result = {
               code: "REFERENCE_NOT_SUPPORTED",
