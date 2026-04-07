@@ -45,6 +45,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Link } from "react-router-dom";
 
 type ViewMode = "day" | "3days" | "week" | "month";
 
@@ -97,6 +98,10 @@ function getCategoryClasses(name?: string | null) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % 2147483647;
   return CATEGORY_COLORS[hash % CATEGORY_COLORS.length];
+}
+
+function taskDetailHref(taskId: string) {
+  return `/tareas?taskId=${encodeURIComponent(taskId)}`;
 }
 
 export function CalendarView() {
@@ -380,13 +385,17 @@ export function CalendarView() {
               );
             })}
             {todayTasks.slice(0, 5).map((task: any) => (
-              <div key={task.id} className="flex items-start gap-2 p-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10">
+              <Link
+                key={task.id}
+                to={taskDetailHref(task.id)}
+                className="flex items-start gap-2 p-2 rounded-lg bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-100/70 dark:hover:bg-amber-900/25 transition-colors text-left w-full"
+              >
                 <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
+                  <p className="text-xs font-medium text-foreground truncate underline-offset-2 hover:underline">{task.title}</p>
                   {task.clients?.name && <p className="text-[11px] text-muted-foreground">{task.clients.name}</p>}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
@@ -407,10 +416,10 @@ export function CalendarView() {
               const daysLeft = differenceInDays(parseISO(task.due_date), new Date());
               const urgencyColor = daysLeft === 0 ? "text-red-600" : daysLeft <= 2 ? "text-amber-600" : "text-muted-foreground";
               return (
-                <div key={task.id} className="flex items-start gap-2 py-1.5">
+                <Link key={task.id} to={taskDetailHref(task.id)} className="flex items-start gap-2 py-1.5 rounded-md hover:bg-accent/40 transition-colors -mx-1 px-1 text-left">
                   <div className={cn("h-1.5 w-1.5 rounded-full mt-1.5 shrink-0", PRIORITY_COLORS[task.priority] || "bg-amber-400")} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-foreground truncate">{task.title}</p>
+                    <p className="text-xs font-medium text-foreground truncate underline-offset-2 hover:underline">{task.title}</p>
                     <div className="flex items-center gap-2">
                       {task.clients?.name && <span className="text-[11px] text-muted-foreground truncate">{task.clients.name}</span>}
                       <span className={cn("text-[11px] shrink-0", urgencyColor)}>
@@ -418,7 +427,7 @@ export function CalendarView() {
                       </span>
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -512,12 +521,15 @@ export function CalendarView() {
                           </div>
                         ))}
                         {dayTasks.map((task: any) => (
-                          <div key={task.id}
-                            className="flex items-center gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 rounded px-1.5 py-0.5 text-[11px] truncate cursor-default"
-                            title={`Tarea: ${task.title}${task.clients?.name ? ` — ${task.clients.name}` : ""}`}>
+                          <Link
+                            key={task.id}
+                            to={taskDetailHref(task.id)}
+                            className="flex items-center gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 rounded px-1.5 py-0.5 text-[11px] truncate cursor-pointer hover:bg-amber-500/25 dark:hover:bg-amber-500/25 transition-colors underline-offset-1 hover:underline"
+                            title={`Tarea: ${task.title}${task.clients?.name ? ` — ${task.clients.name}` : ""}`}
+                          >
                             <CheckSquare className="h-2.5 w-2.5 shrink-0" />
                             <span className="truncate">{task.title}</span>
-                          </div>
+                          </Link>
                         ))}
                       </div>
                     );
@@ -638,10 +650,15 @@ export function CalendarView() {
                           );
                         })}
                         {dayTasks.slice(0, 2).map((task: any) => (
-                          <div key={task.id} className="flex items-center gap-0.5 bg-amber-500/15 text-amber-700 dark:text-amber-300 rounded px-1 py-0.5 text-[10px] truncate">
+                          <Link
+                            key={task.id}
+                            to={taskDetailHref(task.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-0.5 bg-amber-500/15 text-amber-700 dark:text-amber-300 rounded px-1 py-0.5 text-[10px] truncate hover:bg-amber-500/25 transition-colors underline-offset-1 hover:underline"
+                          >
                             <CheckSquare className="h-2.5 w-2.5 shrink-0" />
                             <span className="truncate">{task.title}</span>
-                          </div>
+                          </Link>
                         ))}
                         {totalExtra > 0 && <div className="text-[10px] text-muted-foreground pl-1">+{totalExtra} más</div>}
                       </div>
