@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Sparkles, Copy, X, Languages, ListChecks } from "lucide-react";
+import { Loader2, Sparkles, Copy, X } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 
@@ -18,13 +18,30 @@ interface Props {
   emailSubject: string;
   emailBody: string;
   senderName?: string;
+  /** Hilo completo (texto plano); si existe, sustituye el contexto de un solo mensaje. */
+  threadContext?: string;
   onInsertText?: (text: string) => void;
+  /** Sustituye el HTML del borrador por la propuesta (texto plano/markdown de la IA). */
+  onReplaceDraft?: (text: string) => void;
+  /** Si true, pide confirmación antes de reemplazar (borrador no vacío). */
+  hasDraftText?: boolean;
   onClose?: () => void;
   /** For quick mode: auto-execute this prompt on mount */
   autoPrompt?: string;
 }
 
-export function EmailAIAssistant({ mode, emailSubject, emailBody, senderName, onInsertText, onClose, autoPrompt }: Props) {
+export function EmailAIAssistant({
+  mode,
+  emailSubject,
+  emailBody,
+  senderName,
+  threadContext,
+  onInsertText,
+  onReplaceDraft,
+  hasDraftText = false,
+  onClose,
+  autoPrompt,
+}: Props) {
   const [prompt, setPrompt] = useState("");
   const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,7 +57,16 @@ export function EmailAIAssistant({ mode, emailSubject, emailBody, senderName, on
       const token = session.data.session?.access_token;
       if (!token) throw new Error("No session");
 
-      const context = `Asunto: ${emailSubject}\nDe: ${senderName || "Desconocido"}\n\nContenido del correo:\n${stripHtml(emailBody).substring(0, 3000)}`;
+      const context = threadContext?.trim()
+        ? `Asunto del hilo: ${emailSubject}\nRemitente del mensaje abierto: ${senderName || "Desconocido"}\n\n${threadContext.trim()}`
+        : `Asunto: ${emailSubject}\nDe: ${senderName || "Desconocido"}\n\nContenido del correo:\n${stripHtml(emailBody).substring(0, 3000)}`;
+
+      const systemBase =
+        "Eres un asistente de correo electrónico profesional. Ayudas a redactar respuestas, resumir hilos y traducir correos. Responde de forma concisa y profesional en el idioma que te pidan.";
+      const systemThread =
+        threadContext?.trim()
+          ? " Cuando se incluye una conversación completa, basa tu respuesta en todo el hilo y en el mensaje marcado como «RESPONDER A ESTE»."
+          : "";
 
       const resp = await fetch(CHAT_URL, {
         method: "POST",
@@ -53,7 +79,7 @@ export function EmailAIAssistant({ mode, emailSubject, emailBody, senderName, on
           messages: [
             { role: "user", content: `Contexto del correo:\n${context}\n\nInstrucción: ${text}` },
           ],
-          systemPrompt: "Eres un asistente de correo electrónico profesional. Ayudas a redactar respuestas, resumir hilos y traducir correos. Responde de forma concisa y profesional en el idioma que te pidan.",
+          systemPrompt: `${systemBase}${systemThread}`,
         }),
       });
 
@@ -102,8 +128,20 @@ export function EmailAIAssistant({ mode, emailSubject, emailBody, senderName, on
   const handleInsert = () => {
     if (onInsertText && response) {
       onInsertText(response);
-      toast.success("Texto insertado en la respuesta");
+      toast.success("Texto añadido al borrador");
     }
+  };
+
+  const handleReplaceDraft = () => {
+    if (!onReplaceDraft || !response) return;
+    if (hasDraftText && typeof window !== "undefined") {
+      const ok = window.confirm(
+        "¿Reemplazar todo el contenido del borrador por la propuesta de la IA? Se perderá el texto actual del cuerpo.",
+      );
+      if (!ok) return;
+    }
+    onReplaceDraft(response);
+    toast.success("Borrador reemplazado");
   };
 
   // Quick mode: compact result display
@@ -209,7 +247,12 @@ export function EmailAIAssistant({ mode, emailSubject, emailBody, senderName, on
                 </Button>
                 {onInsertText && (
                   <Button size="sm" className="text-xs h-7" onClick={handleInsert}>
-                    Usar en respuesta
+                    Añadir al borrador
+                  </Button>
+                )}
+                {onReplaceDraft && (
+                  <Button variant="secondary" size="sm" className="text-xs h-7" onClick={handleReplaceDraft}>
+                    Reemplazar borrador
                   </Button>
                 )}
               </div>
