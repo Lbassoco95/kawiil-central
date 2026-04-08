@@ -279,6 +279,7 @@ export function EmailView() {
   /** Escritorio: oculta la lista al leer un correo para ampliar el lector */
   const [listPaneCollapsed, setListPaneCollapsed] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -325,6 +326,34 @@ export function EmailView() {
   const isLoading = emailsQuery.isLoading;
   const hasNextPage = emailsQuery.hasNextPage;
   const isFetchingNextPage = emailsQuery.isFetchingNextPage;
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+    const root = sentinel.closest("[data-radix-scroll-area-viewport]");
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+        if (emailsQuery.hasNextPage && !emailsQuery.isFetchingNextPage) {
+          void emailsQuery.fetchNextPage();
+        }
+      },
+      {
+        root: root instanceof Element ? root : null,
+        rootMargin: "240px",
+        threshold: 0.01,
+      },
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [
+    allEmails.length,
+    emailsQuery.fetchNextPage,
+    emailsQuery.hasNextPage,
+    emailsQuery.isFetchingNextPage,
+    selectedFolderId,
+    debouncedSearch,
+  ]);
 
   const sortedFolders = sortFolders(folders);
 
@@ -1170,24 +1199,27 @@ export function EmailView() {
                 );
               })}
 
-              {/* Load more button */}
+              {/* Paginación: scroll cercano al final + botón explícito */}
               {hasNextPage && (
-                <div className="p-4 text-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => emailsQuery.fetchNextPage()}
-                    disabled={isFetchingNextPage}
-                  >
-                    {isFetchingNextPage ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    )}
-                    {isFetchingNextPage ? "Cargando..." : "Cargar más correos"}
-                  </Button>
-                </div>
+                <>
+                  <div ref={loadMoreSentinelRef} className="h-3 w-full shrink-0" aria-hidden />
+                  <div className="p-4 text-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => emailsQuery.fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                    >
+                      {isFetchingNextPage ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      )}
+                      {isFetchingNextPage ? "Cargando..." : "Cargar correos anteriores"}
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
           )}

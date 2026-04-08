@@ -308,30 +308,59 @@ export function useOutlookCategories() {
   });
 }
 
+export type OutlookEmailsPage = {
+  emails: unknown[];
+  /** URL @odata.nextLink de Graph (paginación con búsqueda y, a veces, sin ella). */
+  nextLink?: string;
+  /** Skip usado en esta página (solo cuando no se siguió nextLink). */
+  pageSkip: number;
+  totalCount: number | null;
+};
+
 export function useOutlookEmails(folderId = "inbox", search?: string) {
   const { user } = useAuth();
   const PAGE_SIZE = 25;
 
   return useInfiniteQuery({
     queryKey: ["outlook-emails", folderId, search],
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: async ({ pageParam }: { pageParam: number | string }): Promise<OutlookEmailsPage> => {
+      const params: Record<string, unknown> = {
+        folder: folderId,
+        search,
+        top: PAGE_SIZE,
+      };
+      let pageSkip = 0;
+      if (typeof pageParam === "string" && pageParam.startsWith("http")) {
+        params.nextLink = pageParam;
+      } else {
+        pageSkip = typeof pageParam === "number" && Number.isFinite(pageParam) ? pageParam : 0;
+        params.skip = pageSkip;
+      }
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
-        body: { action: "emails", params: { folder: folderId, search, top: PAGE_SIZE, skip: pageParam } },
+        body: { action: "emails", params },
       });
-      if (isNotConnectedError(data, error)) return { emails: [], nextSkip: null, totalCount: 0 };
+      if (isNotConnectedError(data, error)) {
+        return { emails: [], pageSkip: 0, totalCount: 0 };
+      }
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const emails = data?.value || [];
       const totalCount = data?.["@odata.count"] ?? null;
-      const hasMore = emails.length === PAGE_SIZE;
+      const nextLink =
+        typeof data?.["@odata.nextLink"] === "string" ? (data["@odata.nextLink"] as string) : undefined;
       return {
         emails,
-        nextSkip: hasMore ? pageParam + PAGE_SIZE : null,
+        nextLink,
+        pageSkip,
         totalCount,
       };
     },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => lastPage.nextSkip,
+    initialPageParam: 0 as number | string,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.nextLink) return lastPage.nextLink;
+      if (lastPage.emails.length < PAGE_SIZE) return undefined;
+      return lastPage.pageSkip + PAGE_SIZE;
+    },
     enabled: !!user,
     refetchInterval: 60000,
   });

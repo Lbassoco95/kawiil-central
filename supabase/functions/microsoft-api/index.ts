@@ -125,9 +125,9 @@ async function loadMessageFileAttachmentFromGraph(
   if (!messageId || !attachmentId) {
     throw new Error("messageId y attachmentId son requeridos");
   }
-  // No incluir contentId en $select: Graph falla (no está en el tipo base attachment).
+  // No incluir contentId ni @odata.type en $select: Graph devuelve 400 (OData).
   const metaPath =
-    `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,@odata.type`;
+    `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline`;
   const att = await graphRequest(accessToken, metaPath, {
     headers: GRAPH_MAIL_PREFER_IMMUTABLE,
   });
@@ -411,6 +411,21 @@ Deno.serve(async (req) => {
       }
 
       case "emails": {
+        /** Continuación oficial de Graph; con $search no se admite $skip en la misma petición. */
+        if (params?.nextLink && typeof params.nextLink === "string") {
+          const link = params.nextLink.trim();
+          if (!link.startsWith("https://graph.microsoft.com/v1.0/")) {
+            throw new Error("nextLink no permitido");
+          }
+          const u = new URL(link);
+          const path = u.pathname.slice("/v1.0".length) + u.search;
+          const q = u.search.toLowerCase();
+          const needsSearchHeader = q.includes("$search") || q.includes("%24search");
+          result = await graphRequest(accessToken, path, {
+            headers: needsSearchHeader ? GRAPH_MAIL_SEARCH_HEADERS : GRAPH_MAIL_PREFER_IMMUTABLE,
+          });
+          break;
+        }
         const top = params?.top || 25;
         const skip = params?.skip || 0;
         const folder = params?.folder || "inbox";
@@ -877,7 +892,7 @@ Deno.serve(async (req) => {
           throw new Error("messageId y attachmentId son requeridos");
         }
         const metaPath =
-          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,@odata.type`;
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline`;
         const att = await graphRequest(accessToken, metaPath, {
           headers: GRAPH_MAIL_PREFER_IMMUTABLE,
         });
@@ -951,7 +966,7 @@ Deno.serve(async (req) => {
         }
 
         const metaPath =
-          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,@odata.type`;
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size`;
         const att = await graphRequest(accessToken, metaPath, {
           headers: GRAPH_MAIL_PREFER_IMMUTABLE,
         });
