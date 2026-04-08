@@ -32,7 +32,6 @@ export interface ReplyForwardDialogProps {
   onOpenChange: (open: boolean) => void;
   action: ReplyForwardAction;
   emailDetail: Record<string, unknown> | null | undefined;
-  selectedEmailId: string | null;
   threadContextForAi: string;
   draftId: string | null;
   draftHtml: string;
@@ -56,7 +55,6 @@ export function ReplyForwardDialog({
   onOpenChange,
   action,
   emailDetail,
-  selectedEmailId,
   threadContextForAi,
   draftId,
   draftHtml,
@@ -112,7 +110,7 @@ export function ReplyForwardDialog({
                 <Sparkles className="h-3.5 w-3.5" /> Kawiil AI
               </Button>
             </div>
-            {showFullAI && selectedEmailId && (
+            {showFullAI && (
               <EmailAIAssistant
                 mode="full"
                 emailSubject={subject}

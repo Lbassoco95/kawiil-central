@@ -14,7 +14,7 @@ function messageTimestamp(m: Record<string, unknown>): string {
 }
 
 function mergeThreadMessages(
-  detail: Record<string, unknown> | null | undefined,
+  detail: Record<string, unknown> | undefined | null,
   threadEmails: Record<string, unknown>[],
 ): Record<string, unknown>[] {
   const byId = new Map<string, Record<string, unknown>>();
@@ -33,7 +33,7 @@ function mergeThreadMessages(
  * Marca el mensaje al que se responde (`replyToMessageId`).
  */
 export function buildThreadContextForAi(
-  emailDetail: Record<string, unknown> | null | undefined,
+  emailDetail: Record<string, unknown> | undefined | null,
   threadEmails: Record<string, unknown>[],
   replyToMessageId: string | null | undefined,
 ): string {

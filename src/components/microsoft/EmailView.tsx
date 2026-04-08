@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useRef, useMemo, type DragEvent } fro
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -72,8 +71,9 @@ import {
 import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
-import { RichTextEditor } from "./RichTextEditor";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
+import { ReplyForwardDialog } from "./ReplyForwardDialog";
+import { buildThreadContextForAi } from "@/lib/emailThreadContext";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
@@ -506,6 +506,10 @@ export function EmailView() {
     }
   };
 
+  const removeReplyAttachment = useCallback((file: ComposerAttachment) => {
+    setReplyAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)));
+  }, []);
+
   const handleArchive = useCallback((emailId: string) => {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
     const next = allEmails[idx + 1] || allEmails[idx - 1];
@@ -682,6 +686,15 @@ export function EmailView() {
     sendDraft.isPending ||
     createForwardDraft.isPending;
   const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
+
+  const threadContextForAi = useMemo(() => {
+    if (!selectedEmailId) return "";
+    return buildThreadContextForAi(
+      emailDetail as Record<string, unknown> | undefined,
+      threadEmails as Record<string, unknown>[],
+      selectedEmailId,
+    );
+  }, [emailDetail, threadEmails, selectedEmailId]);
 
   const folderRow = (folder: any) => {
     const Icon = getFolderIcon(folder.displayName);
@@ -1566,6 +1579,7 @@ export function EmailView() {
                   emailSubject={emailDetail.subject || ""}
                   emailBody={emailDetail.body?.content || ""}
                   senderName={emailDetail.from?.emailAddress?.name}
+                  threadContext={threadContextForAi || undefined}
                   autoPrompt={quickAIPrompt}
                   onClose={() => setQuickAIPrompt(null)}
                 />
@@ -1634,95 +1648,6 @@ export function EmailView() {
               </div>
             </ScrollArea>
 
-            {/* Reply/Forward form */}
-            {emailAction && (
-              <div className="border-t border-border p-3 sm:p-5 shrink-0 space-y-3 bg-muted/20 max-h-[45%] overflow-y-auto">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-foreground">
-                    {emailAction === "reply" ? "Responder" : emailAction === "reply-all" ? "Responder a todos" : "Reenviar"}
-                  </Label>
-                  <Button variant={showFullAI ? "default" : "ghost"} size="sm" className="h-8 text-xs gap-1.5"
-                    onClick={() => setShowFullAI(!showFullAI)}>
-                    <Sparkles className="h-3.5 w-3.5" /> Kawiil AI
-                  </Button>
-                </div>
-
-                {showFullAI && (
-                  <EmailAIAssistant
-                    mode="full"
-                    emailSubject={emailDetail.subject || ""}
-                    emailBody={emailDetail.body?.content || ""}
-                    senderName={emailDetail.from?.emailAddress?.name}
-                    onInsertText={(text) => setDraftHtml((prev) => `<p>${text.replace(/\n/g, "<br>")}</p>${prev}`)}
-                    onClose={() => setShowFullAI(false)}
-                  />
-                )}
-
-                {emailAction === "forward" && (
-                  <Input
-                    placeholder="Para (separar con coma): correo@ejemplo.com"
-                    value={forwardTo}
-                    onChange={(e) => setForwardTo(e.target.value)}
-                    className="text-sm h-9"
-                  />
-                )}
-
-                {createReplyDraft.isPending || createForwardDraft.isPending ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
-                    <Loader2 className="h-4 w-4 animate-spin" />{" "}
-                    {emailAction === "forward" ? "Preparando reenvío con firma…" : "Preparando respuesta con firma…"}
-                  </div>
-                ) : (
-                  <>
-                    <RichTextEditor
-                      key={draftId || "new"}
-                      initialHtml={draftHtml}
-                      placeholder={emailAction === "forward" ? "Mensaje al reenviar..." : "Escribe tu respuesta..."}
-                      onHtmlChange={setDraftHtml}
-                    />
-                    <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs">Adjuntos de respuesta</span>
-                        <label className="inline-flex cursor-pointer items-center rounded-md border px-2 py-1 text-xs">
-                          <Paperclip className="mr-1 h-3.5 w-3.5" />
-                          Adjuntar
-                          <input
-                            type="file"
-                            multiple
-                            className="hidden"
-                            onChange={(e) => void handleReplyAttachmentPick(e.target.files)}
-                          />
-                        </label>
-                      </div>
-                      {replyAttachments.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {replyAttachments.map((file) => (
-                            <div key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
-                              <span className="max-w-[180px] truncate">{file.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => setReplyAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)))}
-                                aria-label={`Quitar ${file.name}`}
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                <div className="flex justify-between items-center pt-1">
-                  <Button variant="ghost" size="sm" className="text-sm h-8" onClick={resetAction}>Cancelar</Button>
-                  <Button size="sm" className="h-8 text-sm gap-1.5" onClick={handleSendReply} disabled={isSending || !draftHtml.trim()}>
-                    {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                    {emailAction === "forward" ? "Reenviar" : "Enviar"}
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         ) : null}
       </div>
@@ -1743,6 +1668,32 @@ export function EmailView() {
         bodyPreview={emailDetail?.bodyPreview}
         receivedDate={emailDetail?.receivedDateTime ? formatDistanceToNow(parseISO(emailDetail.receivedDateTime), { addSuffix: true, locale: es }) : undefined}
       />
+      {emailAction && selectedEmailId && (
+        <ReplyForwardDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) resetAction();
+          }}
+          action={emailAction}
+          emailDetail={(emailDetail ?? {}) as Record<string, unknown>}
+          threadContextForAi={threadContextForAi}
+          draftId={draftId}
+          draftHtml={draftHtml}
+          setDraftHtml={setDraftHtml}
+          forwardTo={forwardTo}
+          setForwardTo={setForwardTo}
+          replyAttachments={replyAttachments}
+          showFullAI={showFullAI}
+          setShowFullAI={setShowFullAI}
+          createReplyDraftPending={createReplyDraft.isPending}
+          createForwardDraftPending={createForwardDraft.isPending}
+          isSending={isSending}
+          onCancel={resetAction}
+          onSend={handleSendReply}
+          onAttachmentPick={(files) => void handleReplyAttachmentPick(files)}
+          onRemoveAttachment={removeReplyAttachment}
+        />
+      )}
       <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} />
     </>
   );
