@@ -323,6 +323,16 @@ export function EmailView() {
     return emailsQuery.data.pages.flatMap((p) => p.emails);
   }, [emailsQuery.data]);
 
+  const emailFolderTotal = useMemo(() => {
+    const pages = emailsQuery.data?.pages;
+    if (!pages?.length) return null;
+    for (const p of pages) {
+      const t = (p as { totalCount?: number }).totalCount;
+      if (typeof t === "number" && t > 0) return t;
+    }
+    return null;
+  }, [emailsQuery.data]);
+
   const isLoading = emailsQuery.isLoading;
   const hasNextPage = emailsQuery.hasNextPage;
   const isFetchingNextPage = emailsQuery.isFetchingNextPage;
@@ -1031,7 +1041,8 @@ export function EmailView() {
           </TooltipProvider>
         </div>
 
-        {/* Email list — sin padding lateral; cada fila usa px-4 */}
+        {/* Lista con scroll + pie fijo para «más correos» (siempre visible) */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ScrollArea className="min-h-0 flex-1 px-0" ref={listRef}>
           {isLoading ? (
             <div className="py-2 space-y-0">
@@ -1199,31 +1210,38 @@ export function EmailView() {
                 );
               })}
 
-              {/* Paginación: scroll cercano al final + botón explícito */}
+              {/* Sentinel dentro del scroll para cargar al acercarse al final */}
               {hasNextPage && (
-                <>
-                  <div ref={loadMoreSentinelRef} className="h-3 w-full shrink-0" aria-hidden />
-                  <div className="p-4 text-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={() => emailsQuery.fetchNextPage()}
-                      disabled={isFetchingNextPage}
-                    >
-                      {isFetchingNextPage ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <ArrowDown className="h-3.5 w-3.5" />
-                      )}
-                      {isFetchingNextPage ? "Cargando..." : "Cargar correos anteriores"}
-                    </Button>
-                  </div>
-                </>
+                <div ref={loadMoreSentinelRef} className="h-4 w-full shrink-0" aria-hidden />
               )}
             </div>
           )}
         </ScrollArea>
+
+        {!isLoading && allEmails.length > 0 && (hasNextPage || isFetchingNextPage) && (
+          <div className="shrink-0 border-t border-border/60 bg-muted/30 px-3 py-2">
+            {emailFolderTotal != null && (
+              <p className="mb-1.5 text-center text-[11px] text-muted-foreground tabular-nums">
+                Mostrando {allEmails.length} de {emailFolderTotal}
+              </p>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-9 w-full gap-2"
+              onClick={() => emailsQuery.fetchNextPage()}
+              disabled={isFetchingNextPage || !hasNextPage}
+            >
+              {isFetchingNextPage ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ArrowDown className="h-3.5 w-3.5" />
+              )}
+              {isFetchingNextPage ? "Cargando..." : "Cargar correos anteriores"}
+            </Button>
+          </div>
+        )}
+        </div>
       </div>
 
       {/* Detail panel — borde izquierdo de acento: visible incluso si el HTML del correo es plano */}

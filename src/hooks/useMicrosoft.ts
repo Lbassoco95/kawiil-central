@@ -317,6 +317,15 @@ export type OutlookEmailsPage = {
   totalCount: number | null;
 };
 
+function parseOdataCount(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw >= 0) return raw;
+  if (typeof raw === "string") {
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  return null;
+}
+
 export function useOutlookEmails(folderId = "inbox", search?: string) {
   const { user } = useAuth();
   const PAGE_SIZE = 25;
@@ -345,7 +354,7 @@ export function useOutlookEmails(folderId = "inbox", search?: string) {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const emails = data?.value || [];
-      const totalCount = data?.["@odata.count"] ?? null;
+      const totalCount = parseOdataCount(data?.["@odata.count"]);
       const nextLink =
         typeof data?.["@odata.nextLink"] === "string" ? (data["@odata.nextLink"] as string) : undefined;
       return {
@@ -356,10 +365,32 @@ export function useOutlookEmails(folderId = "inbox", search?: string) {
       };
     },
     initialPageParam: 0 as number | string,
-    getNextPageParam: (lastPage) => {
+    getNextPageParam: (lastPage, allPages) => {
       if (lastPage.nextLink) return lastPage.nextLink;
-      if (lastPage.emails.length < PAGE_SIZE) return undefined;
-      return lastPage.pageSkip + PAGE_SIZE;
+      if (lastPage.emails.length === 0) return undefined;
+
+      const loaded = allPages.reduce((n, p) => n + p.emails.length, 0);
+
+      let folderTotal: number | null = null;
+      for (const p of allPages) {
+        if (typeof p.totalCount === "number" && p.totalCount > 0) {
+          folderTotal = p.totalCount;
+          break;
+        }
+      }
+
+      // Sin búsqueda: @odata.count permite seguir aunque la 1.ª página traiga < PAGE_SIZE.
+      if (!search && folderTotal != null && loaded < folderTotal) {
+        return loaded;
+      }
+
+      if (lastPage.emails.length === PAGE_SIZE) {
+        // Con $search Graph no admite $skip; si no hay nextLink, no inventar páginas.
+        if (search) return undefined;
+        return loaded;
+      }
+
+      return undefined;
     },
     enabled: !!user,
     refetchInterval: 60000,
