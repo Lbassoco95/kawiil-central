@@ -1195,6 +1195,7 @@ export type Database = {
           template_id: string | null
           sequence_step_id: string | null
           to_email: string
+          additional_to_emails: string[]
           subject: string
           status: string
           scheduled_at: string | null
@@ -1225,6 +1226,7 @@ export type Database = {
           template_id?: string | null
           sequence_step_id?: string | null
           to_email: string
+          additional_to_emails?: string[]
           subject: string
           status?: string
           scheduled_at?: string | null
@@ -1255,6 +1257,7 @@ export type Database = {
           template_id?: string | null
           sequence_step_id?: string | null
           to_email?: string
+          additional_to_emails?: string[]
           subject?: string
           status?: string
           scheduled_at?: string | null

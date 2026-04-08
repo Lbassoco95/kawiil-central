@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { leadMatchesPipelineSearch } from "@/lib/pipelineSearch";
 import { usePipelineStages, usePipelineLeads, type Lead } from "@/hooks/usePipeline";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function PipelineList() {
   const { data: stages = [], isLoading: sl } = usePipelineStages();
   const { data: leads = [], isLoading: ll } = usePipelineLeads(true);
-  const [q, setQ] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get("q") ?? "";
   const [priority, setPriority] = useState<string>("all");
   const [country, setCountry] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("all");
@@ -36,18 +38,14 @@ export default function PipelineList() {
     return (id: string) => m.get(id) || "—";
   }, [stages]);
 
+  const clearSearchParam = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    setSearchParams(next, { replace: true });
+  };
+
   const filtered = useMemo(() => {
-    let rows: Lead[] = leads;
-    if (q.trim()) {
-      const t = q.toLowerCase();
-      rows = rows.filter(
-        (l) =>
-          l.full_name.toLowerCase().includes(t) ||
-          (l.email && l.email.toLowerCase().includes(t)) ||
-          (l.company_name && l.company_name.toLowerCase().includes(t)) ||
-          (l.campaign_name && l.campaign_name.toLowerCase().includes(t)),
-      );
-    }
+    let rows: Lead[] = leads.filter((l) => leadMatchesPipelineSearch(l, q));
     if (priority !== "all") rows = rows.filter((l) => l.priority === priority);
     if (country.trim()) {
       const c = country.toLowerCase();
@@ -76,11 +74,12 @@ export default function PipelineList() {
 
   return (
     <div className="space-y-4">
+      {q.trim() ? (
+        <p className="text-xs text-muted-foreground">
+          Búsqueda activa (barra superior): <strong>{filtered.length}</strong> fila(s) tras filtros de esta vista.
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2 items-end">
-        <div className="flex-1 min-w-[180px]">
-          <label className="text-xs text-muted-foreground">Buscar</label>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre, email, campaña…" />
-        </div>
         <div className="w-[140px]">
           <label className="text-xs text-muted-foreground">Prioridad</label>
           <Select value={priority} onValueChange={setPriority}>
@@ -143,7 +142,19 @@ export default function PipelineList() {
             </SelectContent>
           </Select>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => { setQ(""); setPriority("all"); setCountry(""); setStageFilter("all"); setUrgencyFilter("all"); setVisaFilter("all"); }}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            clearSearchParam();
+            setPriority("all");
+            setCountry("");
+            setStageFilter("all");
+            setUrgencyFilter("all");
+            setVisaFilter("all");
+          }}
+        >
           Limpiar
         </Button>
       </div>

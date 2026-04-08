@@ -30,7 +30,8 @@ import { Label } from "@/components/ui/label";
 import { useCreateLead } from "@/hooks/usePipeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { leadMatchesPipelineSearch } from "@/lib/pipelineSearch";
 
 const priorityVariant: Record<string, "destructive" | "default" | "secondary" | "outline"> = {
   urgent: "destructive",
@@ -239,7 +240,13 @@ function isToday(date: Date): boolean {
 
 export default function PipelineBoard() {
   const { data: stages = [], isLoading: ls } = usePipelineStages();
-  const { data: leads = [], isLoading: ll } = usePipelineLeads(true);
+  const { data: leadsRaw = [], isLoading: ll } = usePipelineLeads(true);
+  const [searchParams] = useSearchParams();
+  const pipelineQ = searchParams.get("q") ?? "";
+  const leads = useMemo(
+    () => leadsRaw.filter((l) => leadMatchesPipelineSearch(l, pipelineQ)),
+    [leadsRaw, pipelineQ],
+  );
   const moveStage = useMoveLeadStage();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -318,7 +325,15 @@ export default function PipelineBoard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {pipelineQ.trim() ? (
+          <p className="text-xs text-muted-foreground">
+            Búsqueda activa: se muestran <strong>{leads.length}</strong> lead(s) que coinciden (nombre, empresa, email o
+            campaña).
+          </p>
+        ) : (
+          <span />
+        )}
         <NewLeadDialog registradoStageId={registradoStageId} />
       </div>
       <p className="text-xs text-muted-foreground px-0.5">

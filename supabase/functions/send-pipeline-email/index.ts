@@ -43,6 +43,28 @@ function wrapLinksForTracking(html: string, eid: string, base: string): string {
   );
 }
 
+const SIMPLE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+
+/** Principal + extras, sin duplicados (por minúsculas), máximo 4. */
+function buildRecipientList(primaryRaw: string, extras: unknown): string[] {
+  const primary = String(primaryRaw ?? "").trim();
+  const extraArr = Array.isArray(extras)
+    ? extras.map((x) => String(x ?? "").trim()).filter(Boolean)
+    : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (e: string) => {
+    if (!SIMPLE_EMAIL.test(e)) return;
+    const k = e.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(e);
+  };
+  if (primary) push(primary);
+  for (const e of extraArr) push(e);
+  return out.slice(0, 4);
+}
+
 async function getAppOnlyGraphToken(): Promise<string> {
   const tenant = Deno.env.get("AZURE_TENANT_ID") || Deno.env.get("MICROSOFT_TENANT_ID");
   const clientId = Deno.env.get("AZURE_CLIENT_ID") || Deno.env.get("MICROSOFT_CLIENT_ID");
@@ -123,6 +145,9 @@ Deno.serve(async (req) => {
       email_log_id?: string;
       subject?: string;
       body_html?: string;
+      to_email?: string;
+      /** Máx. 3 correos además del principal (4 To en total). Ignorado si hay in_reply_to. */
+      additional_to_emails?: string[];
       in_reply_to?: string;
       attachments?: Array<{
         name: string;
@@ -148,13 +173,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    const to = lead.email as string | null;
-    if (!to) {
-      return new Response(JSON.stringify({ error: "Lead sin email" }), {
+    const leadEmail = (lead.email as string | null) || "";
+    const primaryHint = (body.to_email || "").trim() || leadEmail;
+    const extraList = body.in_reply_to ? [] : (body.additional_to_emails ?? []);
+    const recipients = buildRecipientList(primaryHint, extraList);
+    if (recipients.length === 0) {
+      return new Response(JSON.stringify({ error: "Indica al menos un correo válido en Para" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const toPrimary = recipients[0];
+    const additionalOnly = recipients.slice(1);
 
     let subject = body.subject || "";
     let html = body.body_html || "";
@@ -175,7 +205,7 @@ Deno.serve(async (req) => {
 
     const vars: Record<string, string> = {
       nombre: lead.full_name || "",
-      email: to || "",
+      email: leadEmail || toPrimary,
       empresa: lead.company_name || "",
       pais: lead.country_name || "",
       campana: lead.campaign_name || "",
@@ -202,7 +232,8 @@ Deno.serve(async (req) => {
         id: effectiveLogId,
         lead_id: lead.id,
         template_id: body.template_id || null,
-        to_email: to,
+        to_email: toPrimary,
+        additional_to_emails: additionalOnly,
         subject,
         status: "sent",
         sent_at: preNow,
@@ -226,7 +257,7 @@ Deno.serve(async (req) => {
     const messagePayload: Record<string, unknown> = {
       subject,
       body: { contentType: "HTML", content: htmlToSend },
-      toRecipients: [{ emailAddress: { address: to } }],
+      toRecipients: recipients.map((addr) => ({ emailAddress: { address: addr } })),
     };
     const fromTemplate = await attachmentsForTemplateKey(templateAttachmentKey);
     const fromClient = body.attachments ?? [];
@@ -279,7 +310,7 @@ Deno.serve(async (req) => {
     }
 
     await new Promise((r) => setTimeout(r, 800));
-    const sentMeta = await fetchLatestSentMessage(token, sender, to);
+    const sentMeta = await fetchLatestSentMessage(token, sender, toPrimary);
     const graphId = sentMeta?.id ?? null;
     const conversationId = sentMeta?.conversationId ?? null;
 
@@ -298,6 +329,8 @@ Deno.serve(async (req) => {
       conversation_id: conversationId,
       in_reply_to: body.in_reply_to || null,
       error_message: null,
+      to_email: toPrimary,
+      additional_to_emails: additionalOnly,
     }).eq("id", effectiveLogId);
 
     await svc.from("lead_activities").insert({
@@ -308,6 +341,7 @@ Deno.serve(async (req) => {
         template_id: body.template_id,
         email_log_id: effectiveLogId,
         subject,
+        to_recipients: recipients,
       },
     });
 

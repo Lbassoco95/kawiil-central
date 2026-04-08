@@ -32,14 +32,48 @@ import { Paperclip, X } from "lucide-react";
 import { RichTextEditor } from "@/components/microsoft/RichTextEditor";
 import { filesToComposerAttachments, type ComposerAttachment } from "@/lib/emailComposer";
 
-const emailSchema = z.object({
-  to_email: z.string().email("Email inválido"),
-  subject: z.string().min(1, "El asunto es requerido"),
-  body_html: z.string().min(1, "El contenido es requerido"),
-  template_id: z.string().optional(),
-  schedule_follow_up: z.boolean().default(false),
-  follow_up_date: z.string().optional(),
-});
+const emailSchema = z
+  .object({
+    to_email: z.string().min(1, "El correo principal es requerido").email("Email inválido"),
+    extra_email_1: z.string().optional(),
+    extra_email_2: z.string().optional(),
+    extra_email_3: z.string().optional(),
+    subject: z.string().min(1, "El asunto es requerido"),
+    body_html: z.string().min(1, "El contenido es requerido"),
+    template_id: z.string().optional(),
+    schedule_follow_up: z.boolean().default(false),
+    follow_up_date: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const keys = ["extra_email_1", "extra_email_2", "extra_email_3"] as const;
+    const extras: string[] = [];
+    for (const k of keys) {
+      const v = (data[k] || "").trim();
+      if (!v) continue;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Email inválido", path: [k] });
+        continue;
+      }
+      extras.push(v);
+    }
+    const main = data.to_email.trim();
+    const all = [main, ...extras];
+    const uniq = new Set(all.map((x) => x.toLowerCase()));
+    if (uniq.size !== all.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "No repitas el mismo correo",
+        path: ["to_email"],
+      });
+    }
+    if (all.length > 4) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Máximo 4 destinatarios en total",
+        path: ["to_email"],
+      });
+    }
+  });
 
 type EmailForm = z.infer<typeof emailSchema>;
 
@@ -81,6 +115,9 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
     resolver: zodResolver(emailSchema),
     defaultValues: {
       to_email: leadEmail || "",
+      extra_email_1: "",
+      extra_email_2: "",
+      extra_email_3: "",
       subject: "",
       body_html: "",
       schedule_follow_up: false,
@@ -90,6 +127,9 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
   useEffect(() => {
     if (!open) return;
     if (leadEmail) form.setValue("to_email", leadEmail);
+    form.setValue("extra_email_1", "");
+    form.setValue("extra_email_2", "");
+    form.setValue("extra_email_3", "");
     if (replyTo?.subject) {
       const base = replyTo.subject.replace(/^Re:\s*/i, "");
       form.setValue("subject", `Re: ${base}`);
@@ -122,10 +162,16 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
     if (!user) return;
     setSaving(true);
     try {
+      const extras = [data.extra_email_1, data.extra_email_2, data.extra_email_3]
+        .map((s) => (s || "").trim())
+        .filter(Boolean);
+      const additional_to_emails = replyTo ? [] : extras;
+
       const { data: logEntry, error: emailErr } = await supabase.from("email_log").insert({
         lead_id: leadId,
         template_id: data.template_id || null,
-        to_email: data.to_email,
+        to_email: data.to_email.trim(),
+        additional_to_emails,
         subject: data.subject,
         status: "queued",
         in_reply_to: replyTo?.graph_message_id || null,
@@ -141,6 +187,8 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
             email_log_id: logEntry.id,
             subject: data.subject,
             body_html: data.body_html,
+            to_email: data.to_email.trim(),
+            additional_to_emails,
             in_reply_to: replyTo?.graph_message_id || undefined,
             attachments,
           },
@@ -171,9 +219,22 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
 
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.activities(leadId) });
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.emailLog(leadId) });
-      toast.success("Correo enviado correctamente desde el buzón configurado en el sistema.");
+      const n = 1 + additional_to_emails.length;
+      toast.success(
+        n > 1
+          ? `Correo enviado a ${n} destinatarios desde el buzón del sistema.`
+          : "Correo enviado correctamente desde el buzón configurado en el sistema.",
+      );
       onClose();
-      form.reset({ to_email: leadEmail || "", subject: "", body_html: "", schedule_follow_up: false });
+      form.reset({
+        to_email: leadEmail || "",
+        extra_email_1: "",
+        extra_email_2: "",
+        extra_email_3: "",
+        subject: "",
+        body_html: "",
+        schedule_follow_up: false,
+      });
       setShowPreview(false);
       setAttachments([]);
     } catch (e: unknown) {
@@ -205,7 +266,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
@@ -264,11 +325,50 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
             />
           </div>
 
-          <div>
-            <Label>Para *</Label>
-            <Input type="email" {...form.register("to_email")} placeholder="correo@ejemplo.com" />
-            {form.formState.errors.to_email && (
-              <p className="text-xs text-destructive mt-1">{form.formState.errors.to_email.message}</p>
+          <div className="space-y-2">
+            <div>
+              <Label>Para (contacto del lead) *</Label>
+              <Input type="email" {...form.register("to_email")} placeholder="correo@ejemplo.com" />
+              {form.formState.errors.to_email && (
+                <p className="text-xs text-destructive mt-1">{form.formState.errors.to_email.message}</p>
+              )}
+            </div>
+            {!replyTo && (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Correos adicionales (mismo mensaje para todos). Ideal si en Calendly u otra reunión hay más
+                  participantes — hasta <strong>3</strong> extra (<strong>4</strong> destinatarios en total).
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Correo adicional 1</Label>
+                    <Input type="email" {...form.register("extra_email_1")} placeholder="Opcional" />
+                    {form.formState.errors.extra_email_1 && (
+                      <p className="text-xs text-destructive mt-0.5">
+                        {form.formState.errors.extra_email_1.message}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Correo adicional 2</Label>
+                    <Input type="email" {...form.register("extra_email_2")} placeholder="Opcional" />
+                    {form.formState.errors.extra_email_2 && (
+                      <p className="text-xs text-destructive mt-0.5">
+                        {form.formState.errors.extra_email_2.message}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Correo adicional 3</Label>
+                    <Input type="email" {...form.register("extra_email_3")} placeholder="Opcional" />
+                    {form.formState.errors.extra_email_3 && (
+                      <p className="text-xs text-destructive mt-0.5">
+                        {form.formState.errors.extra_email_3.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </div>
 

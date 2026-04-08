@@ -84,6 +84,11 @@ function EmailCard({
   const [expanded, setExpanded] = useState(false);
   const isOutbound = email.direction === "outbound";
   const timestamp = email.sent_at || email.received_at || email.created_at;
+  const extraTo = Array.isArray(email.additional_to_emails) ? email.additional_to_emails : [];
+  const outboundToLabel =
+    extraTo.length > 0
+      ? `${email.to_email} +${extraTo.length} (${extraTo.join(", ")})`
+      : email.to_email;
 
   return (
     <div
@@ -97,9 +102,9 @@ function EmailCard({
             <Inbox className="h-4 w-4 text-blue-600 shrink-0" />
           )}
           <div className="min-w-0">
-            <p className="text-sm font-medium truncate">
+            <p className="text-sm font-medium truncate" title={isOutbound ? outboundToLabel : undefined}>
               {isOutbound
-                ? `${mailboxLabel} → ${email.to_email}`
+                ? `${mailboxLabel} → ${outboundToLabel}`
                 : `${email.from_name || email.from_email || "?"} → ${mailboxLabel}`}
             </p>
             <p className="text-sm text-muted-foreground truncate">{email.subject}</p>
