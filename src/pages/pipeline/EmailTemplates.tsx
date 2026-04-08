@@ -27,8 +27,8 @@ import { Plus, Pencil } from "lucide-react";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
 const SOFTLANDING_SUGGESTED_BODY_HTML = `<p>Hola {{nombre}},</p>
-<p>Gracias por tu interés en Kawiil. Te adjuntamos el documento <strong>Kawiil – Softlanding Hub en México</strong>, con información sobre cómo acompañamos a empresas en su implantación en el país.</p>
-<p>Encontrarás un resumen de servicios, contexto regulatorio y posibles siguientes pasos. Si en <strong>{{empresa}}</strong> quieren profundizar en algún tema concreto, responde a este correo y coordinamos una llamada.</p>
+<p>Te adjuntamos en PDF nuestra <strong>propuesta comercial – Softlanding Hub en México</strong>. Incluye alcance, modalidades y siguientes pasos para que <strong>{{empresa}}</strong> pueda revisarlo con el equipo y tomar una decisión informada.</p>
+<p>Cuando lo hayan leído, escríbenos si desean <strong>iniciar el proceso</strong> con Kawiil o si prefieren una llamada breve para resolver dudas: basta con responder a este correo.</p>
 <p>Saludos cordiales,<br/>Equipo Kawiil</p>`;
 
 export default function EmailTemplates() {
