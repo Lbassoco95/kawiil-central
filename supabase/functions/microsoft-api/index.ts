@@ -964,13 +964,18 @@ Deno.serve(async (req) => {
         const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
         const rangeEnd = byteStart + maxLen - 1;
 
+        /** No enviar Range en el primer trozo: Graph/Exchange a veces responde 416 o cuerpo vacío con bytes=0-… */
+        const valueHeaders: Record<string, string> = {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/octet-stream",
+          ...GRAPH_MAIL_PREFER_IMMUTABLE,
+        };
+        if (byteStart > 0) {
+          valueHeaders.Range = `bytes=${byteStart}-${rangeEnd}`;
+        }
+
         const valueRes = await fetch(valueUrl, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/octet-stream",
-            Range: `bytes=${byteStart}-${rangeEnd}`,
-            ...GRAPH_MAIL_PREFER_IMMUTABLE,
-          },
+          headers: valueHeaders,
         });
 
         let buf: Uint8Array;
@@ -1010,10 +1015,27 @@ Deno.serve(async (req) => {
             if (Number.isFinite(n)) totalSize = n;
           }
         } else if (valueRes.status === 200 && byteStart > 0) {
-          const errText = await valueRes.text();
-          throw new Error(
-            `Graph no devolvió 206 en offset ${byteStart} (Range). ${errText.slice(0, 120)}`,
-          );
+          if (totalFromMeta != null && totalFromMeta <= 6 * 1024 * 1024) {
+            const full = new Uint8Array(await valueRes.arrayBuffer());
+            if (byteStart >= full.length) {
+              buf = new Uint8Array(0);
+            } else {
+              buf = full.subarray(byteStart, Math.min(byteStart + maxLen, full.length));
+            }
+            totalSize = totalFromMeta;
+            const hdr = valueRes.headers.get("content-type");
+            if (hdr) {
+              const main = hdr.split(";")[0].trim().toLowerCase();
+              if (main && main !== "application/octet-stream") {
+                contentType = hdr.split(";")[0].trim();
+              }
+            }
+          } else {
+            const errText = await valueRes.text();
+            throw new Error(
+              `Graph no devolvió 206 en offset ${byteStart} (Range). ${errText.slice(0, 120)}`,
+            );
+          }
         } else {
           const errText = await valueRes.text();
           throw new Error(`Adjunto chunk [${valueRes.status}]: ${errText}`);

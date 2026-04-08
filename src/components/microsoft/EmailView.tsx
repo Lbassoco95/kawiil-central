@@ -232,7 +232,7 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv18-attachment-chunk";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv19-chunk-no-range0";
 
 type AttachmentPreviewState = {
   url: string;

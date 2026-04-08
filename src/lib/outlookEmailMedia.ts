@@ -90,12 +90,23 @@ async function fetchMessageAttachmentBlobViaChunks(
           (trimmed.slice(0, 400) || `Error HTTP ${res.status}`),
       );
     }
+    if (!trimmed) {
+      throw new Error(
+        "microsoft-api devolvió cuerpo vacío al pedir trozos. Despliega la función: supabase functions deploy microsoft-api --no-verify-jwt",
+      );
+    }
     throwIfMicrosoftJsonIsError(parsed);
-    if (!parsed || typeof parsed !== "object" || parsed === null || !("partBase64" in parsed)) {
-      throw new Error("La API no devolvió trozos del adjunto (despliega microsoft-api).");
+    if (!parsed || typeof parsed !== "object" || parsed === null) {
+      throw new Error(`Trozo de adjunto: JSON inválido (${res.status}). ${trimmed.slice(0, 180)}`);
+    }
+    const rec = parsed as Record<string, unknown>;
+    if (!("partBase64" in rec)) {
+      throw new Error(
+        `microsoft-api no incluye partBase64 (¿versión antigua?). Despliega: supabase functions deploy microsoft-api --no-verify-jwt — detalle: ${trimmed.slice(0, 160)}`,
+      );
     }
     const p = parsed as {
-      partBase64: string;
+      partBase64: string | null;
       length: number;
       done: boolean;
       name?: string;
@@ -107,7 +118,7 @@ async function fetchMessageAttachmentBlobViaChunks(
     if (typeof p.totalSize === "number") totalSize = p.totalSize;
 
     const raw = p.partBase64;
-    if (typeof raw !== "string" || raw.length === 0) {
+    if (raw == null || (typeof raw === "string" && raw.length === 0)) {
       if (p.done || byteStart > 0) break;
       throw new Error("Primer trozo del adjunto vacío.");
     }
