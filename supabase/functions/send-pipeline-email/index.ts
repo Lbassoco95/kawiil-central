@@ -45,6 +45,10 @@ function wrapLinksForTracking(html: string, eid: string, base: string): string {
 
 const SIMPLE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
+function isMissingAdditionalToColumnError(msg: string): boolean {
+  return /additional_to_emails|schema cache|Could not find.*column/i.test(msg);
+}
+
 /** Principal + extras, sin duplicados (por minúsculas), máximo 4. */
 function buildRecipientList(primaryRaw: string, extras: unknown): string[] {
   const primary = String(primaryRaw ?? "").trim();
@@ -228,7 +232,7 @@ Deno.serve(async (req) => {
     const preNow = new Date().toISOString();
 
     if (!body.email_log_id) {
-      await svc.from("email_log").insert({
+      const fullRow = {
         id: effectiveLogId,
         lead_id: lead.id,
         template_id: body.template_id || null,
@@ -241,9 +245,15 @@ Deno.serve(async (req) => {
         body_text: bodyText,
         from_email: sender,
         from_name: "Kawiil",
-        direction: "outbound",
+        direction: "outbound" as const,
         in_reply_to: body.in_reply_to || null,
-      });
+      };
+      let ins = await svc.from("email_log").insert(fullRow);
+      if (ins.error && isMissingAdditionalToColumnError(ins.error.message || "")) {
+        const { additional_to_emails: _x, ...rowNoExtra } = fullRow;
+        ins = await svc.from("email_log").insert(rowNoExtra);
+      }
+      if (ins.error) throw new Error(ins.error.message);
     }
 
     const trackingOn = Deno.env.get("EMAIL_TRACKING") !== "false";
@@ -316,7 +326,7 @@ Deno.serve(async (req) => {
 
     const now = new Date().toISOString();
 
-    await svc.from("email_log").update({
+    const sentPatch: Record<string, unknown> = {
       status: "sent",
       sent_at: now,
       subject,
@@ -331,7 +341,13 @@ Deno.serve(async (req) => {
       error_message: null,
       to_email: toPrimary,
       additional_to_emails: additionalOnly,
-    }).eq("id", effectiveLogId);
+    };
+    let up = await svc.from("email_log").update(sentPatch).eq("id", effectiveLogId);
+    if (up.error && isMissingAdditionalToColumnError(up.error.message || "")) {
+      const { additional_to_emails: _y, ...patchNoExtra } = sentPatch;
+      up = await svc.from("email_log").update(patchNoExtra).eq("id", effectiveLogId);
+    }
+    if (up.error) throw new Error(up.error.message);
 
     await svc.from("lead_activities").insert({
       lead_id: lead.id,

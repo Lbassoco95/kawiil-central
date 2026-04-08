@@ -102,6 +102,15 @@ function replaceVariables(text: string, leadName: string, leadEmail: string | nu
     .replace(/\{\{email\}\}/gi, email);
 }
 
+function errorMessageFromUnknown(e: unknown): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (e && typeof e === "object" && "message" in e) {
+    const m = (e as { message?: string }).message;
+    if (typeof m === "string" && m.trim()) return m;
+  }
+  return "Error al enviar email";
+}
+
 export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, replyTo }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -167,16 +176,30 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         .filter(Boolean);
       const additional_to_emails = replyTo ? [] : extras;
 
-      const { data: logEntry, error: emailErr } = await supabase.from("email_log").insert({
+      const logPayload = {
         lead_id: leadId,
         template_id: data.template_id || null,
         to_email: data.to_email.trim(),
         additional_to_emails,
         subject: data.subject,
-        status: "queued",
+        status: "queued" as const,
         in_reply_to: replyTo?.graph_message_id || null,
-      }).select("id").single();
-      if (emailErr) throw emailErr;
+      };
+      let logRes = await supabase.from("email_log").insert(logPayload).select("id").single();
+      if (logRes.error && /additional_to_emails|schema cache|column.*email_log/i.test(logRes.error.message || "")) {
+        const { additional_to_emails: _a, ...withoutExtra } = logPayload;
+        logRes = await supabase.from("email_log").insert(withoutExtra).select("id").single();
+      }
+      const { data: logEntry, error: emailErr } = logRes;
+      if (emailErr) {
+        const msg = errorMessageFromUnknown(emailErr);
+        throw new Error(
+          /additional_to_emails|schema cache/i.test(msg)
+            ? `${msg} — En Supabase SQL Editor ejecuta: ALTER TABLE public.email_log ADD COLUMN IF NOT EXISTS additional_to_emails text[] NOT NULL DEFAULT '{}';`
+            : msg,
+        );
+      }
+      if (!logEntry) throw new Error("No se pudo crear el registro de envío");
 
       const { data: result, error: fnErr } = await supabase.functions.invoke(
         "send-pipeline-email",
@@ -195,13 +218,17 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         },
       );
 
-      if (fnErr) {
-        await supabase.from("email_log").update({ status: "failed", error_message: fnErr.message || "Error desconocido" }).eq("id", logEntry.id);
-        throw new Error(fnErr.message || "Error al enviar email");
-      }
-      if (result?.error) {
-        await supabase.from("email_log").update({ status: "failed", error_message: result.error }).eq("id", logEntry.id);
-        throw new Error(result.error);
+      const fnBodyError =
+        result && typeof result === "object" && result !== null && "error" in result
+          ? String((result as { error: unknown }).error)
+          : "";
+
+      if (fnErr || fnBodyError) {
+        const detail = fnBodyError || fnErr?.message || "Error desconocido";
+        await supabase.from("email_log").update({ status: "failed", error_message: detail.slice(0, 500) }).eq("id", logEntry.id);
+        throw new Error(
+          detail.length > 280 ? `${detail.slice(0, 280)}…` : detail,
+        );
       }
 
       if (data.schedule_follow_up && data.follow_up_date) {
@@ -238,7 +265,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
       setShowPreview(false);
       setAttachments([]);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Error al enviar email");
+      toast.error(errorMessageFromUnknown(e));
     } finally {
       setSaving(false);
     }
