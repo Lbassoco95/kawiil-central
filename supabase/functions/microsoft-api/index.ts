@@ -36,6 +36,11 @@ function normalizeGraphMessageOrAttachmentId(raw: string | undefined): string {
 }
 
 const GRAPH_MAIL_PREFER_IMMUTABLE = { Prefer: 'IdType="ImmutableId"' };
+/** Graph exige ConsistencyLevel eventual en búsquedas ($search) sobre mensajes. */
+const GRAPH_MAIL_SEARCH_HEADERS = {
+  ...GRAPH_MAIL_PREFER_IMMUTABLE,
+  ConsistencyLevel: "eventual",
+};
 
 async function graphRequest(accessToken: string, path: string, init?: RequestInit) {
   const res = await fetch(`${GRAPH_BASE}${path}`, {
@@ -120,8 +125,9 @@ async function loadMessageFileAttachmentFromGraph(
   if (!messageId || !attachmentId) {
     throw new Error("messageId y attachmentId son requeridos");
   }
+  // No incluir contentId en $select: Graph falla (no está en el tipo base attachment).
   const metaPath =
-    `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
+    `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,@odata.type`;
   const att = await graphRequest(accessToken, metaPath, {
     headers: GRAPH_MAIL_PREFER_IMMUTABLE,
   });
@@ -415,7 +421,7 @@ Deno.serve(async (req) => {
         result = await graphRequest(
           accessToken,
           `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${search}`,
-          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+          { headers: params?.search ? GRAPH_MAIL_SEARCH_HEADERS : GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;
       }
@@ -669,11 +675,14 @@ Deno.serve(async (req) => {
       case "email-conversation": {
         const convId = params?.conversationId;
         if (!convId) throw new Error("conversationId required");
-        // Use $search instead of $filter to avoid InefficientFilter error
+        const safeConvId = String(convId).replace(/"/g, "");
+        const convSelect =
+          "$select=id,conversationId,subject,bodyPreview,body,from,receivedDateTime,sentDateTime,isRead,hasAttachments";
+        // $search requiere ConsistencyLevel eventual; $select aporta body para el hilo en UI
         const data = await graphRequest(
           accessToken,
-          `/me/messages?$search="conversationId:${convId}"&$top=20`,
-          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+          `/me/messages?${convSelect}&$search="conversationId:${safeConvId}"&$top=50`,
+          { headers: GRAPH_MAIL_SEARCH_HEADERS },
         );
         result = data?.value || [];
         break;
@@ -868,7 +877,7 @@ Deno.serve(async (req) => {
           throw new Error("messageId y attachmentId son requeridos");
         }
         const metaPath =
-          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,contentId,@odata.type`;
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,isInline,@odata.type`;
         const att = await graphRequest(accessToken, metaPath, {
           headers: GRAPH_MAIL_PREFER_IMMUTABLE,
         });

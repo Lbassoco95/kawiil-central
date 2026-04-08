@@ -452,7 +452,10 @@ export function useEmailConversation(conversationId: string | null) {
       });
       if (isNotConnectedError(data, error)) return [];
       if (error) throw error;
-      return Array.isArray(data) ? data : [];
+      const raw = data as unknown[] | { value?: unknown[] } | null | undefined;
+      if (Array.isArray(raw)) return raw;
+      if (raw && Array.isArray(raw.value)) return raw.value;
+      return [];
     },
     enabled: !!user && !!conversationId,
   });
