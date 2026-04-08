@@ -166,6 +166,41 @@ async function loadMessageFileAttachmentFromGraph(
   };
 }
 
+/** Lee como máximo `max` bytes y cancela el stream (evita bajar el PDF entero en el primer trozo). */
+async function readFirstBytesFromStream(body: ReadableStream<Uint8Array>, max: number): Promise<Uint8Array> {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let got = 0;
+  try {
+    while (got < max) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const v = value;
+      if (got + v.length <= max) {
+        chunks.push(v);
+        got += v.length;
+      } else {
+        chunks.push(v.subarray(0, max - got));
+        got = max;
+        break;
+      }
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+  const out = new Uint8Array(got);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -891,6 +926,114 @@ Deno.serve(async (req) => {
             "Access-Control-Expose-Headers": "Content-Type, X-Kawiil-Attachment-Name",
           },
         });
+      }
+
+      /**
+       * Trozos en JSON (base64) para cuando binario/stream falla en el cliente o el gateway trunca.
+       * Usa Range en Graph si responde 206; si no, solo byteStart=0 con lectura parcial + cancel.
+       */
+      case "message-attachment-chunk": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const attachmentId = normalizeGraphMessageOrAttachmentId(params?.attachmentId);
+        const byteStart = Math.max(0, Math.floor(Number(params?.byteStart ?? 0)));
+        const maxLen = Math.min(Math.max(1, Math.floor(Number(params?.maxLength ?? 196608))), 262144);
+        if (!messageId || !attachmentId) {
+          throw new Error("messageId y attachmentId son requeridos");
+        }
+
+        const metaPath =
+          `/me/messages/${messageId}/attachments/${attachmentId}?$select=id,name,contentType,size,@odata.type`;
+        const att = await graphRequest(accessToken, metaPath, {
+          headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+        });
+        const odataType = (att as Record<string, unknown>)["@odata.type"] as string | undefined;
+        if (odataType && String(odataType).includes("itemAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+        if (odataType && String(odataType).includes("referenceAttachment")) {
+          throw new Error("Este tipo de adjunto no se puede previsualizar");
+        }
+
+        let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
+        const name = String((att as Record<string, unknown>).name ?? "adjunto");
+        const totalFromMeta =
+          typeof (att as Record<string, unknown>).size === "number"
+            ? Number((att as Record<string, unknown>).size)
+            : null;
+
+        const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+        const rangeEnd = byteStart + maxLen - 1;
+
+        const valueRes = await fetch(valueUrl, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/octet-stream",
+            Range: `bytes=${byteStart}-${rangeEnd}`,
+            ...GRAPH_MAIL_PREFER_IMMUTABLE,
+          },
+        });
+
+        let buf: Uint8Array;
+        let totalSize: number | null = totalFromMeta;
+
+        if (valueRes.status === 206) {
+          buf = new Uint8Array(await valueRes.arrayBuffer());
+          const cr = valueRes.headers.get("content-range");
+          if (cr) {
+            const m = cr.match(/\/(\d+)\s*$/);
+            if (m) totalSize = parseInt(m[1], 10);
+          }
+          const hdr = valueRes.headers.get("content-type");
+          if (hdr) {
+            const main = hdr.split(";")[0].trim().toLowerCase();
+            if (main && main !== "application/octet-stream") {
+              contentType = hdr.split(";")[0].trim();
+            }
+          }
+        } else if (valueRes.status === 200 && byteStart === 0) {
+          const streamBody = valueRes.body;
+          if (!streamBody) {
+            buf = new Uint8Array(await valueRes.arrayBuffer());
+          } else {
+            buf = await readFirstBytesFromStream(streamBody, maxLen);
+          }
+          const hdr = valueRes.headers.get("content-type");
+          if (hdr) {
+            const main = hdr.split(";")[0].trim().toLowerCase();
+            if (main && main !== "application/octet-stream") {
+              contentType = hdr.split(";")[0].trim();
+            }
+          }
+          if (totalSize == null) {
+            const cl = valueRes.headers.get("content-length");
+            const n = cl ? parseInt(cl, 10) : NaN;
+            if (Number.isFinite(n)) totalSize = n;
+          }
+        } else if (valueRes.status === 200 && byteStart > 0) {
+          const errText = await valueRes.text();
+          throw new Error(
+            `Graph no devolvió 206 en offset ${byteStart} (Range). ${errText.slice(0, 120)}`,
+          );
+        } else {
+          const errText = await valueRes.text();
+          throw new Error(`Adjunto chunk [${valueRes.status}]: ${errText}`);
+        }
+
+        const done =
+          buf.length === 0 ||
+          (totalSize != null && byteStart + buf.length >= totalSize) ||
+          (totalSize == null && buf.length < maxLen);
+
+        result = {
+          name,
+          contentType,
+          byteStart,
+          length: buf.length,
+          totalSize,
+          partBase64: uint8ArrayToBase64(buf),
+          done,
+        };
+        break;
       }
 
       case "email-attachments": {

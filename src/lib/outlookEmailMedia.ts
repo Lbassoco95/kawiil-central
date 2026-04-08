@@ -37,6 +37,101 @@ function throwIfMicrosoftJsonIsError(parsed: unknown): void {
   if (msg) throw new Error(msg);
 }
 
+function base64ToUint8Array(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function concatUint8Arrays(parts: Uint8Array[]): Uint8Array {
+  let len = 0;
+  for (const p of parts) len += p.length;
+  const out = new Uint8Array(len);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+
+/** Último recurso: JSON en trozos (Graph Range 206 o primer trozo con stream). */
+async function fetchMessageAttachmentBlobViaChunks(
+  postMicrosoftApi: (payload: object) => Promise<Response>,
+  messageId: string,
+  attachmentId: string,
+): Promise<{ blob: Blob; name: string; contentType: string }> {
+  const maxLen = 196608;
+  let byteStart = 0;
+  const acc: Uint8Array[] = [];
+  let name = "adjunto";
+  let contentType = "application/octet-stream";
+  let totalSize: number | null = null;
+
+  for (let guard = 0; guard < 400; guard++) {
+    const res = await postMicrosoftApi({
+      action: "message-attachment-chunk",
+      params: { messageId, attachmentId, byteStart, maxLength: maxLen },
+    });
+    const text = await res.text();
+    const trimmed = text.trim();
+    let parsed: unknown = null;
+    if (trimmed) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        throw new Error(`Trozo de adjunto inválido (${res.status}). ${trimmed.slice(0, 120)}`);
+      }
+    }
+    if (!res.ok) {
+      throw new Error(
+        messageForMicrosoftParsedError(parsed) ??
+          (trimmed.slice(0, 400) || `Error HTTP ${res.status}`),
+      );
+    }
+    throwIfMicrosoftJsonIsError(parsed);
+    if (!parsed || typeof parsed !== "object" || parsed === null || !("partBase64" in parsed)) {
+      throw new Error("La API no devolvió trozos del adjunto (despliega microsoft-api).");
+    }
+    const p = parsed as {
+      partBase64: string;
+      length: number;
+      done: boolean;
+      name?: string;
+      contentType?: string;
+      totalSize?: number | null;
+    };
+    name = String(p.name ?? name);
+    contentType = String(p.contentType ?? contentType);
+    if (typeof p.totalSize === "number") totalSize = p.totalSize;
+
+    const raw = p.partBase64;
+    if (typeof raw !== "string" || raw.length === 0) {
+      if (p.done || byteStart > 0) break;
+      throw new Error("Primer trozo del adjunto vacío.");
+    }
+    const bytes = base64ToUint8Array(raw);
+    acc.push(bytes);
+    const partLen = typeof p.length === "number" && p.length >= 0 ? p.length : bytes.length;
+    byteStart += partLen;
+    if (p.done) break;
+    if (totalSize != null && byteStart >= totalSize) break;
+    if (partLen === 0) break;
+  }
+
+  if (acc.length === 0) {
+    throw new Error("No se recibieron datos del adjunto por trozos.");
+  }
+
+  const merged = concatUint8Arrays(acc);
+  return {
+    blob: new Blob([merged], { type: contentType }),
+    name,
+    contentType,
+  };
+}
+
 function jsonAttachmentPayloadToBlob(parsed: unknown): { blob: Blob; name: string; contentType: string } | null {
   if (!parsed || typeof parsed !== "object" || parsed === null) return null;
   const cb = (parsed as { contentBytes?: unknown }).contentBytes;
@@ -179,8 +274,9 @@ export function base64ToBlobUrl(contentBytes: string, contentType: string): stri
 
 /**
  * Descarga el adjunto como Blob.
- * 1) Intenta `message-attachment-binary` (sin límite JSON).
- * 2) Si el despliegue es antiguo o la respuesta es JSON, reintenta con `message-attachment-content` (base64).
+ * 1) `message-attachment-binary` (stream / binario).
+ * 2) JSON `message-attachment-content` si cabe.
+ * 3) `message-attachment-chunk` (trozos + Range en Graph) si el JSON se trunca.
  */
 export async function fetchMessageAttachmentBlob(
   messageId: string,
@@ -275,9 +371,7 @@ export async function fetchMessageAttachmentBlob(
   const fromLegacy = jsonAttachmentPayloadToBlob(parsedJson);
   if (fromLegacy) return fromLegacy;
 
-  throw new Error(
-    "El adjunto no llegó (vacío o demasiado grande para JSON). Despliega microsoft-api con message-attachment-binary: supabase functions deploy microsoft-api --no-verify-jwt",
-  );
+  return fetchMessageAttachmentBlobViaChunks(postMicrosoftApi, messageId, attachmentId);
 }
 
 /**
