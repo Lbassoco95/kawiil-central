@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Sparkles, Copy, X, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
@@ -118,6 +117,7 @@ export function EmailAIAssistant({
   /** Texto del asistente en curso (streaming). */
   const [streamingAssistant, setStreamingAssistant] = useState("");
   const [loading, setLoading] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const anchor = useMemo(() => {
     const context = threadContext?.trim()
@@ -142,6 +142,14 @@ export function EmailAIAssistant({
     setPrompt("");
     setStreamingAssistant("");
   }, [conversationKey]);
+
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    });
+  }, [completedTurns, streamingAssistant]);
 
   const lastAssistantText = useMemo(() => {
     if (streamingAssistant) return streamingAssistant;
@@ -433,7 +441,7 @@ export function EmailAIAssistant({
   }
 
   return (
-    <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-3 flex flex-col min-h-0 max-h-[min(50vh,420px)]">
+    <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-3 flex flex-col min-h-0 max-h-[min(62vh,560px)]">
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Sparkles className="h-4 w-4 text-primary" />
@@ -472,44 +480,48 @@ export function EmailAIAssistant({
         ))}
       </div>
 
-      <ScrollArea className="flex-1 min-h-[120px] rounded-md border border-border bg-background/50">
-        <div className="p-2 space-y-3">
-          {completedTurns.map((turn, i) => (
-            <div key={i} className="space-y-2">
-              <div className="flex justify-end">
-                <div
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-xs max-w-[92%] bg-primary/15 text-foreground",
-                  )}
-                >
-                  <p className="whitespace-pre-wrap break-words">{turn.user}</p>
-                </div>
-              </div>
-              <div className="flex justify-start">
-                <div className="rounded-lg px-3 py-2 text-xs max-w-[92%] bg-muted border border-border">
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    <ReactMarkdown>{turn.assistant}</ReactMarkdown>
-                  </div>
-                </div>
+      <div
+        ref={chatScrollRef}
+        role="log"
+        aria-label="Conversación con el asistente"
+        tabIndex={0}
+        className={cn(
+          "flex-1 min-h-0 max-h-[min(48vh,440px)] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-background/50",
+          "p-2 space-y-3 scroll-smooth overscroll-y-contain touch-pan-y",
+          "[scrollbar-gutter:stable]",
+        )}
+      >
+        {completedTurns.map((turn, i) => (
+          <div key={i} className="space-y-2">
+            <div className="flex justify-end">
+              <div className="rounded-lg px-3 py-2 text-xs max-w-[92%] bg-primary/15 text-foreground">
+                <p className="whitespace-pre-wrap break-words">{turn.user}</p>
               </div>
             </div>
-          ))}
-          {loading && streamingAssistant && (
             <div className="flex justify-start">
-              <div className="rounded-lg px-3 py-2 text-xs max-w-[92%] bg-muted border border-border border-dashed">
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown>{streamingAssistant}</ReactMarkdown>
+              <div className="rounded-lg px-3 py-2 text-xs max-w-[92%] bg-muted border border-border min-w-0">
+                <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                  <ReactMarkdown>{turn.assistant}</ReactMarkdown>
                 </div>
               </div>
             </div>
-          )}
-          {loading && !streamingAssistant && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 py-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> Generando...
+          </div>
+        ))}
+        {loading && streamingAssistant && (
+          <div className="flex justify-start">
+            <div className="rounded-lg px-3 py-2 text-xs max-w-[92%] bg-muted border border-border border-dashed min-w-0">
+              <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                <ReactMarkdown>{streamingAssistant}</ReactMarkdown>
+              </div>
             </div>
-          )}
-        </div>
-      </ScrollArea>
+          </div>
+        )}
+        {loading && !streamingAssistant && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 py-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> Generando...
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-2 shrink-0">
         <Textarea
@@ -531,8 +543,18 @@ export function EmailAIAssistant({
       </div>
 
       {(lastAssistantText || loading) && (
-        <div className="border border-border rounded-md p-2 bg-background shrink-0">
-          <p className="text-[10px] text-muted-foreground mb-1.5">Última respuesta del asistente</p>
+        <div className="border border-border rounded-md p-2 bg-background shrink-0 space-y-2">
+          <p className="text-[10px] text-muted-foreground">Última respuesta del asistente</p>
+          {lastAssistantText ? (
+            <div
+              className="max-h-[min(28vh,240px)] overflow-y-auto overflow-x-hidden rounded-md border border-dashed border-border/80 bg-muted/20 p-2 text-xs leading-relaxed"
+              aria-label="Vista previa del texto sugerido"
+            >
+              <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                <ReactMarkdown>{lastAssistantText}</ReactMarkdown>
+              </div>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="text-xs h-7" onClick={handleCopy} disabled={!lastAssistantText}>
               <Copy className="mr-1 h-3 w-3" /> Copiar
