@@ -90,6 +90,37 @@ import {
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
 
+function scheduleMailInsertErrorText(err: unknown): string {
+  if (err instanceof Error && err.message?.trim()) {
+    const hint =
+      "hint" in err && typeof (err as { hint?: string }).hint === "string"
+        ? (err as { hint: string }).hint.trim()
+        : "";
+    const base = err.message.trim();
+    if (hint && !base.toLowerCase().includes(hint.toLowerCase())) return `${base}. ${hint}`;
+    return base;
+  }
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === "string" && m.trim()) return m.trim();
+  }
+  return "";
+}
+
+function humanizeScheduleMailError(raw: string): string {
+  const t = raw.toLowerCase();
+  if (t.includes("does not exist") || t.includes("no existe la relación")) {
+    return "Envíos programados: la tabla no existe en Supabase. Aplica las migraciones del repositorio (scheduled_mail_jobs) y vuelve a intentar.";
+  }
+  if (t.includes("row-level security")) {
+    return "No se pudo guardar el envío programado (políticas de seguridad). Cierra sesión y entra de nuevo.";
+  }
+  if (t.includes("permission denied") || t.includes("permiso denegado")) {
+    return "No tienes permiso para programar envíos. Si eres administrador, aplica la migración de permisos en scheduled_mail_jobs.";
+  }
+  return raw;
+}
+
 function getFolderIcon(displayName: string) {
   const key = displayName.toLowerCase().replace(/\s/g, "");
   if (key.includes("inbox") || key.includes("bandeja")) return Inbox;
@@ -487,7 +518,9 @@ export function EmailView() {
       await queryClient.invalidateQueries({ queryKey: [...SCHEDULED_MAIL_JOBS_QUERY_KEY, user.id] });
       resetAction();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo programar el envío");
+      console.error("[schedule mail] insert failed", e);
+      const raw = scheduleMailInsertErrorText(e);
+      toast.error(raw ? humanizeScheduleMailError(raw) : "No se pudo programar el envío");
     } finally {
       setScheduleSubmitting(false);
     }
