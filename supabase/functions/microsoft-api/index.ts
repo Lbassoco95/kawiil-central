@@ -65,6 +65,48 @@ function graphRetryDelayMs(headers: Headers, attempt: number): number {
   return exp + jitter;
 }
 
+/** Extrae email/nombre de un recipient Graph (from / toRecipients / ccRecipients). */
+function graphRecipientEntry(
+  raw: unknown,
+): { email: string; displayName: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const ea = (raw as { emailAddress?: { address?: string; name?: string } }).emailAddress;
+  if (!ea?.address || typeof ea.address !== "string") return null;
+  const email = ea.address.trim().toLowerCase();
+  if (!email || !email.includes("@")) return null;
+  const name = typeof ea.name === "string" ? ea.name.trim() : "";
+  const displayName = name || email;
+  return { email, displayName };
+}
+
+function collectRecipientsFromMessage(
+  msg: Record<string, unknown>,
+  into: Map<string, { email: string; displayName: string }>,
+): void {
+  const push = (e: { email: string; displayName: string }) => {
+    const prev = into.get(e.email);
+    if (!prev) {
+      into.set(e.email, e);
+      return;
+    }
+    const prevBare = !prev.displayName || prev.displayName === prev.email;
+    const nextBare = !e.displayName || e.displayName === e.email;
+    if (prevBare && !nextBare) into.set(e.email, e);
+    else if (!prevBare && nextBare) return;
+    else if ((e.displayName?.length ?? 0) > (prev.displayName?.length ?? 0)) into.set(e.email, e);
+  };
+  const from = graphRecipientEntry(msg.from);
+  if (from) push(from);
+  const lists = [msg.toRecipients, msg.ccRecipients, msg.bccRecipients];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const r of list) {
+      const e = graphRecipientEntry(r);
+      if (e) push(e);
+    }
+  }
+}
+
 function isGraphRetryable(status: number, errorBody: string): boolean {
   if (status === 429 || status === 503 || status === 504) return true;
   const lower = errorBody.toLowerCase();
@@ -493,6 +535,35 @@ Deno.serve(async (req) => {
           `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${search}`,
           { headers: params?.search ? GRAPH_MAIL_SEARCH_HEADERS : GRAPH_MAIL_PREFER_IMMUTABLE },
         );
+        break;
+      }
+
+      case "mail-directory-sync": {
+        const me = (await graphRequest(accessToken, "/me", {})) as Record<string, unknown>;
+        const selfMail =
+          typeof me.mail === "string" && me.mail.trim()
+            ? me.mail.trim().toLowerCase()
+            : typeof me.userPrincipalName === "string" && me.userPrincipalName.includes("@")
+              ? me.userPrincipalName.trim().toLowerCase()
+              : "";
+        const rawTop = params?.top;
+        const top =
+          typeof rawTop === "number" && Number.isFinite(rawTop)
+            ? Math.min(Math.max(Math.floor(rawTop), 1), 200)
+            : 180;
+        const select =
+          "$select=from,toRecipients,ccRecipients,bccRecipients,receivedDateTime";
+        const page = (await graphRequest(
+          accessToken,
+          `/me/messages?${select}&$top=${top}&$orderby=receivedDateTime desc`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
+        )) as { value?: unknown[] };
+        const map = new Map<string, { email: string; displayName: string }>();
+        for (const m of page.value || []) {
+          if (m && typeof m === "object") collectRecipientsFromMessage(m as Record<string, unknown>, map);
+        }
+        if (selfMail) map.delete(selfMail);
+        result = { contacts: Array.from(map.values()) };
         break;
       }
 

@@ -2588,6 +2588,30 @@ export type Database = {
           },
         ]
       }
+      user_mail_directory: {
+        Row: {
+          user_id: string
+          email: string
+          display_name: string | null
+          last_seen_at: string
+          created_at: string
+        }
+        Insert: {
+          user_id: string
+          email: string
+          display_name?: string | null
+          last_seen_at?: string
+          created_at?: string
+        }
+        Update: {
+          user_id?: string
+          email?: string
+          display_name?: string | null
+          last_seen_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

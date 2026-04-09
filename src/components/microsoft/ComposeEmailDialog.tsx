@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/microsoft/RichTextEditor";
-import { useSendNewEmail, useOutlookComposeSignature } from "@/hooks/useMicrosoft";
+import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useOrgUsers, type OrgUser } from "@/hooks/useOrgUsers";
+import { useMailDirectoryContacts, useSyncMailDirectory, type MailDirectoryContact } from "@/hooks/useMailDirectory";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, Paperclip, X } from "lucide-react";
+import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, Paperclip, X, BookUser } from "lucide-react";
 import { toast } from "sonner";
 import {
   filesToComposerAttachments,
@@ -46,39 +47,56 @@ function ComposeRecipientInput({
   placeholder,
   id,
   orgUsers,
+  mailContacts,
+  teamEmailLowerSet,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   id?: string;
   orgUsers: OrgUser[];
+  mailContacts: MailDirectoryContact[];
+  teamEmailLowerSet: Set<string>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const parts = value.split(",");
   const lastQuery = (parts[parts.length - 1] ?? "").trim().toLowerCase();
 
-  const suggestions = useMemo(
+  const teamSuggestions = useMemo(
     () =>
-      orgUsers.map((u) => ({
-        user_id: u.user_id,
-        email: u.email || "",
-        full_name: u.full_name || u.email || "",
-      })).filter((u) => u.email),
+      orgUsers
+        .map((u) => ({
+          user_id: u.user_id,
+          email: u.email || "",
+          full_name: u.full_name || u.email || "",
+        }))
+        .filter((u) => u.email),
     [orgUsers]
   );
 
-  const filtered = useMemo(() => {
+  const filteredTeam = useMemo(() => {
     if (!lastQuery) return [];
-    return suggestions
+    return teamSuggestions
       .filter(
         (u) =>
-          u.email.toLowerCase().includes(lastQuery) ||
-          u.full_name.toLowerCase().includes(lastQuery)
+          u.email.toLowerCase().includes(lastQuery) || u.full_name.toLowerCase().includes(lastQuery)
       )
       .slice(0, 8);
-  }, [suggestions, lastQuery]);
+  }, [teamSuggestions, lastQuery]);
 
-  const showList = menuOpen && filtered.length > 0 && lastQuery.length >= 1;
+  const filteredMailbox = useMemo(() => {
+    if (!lastQuery) return [];
+    return mailContacts
+      .filter((c) => {
+        if (teamEmailLowerSet.has(c.email.toLowerCase())) return false;
+        const name = (c.display_name || "").toLowerCase();
+        return c.email.includes(lastQuery) || name.includes(lastQuery);
+      })
+      .slice(0, 8);
+  }, [mailContacts, lastQuery, teamEmailLowerSet]);
+
+  const showList =
+    menuOpen && lastQuery.length >= 1 && (filteredTeam.length > 0 || filteredMailbox.length > 0);
 
   const pick = (email: string) => {
     const before = parts.slice(0, -1).join(",").trim();
@@ -99,19 +117,45 @@ function ComposeRecipientInput({
         onBlur={() => setTimeout(() => setMenuOpen(false), 200)}
       />
       {showList && (
-        <div className="absolute z-50 top-full mt-1 w-full max-h-40 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md">
-          {filtered.map((u) => (
-            <button
-              key={u.user_id}
-              type="button"
-              className="flex w-full flex-col gap-0 px-3 py-2 text-left text-sm hover:bg-accent"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => pick(u.email)}
-            >
-              <span className="font-medium truncate">{u.full_name}</span>
-              <span className="text-xs text-muted-foreground truncate">{u.email}</span>
-            </button>
-          ))}
+        <div className="absolute z-50 top-full mt-1 w-full max-h-52 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md">
+          {filteredTeam.length > 0 ? (
+            <div className="py-1">
+              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Equipo
+              </div>
+              {filteredTeam.map((u) => (
+                <button
+                  key={u.user_id}
+                  type="button"
+                  className="flex w-full flex-col gap-0 px-3 py-2 text-left text-sm hover:bg-accent"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(u.email)}
+                >
+                  <span className="font-medium truncate">{u.full_name}</span>
+                  <span className="text-xs text-muted-foreground truncate">{u.email}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {filteredMailbox.length > 0 ? (
+            <div className={`py-1 ${filteredTeam.length > 0 ? "border-t border-border" : ""}`}>
+              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Buzón
+              </div>
+              {filteredMailbox.map((c) => (
+                <button
+                  key={c.email}
+                  type="button"
+                  className="flex w-full flex-col gap-0 px-3 py-2 text-left text-sm hover:bg-accent"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(c.email)}
+                >
+                  <span className="font-medium truncate">{c.display_name || c.email}</span>
+                  <span className="text-xs text-muted-foreground truncate">{c.email}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       )}
     </div>
@@ -136,9 +180,22 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
   const signatureAppliedRef = useRef(false);
+  const directorySyncRef = useRef(false);
   const sendEmail = useSendNewEmail();
   const { data: orgUsers = [] } = useOrgUsers();
+  const { isConnected } = useMicrosoftConnection();
+  const { data: mailContacts = [] } = useMailDirectoryContacts(open && isConnected);
+  const { mutate: syncDirectoryMutate, isPending: syncDirectoryPending } = useSyncMailDirectory();
   const { data: composeSignature } = useOutlookComposeSignature(open);
+
+  const teamEmailLowerSet = useMemo(() => {
+    const s = new Set<string>();
+    for (const u of orgUsers) {
+      const e = (u.email || "").trim().toLowerCase();
+      if (e) s.add(e);
+    }
+    return s;
+  }, [orgUsers]);
 
   useEffect(() => {
     if (open) {
@@ -160,6 +217,16 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
       setAttachments([]);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      directorySyncRef.current = false;
+      return;
+    }
+    if (!isConnected || directorySyncRef.current) return;
+    directorySyncRef.current = true;
+    syncDirectoryMutate({ silent: true });
+  }, [open, isConnected, syncDirectoryMutate]);
 
   /** Firma desde perfil Microsoft (/me); Graph no expone la firma HTML de Outlook de forma oficial. */
   useEffect(() => {
@@ -268,12 +335,12 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[92vh] w-[min(100vw-1.5rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+        <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left sm:px-6">
           <DialogTitle>Nuevo correo</DialogTitle>
         </DialogHeader>
         <div
-          className="space-y-3 px-0"
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6"
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
               e.preventDefault();
@@ -281,198 +348,230 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
             }
           }}
         >
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="compose-to" className="w-12 text-right text-sm text-muted-foreground shrink-0">
-                Para
-              </Label>
-              <ComposeRecipientInput
-                id="compose-to"
-                value={to}
-                onChange={setTo}
-                placeholder="destinatario@ejemplo.com, otro@ejemplo.com"
-                orgUsers={orgUsers}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground shrink-0"
-                onClick={() => {
-                  setShowCc((prev) => {
-                    if (prev) setShowBcc(false);
-                    return !prev;
-                  });
-                }}
-              >
-                CC {showCc ? <ChevronUp className="h-3 w-3 ml-0.5" /> : <ChevronDown className="h-3 w-3 ml-0.5" />}
-              </Button>
-            </div>
-            {showCc && (
-              <div className="space-y-2 animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="compose-cc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
-                    CC
-                  </Label>
-                  <ComposeRecipientInput
-                    id="compose-cc"
-                    value={cc}
-                    onChange={setCc}
-                    placeholder="copia@ejemplo.com"
-                    orgUsers={orgUsers}
-                  />
-                  <div className="flex items-center gap-2 shrink-0 px-1">
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">BCC</span>
-                    <Switch checked={showBcc} onCheckedChange={setShowBcc} aria-label="Mostrar BCC" />
-                  </div>
-                </div>
-                {showBcc && (
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="compose-bcc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
-                      BCC
-                    </Label>
-                    <ComposeRecipientInput
-                      id="compose-bcc"
-                      value={bcc}
-                      onChange={setBcc}
-                      placeholder="copia oculta@ejemplo.com"
-                      orgUsers={orgUsers}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor="compose-subject" className="w-12 text-right text-sm text-muted-foreground shrink-0">
-              Asunto
-            </Label>
-            <Input
-              id="compose-subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Asunto del correo"
-              className="flex-1"
-            />
-          </div>
-
-          <div className="space-y-2">
-            {aiPanelOpen && (
-              <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2 shadow-sm">
-                <Input
-                  placeholder="¿Qué quieres decir? Ej: confirma la reunión del martes"
-                  value={aiInstruction}
-                  onChange={(e) => setAiInstruction(e.target.value)}
-                  disabled={aiLoading}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void runAiDraft(aiInstruction);
-                    }
-                  }}
-                  className="bg-background"
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="compose-to" className="w-12 text-right text-sm text-muted-foreground shrink-0">
+                  Para
+                </Label>
+                <ComposeRecipientInput
+                  id="compose-to"
+                  value={to}
+                  onChange={setTo}
+                  placeholder="destinatario@ejemplo.com, otro@ejemplo.com"
+                  orgUsers={orgUsers}
+                  mailContacts={mailContacts}
+                  teamEmailLowerSet={teamEmailLowerSet}
                 />
-                <div className="flex flex-wrap items-center gap-2">
+                {isConnected ? (
                   <Button
                     type="button"
-                    size="sm"
-                    disabled={aiLoading}
-                    onClick={() => void runAiDraft(aiInstruction)}
-                    className="gap-1.5"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    disabled={syncDirectoryPending}
+                    title="Actualizar directorio desde tu buzón Microsoft (recientes)"
+                    onClick={() => syncDirectoryMutate({ silent: false })}
                   >
-                    {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : null}
-                    Generar
+                    {syncDirectoryPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <BookUser className="h-4 w-4" />
+                    )}
                   </Button>
-                  {hasAiDraft && lastInstructionRef.current ? (
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground shrink-0"
+                  onClick={() => {
+                    setShowCc((prev) => {
+                      if (prev) setShowBcc(false);
+                      return !prev;
+                    });
+                  }}
+                >
+                  CC {showCc ? <ChevronUp className="h-3 w-3 ml-0.5" /> : <ChevronDown className="h-3 w-3 ml-0.5" />}
+                </Button>
+              </div>
+              {showCc && (
+                <div className="space-y-2 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="compose-cc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
+                      CC
+                    </Label>
+                    <ComposeRecipientInput
+                      id="compose-cc"
+                      value={cc}
+                      onChange={setCc}
+                      placeholder="copia@ejemplo.com"
+                      orgUsers={orgUsers}
+                      mailContacts={mailContacts}
+                      teamEmailLowerSet={teamEmailLowerSet}
+                    />
+                    <div className="flex items-center gap-2 shrink-0 px-1">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">BCC</span>
+                      <Switch checked={showBcc} onCheckedChange={setShowBcc} aria-label="Mostrar BCC" />
+                    </div>
+                  </div>
+                  {showBcc && (
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="compose-bcc" className="w-12 text-right text-sm text-muted-foreground shrink-0">
+                        BCC
+                      </Label>
+                      <ComposeRecipientInput
+                        id="compose-bcc"
+                        value={bcc}
+                        onChange={setBcc}
+                        placeholder="copia oculta@ejemplo.com"
+                        orgUsers={orgUsers}
+                        mailContacts={mailContacts}
+                        teamEmailLowerSet={teamEmailLowerSet}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label htmlFor="compose-subject" className="w-12 text-right text-sm text-muted-foreground shrink-0">
+                Asunto
+              </Label>
+              <Input
+                id="compose-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Asunto del correo"
+                className="flex-1"
+              />
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col space-y-2">
+              {aiPanelOpen && (
+                <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2 shadow-sm shrink-0">
+                  <Input
+                    placeholder="¿Qué quieres decir? Ej: confirma la reunión del martes"
+                    value={aiInstruction}
+                    onChange={(e) => setAiInstruction(e.target.value)}
+                    disabled={aiLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void runAiDraft(aiInstruction);
+                      }
+                    }}
+                    className="bg-background"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
                       disabled={aiLoading}
-                      onClick={() => void runAiDraft(lastInstructionRef.current)}
-                      className="gap-1"
+                      onClick={() => void runAiDraft(aiInstruction)}
+                      className="gap-1.5"
                     >
-                      {aiLoading ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                      Regenerar
+                      {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : null}
+                      Generar
                     </Button>
-                  ) : null}
-                </div>
-              </div>
-            )}
-
-            <RichTextEditor
-              key={editorKey}
-              ref={editorRef}
-              placeholder="Escribe tu mensaje..."
-              onHtmlChange={(html) => {
-                bodyRef.current = html;
-              }}
-              className="min-h-[200px]"
-              toolbarEndSlot={iaToolbarButton}
-            />
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.msg,.eml"
-              onChange={(e) => void handleAttachmentPick(e.target.files)}
-            />
-            <div
-              className="rounded-md border border-dashed p-3 text-sm text-muted-foreground"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                void handleAttachmentPick(e.dataTransfer.files);
-              }}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs">
-                  Adjuntos (documentos, imágenes, zip…). La firma del nuevo correo usa tu perfil de Microsoft 365.
-                </span>
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                  <Paperclip className="h-3.5 w-3.5 mr-1" />
-                  Adjuntar
-                </Button>
-              </div>
-              {attachments.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {attachments.map((file) => (
-                    <div key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
-                      <span className="max-w-[180px] truncate">{file.name}</span>
-                      <button
+                    {hasAiDraft && lastInstructionRef.current ? (
+                      <Button
                         type="button"
-                        onClick={() => setAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)))}
-                        aria-label={`Quitar ${file.name}`}
+                        size="sm"
+                        variant="outline"
+                        disabled={aiLoading}
+                        onClick={() => void runAiDraft(lastInstructionRef.current)}
+                        className="gap-1"
                       >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
+                        {aiLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        Regenerar
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               )}
+
+              <RichTextEditor
+                key={editorKey}
+                ref={editorRef}
+                placeholder="Escribe tu mensaje..."
+                onHtmlChange={(html) => {
+                  bodyRef.current = html;
+                }}
+                className="min-h-[min(40vh,360px)] sm:min-h-[320px]"
+                toolbarEndSlot={iaToolbarButton}
+              />
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.msg,.eml"
+                onChange={(e) => void handleAttachmentPick(e.target.files)}
+              />
+              <div
+                className="rounded-md border border-dashed p-3 text-sm text-muted-foreground shrink-0"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void handleAttachmentPick(e.dataTransfer.files);
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs">
+                    Adjuntos (documentos, imágenes, zip…). La firma del nuevo correo usa tu perfil de Microsoft 365.
+                  </span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                    <Paperclip className="h-3.5 w-3.5 mr-1" />
+                    Adjuntar
+                  </Button>
+                </div>
+                {attachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {attachments.map((file) => (
+                      <div
+                        key={`${file.name}-${file.size}`}
+                        className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs"
+                      >
+                        <span className="max-w-[180px] truncate">{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAttachments((prev) =>
+                              prev.filter((f) => !(f.name === file.name && f.size === file.size))
+                            )
+                          }
+                          aria-label={`Quitar ${file.name}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => void handleSend()} disabled={sendEmail.isPending || !to.trim()}>
-              {sendEmail.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-1.5" />
-              )}
-              Enviar
-            </Button>
-          </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border px-4 py-3 sm:px-6">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={() => void handleSend()} disabled={sendEmail.isPending || !to.trim()}>
+            {sendEmail.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4 mr-1.5" />
+            )}
+            Enviar
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
