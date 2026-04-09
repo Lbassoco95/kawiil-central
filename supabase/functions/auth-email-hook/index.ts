@@ -267,19 +267,27 @@ async function handleWebhook(req: Request): Promise<Response> {
   let recoveryLink = payload.data.url
   if (emailType === 'recovery') {
     if (isDirectRecoveryFlow) {
-      // Extract token from Supabase's native verify URL and build a frontend-only link
-      // so email scanners can't consume the one-time token
-      let extractedToken = payload.data.token || ''
-      if (!extractedToken && payload.data.url) {
+      // PKCE recovery links use token_hash + verifyOtp({ token_hash, type: 'recovery' }).
+      // Legacy/OTP flow uses email + token (e.g. 6-digit code). Prefer token_hash when present.
+      let extractedTokenHash = (payload.data.token_hash as string) || ''
+      let extractedToken = (payload.data.token as string) || ''
+      if (payload.data.url) {
         try {
           const nativeUrl = new URL(payload.data.url)
-          extractedToken = nativeUrl.searchParams.get('token') || ''
+          extractedTokenHash = extractedTokenHash || nativeUrl.searchParams.get('token_hash') || ''
+          extractedToken = extractedToken || nativeUrl.searchParams.get('token') || ''
+          if (!extractedTokenHash && nativeUrl.hash) {
+            const fromHash = new URLSearchParams(nativeUrl.hash.replace(/^#/, ''))
+            extractedTokenHash = fromHash.get('token_hash') || ''
+          }
         } catch { /* ignore */ }
       }
-      if (extractedToken) {
+      if (extractedTokenHash) {
+        recoveryLink = `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token_hash=${encodeURIComponent(extractedTokenHash)}`
+      } else if (extractedToken) {
         recoveryLink = `${siteUrl}/cambiar-contrasena?mode=recovery&email=${encodeURIComponent(payload.data.email ?? '')}&token=${encodeURIComponent(extractedToken)}`
       } else {
-        console.warn('No token found for direct recovery flow, falling back to activation link')
+        console.warn('No token_hash/token found for direct recovery flow, falling back to activation link')
         recoveryLink = await buildActivationRecoveryLink(siteUrl, payload.data.email ?? '')
       }
     } else {

@@ -30,6 +30,7 @@ const CambiarContrasena = () => {
 
     const mode = searchParams.get("mode") || hashParams.get("mode");
     const token = searchParams.get("token") || hashParams.get("token");
+    const tokenHash = searchParams.get("token_hash") || hashParams.get("token_hash");
     const email = searchParams.get("email") || hashParams.get("email");
     const ts = searchParams.get("ts") || hashParams.get("ts");
     const sig = searchParams.get("sig") || hashParams.get("sig");
@@ -44,8 +45,8 @@ const CambiarContrasena = () => {
       return;
     }
 
-    // Recovery flow: token/email are verified only after explicit user click
-    if (mode === "recovery" && token && email) {
+    // Recovery flow: token_hash (PKCE) or token + email verified only after explicit user click
+    if (mode === "recovery" && email && (token || tokenHash)) {
       setManualRecoveryFlow(true);
       setRecoveryEmail(email);
       setError(null);
@@ -102,18 +103,27 @@ const CambiarContrasena = () => {
   }, []);
 
   const handleVerifyRecoveryLink = async () => {
-    const token = new URLSearchParams(window.location.search).get("token") || new URLSearchParams(window.location.hash.replace("#", "")).get("token");
-    if (!recoveryEmail || !token) {
+    const qs = new URLSearchParams(window.location.search);
+    const hp = new URLSearchParams(window.location.hash.replace("#", ""));
+    const token_hash = qs.get("token_hash") || hp.get("token_hash");
+    const token = qs.get("token") || hp.get("token");
+
+    if (!token_hash && (!recoveryEmail || !token)) {
       setError("Enlace de recuperación inválido. Solicita uno nuevo.");
       return;
     }
 
     setVerifyingLink(true);
-    const { error } = await supabase.auth.verifyOtp({
-      email: recoveryEmail,
-      token,
-      type: "recovery",
-    });
+    const { error } = token_hash
+      ? await supabase.auth.verifyOtp({
+          token_hash,
+          type: "recovery",
+        })
+      : await supabase.auth.verifyOtp({
+          email: recoveryEmail,
+          token: token!,
+          type: "recovery",
+        });
 
     if (error) {
       setError("El enlace ha expirado o ya fue utilizado. Solicita uno nuevo desde administración.");

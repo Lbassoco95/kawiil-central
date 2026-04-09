@@ -27,7 +27,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { pipelineQueryKeys, useEmailTemplates } from "@/hooks/usePipeline";
-import { Mail, Eye } from "lucide-react";
+import { Mail } from "lucide-react";
 import { Paperclip, X } from "lucide-react";
 import { RichTextEditor } from "@/components/microsoft/RichTextEditor";
 import { filesToComposerAttachments, type ComposerAttachment } from "@/lib/emailComposer";
@@ -116,7 +116,6 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
   const qc = useQueryClient();
   const { data: templates = [] } = useEmailTemplates();
   const [saving, setSaving] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -148,7 +147,6 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
     form.setValue("body_html", "");
     form.setValue("template_id", undefined);
     form.setValue("schedule_follow_up", false);
-    setShowPreview(false);
     setAttachments([]);
   }, [open, leadEmail, replyTo, form]);
 
@@ -262,7 +260,6 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         body_html: "",
         schedule_follow_up: false,
       });
-      setShowPreview(false);
       setAttachments([]);
     } catch (e: unknown) {
       toast.error(errorMessageFromUnknown(e));
@@ -408,34 +405,17 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <Label>Contenido *</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowPreview(!showPreview)}
-                className="h-6 text-xs"
-              >
-                <Eye className="h-3 w-3 mr-1" />
-                {showPreview ? "Editar" : "Vista previa"}
-              </Button>
-            </div>
-            {showPreview ? (
-              <div
-                className="border rounded-md p-3 min-h-[120px] text-sm prose prose-sm max-w-none bg-muted/20"
-                dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(watchBody || "", { USE_PROFILES: { html: true } }),
-                }}
-              />
-            ) : (
-              <RichTextEditor
-                initialHtml={watchBody}
-                placeholder="Contenido del correo..."
-                onHtmlChange={(html) => form.setValue("body_html", html, { shouldValidate: true })}
-                className="min-h-[180px]"
-              />
-            )}
+            <Label className="mb-1 block">Contenido *</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Ves el mismo formato que recibirá el destinatario y puedes corregir el texto aquí antes de enviar.
+            </p>
+            <RichTextEditor
+              key={`${leadId}-${watchTemplateId ?? "none"}`}
+              initialHtml={watchBody}
+              placeholder="Contenido del correo..."
+              onHtmlChange={(html) => form.setValue("body_html", html, { shouldValidate: true })}
+              className="min-h-[200px] [&_.ProseMirror]:min-h-[160px] bg-muted/10"
+            />
             <p className="text-xs text-muted-foreground mt-1">
               Variables en plantillas y cuerpo:{" "}
               <code className="text-[10px]">{"{{nombre}} {{email}} {{empresa}} {{pais}} {{campana}}"}</code>
