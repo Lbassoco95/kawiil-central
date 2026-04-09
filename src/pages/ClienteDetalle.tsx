@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
+import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 import { useProfiles } from "@/hooks/useTasks";
 
 const STATUS_STYLES: Record<ClientStatus, string> = Object.fromEntries(
@@ -84,6 +85,7 @@ const ClienteDetalle = () => {
   const openTasks = useMemo(() => tasks.filter((t) => !isTaskClosedStatus(t.status)), [tasks]);
   const openTaskIds = useMemo(() => openTasks.map((t) => t.id), [openTasks]);
   const { data: taskAssigneeUserIds = [], isLoading: loadingTaskAssignees } = useOpenTaskAssigneeUserIds(openTaskIds);
+  const { data: declaredCollaboratorIds = [], isLoading: loadingDeclaredCollaborators } = useClientCollaboratorIds(id);
   const { data: orgProfiles = [] } = useProfiles();
   const profilesByUserId = useMemo(
     () => new Map(orgProfiles.map((p) => [p.user_id, p])),
@@ -92,7 +94,9 @@ const ClienteDetalle = () => {
 
   const clientCollaboratorUserIds = useMemo(() => {
     const responsible = client?.responsible_user_id;
+    const explicit = new Set(declaredCollaboratorIds);
     const set = new Set<string>();
+    for (const uid of declaredCollaboratorIds) set.add(uid);
     for (const t of openTasks) {
       if (t.assigned_to) set.add(t.assigned_to);
     }
@@ -104,11 +108,21 @@ const ClienteDetalle = () => {
     }
     if (responsible) set.delete(responsible);
     return [...set].sort((a, b) => {
+      const aExplicit = explicit.has(a) ? 0 : 1;
+      const bExplicit = explicit.has(b) ? 0 : 1;
+      if (aExplicit !== bExplicit) return aExplicit - bExplicit;
       const na = profilesByUserId.get(a)?.full_name || "";
       const nb = profilesByUserId.get(b)?.full_name || "";
       return na.localeCompare(nb, "es");
     });
-  }, [client?.responsible_user_id, openTasks, taskAssigneeUserIds, projects, profilesByUserId]);
+  }, [
+    client?.responsible_user_id,
+    declaredCollaboratorIds,
+    openTasks,
+    taskAssigneeUserIds,
+    projects,
+    profilesByUserId,
+  ]);
 
   if (isLoadingClient) {
     return (
@@ -163,8 +177,10 @@ const ClienteDetalle = () => {
             responsibleUserId={client.responsible_user_id}
             profilesByUserId={profilesByUserId}
             collaboratorUserIds={clientCollaboratorUserIds}
-            collaboratorsLoading={loadingTaskAssignees && openTaskIds.length > 0}
-            collaboratorsEmptyHint="No hay otras personas en tareas abiertas, como colaboradores en esas tareas ni como responsables de proyectos activos o en pausa (aparte del responsable del cliente)."
+            collaboratorsLoading={
+              (loadingTaskAssignees && openTaskIds.length > 0) || (loadingDeclaredCollaborators && !!id)
+            }
+            collaboratorsEmptyHint="No hay colaboradores de seguimiento en la ficha ni otras personas en tareas abiertas, colaboradores de tareas o responsables de proyectos activos o en pausa. Configura el equipo en Editar cliente."
             className="relative"
           />
         </div>

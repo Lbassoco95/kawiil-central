@@ -36,6 +36,7 @@ import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
+import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -218,9 +219,14 @@ const ProyectoDetalle = () => {
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
   const profilesByUserId = useMemo(() => new Map(profiles.map((p) => [p.user_id, p])), [profiles]);
 
+  const { data: clientDeclaredCollaboratorIds = [], isLoading: loadingClientDeclaredCollab } =
+    useClientCollaboratorIds(project?.client_id ?? undefined, !!project?.client_id);
+
   const proyectoCollaboratorUserIds = useMemo(() => {
     if (!project) return [];
+    const explicit = new Set(clientDeclaredCollaboratorIds);
     const set = new Set<string>();
+    for (const uid of clientDeclaredCollaboratorIds) set.add(uid);
     for (const t of openProjectTasks) {
       if (t.assigned_to) set.add(t.assigned_to);
     }
@@ -231,11 +237,14 @@ const ProyectoDetalle = () => {
       ?.responsible_user_id;
     if (clientResp) set.delete(clientResp);
     return [...set].sort((a, b) => {
+      const aE = explicit.has(a) ? 0 : 1;
+      const bE = explicit.has(b) ? 0 : 1;
+      if (aE !== bE) return aE - bE;
       const na = profilesByUserId.get(a)?.full_name || "";
       const nb = profilesByUserId.get(b)?.full_name || "";
       return na.localeCompare(nb, "es");
     });
-  }, [project, openProjectTasks, projectTaskAssigneeIds, profilesByUserId]);
+  }, [project, openProjectTasks, projectTaskAssigneeIds, profilesByUserId, clientDeclaredCollaboratorIds]);
 
   const hasAccounting = project?.area === "contabilidad" || project?.area === "softlanding";
   const isSoftlanding = project?.area === "softlanding";
@@ -394,8 +403,11 @@ const ProyectoDetalle = () => {
             }
             profilesByUserId={profilesByUserId}
             collaboratorUserIds={proyectoCollaboratorUserIds}
-            collaboratorsLoading={loadingProjectTaskAssignees && openProjectTaskIds.length > 0}
-            collaboratorsEmptyHint="No hay otras personas en tareas abiertas de este proyecto ni como colaboradores adicionales en esas tareas (aparte del responsable del proyecto)."
+            collaboratorsLoading={
+              (loadingProjectTaskAssignees && openProjectTaskIds.length > 0) ||
+              (loadingClientDeclaredCollab && !!project.client_id)
+            }
+            collaboratorsEmptyHint="No hay colaboradores de seguimiento en la ficha del cliente ni otras personas en tareas abiertas del proyecto. Configura el equipo del cliente en Editar cliente."
             className="relative"
           />
         </div>

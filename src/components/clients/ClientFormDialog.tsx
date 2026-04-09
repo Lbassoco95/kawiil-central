@@ -19,7 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Folder } from "lucide-react";
+import { Folder, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -117,6 +118,7 @@ const clientSchema = z.object({
   contact_name: z.string().trim().max(200).optional().or(z.literal("")),
   contact_position: z.string().trim().max(200).optional().or(z.literal("")),
   dropbox_folder_path: z.string().trim().max(500).optional().or(z.literal("")),
+  collaborator_user_ids: z.array(z.string().uuid()).default([]),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
@@ -164,8 +166,21 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       contact_name: "",
       contact_position: "",
       dropbox_folder_path: "",
+      collaborator_user_ids: [],
     },
   });
+
+  const responsibleId = form.watch("responsible_user_id");
+  const collaboratorIds = form.watch("collaborator_user_ids");
+  useEffect(() => {
+    if (!responsibleId || !collaboratorIds?.length) return;
+    if (collaboratorIds.includes(responsibleId)) {
+      form.setValue(
+        "collaborator_user_ids",
+        collaboratorIds.filter((uid) => uid !== responsibleId)
+      );
+    }
+  }, [responsibleId, form, collaboratorIds]);
 
   const servicePackage = form.watch("service_package");
   const extraServices = form.watch("extra_services");
@@ -202,6 +217,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       contact_position: values.contact_position || null,
       dropbox_folder_path: values.dropbox_folder_path || null,
       payroll_type: values.payroll_type === "none" ? null : values.payroll_type,
+      collaborator_user_ids: values.collaborator_user_ids,
     });
 
     if (newClient) {
@@ -369,6 +385,55 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+
+              <FormField
+                control={form.control}
+                name="collaborator_user_ids"
+                render={({ field }) => {
+                  const opts = (profiles || [])
+                    .filter(
+                      (p) =>
+                        p.user_id !== (form.getValues("responsible_user_id") || "") &&
+                        !field.value.includes(p.user_id)
+                    )
+                    .map((p) => ({ value: p.user_id, label: p.full_name }))
+                    .sort((a, b) => a.label.localeCompare(b.label, "es"));
+                  return (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Colaboradores de seguimiento</FormLabel>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Personas al pendiente del cliente además del responsable. Podrás cambiarlos cuando quieras desde
+                        Editar cliente.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {field.value.map((uid) => {
+                          const p = profiles?.find((pr) => pr.user_id === uid);
+                          return (
+                            <Badge key={uid} variant="secondary" className="text-xs gap-1">
+                              {p?.full_name || uid}
+                              <X
+                                role="button"
+                                className="h-3 w-3 cursor-pointer shrink-0"
+                                onClick={() => field.onChange(field.value.filter((x) => x !== uid))}
+                              />
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                      <SearchableSelect
+                        options={opts}
+                        value=""
+                        onValueChange={(v) => {
+                          if (v && !field.value.includes(v)) field.onChange([...field.value, v]);
+                        }}
+                        placeholder="Agregar colaborador..."
+                        searchPlaceholder="Buscar usuario..."
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
             </div>
 

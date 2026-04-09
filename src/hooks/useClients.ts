@@ -9,6 +9,27 @@ import { logActivity } from "@/lib/activityLog";
 export type Client = Tables<"clients">;
 export type ClientInsert = TablesInsert<"clients">;
 
+export type ClientCreateInput = Omit<ClientInsert, "organization_id" | "created_by"> & {
+  collaborator_user_ids?: string[];
+};
+
+async function syncClientCollaborators(
+  clientId: string,
+  userIds: string[],
+  responsibleUserId: string | null | undefined
+) {
+  const filtered = [...new Set(userIds)].filter(
+    (uid) => typeof uid === "string" && uid.length > 0 && uid !== responsibleUserId
+  );
+  const { error: delErr } = await supabase.from("client_collaborators").delete().eq("client_id", clientId);
+  if (delErr) throw delErr;
+  if (filtered.length === 0) return;
+  const { error: insErr } = await supabase.from("client_collaborators").insert(
+    filtered.map((user_id) => ({ client_id: clientId, user_id }))
+  );
+  if (insErr) throw insErr;
+}
+
 export function useClients() {
   const { user } = useAuth();
 
@@ -32,7 +53,8 @@ export function useCreateClient() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (client: Omit<ClientInsert, "organization_id" | "created_by">) => {
+    mutationFn: async (client: ClientCreateInput) => {
+      const { collaborator_user_ids = [], ...clientRow } = client;
       const { data: orgId } = await supabase.rpc("get_user_org_id", {
         _user_id: user!.id,
       });
@@ -40,10 +62,10 @@ export function useCreateClient() {
       const { data, error } = await supabase
         .from("clients")
         .insert({
-          ...client,
+          ...clientRow,
           organization_id: orgId!,
           created_by: user!.id,
-          dropbox_folder_path: client.dropbox_folder_path || null,
+          dropbox_folder_path: clientRow.dropbox_folder_path || null,
         })
         .select()
         .single();
@@ -51,9 +73,9 @@ export function useCreateClient() {
       if (error) throw error;
 
       // Auto-create projects based on contracted services
-      const services = client.services || [];
+      const services = clientRow.services || [];
       const isSoftlanding = services.includes("softlanding");
-      const responsibleId = client.responsible_user_id || user!.id;
+      const responsibleId = clientRow.responsible_user_id || user!.id;
 
       // Default constitution steps for auto-initialization
       const DEFAULT_CONSTITUTION_STEPS = [
@@ -148,7 +170,7 @@ export function useCreateClient() {
         }
 
         // Auto-create quarterly legal review task when payroll is set on creation
-        const payrollType = (client as any).payroll_type || null;
+        const payrollType = (clientRow as any).payroll_type || null;
         if (payrollType) {
           // Find the legal project responsible (just created above if legal service exists)
           const { data: legalProject } = await supabase
@@ -159,7 +181,7 @@ export function useCreateClient() {
             .neq("status", "cancelado")
             .maybeSingle();
 
-          const assignTo = legalProject?.responsible_user_id || client.responsible_user_id || user!.id;
+          const assignTo = legalProject?.responsible_user_id || clientRow.responsible_user_id || user!.id;
 
           await supabase.from("tasks").insert({
             title: `Revisión de contratos y estructura legal - ${data.name}`,
@@ -177,11 +199,25 @@ export function useCreateClient() {
         }
       }
 
+      if (data) {
+        try {
+          await syncClientCollaborators(data.id, collaborator_user_ids, data.responsible_user_id);
+        } catch (e) {
+          console.error(e);
+          toast.error(
+            "Cliente creado, pero no se pudieron guardar los colaboradores. Añádelos desde Editar cliente."
+          );
+        }
+      }
+
       return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      if (data) {
+        queryClient.invalidateQueries({ queryKey: ["client-collaborators", data.id] });
+      }
       toast.success("Cliente creado exitosamente");
 
       if (data) {
@@ -233,10 +269,12 @@ export function useUpdateClient() {
       id,
       updates,
       previousServices,
+      collaborator_user_ids,
     }: {
       id: string;
       updates: Partial<ClientInsert> & { payroll_type?: string | null };
       previousServices: string[];
+      collaborator_user_ids?: string[];
     }) => {
       // Get previous payroll_type value
       const { data: prevClient } = await supabase
@@ -469,11 +507,23 @@ export function useUpdateClient() {
         }
       }
 
+      if (data && collaborator_user_ids !== undefined) {
+        try {
+          await syncClientCollaborators(id, collaborator_user_ids, data.responsible_user_id);
+        } catch (e) {
+          console.error(e);
+          toast.error(
+            "Cliente actualizado, pero no se pudieron sincronizar colaboradores. Reintenta desde Editar."
+          );
+        }
+      }
+
       return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["client", data.id] });
+      queryClient.invalidateQueries({ queryKey: ["client-collaborators", data.id] });
       logActivity({ entityType: "client", entityId: data.id, action: "updated", details: { name: data.name } });
       toast.success("Cliente actualizado exitosamente");
     },

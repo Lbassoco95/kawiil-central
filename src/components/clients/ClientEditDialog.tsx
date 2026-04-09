@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -19,7 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Folder } from "lucide-react";
+import { Folder, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUpdateClient, useOrgProfiles } from "@/hooks/useClients";
+import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 import { DropboxFolderPicker } from "@/components/clients/DropboxFolderPicker";
 import type { Database } from "@/integrations/supabase/types";
 import type { Tables } from "@/integrations/supabase/types";
@@ -105,6 +107,7 @@ const clientSchema = z.object({
   contact_name: z.string().trim().max(200).optional().or(z.literal("")),
   contact_position: z.string().trim().max(200).optional().or(z.literal("")),
   dropbox_folder_path: z.string().trim().max(500).optional().or(z.literal("")),
+  collaborator_user_ids: z.array(z.string().uuid()).default([]),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
@@ -139,6 +142,14 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
   const updateClient = useUpdateClient();
   const { data: profiles } = useOrgProfiles();
   const [dropboxPickerOpen, setDropboxPickerOpen] = useState(false);
+  const { data: loadedCollaboratorIds = [], isFetched: collabFetched } = useClientCollaboratorIds(
+    client.id,
+    open
+  );
+  const collabKey = useMemo(
+    () => [...loadedCollaboratorIds].sort().join(","),
+    [loadedCollaboratorIds]
+  );
 
   const detectedPkg = detectPackage(client.services || []);
   const detectedExtras = detectExtras(client.services || [], detectedPkg);
@@ -163,35 +174,49 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       contact_name: client.contact_name || "",
       contact_position: client.contact_position || "",
       dropbox_folder_path: client.dropbox_folder_path || "",
+      collaborator_user_ids: [],
     },
   });
 
-  // Reset form when client changes
+  const responsibleId = form.watch("responsible_user_id");
+  const collaboratorIds = form.watch("collaborator_user_ids");
   useEffect(() => {
-    if (open) {
-      const pkg = detectPackage(client.services || []);
-      const extras = detectExtras(client.services || [], pkg);
-      form.reset({
-        name: client.name,
-        client_type: client.client_type,
-        rfc: client.rfc || "",
-        email: client.email || "",
-        phone: client.phone || "",
-        address: client.address || "",
-        notes: client.notes || "",
-        service_package: pkg,
-        extra_services: pkg !== "individual" ? extras : [],
-        individual_services: pkg === "individual" ? (client.services || []) : [],
-        payroll_type: (client as any).payroll_type || "none",
-        primary_area: client.primary_area || null,
-        responsible_user_id: client.responsible_user_id || "",
-        status: client.status,
-        contact_name: client.contact_name || "",
-        contact_position: client.contact_position || "",
-        dropbox_folder_path: client.dropbox_folder_path || "",
-      });
+    if (!responsibleId || !collaboratorIds?.length) return;
+    if (collaboratorIds.includes(responsibleId)) {
+      form.setValue(
+        "collaborator_user_ids",
+        collaboratorIds.filter((uid) => uid !== responsibleId)
+      );
     }
-  }, [open, client, form]);
+  }, [responsibleId, form, collaboratorIds]);
+
+  // Reset form when client opens or collaborator list is loaded from server
+  useEffect(() => {
+    if (!open || !collabFetched) return;
+    const pkg = detectPackage(client.services || []);
+    const extras = detectExtras(client.services || [], pkg);
+    const collaboratorIdsFromServer = collabKey ? collabKey.split(",").filter((x) => x.length > 0) : [];
+    form.reset({
+      name: client.name,
+      client_type: client.client_type,
+      rfc: client.rfc || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      address: client.address || "",
+      notes: client.notes || "",
+      service_package: pkg,
+      extra_services: pkg !== "individual" ? extras : [],
+      individual_services: pkg === "individual" ? (client.services || []) : [],
+      payroll_type: (client as any).payroll_type || "none",
+      primary_area: client.primary_area || null,
+      responsible_user_id: client.responsible_user_id || "",
+      status: client.status,
+      contact_name: client.contact_name || "",
+      contact_position: client.contact_position || "",
+      dropbox_folder_path: client.dropbox_folder_path || "",
+      collaborator_user_ids: collaboratorIdsFromServer,
+    });
+  }, [open, collabFetched, client, collabKey, form]);
 
   const servicePackage = form.watch("service_package");
   const allServices = computeServices(form.getValues());
@@ -223,6 +248,7 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
         dropbox_folder_path: values.dropbox_folder_path || null,
         payroll_type: values.payroll_type === "none" ? null : values.payroll_type,
       },
+      collaborator_user_ids: values.collaborator_user_ids,
     });
     onOpenChange(false);
   };
@@ -373,6 +399,54 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+
+              <FormField
+                control={form.control}
+                name="collaborator_user_ids"
+                render={({ field }) => {
+                  const opts = (profiles || [])
+                    .filter(
+                      (p) =>
+                        p.user_id !== (form.getValues("responsible_user_id") || "") &&
+                        !field.value.includes(p.user_id)
+                    )
+                    .map((p) => ({ value: p.user_id, label: p.full_name }))
+                    .sort((a, b) => a.label.localeCompare(b.label, "es"));
+                  return (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Colaboradores de seguimiento</FormLabel>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Equipo al pendiente del cliente además del responsable.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {field.value.map((uid) => {
+                          const p = profiles?.find((pr) => pr.user_id === uid);
+                          return (
+                            <Badge key={uid} variant="secondary" className="text-xs gap-1">
+                              {p?.full_name || uid}
+                              <X
+                                role="button"
+                                className="h-3 w-3 cursor-pointer shrink-0"
+                                onClick={() => field.onChange(field.value.filter((x) => x !== uid))}
+                              />
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                      <SearchableSelect
+                        options={opts}
+                        value=""
+                        onValueChange={(v) => {
+                          if (v && !field.value.includes(v)) field.onChange([...field.value, v]);
+                        }}
+                        placeholder="Agregar colaborador..."
+                        searchPlaceholder="Buscar usuario..."
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
             </div>
 
