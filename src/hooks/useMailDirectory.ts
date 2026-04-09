@@ -15,6 +15,14 @@ function isNotConnectedResponse(data: unknown): boolean {
   return (data as { code?: string } | null)?.code === "NOT_CONNECTED";
 }
 
+/** 400 cuando la Edge desplegada no incluye la acción (falta deploy). */
+function isUnknownActionResponse(data: unknown, invokeError: unknown): boolean {
+  const code = (data as { code?: string } | null)?.code;
+  if (code === "UNKNOWN_ACTION") return true;
+  const blob = `${JSON.stringify(data ?? {})} ${String((invokeError as Error)?.message ?? "")}`;
+  return blob.includes("UNKNOWN_ACTION") || blob.includes("Acción no reconocida");
+}
+
 export function useMailDirectoryContacts(enabled: boolean) {
   const { user } = useAuth();
 
@@ -49,6 +57,9 @@ export function useSyncMailDirectory() {
       if (isNotConnectedResponse(data)) {
         return { upserted: 0, notConnected: true as const };
       }
+      if (isUnknownActionResponse(data, error)) {
+        return { upserted: 0, notConnected: false as const, apiOutdated: true as const };
+      }
       if (error) throw error;
       if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
         throw new Error(String((data as { error: string }).error));
@@ -73,6 +84,12 @@ export function useSyncMailDirectory() {
     onSuccess: (res, vars) => {
       void queryClient.invalidateQueries({ queryKey: [...MAIL_DIRECTORY_QUERY_KEY, user?.id] });
       if (res.notConnected || vars?.silent) return;
+      if ("apiOutdated" in res && res.apiOutdated) {
+        toast.error(
+          "El directorio de buzón requiere desplegar la función microsoft-api en Supabase (última versión del repositorio). Mientras tanto puedes usar sugerencias del equipo.",
+        );
+        return;
+      }
       if (res.upserted > 0) {
         toast.success(`Directorio actualizado (${res.upserted} direcciones)`);
       } else {
