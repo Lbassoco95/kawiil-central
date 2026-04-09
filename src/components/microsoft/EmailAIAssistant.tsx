@@ -28,6 +28,17 @@ interface Props {
   onClose?: () => void;
   /** For quick mode: auto-execute this prompt on mount */
   autoPrompt?: string;
+  /** Tras generar, anteponer la sugerencia al cuerpo del borrador (además de mostrarla arriba). */
+  insertIntoDraftOnComplete?: boolean;
+}
+
+function extractSseDataText(parsed: Record<string, unknown>): string | null {
+  if (parsed.type === "kawiil_progress") return null;
+  if (typeof parsed.text === "string" && parsed.text.length > 0) return parsed.text;
+  const choices = parsed.choices as Array<{ delta?: { content?: string } }> | undefined;
+  const chunk = choices?.[0]?.delta?.content;
+  if (typeof chunk === "string" && chunk.length > 0) return chunk;
+  return null;
 }
 
 export function EmailAIAssistant({
@@ -41,6 +52,7 @@ export function EmailAIAssistant({
   hasDraftText = false,
   onClose,
   autoPrompt,
+  insertIntoDraftOnComplete = false,
 }: Props) {
   const [prompt, setPrompt] = useState("");
   const [response, setResponse] = useState("");
@@ -85,36 +97,72 @@ export function EmailAIAssistant({
 
       if (!resp.ok) throw new Error(`Error ${resp.status}`);
 
+      let accumulated = "";
+
       if (resp.headers.get("content-type")?.includes("text/event-stream")) {
         const reader = resp.body?.getReader();
         const decoder = new TextDecoder();
-        let full = "";
+        let sseBuffer = "";
         while (reader) {
           const { done, value } = await reader.read();
           if (done) break;
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() ?? "";
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.text) {
-                  full += parsed.text;
-                  setResponse(full);
-                }
-              } catch {}
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6).trim();
+            if (data === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(data) as Record<string, unknown>;
+              const piece = extractSseDataText(parsed);
+              if (piece) {
+                accumulated += piece;
+                setResponse(accumulated);
+              }
+            } catch {
+              /* línea incompleta o no JSON */
+            }
+          }
+        }
+        if (sseBuffer.trim().startsWith("data: ")) {
+          const data = sseBuffer.trim().slice(6).trim();
+          if (data && data !== "[DONE]") {
+            try {
+              const parsed = JSON.parse(data) as Record<string, unknown>;
+              const piece = extractSseDataText(parsed);
+              if (piece) {
+                accumulated += piece;
+                setResponse(accumulated);
+              }
+            } catch {
+              /* ignore */
             }
           }
         }
       } else {
-        const data = await resp.json();
-        setResponse(data.reply || data.text || JSON.stringify(data));
+        const data = (await resp.json()) as Record<string, unknown>;
+        if (data.error && typeof data.error === "string") {
+          throw new Error(data.error);
+        }
+        const text =
+          (typeof data.content === "string" && data.content) ||
+          (typeof data.reply === "string" && data.reply) ||
+          (typeof data.text === "string" && data.text) ||
+          (typeof data.message === "string" && data.message) ||
+          "";
+        accumulated = text || JSON.stringify(data);
+        setResponse(accumulated);
+      }
+
+      if (insertIntoDraftOnComplete && onInsertText && accumulated.trim()) {
+        onInsertText(accumulated);
+        toast.success("Sugerencia añadida al cuerpo del correo");
       }
     } catch (err) {
       console.error("AI assistant error:", err);
-      toast.error("Error al consultar el asistente");
+      toast.error(err instanceof Error ? err.message : "Error al consultar el asistente");
     } finally {
       setLoading(false);
     }

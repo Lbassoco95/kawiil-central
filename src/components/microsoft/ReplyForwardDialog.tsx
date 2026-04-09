@@ -121,6 +121,7 @@ export function ReplyForwardDialog({
                 onInsertText={(text) =>
                   setDraftHtml((prev) => `<p>${text.replace(/\n/g, "<br>")}</p>${prev}`)
                 }
+                insertIntoDraftOnComplete
                 onReplaceDraft={(text) => setDraftHtml(aiProposalToEmailHtml(text))}
                 onClose={() => setShowFullAI(false)}
               />
