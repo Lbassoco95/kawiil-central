@@ -42,24 +42,85 @@ const GRAPH_MAIL_SEARCH_HEADERS = {
   ConsistencyLevel: "eventual",
 };
 
-async function graphRequest(accessToken: string, path: string, init?: RequestInit) {
-  const res = await fetch(`${GRAPH_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(init?.headers || {}),
-    },
-  });
+const GRAPH_MAX_RETRIES = 6;
 
-  if (!res.ok) {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function graphRetryDelayMs(headers: Headers, attempt: number): number {
+  const ra = headers.get("Retry-After");
+  if (ra) {
+    const sec = parseInt(ra, 10);
+    if (!Number.isNaN(sec) && sec >= 0) {
+      return Math.min(Math.max(sec * 1000, 500), 120_000);
+    }
+    const when = Date.parse(ra);
+    if (!Number.isNaN(when)) {
+      return Math.min(Math.max(when - Date.now(), 500), 120_000);
+    }
+  }
+  const exp = Math.min(1_500 * Math.pow(2, attempt - 1), 45_000);
+  const jitter = Math.floor(Math.random() * 400);
+  return exp + jitter;
+}
+
+function isGraphRetryable(status: number, errorBody: string): boolean {
+  if (status === 429 || status === 503 || status === 504) return true;
+  const lower = errorBody.toLowerCase();
+  return (
+    lower.includes("applicationthrottled") ||
+    lower.includes("mailboxconcurrency") ||
+    lower.includes("toomanyrequests") ||
+    lower.includes('"code":"applicationthrottled"') ||
+    lower.includes('"code":"throttled"')
+  );
+}
+
+/**
+ * Petición a Microsoft Graph con reintentos ante 429 (p. ej. MailboxConcurrency / ApplicationThrottled) y 503.
+ */
+async function graphMailFetchWithRetry(
+  accessToken: string,
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const pathPart = path.startsWith("/") ? path : `/${path}`;
+  const url = `${GRAPH_BASE}${pathPart}`;
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= GRAPH_MAX_RETRIES; attempt++) {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(init?.headers || {}),
+      },
+    });
+
+    if (res.ok) return res;
+
     const errorBody = await res.text();
     const lower = errorBody.toLowerCase();
+
     if (res.status === 403 || lower.includes("insufficient") || lower.includes("permission")) {
       throw new Error(`MICROSOFT_PERMISSION_REQUIRED:${errorBody}`);
     }
+
+    if (isGraphRetryable(res.status, errorBody) && attempt < GRAPH_MAX_RETRIES) {
+      await sleep(graphRetryDelayMs(res.headers, attempt));
+      lastError = new Error(`Microsoft Graph error [${res.status}]: ${errorBody}`);
+      continue;
+    }
+
     throw new Error(`Microsoft Graph error [${res.status}]: ${errorBody}`);
   }
 
+  throw lastError ?? new Error("Microsoft Graph: reintentos agotados");
+}
+
+async function graphRequest(accessToken: string, path: string, init?: RequestInit): Promise<unknown> {
+  const res = await graphMailFetchWithRetry(accessToken, path, init);
   if (res.status === 204) return { success: true };
   const text = await res.text();
   return text ? JSON.parse(text) : { success: true };
@@ -141,18 +202,13 @@ async function loadMessageFileAttachmentFromGraph(
 
   let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
 
-  const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
-  const valueRes = await fetch(valueUrl, {
+  const valuePath = `/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+  const valueRes = await graphMailFetchWithRetry(accessToken, valuePath, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       Accept: "application/octet-stream",
       ...GRAPH_MAIL_PREFER_IMMUTABLE,
     },
   });
-  if (!valueRes.ok) {
-    const errText = await valueRes.text();
-    throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
-  }
   const buf = new Uint8Array(await valueRes.arrayBuffer());
   const hdr = valueRes.headers.get("content-type");
   if (hdr) {
@@ -262,26 +318,23 @@ Deno.serve(async (req) => {
       case "calendar-events": {
         const start = params?.start || new Date().toISOString();
         const end = params?.end || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-        const res = await fetch(
-          `${GRAPH_BASE}/me/calendarview?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`,
+        const res = await graphMailFetchWithRetry(
+          accessToken,
+          `/me/calendarview?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=100`,
           {
             headers: {
-              Authorization: `Bearer ${accessToken}`,
               Prefer: 'outlook.timezone="America/Mexico_City"',
             },
-          }
+          },
         );
         result = await res.json();
         break;
       }
 
       case "create-event": {
-        const res = await fetch(`${GRAPH_BASE}/me/events`, {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/events`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(params.event),
         });
         result = await res.json();
@@ -289,18 +342,17 @@ Deno.serve(async (req) => {
       }
 
       case "delete-event": {
-        const res = await fetch(`${GRAPH_BASE}/me/events/${params.eventId}`, {
+        await graphMailFetchWithRetry(accessToken, `/me/events/${params.eventId}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: {},
         });
-        result = { success: res.ok };
+        result = { success: true };
         break;
       }
 
       case "event-detail": {
-        const res = await fetch(`${GRAPH_BASE}/me/events/${params.eventId}`, {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/events/${params.eventId}`, {
           headers: {
-            Authorization: `Bearer ${accessToken}`,
             Prefer: 'outlook.timezone="America/Mexico_City"',
           },
         });
@@ -312,34 +364,41 @@ Deno.serve(async (req) => {
         const encodedEventId = encodeURIComponent(params.eventId);
 
         // Snapshot previo para fallback en ocurrencias recurrentes
-        const beforeRes = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const beforeEvent = beforeRes.ok ? await beforeRes.json() : null;
+        let beforeEvent: any = null;
+        try {
+          const beforeRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+            headers: {},
+          });
+          beforeEvent = await beforeRes.json();
+        } catch (be) {
+          const bm = be instanceof Error ? be.message : String(be);
+          if (!/\[404\]/.test(bm) && !bm.toLowerCase().includes("erroritemnotfound")) throw be;
+        }
 
-        const res = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
           method: "PATCH",
           headers: {
-            Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
             Prefer: 'outlook.timezone="America/Mexico_City", return=representation',
           },
           body: JSON.stringify(params.payload),
         });
 
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`Update event failed [${res.status}]: ${errBody}`);
-        }
-
         const patchText = await res.text();
         const patchEvent: any = patchText ? JSON.parse(patchText) : null;
 
         // Verifica estado persistido (no confiar solo en respuesta del PATCH)
-        const verifyRes = await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const persistedEvent = verifyRes.ok ? await verifyRes.json() : null;
+        let persistedEvent: any = null;
+        try {
+          const verifyRes = await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+            headers: {},
+          });
+          persistedEvent = await verifyRes.json();
+        } catch (ve) {
+          const vm = ve instanceof Error ? ve.message : String(ve);
+          if (!/\[404\]/.test(vm) && !vm.toLowerCase().includes("erroritemnotfound")) throw ve;
+        }
+        const verifyOk = persistedEvent != null;
 
         const desiredStart = params?.payload?.start?.dateTime as string | undefined;
         const desiredEnd = params?.payload?.end?.dateTime as string | undefined;
@@ -347,7 +406,7 @@ Deno.serve(async (req) => {
         const appliedEnd = persistedEvent?.end?.dateTime as string | undefined;
 
         // Si el evento ya no existe por ese ID, asumimos que Graph lo convirtió/reidentificó y sí aplicó
-        const updateApplied = !verifyRes.ok
+        const updateApplied = !verifyOk
           ? true
           : (!desiredStart || (appliedStart && appliedStart.startsWith(desiredStart))) &&
             (!desiredEnd || (appliedEnd && appliedEnd.startsWith(desiredEnd)));
@@ -368,26 +427,22 @@ Deno.serve(async (req) => {
               : undefined,
           };
 
-          const createRes = await fetch(`${GRAPH_BASE}/me/events`, {
+          const createRes = await graphMailFetchWithRetry(accessToken, `/me/events`, {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(clonePayload),
           });
 
-          if (!createRes.ok) {
-            const errBody = await createRes.text();
-            throw new Error(`Fallback create event failed [${createRes.status}]: ${errBody}`);
-          }
-
           const createdEvent = await createRes.json();
 
-          await fetch(`${GRAPH_BASE}/me/events/${encodedEventId}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
+          try {
+            await graphMailFetchWithRetry(accessToken, `/me/events/${encodedEventId}`, {
+              method: "DELETE",
+              headers: {},
+            });
+          } catch {
+            /* ignorar si la ocurrencia ya no existe */
+          }
 
           result = {
             ...createdEvent,
@@ -402,8 +457,8 @@ Deno.serve(async (req) => {
       }
 
       case "outlook-categories": {
-        const res = await fetch(`${GRAPH_BASE}/me/outlook/masterCategories`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+        const res = await graphMailFetchWithRetry(accessToken, `/me/outlook/masterCategories`, {
+          headers: {},
         });
         const json = await res.json();
         result = json.value || [];
@@ -442,25 +497,19 @@ Deno.serve(async (req) => {
       }
 
       case "mark-unread": {
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}`, {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}`, {
           method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ isRead: false }),
         });
-        result = res.ok ? { success: true } : await res.json();
+        result = { success: true };
         break;
       }
 
       case "archive-email": {
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/move`, {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/move`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ destinationId: "archive" }),
         });
         result = await res.json();
@@ -477,18 +526,11 @@ Deno.serve(async (req) => {
       }
 
       case "send-email": {
-        const res = await fetch(`${GRAPH_BASE}/me/sendMail`, {
+        await graphMailFetchWithRetry(accessToken, `/me/sendMail`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: params.message }),
         });
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`SendMail failed [${res.status}]: ${errBody}`);
-        }
         result = { success: true };
         break;
       }
@@ -499,35 +541,21 @@ Deno.serve(async (req) => {
       }
 
       case "reply": {
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/reply`, {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/reply`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ comment: params.comment }),
         });
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`Reply failed [${res.status}]: ${errBody}`);
-        }
         result = { success: true };
         break;
       }
 
       case "reply-all": {
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/replyAll`, {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/replyAll`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ comment: params.comment }),
         });
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`ReplyAll failed [${res.status}]: ${errBody}`);
-        }
         result = { success: true };
         break;
       }
@@ -552,15 +580,16 @@ Deno.serve(async (req) => {
         const folderPath = params.folderPath || "Kawiil";
 
         const getItemByPath = async (path: string) => {
-          const res = await fetch(`${GRAPH_BASE}/me/drive/root:/${encodeURI(path)}`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (res.status === 404) return null;
-          if (!res.ok) {
-            const errBody = await res.text();
-            throw new Error(`Read OneDrive path failed [${res.status}]: ${errBody}`);
+          try {
+            const res = await graphMailFetchWithRetry(accessToken, `/me/drive/root:/${encodeURI(path)}`, {
+              headers: {},
+            });
+            return await res.json();
+          } catch (e) {
+            const m = e instanceof Error ? e.message : String(e);
+            if (/\[404\]/.test(m)) return null;
+            throw e;
           }
-          return await res.json();
         };
 
         const ensureFolderPathExists = async (path: string) => {
@@ -576,29 +605,25 @@ Deno.serve(async (req) => {
               ? currentPath.slice(0, currentPath.lastIndexOf("/"))
               : "";
 
-            const createUrl = parentPath
-              ? `${GRAPH_BASE}/me/drive/root:/${encodeURI(parentPath)}:/children`
-              : `${GRAPH_BASE}/me/drive/root/children`;
+            const createPath = parentPath
+              ? `/me/drive/root:/${encodeURI(parentPath)}:/children`
+              : `/me/drive/root/children`;
 
-            const createRes = await fetch(createUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                name: segment,
-                folder: {},
-                "@microsoft.graph.conflictBehavior": "fail",
-              }),
-            });
-
-            if (!createRes.ok && createRes.status !== 409) {
-              const errBody = await createRes.text();
-              throw new Error(`Create OneDrive folder failed [${createRes.status}]: ${errBody}`);
+            try {
+              const createRes = await graphMailFetchWithRetry(accessToken, createPath, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: segment,
+                  folder: {},
+                  "@microsoft.graph.conflictBehavior": "fail",
+                }),
+              });
+              await createRes.text();
+            } catch (e) {
+              const m = e instanceof Error ? e.message : String(e);
+              if (!/\[409\]/.test(m)) throw e;
             }
-
-            if (createRes.body) await createRes.text();
           }
         };
 
@@ -610,36 +635,30 @@ Deno.serve(async (req) => {
           pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         };
 
-        let putRes = await fetch(
-          `${GRAPH_BASE}/me/drive/root:/${encodeURI(folderPath)}/${encodeURIComponent(fileName)}:/content`,
-          {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": mimeTypes[docType] || "application/octet-stream",
-            },
-            body: new Uint8Array(0),
-          }
-        );
-
-        // Fallback: if nested path fails (common when tenant path behavior differs), create in root
-        if (putRes.status === 404) {
-          putRes = await fetch(
-            `${GRAPH_BASE}/me/drive/root:/${encodeURIComponent(fileName)}:/content`,
+        const putHeaders = { "Content-Type": mimeTypes[docType] || "application/octet-stream" };
+        let putRes: Response;
+        try {
+          putRes = await graphMailFetchWithRetry(
+            accessToken,
+            `/me/drive/root:/${encodeURI(folderPath)}/${encodeURIComponent(fileName)}:/content`,
             {
               method: "PUT",
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": mimeTypes[docType] || "application/octet-stream",
-              },
+              headers: putHeaders,
               body: new Uint8Array(0),
-            }
+            },
           );
-        }
-
-        if (!putRes.ok) {
-          const errBody = await putRes.text();
-          throw new Error(`Create OneDrive doc failed [${putRes.status}]: ${errBody}`);
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          if (!/\[404\]/.test(m)) throw e;
+          putRes = await graphMailFetchWithRetry(
+            accessToken,
+            `/me/drive/root:/${encodeURIComponent(fileName)}:/content`,
+            {
+              method: "PUT",
+              headers: putHeaders,
+              body: new Uint8Array(0),
+            },
+          );
         }
 
         const createdFile = await putRes.json();
@@ -654,21 +673,14 @@ Deno.serve(async (req) => {
       }
 
       case "forward": {
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${params.messageId}/forward`, {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${params.messageId}/forward`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             comment: params.comment,
             toRecipients: params.toRecipients,
           }),
         });
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`Forward failed [${res.status}]: ${errBody}`);
-        }
         result = { success: true };
         break;
       }
@@ -707,16 +719,20 @@ Deno.serve(async (req) => {
         const messageId = params?.messageId;
         const replyAll = params?.replyAll || false;
         const endpoint = replyAll ? "createReplyAll" : "createReply";
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${messageId}/${endpoint}`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ comment: "" }),
-        });
-        if (!res.ok) {
-          const errBody = await res.text();
+        try {
+          const res = await graphMailFetchWithRetry(
+            accessToken,
+            `/me/messages/${messageId}/${endpoint}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ comment: "" }),
+            },
+          );
+          result = await res.json();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const errBody = msg.replace(/^Microsoft Graph error \[\d+\]: /, "");
           let graphCode: string | undefined;
           try {
             const j = JSON.parse(errBody);
@@ -739,9 +755,8 @@ Deno.serve(async (req) => {
             };
             break;
           }
-          throw new Error(`CreateReplyDraft failed [${res.status}]: ${errBody}`);
+          throw e;
         }
-        result = await res.json();
         break;
       }
 
@@ -749,18 +764,11 @@ Deno.serve(async (req) => {
       case "create-forward-draft": {
         const messageId = params?.messageId;
         if (!messageId) throw new Error("messageId required");
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${messageId}/createForward`, {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/messages/${messageId}/createForward`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ comment: "" }),
         });
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`CreateForwardDraft failed [${res.status}]: ${errBody}`);
-        }
         result = await res.json();
         break;
       }
@@ -815,14 +823,10 @@ Deno.serve(async (req) => {
 
       case "send-draft": {
         const draftId = params?.draftId;
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${draftId}/send`, {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${draftId}/send`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: {},
         });
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`SendDraft failed [${res.status}]: ${errBody}`);
-        }
         result = { success: true };
         break;
       }
@@ -862,11 +866,11 @@ Deno.serve(async (req) => {
       case "delete-email": {
         const messageId = params?.messageId;
         if (!messageId) throw new Error("messageId required");
-        const res = await fetch(`${GRAPH_BASE}/me/messages/${messageId}`, {
+        await graphMailFetchWithRetry(accessToken, `/me/messages/${messageId}`, {
           method: "DELETE",
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: {},
         });
-        result = { success: res.ok };
+        result = { success: true };
         break;
       }
 
@@ -907,18 +911,13 @@ Deno.serve(async (req) => {
         let contentType = String((att as Record<string, unknown>).contentType || "application/octet-stream");
         const name = String((att as Record<string, unknown>).name ?? "adjunto");
 
-        const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
-        const valueRes = await fetch(valueUrl, {
+        const valuePathBin = `/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+        const valueRes = await graphMailFetchWithRetry(accessToken, valuePathBin, {
           headers: {
-            Authorization: `Bearer ${accessToken}`,
             Accept: "application/octet-stream",
             ...GRAPH_MAIL_PREFER_IMMUTABLE,
           },
         });
-        if (!valueRes.ok) {
-          const errText = await valueRes.text();
-          throw new Error(`Adjunto binario [${valueRes.status}]: ${errText}`);
-        }
         const hdr = valueRes.headers.get("content-type");
         if (hdr) {
           const main = hdr.split(";")[0].trim().toLowerCase();
@@ -985,21 +984,20 @@ Deno.serve(async (req) => {
             ? Number((att as Record<string, unknown>).size)
             : null;
 
-        const valueUrl = `${GRAPH_BASE}/me/messages/${messageId}/attachments/${attachmentId}/$value`;
+        const valuePathChunk = `/me/messages/${messageId}/attachments/${attachmentId}/$value`;
         const rangeEnd = byteStart + maxLen - 1;
 
         /** No enviar Range en el primer trozo: Graph/Exchange a veces responde 416 o cuerpo vacío con bytes=0-… */
-        const valueHeaders: Record<string, string> = {
-          Authorization: `Bearer ${accessToken}`,
+        const chunkHeaders: Record<string, string> = {
           Accept: "application/octet-stream",
           ...GRAPH_MAIL_PREFER_IMMUTABLE,
         };
         if (byteStart > 0) {
-          valueHeaders.Range = `bytes=${byteStart}-${rangeEnd}`;
+          chunkHeaders.Range = `bytes=${byteStart}-${rangeEnd}`;
         }
 
-        const valueRes = await fetch(valueUrl, {
-          headers: valueHeaders,
+        const valueRes = await graphMailFetchWithRetry(accessToken, valuePathChunk, {
+          headers: chunkHeaders,
         });
 
         let buf: Uint8Array;
@@ -1096,18 +1094,11 @@ Deno.serve(async (req) => {
       case "create-mail-folder": {
         const displayName = params?.displayName;
         if (!displayName) throw new Error("displayName required");
-        const res = await fetch(`${GRAPH_BASE}/me/mailFolders`, {
+        const res = await graphMailFetchWithRetry(accessToken, `/me/mailFolders`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ displayName }),
         });
-        if (!res.ok) {
-          const errBody = await res.text();
-          throw new Error(`Create mail folder failed [${res.status}]: ${errBody}`);
-        }
         result = await res.json();
         break;
       }
@@ -1172,9 +1163,27 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (
+      lower.includes("applicationthrottled") ||
+      lower.includes("mailboxconcurrency") ||
+      message.includes("[429]")
+    ) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Microsoft limitó temporalmente las peticiones al buzón. Espera unos segundos y vuelve a intentar.",
+          code: "GRAPH_THROTTLED",
+        }),
+        {
+          status: 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: corsHeaders,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

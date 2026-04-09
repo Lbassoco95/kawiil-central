@@ -46,6 +46,14 @@ function getActionableError(err: Error): string {
   if (lower.includes("attachment") || lower.includes("size")) {
     return "No se pudo adjuntar el archivo. Verifica tipo/tamaño e inténtalo de nuevo.";
   }
+  if (
+    lower.includes("graph_throttled") ||
+    lower.includes("mailboxconcurrency") ||
+    lower.includes("applicationthrottled") ||
+    lower.includes("limitó temporalmente")
+  ) {
+    return "Microsoft aplicó un límite temporal al buzón. Espera unos segundos y vuelve a intentar.";
+  }
   return message;
 }
 
