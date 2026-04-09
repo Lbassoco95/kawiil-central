@@ -1801,6 +1801,7 @@ serve(async (req) => {
       attachmentRefs,
       insightLite,
       indexed_attachment_names,
+      systemPrompt: clientSystemPrompt,
     } = body;
 
     const svcUrl = Deno.env.get("SUPABASE_URL")!;
@@ -1944,6 +1945,14 @@ serve(async (req) => {
         `Los fragmentos recuperados incluyen metadatos con rangos de página aproximados (page_from / page_to) cuando apliquen.\n` +
         `No digas que "leíste el PDF completo" sin haber llamado a semantic_search.\n` +
         `Al integrar lo encontrado, responde en **párrafos** al usuario, no como inventario de fragmentos.\n`;
+    }
+
+    if (
+      typeof clientSystemPrompt === "string" &&
+      clientSystemPrompt.trim().length > 0 &&
+      !(simple && insightLite)
+    ) {
+      systemPrompt += `\n\n## Instrucciones adicionales del cliente\n${clientSystemPrompt.trim()}`;
     }
 
     systemPrompt = clampSystemPromptForClaude(systemPrompt);

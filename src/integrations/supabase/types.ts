@@ -2153,6 +2153,45 @@ export type Database = {
           },
         ]
       }
+      scheduled_mail_jobs: {
+        Row: {
+          id: string
+          user_id: string
+          status: Database["public"]["Enums"]["scheduled_mail_job_status"]
+          scheduled_at: string
+          kind: Database["public"]["Enums"]["scheduled_mail_job_kind"]
+          draft_id: string
+          payload: Json
+          error_message: string | null
+          sent_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          status?: Database["public"]["Enums"]["scheduled_mail_job_status"]
+          scheduled_at: string
+          kind?: Database["public"]["Enums"]["scheduled_mail_job_kind"]
+          draft_id: string
+          payload?: Json
+          error_message?: string | null
+          sent_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          status?: Database["public"]["Enums"]["scheduled_mail_job_status"]
+          scheduled_at?: string
+          kind?: Database["public"]["Enums"]["scheduled_mail_job_kind"]
+          draft_id?: string
+          payload?: Json
+          error_message?: string | null
+          sent_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       savio_webhook_events: {
         Row: {
           created_at: string
@@ -2632,6 +2671,8 @@ export type Database = {
       }
     }
     Enums: {
+      scheduled_mail_job_kind: "send_draft"
+      scheduled_mail_job_status: "pending" | "processing" | "sent" | "failed" | "cancelled"
       app_role: "transformador" | "referente" | "ejecutor" | "en_formacion"
       client_status: "activo" | "inactivo" | "prospecto"
       client_type: "persona_moral" | "persona_fisica"
@@ -2781,6 +2822,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      scheduled_mail_job_kind: ["send_draft"],
+      scheduled_mail_job_status: ["pending", "processing", "sent", "failed", "cancelled"],
       app_role: ["transformador", "referente", "ejecutor", "en_formacion"],
       client_status: ["activo", "inactivo", "prospecto"],
       client_type: ["persona_moral", "persona_fisica"],

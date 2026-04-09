@@ -37,7 +37,10 @@ import {
   useDeleteEmail,
   useEmailAttachments,
   useUnreadEmailCount,
+  SCHEDULED_MAIL_JOBS_QUERY_KEY,
 } from "@/hooks/useMicrosoft";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import {
   fetchMessageAttachmentBlob,
@@ -252,6 +255,9 @@ function readFoldersCollapsedPref(): boolean {
 }
 
 export function EmailView() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string>("inbox");
@@ -431,6 +437,59 @@ export function EmailView() {
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo preparar la respuesta");
+    }
+  };
+
+  const handleScheduleMail = async (scheduledAtIso: string) => {
+    if (!draftId || !user?.id) {
+      toast.error("No hay borrador para programar.");
+      return;
+    }
+    const when = new Date(scheduledAtIso);
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now() + 30_000) {
+      toast.error("Elige una fecha y hora al menos un minuto en el futuro.");
+      return;
+    }
+    if (emailAction === "forward") {
+      const forwardRecipients = parseRecipients(forwardTo);
+      const err = validateRecipientGroups({ to: forwardRecipients });
+      if (err) {
+        toast.error(err);
+        return;
+      }
+    }
+    let attachments = replyAttachments;
+    const attBytes = attachments.reduce((n, a) => n + (a.contentBytes?.length || 0), 0);
+    if (attBytes > 3 * 1024 * 1024) {
+      toast.warning("Adjuntos omitidos del envío programado (superan 3 MB en base64).");
+      attachments = [];
+    }
+    setScheduleSubmitting(true);
+    try {
+      const toRecipients =
+        emailAction === "forward"
+          ? parseRecipients(forwardTo).map((email) => ({ emailAddress: { address: email } }))
+          : undefined;
+
+      const { error } = await supabase.from("scheduled_mail_jobs").insert({
+        user_id: user.id,
+        scheduled_at: when.toISOString(),
+        draft_id: draftId,
+        kind: "send_draft",
+        payload: {
+          body_html: draftHtml,
+          ...(toRecipients?.length ? { to_recipients: toRecipients } : {}),
+          ...(attachments.length ? { attachments } : {}),
+        },
+      });
+      if (error) throw error;
+      toast.success("Correo programado. Se enviará a la hora indicada.");
+      await queryClient.invalidateQueries({ queryKey: [...SCHEDULED_MAIL_JOBS_QUERY_KEY, user.id] });
+      resetAction();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo programar el envío");
+    } finally {
+      setScheduleSubmitting(false);
     }
   };
 
@@ -1688,8 +1747,10 @@ export function EmailView() {
           createReplyDraftPending={createReplyDraft.isPending}
           createForwardDraftPending={createForwardDraft.isPending}
           isSending={isSending}
+          isScheduling={scheduleSubmitting}
           onCancel={resetAction}
           onSend={handleSendReply}
+          onScheduleMail={handleScheduleMail}
           onAttachmentPick={(files) => void handleReplyAttachmentPick(files)}
           onRemoveAttachment={removeReplyAttachment}
         />

@@ -1035,3 +1035,48 @@ export function useUnreadEmailCount() {
   });
 }
 
+export const SCHEDULED_MAIL_JOBS_QUERY_KEY = ["scheduled-mail-jobs"] as const;
+
+export function usePendingScheduledMailJobs(enabled = true) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: [...SCHEDULED_MAIL_JOBS_QUERY_KEY, user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("scheduled_mail_jobs")
+        .select("id, scheduled_at, status, draft_id, created_at, error_message")
+        .eq("status", "pending")
+        .order("scheduled_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user && enabled,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useCancelScheduledMailJob() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase
+        .from("scheduled_mail_jobs")
+        .update({ status: "cancelled" })
+        .eq("id", id)
+        .eq("status", "pending")
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("No se pudo cancelar (ya enviado o cancelado).");
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...SCHEDULED_MAIL_JOBS_QUERY_KEY, user?.id] });
+      toast.success("Envío programado cancelado");
+    },
+    onError: (err: Error) => toast.error(err.message || "Error al cancelar"),
+  });
+}
+
