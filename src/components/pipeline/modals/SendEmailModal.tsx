@@ -128,6 +128,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
       extra_email_3: "",
       subject: "",
       body_html: "",
+      template_id: undefined,
       schedule_follow_up: false,
     },
   });
@@ -169,6 +170,12 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
     if (!user) return;
     setSaving(true);
     try {
+      // Incluir plantilla aunque react-hook-form no la devuelva en `data` (Select sin register).
+      const templateIdRaw =
+        (typeof data.template_id === "string" ? data.template_id : "") ||
+        String(form.getValues("template_id") ?? "").trim();
+      const template_id = templateIdRaw || undefined;
+
       const extras = [data.extra_email_1, data.extra_email_2, data.extra_email_3]
         .map((s) => (s || "").trim())
         .filter(Boolean);
@@ -176,7 +183,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
 
       const logPayload = {
         lead_id: leadId,
-        template_id: data.template_id || null,
+        template_id: template_id ?? null,
         to_email: data.to_email.trim(),
         additional_to_emails,
         subject: data.subject,
@@ -204,7 +211,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         {
           body: {
             lead_id: leadId,
-            template_id: data.template_id || undefined,
+            template_id,
             email_log_id: logEntry.id,
             subject: data.subject,
             body_html: data.body_html,
@@ -258,6 +265,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         extra_email_3: "",
         subject: "",
         body_html: "",
+        template_id: undefined,
         schedule_follow_up: false,
       });
       setAttachments([]);
