@@ -15,6 +15,18 @@ function isNotConnectedResponse(data: unknown): boolean {
   return (data as { code?: string } | null)?.code === "NOT_CONNECTED";
 }
 
+/** Tabla aún no creada en DB (falta `supabase db push` o migración). */
+function isUserMailDirectoryMissing(err: { message?: string; code?: string } | null): boolean {
+  if (!err) return false;
+  const m = String(err.message || "").toLowerCase();
+  const c = String(err.code || "");
+  return (
+    c === "PGRST205" ||
+    (m.includes("user_mail_directory") && m.includes("schema cache")) ||
+    (m.includes("user_mail_directory") && m.includes("does not exist"))
+  );
+}
+
 /** 400 cuando la Edge desplegada no incluye la acción (falta deploy). */
 function isUnknownActionResponse(data: unknown, invokeError: unknown): boolean {
   const code = (data as { code?: string } | null)?.code;
@@ -34,7 +46,10 @@ export function useMailDirectoryContacts(enabled: boolean) {
         .select("email, display_name, last_seen_at")
         .order("last_seen_at", { ascending: false })
         .limit(2000);
-      if (error) throw error;
+      if (error) {
+        if (isUserMailDirectoryMissing(error)) return [];
+        throw error;
+      }
       return (data ?? []) as MailDirectoryContact[];
     },
     enabled: !!user && enabled,
@@ -78,7 +93,12 @@ export function useSyncMailDirectory() {
       const { error: upErr } = await supabase.from("user_mail_directory").upsert(rows, {
         onConflict: "user_id,email",
       });
-      if (upErr) throw upErr;
+      if (upErr) {
+        if (isUserMailDirectoryMissing(upErr)) {
+          return { upserted: 0, notConnected: false as const, tableMissing: true as const };
+        }
+        throw upErr;
+      }
       return { upserted: rows.length, notConnected: false as const };
     },
     onSuccess: (res, vars) => {
@@ -87,6 +107,12 @@ export function useSyncMailDirectory() {
       if ("apiOutdated" in res && res.apiOutdated) {
         toast.error(
           "El directorio de buzón requiere desplegar la función microsoft-api en Supabase (última versión del repositorio). Mientras tanto puedes usar sugerencias del equipo.",
+        );
+        return;
+      }
+      if ("tableMissing" in res && res.tableMissing) {
+        toast.error(
+          "Falta la tabla del directorio en Supabase. Ejecuta la migración 20260410120000_user_mail_directory (supabase db push).",
         );
         return;
       }
