@@ -34,6 +34,8 @@ import { toast } from "sonner";
 
 import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
+import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -80,6 +82,10 @@ const ProyectoDetalle = () => {
 
   const openTaskCount = useMemo(() => tasks.filter((t) => !isTaskClosedStatus(t.status)).length, [tasks]);
   const closedTaskCount = useMemo(() => tasks.filter((t) => isTaskClosedStatus(t.status)).length, [tasks]);
+  const openProjectTasks = useMemo(() => tasks.filter((t) => !isTaskClosedStatus(t.status)), [tasks]);
+  const openProjectTaskIds = useMemo(() => openProjectTasks.map((t) => t.id), [openProjectTasks]);
+  const { data: projectTaskAssigneeIds = [], isLoading: loadingProjectTaskAssignees } =
+    useOpenTaskAssigneeUserIds(openProjectTaskIds);
 
   const projectPhases: Phase[] = useMemo(() => {
     const raw = (project as any)?.phases;
@@ -210,6 +216,26 @@ const ProyectoDetalle = () => {
 
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
+  const profilesByUserId = useMemo(() => new Map(profiles.map((p) => [p.user_id, p])), [profiles]);
+
+  const proyectoCollaboratorUserIds = useMemo(() => {
+    if (!project) return [];
+    const set = new Set<string>();
+    for (const t of openProjectTasks) {
+      if (t.assigned_to) set.add(t.assigned_to);
+    }
+    for (const uid of projectTaskAssigneeIds) set.add(uid);
+    const pr = project.responsible_user_id;
+    if (pr) set.delete(pr);
+    const clientResp = (project as { clients?: { responsible_user_id?: string | null } | null }).clients
+      ?.responsible_user_id;
+    if (clientResp) set.delete(clientResp);
+    return [...set].sort((a, b) => {
+      const na = profilesByUserId.get(a)?.full_name || "";
+      const nb = profilesByUserId.get(b)?.full_name || "";
+      return na.localeCompare(nb, "es");
+    });
+  }, [project, openProjectTasks, projectTaskAssigneeIds, profilesByUserId]);
 
   const hasAccounting = project?.area === "contabilidad" || project?.area === "softlanding";
   const isSoftlanding = project?.area === "softlanding";
@@ -356,6 +382,22 @@ const ProyectoDetalle = () => {
               <span className="hidden sm:inline">Subir minuta</span>
             </Button>
           </div>
+          <TeamVisibilityBanner
+            responsibleHeading="Responsable del proyecto"
+            responsibleUserId={project.responsible_user_id}
+            secondaryHeading="Responsable del cliente"
+            secondaryUserId={
+              project.client_id
+                ? (project as { clients?: { responsible_user_id?: string | null } | null }).clients
+                    ?.responsible_user_id
+                : undefined
+            }
+            profilesByUserId={profilesByUserId}
+            collaboratorUserIds={proyectoCollaboratorUserIds}
+            collaboratorsLoading={loadingProjectTaskAssignees && openProjectTaskIds.length > 0}
+            collaboratorsEmptyHint="No hay otras personas en tareas abiertas de este proyecto ni como colaboradores adicionales en esas tareas (aparte del responsable del proyecto)."
+            className="relative"
+          />
         </div>
 
         {/* Tab pills */}

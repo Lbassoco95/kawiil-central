@@ -69,7 +69,7 @@ export function useProjectDetail(projectId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("*, clients(name, dropbox_folder_path)")
+        .select("*, clients(name, dropbox_folder_path, responsible_user_id)")
         .eq("id", projectId!)
         .single();
       if (error) throw error;

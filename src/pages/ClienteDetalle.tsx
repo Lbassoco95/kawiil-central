@@ -32,6 +32,9 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
+import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
+import { useProfiles } from "@/hooks/useTasks";
 
 const STATUS_STYLES: Record<ClientStatus, string> = Object.fromEntries(
   Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -77,6 +80,35 @@ const ClienteDetalle = () => {
         new Date(b.updated_at || "").getTime() - new Date(a.updated_at || "").getTime()
     );
   }, [tasks]);
+
+  const openTasks = useMemo(() => tasks.filter((t) => !isTaskClosedStatus(t.status)), [tasks]);
+  const openTaskIds = useMemo(() => openTasks.map((t) => t.id), [openTasks]);
+  const { data: taskAssigneeUserIds = [], isLoading: loadingTaskAssignees } = useOpenTaskAssigneeUserIds(openTaskIds);
+  const { data: orgProfiles = [] } = useProfiles();
+  const profilesByUserId = useMemo(
+    () => new Map(orgProfiles.map((p) => [p.user_id, p])),
+    [orgProfiles]
+  );
+
+  const clientCollaboratorUserIds = useMemo(() => {
+    const responsible = client?.responsible_user_id;
+    const set = new Set<string>();
+    for (const t of openTasks) {
+      if (t.assigned_to) set.add(t.assigned_to);
+    }
+    for (const uid of taskAssigneeUserIds) set.add(uid);
+    for (const p of projects) {
+      if (p.status === "activo" || p.status === "pausado") {
+        if (p.responsible_user_id) set.add(p.responsible_user_id);
+      }
+    }
+    if (responsible) set.delete(responsible);
+    return [...set].sort((a, b) => {
+      const na = profilesByUserId.get(a)?.full_name || "";
+      const nb = profilesByUserId.get(b)?.full_name || "";
+      return na.localeCompare(nb, "es");
+    });
+  }, [client?.responsible_user_id, openTasks, taskAssigneeUserIds, projects, profilesByUserId]);
 
   if (isLoadingClient) {
     return (
@@ -126,6 +158,15 @@ const ClienteDetalle = () => {
               Editar
             </Button>
           </div>
+          <TeamVisibilityBanner
+            responsibleHeading="Responsable del cliente"
+            responsibleUserId={client.responsible_user_id}
+            profilesByUserId={profilesByUserId}
+            collaboratorUserIds={clientCollaboratorUserIds}
+            collaboratorsLoading={loadingTaskAssignees && openTaskIds.length > 0}
+            collaboratorsEmptyHint="No hay otras personas en tareas abiertas, como colaboradores en esas tareas ni como responsables de proyectos activos o en pausa (aparte del responsable del cliente)."
+            className="relative"
+          />
         </div>
 
         {/* Tab pills */}

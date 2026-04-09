@@ -14,6 +14,7 @@ export function useAddTaskAssignee() {
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["task-assignees", vars.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["task-assignees-bulk"] });
       toast.success("Colaborador agregado");
     },
     onError: (err: Error) => {
@@ -36,6 +37,7 @@ export function useRemoveTaskAssignee() {
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["task-assignees", vars.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["task-assignees-bulk"] });
       toast.success("Colaborador removido");
     },
     onError: (err: Error) => {
