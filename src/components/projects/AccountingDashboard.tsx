@@ -411,6 +411,12 @@ export function AccountingDashboard({
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }, []);
 
+  const moffinWebhookUrl = useMemo(() => {
+    const base = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    if (!base) return "";
+    return `${base.replace(/\/$/, "")}/functions/v1/moffin-webhook`;
+  }, []);
+
   useEffect(() => {
     if (!periods?.length || !projectId) return;
     let cancelled = false;
@@ -460,8 +466,15 @@ export function AccountingDashboard({
               <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xl">
                 Lista 69-B vía <code className="text-[10px]">/query/sat_blacklist</code>. Constancia y opinión se obtienen del mismo servicio de certificados{" "}
                 <code className="text-[10px]">/query/sat_rfc</code> (tipos en <code className="text-[10px]">certificates[].type</code>). Cada clic puede ser una
-                consulta cobrable.
+                consulta cobrable. Para callbacks asíncronos (Svix), el endpoint debe ser{" "}
+                <code className="text-[10px] break-all">moffin-webhook</code> (no <code className="text-[10px]">moffin-query</code>) con secreto{" "}
+                <code className="text-[10px]">MOFFIN_SVIX_SIGNING_SECRET</code> en Supabase.
               </p>
+              {moffinWebhookUrl ? (
+                <p className="text-[10px] text-muted-foreground font-mono break-all mt-1 max-w-2xl">
+                  URL webhook: {moffinWebhookUrl}
+                </p>
+              ) : null}
             </div>
           </div>
           {!clientId ? (

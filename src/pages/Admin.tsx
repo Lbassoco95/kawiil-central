@@ -10,14 +10,16 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useOrgSettings, useUpdateOrgSettings } from "@/hooks/useOrgSettings";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Shield } from "lucide-react";
+import { Shield, Plug } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { MoffinIntegrationCard } from "@/components/admin/MoffinIntegrationCard";
 
 const tabs = [
   { key: "usuarios", label: "Kawiilers" },
   { key: "celulas", label: "Células" },
   { key: "catalogos", label: "Catálogos" },
   { key: "adopcion", label: "Adopción" },
+  { key: "integraciones", label: "Integraciones" },
   { key: "permisos", label: "Permisos" },
 ] as const;
 
@@ -86,6 +88,7 @@ const Admin = () => {
 
         <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
           {tabs.map((t) => {
+            if (t.key === "integraciones" && !isTransformador) return null;
             if (t.key === "permisos" && !isTransformador) return null;
             return (
               <button
@@ -104,6 +107,15 @@ const Admin = () => {
           {tab === "celulas" && <CelulaManagement />}
           {tab === "catalogos" && <CatalogManagement />}
           {tab === "adopcion" && <AdoptionAnalyticsTab />}
+          {tab === "integraciones" && isTransformador && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Plug className="h-4 w-4" />
+                <span>Estado de integraciones externas (solo transformadores).</span>
+              </div>
+              <MoffinIntegrationCard />
+            </div>
+          )}
           {tab === "permisos" && <PermissionsTab />}
         </div>
       </div>
