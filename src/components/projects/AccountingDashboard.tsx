@@ -54,6 +54,7 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PhaseTaskRow } from "./PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { toast } from "sonner";
+import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -315,7 +316,7 @@ export function AccountingDashboard({
   /** Área del proyecto para el alta rápida de tareas (p. ej. contabilidad / softlanding). */
   projectArea?: string;
 }) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const queryClient = useQueryClient();
   const { canDeleteTasks } = useUserRole();
   const deleteTask = useDeleteTask();
@@ -351,8 +352,9 @@ export function AccountingDashboard({
   const { data: moffinFielStatus } = useQuery({
     queryKey: ["moffin-fiel-status", clientId],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("moffin-fiel", {
-        body: { action: "status", clientId: clientId! },
+      const { data, error } = await invokeFunctionWithSession("moffin-fiel", {
+        action: "status",
+        clientId: clientId!,
       });
       if (error) throw new Error(error.message);
       const payload = (data ?? {}) as {
@@ -371,7 +373,7 @@ export function AccountingDashboard({
         updatedAt: payload.updatedAt ?? null,
       };
     },
-    enabled: !!user && !!clientId,
+    enabled: !!user && !!session?.access_token && !!clientId,
   });
 
   useEffect(() => {
@@ -449,14 +451,12 @@ export function AccountingDashboard({
       }
       setMoffinBusy(consultType);
       try {
-        const { data, error } = await supabase.functions.invoke("moffin-query", {
-          body: {
-            projectId,
-            consultType,
-            ...(moffinNeedsFiel(consultType)
-              ? { fielPassword: fielPassword.trim() }
-              : {}),
-          },
+        const { data, error } = await invokeFunctionWithSession("moffin-query", {
+          projectId,
+          consultType,
+          ...(moffinNeedsFiel(consultType)
+            ? { fielPassword: fielPassword.trim() }
+            : {}),
         });
         const payload = (data ?? {}) as {
           error?: string;

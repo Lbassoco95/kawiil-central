@@ -26,8 +26,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
+  const rawAuth =
+    req.headers.get("Authorization") ??
+    req.headers.get("authorization") ??
+    "";
+  const bearerMatch = rawAuth.match(/^Bearer\s+(\S+)/i);
+  const accessToken = bearerMatch?.[1];
+  if (!accessToken) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -39,10 +44,12 @@ Deno.serve(async (req) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
   const caller = createClient(supabaseUrl, anon, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
   });
-  const { data: { user }, error: userErr } = await caller.auth.getUser();
+  const { data: userData, error: userErr } = await caller.auth.getUser(accessToken);
+  const user = userData?.user;
   if (userErr || !user) {
+    console.error("moffin-health auth:", userErr?.message ?? "sin usuario");
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

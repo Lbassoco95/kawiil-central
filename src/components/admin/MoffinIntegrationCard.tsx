@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
 import { Loader2, Landmark, ExternalLink } from "lucide-react";
 
 type HealthPayload = {
@@ -15,15 +16,15 @@ type HealthPayload = {
 };
 
 export function MoffinIntegrationCard() {
+  const { session } = useAuth();
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["moffin-health"],
     queryFn: async () => {
-      const { data: res, error: fnErr } = await supabase.functions.invoke("moffin-health", {
-        body: {},
-      });
+      const { data: res, error: fnErr } = await invokeFunctionWithSession("moffin-health", {});
       if (fnErr) throw new Error(fnErr.message);
       return res as HealthPayload;
     },
+    enabled: !!session?.access_token,
     staleTime: 60_000,
   });
 

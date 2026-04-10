@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { KeyRound, Upload, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -35,7 +35,7 @@ type FielStatus = {
 };
 
 export function MoffinFielCredentialsSection({ clientId }: { clientId: string }) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [cerFile, setCerFile] = useState<File | null>(null);
@@ -44,8 +44,9 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
   const { data: status, isLoading } = useQuery({
     queryKey: ["moffin-fiel-status", clientId],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("moffin-fiel", {
-        body: { action: "status", clientId },
+      const { data, error } = await invokeFunctionWithSession("moffin-fiel", {
+        action: "status",
+        clientId,
       });
       if (error) throw new Error(error.message);
       const payload = (data ?? {}) as FielStatus & { error?: string; message?: string };
@@ -54,7 +55,7 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
       }
       return payload as FielStatus;
     },
-    enabled: !!user && !!clientId,
+    enabled: !!user && !!session?.access_token && !!clientId,
   });
 
   const saveMutation = useMutation({
@@ -64,13 +65,11 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
       }
       const certificateBase64 = await fileToBase64(cerFile);
       const privateKeyBase64 = await fileToBase64(keyFile);
-      const { data, error } = await supabase.functions.invoke("moffin-fiel", {
-        body: {
-          action: "save",
-          clientId,
-          certificateBase64,
-          privateKeyBase64,
-        },
+      const { data, error } = await invokeFunctionWithSession("moffin-fiel", {
+        action: "save",
+        clientId,
+        certificateBase64,
+        privateKeyBase64,
       });
       if (error) throw new Error(error.message);
       const payload = (data ?? {}) as { error?: string; message?: string };
@@ -92,8 +91,9 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("moffin-fiel", {
-        body: { action: "delete", clientId },
+      const { data, error } = await invokeFunctionWithSession("moffin-fiel", {
+        action: "delete",
+        clientId,
       });
       if (error) throw new Error(error.message);
       const payload = (data ?? {}) as { error?: string; message?: string };

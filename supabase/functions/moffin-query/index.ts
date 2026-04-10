@@ -197,8 +197,13 @@ Deno.serve(async (req) => {
     );
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
+  const rawAuth =
+    req.headers.get("Authorization") ??
+    req.headers.get("authorization") ??
+    "";
+  const bearerMatch = rawAuth.match(/^Bearer\s+(\S+)/i);
+  const accessToken = bearerMatch?.[1];
+  if (!accessToken) {
     return new Response(JSON.stringify({ error: "No autorizado" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -206,10 +211,12 @@ Deno.serve(async (req) => {
   }
 
   const userClient = createClient(supabaseUrl, supabaseAnon, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
   });
-  const { data: { user }, error: authError } = await userClient.auth.getUser();
+  const { data: userData, error: authError } = await userClient.auth.getUser(accessToken);
+  const user = userData?.user;
   if (authError || !user) {
+    console.error("moffin-query auth:", authError?.message ?? "sin usuario");
     return new Response(JSON.stringify({ error: "No autorizado" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
