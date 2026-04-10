@@ -3,12 +3,8 @@ import {
   decryptFielSecret,
   formatFielMaterial,
 } from "../_shared/moffinFielCrypto.ts";
-import { uploadMoffinPdfFromUrl } from "../_shared/moffinPdfDownload.ts";
-import {
-  extractReportLevelPdfUrl,
-  pickSatRfcPdfUrl,
-  summarizeSatRfcCertificates,
-} from "../_shared/moffinSatRfc.ts";
+import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
+import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
 
 /**
  * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs (ReDoc en https://moffin.mx/docs)
@@ -90,21 +86,13 @@ function summarizeSatRfc(
   return summarizeSatRfcCertificates(consultType, resp);
 }
 
-function pickPdfForConsult(consultType: ConsultType, report: Record<string, unknown>): string | null {
-  if (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") {
-    const top = extractReportLevelPdfUrl(report);
-    if (top) return top;
-    return pickSatRfcPdfUrl(consultType, report);
-  }
-  return extractReportLevelPdfUrl(report);
-}
-
 type MoffinConsultDbRow = {
   id: string;
   organization_id: string;
   project_id: string;
   client_id: string | null;
   consult_type: string;
+  rfc: string;
   moffin_query_id: string | null;
   document_id: string | null;
   requested_by: string | null;
@@ -145,6 +133,7 @@ async function persistMoffinReportToConsult(
   report: Record<string, unknown>,
   fallbackUserId: string,
   moffinApiKey: string,
+  moffinBase: string,
 ): Promise<{ error?: string }> {
   const allowed: ConsultType[] = ["lista_69b", "constancia_situacion_fiscal", "opinion_cumplimiento"];
   if (!allowed.includes(row.consult_type as ConsultType)) {
@@ -166,27 +155,36 @@ async function persistMoffinReportToConsult(
   let pdfFailure: string | null = null;
 
   if (st === "success" && !documentId && (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento")) {
-    const pdfUrl = pickPdfForConsult(ct, report);
     const docType =
       ct === "constancia_situacion_fiscal" ? "constancia_situacion_fiscal" : "opinion_cumplimiento";
-    if (!pdfUrl) {
-      pdfFailure = "sin URL de PDF en respuesta Moffin";
-    } else {
-      const up = await uploadMoffinPdfFromUrl({
-        admin,
-        orgId: row.organization_id,
-        projectId: row.project_id,
-        clientId: row.client_id,
-        uploadedBy: uploadUid,
-        url: pdfUrl,
-        fileBase: ct,
-        documentDisplayName: `${ct}_${String(row.id).slice(0, 8)}_${Date.now()}`,
-        documentType: docType,
-        moffinApiKey,
-      });
-      if (up.documentId) documentId = up.documentId;
-      else pdfFailure = up.failureReason ?? "descarga PDF falló";
-    }
+    const prevRaw =
+      row.raw_response && typeof row.raw_response === "object" && !Array.isArray(row.raw_response)
+        ? (row.raw_response as Record<string, unknown>)
+        : {};
+    const ext =
+      typeof report.externalId === "string"
+        ? report.externalId
+        : typeof prevRaw.externalId === "string"
+          ? prevRaw.externalId
+          : null;
+    const up = await tryUploadSatRfcPdf({
+      admin,
+      orgId: row.organization_id,
+      projectId: row.project_id,
+      clientId: row.client_id,
+      uploadedBy: uploadUid,
+      moffinBase,
+      moffinApiKey,
+      rfc: row.rfc,
+      externalId: ext,
+      consultType: ct,
+      report,
+      fileBase: ct,
+      documentDisplayName: `${ct}_${String(row.id).slice(0, 8)}_${Date.now()}`,
+      documentType: docType,
+    });
+    if (up.documentId) documentId = up.documentId;
+    else pdfFailure = up.pdfFailure;
   }
 
   const prev = row.raw_response;
@@ -317,7 +315,7 @@ Deno.serve(async (req) => {
       : "";
 
   const consultSelect =
-    "id, organization_id, project_id, client_id, consult_type, moffin_query_id, document_id, requested_by, raw_response";
+    "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, document_id, requested_by, raw_response";
 
   if (refreshProjectId) {
     const { data: projCheck, error: pce } = await userClient
@@ -360,6 +358,7 @@ Deno.serve(async (req) => {
         fr.json,
         user.id,
         moffinKey,
+        moffinBase,
       );
       if (pe.error) {
         results.push({ id: row.id, ok: false, error: pe.error });
@@ -423,6 +422,7 @@ Deno.serve(async (req) => {
         fr.json,
         user.id,
         moffinKey,
+        moffinBase,
       );
       if (pe.error) {
         results.push({ id: row.id, ok: false, error: pe.error });
@@ -502,7 +502,7 @@ Deno.serve(async (req) => {
     consultType === "lista_69b" ? "/query/sat_blacklist" : "/query/sat_rfc";
   const moffinUrl = `${moffinBase}${path}`;
 
-  const payload: Record<string, string> = {
+  const payload: Record<string, unknown> = {
     rfc: rfcRaw,
     accountType,
     externalId,
@@ -583,6 +583,7 @@ Deno.serve(async (req) => {
     payload[certField] = formatFielMaterial(certB64, certFmt);
     payload[keyField] = formatFielMaterial(keyB64, keyFmt);
     payload[passField] = fielPassword;
+    payload.metadata = { tags: [`kawiil:${consultType}`] };
   }
 
   let moffinRes: Response;
@@ -656,43 +657,36 @@ Deno.serve(async (req) => {
         ? "constancia_situacion_fiscal"
         : "opinion_cumplimiento";
     const displayBase = `${consultType}_${Date.now()}`;
-    let sawPdfUrl = false;
 
-    const tryUploadFromReport = async (report: Record<string, unknown>) => {
-      const pdfUrl = pickPdfForConsult(consultType, report);
-      if (!pdfUrl) return;
-      sawPdfUrl = true;
-      const up = await uploadMoffinPdfFromUrl({
+    const runSatUpload = async (report: Record<string, unknown>) => {
+      const r = await tryUploadSatRfcPdf({
         admin,
         orgId: project.organization_id,
         projectId,
         clientId: project.client_id,
         uploadedBy: user.id,
-        url: pdfUrl,
+        moffinBase,
+        moffinApiKey: moffinKey,
+        rfc: rfcRaw,
+        externalId,
+        consultType,
+        report,
         fileBase: consultType,
         documentDisplayName: displayBase,
         documentType: docType,
-        moffinApiKey: moffinKey,
       });
-      if (up.documentId) {
-        documentId = up.documentId;
+      if (r.documentId) {
+        documentId = r.documentId;
         pdfSidecarError = null;
       } else {
-        pdfSidecarError = up.failureReason ?? "descarga PDF falló";
+        pdfSidecarError = r.pdfFailure;
       }
     };
 
-    await tryUploadFromReport(json);
+    await runSatUpload(json);
     if (!documentId && moffinQueryIdStr) {
       const fr = await fetchMoffinReportById(moffinBase, moffinKey, moffinQueryIdStr);
-      if (fr.ok) await tryUploadFromReport(fr.json);
-    }
-    if (!documentId) {
-      if (!sawPdfUrl) {
-        pdfSidecarError = "sin URL de PDF en respuesta Moffin";
-      } else if (!pdfSidecarError) {
-        pdfSidecarError = "no se pudo guardar el PDF";
-      }
+      if (fr.ok) await runSatUpload(fr.json);
     }
   }
 

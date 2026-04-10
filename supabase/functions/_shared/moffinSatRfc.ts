@@ -127,6 +127,69 @@ function collectUrlsByPdfLikeKeys(obj: unknown, out: string[], depth: number): v
   }
 }
 
+/** Prioriza enlaces a nivel reporte; luego certificados con campos explícitos de archivo. */
+export function pickSatRfcPdfUrlForConsult(
+  consultType: MoffinSatRfcConsultType,
+  report: Record<string, unknown>,
+): string | null {
+  const top = extractReportLevelPdfUrl(report);
+  if (top) return top;
+  return pickSatRfcPdfUrl(consultType, report);
+}
+
+function keyLooksLikeBase64PayloadField(k: string): boolean {
+  const n = k.replace(/_/g, "").toLowerCase();
+  return n.includes("base64") || n === "pdf" || n === "document" || n === "filecontent" || n === "archivo";
+}
+
+/** Busca PDF embebido en base64 (si Moffin lo devuelve en JSON). */
+export function extractPdfBase64FromSatReport(report: Record<string, unknown>): string | null {
+  const tryString = (s: string): string | null => {
+    const t = s.replace(/\s/g, "");
+    if (t.length < 200) return null;
+    if (!/^[A-Za-z0-9+/]+=*$/.test(t)) return null;
+    try {
+      const head = atob(t.slice(0, 120));
+      if (head.startsWith("%PDF")) return t;
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  let named: string | null = null;
+  let loose: string | null = null;
+
+  const visit = (obj: unknown, depth: number) => {
+    if (depth > 22 || obj == null) return;
+    if (typeof obj === "string") {
+      const hit = tryString(obj);
+      if (hit && !loose) loose = hit;
+      return;
+    }
+    if (typeof obj !== "object") return;
+    if (Array.isArray(obj)) {
+      for (const x of obj) visit(x, depth + 1);
+      return;
+    }
+    const o = obj as Record<string, unknown>;
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === "string") {
+        const hit = tryString(v);
+        if (hit) {
+          if (keyLooksLikeBase64PayloadField(k)) named = hit;
+          else if (!loose) loose = hit;
+        }
+      } else {
+        visit(v, depth + 1);
+      }
+    }
+  };
+
+  visit(report, 0);
+  return named ?? loose;
+}
+
 export function extractReportLevelPdfUrl(report: Record<string, unknown>): string | null {
   const resp = report.response as Record<string, unknown> | undefined;
   const data = resp?.data as Record<string, unknown> | undefined;

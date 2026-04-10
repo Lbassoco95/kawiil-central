@@ -9,12 +9,8 @@
  * Deploy: verify_jwt = false (ver supabase/config.toml)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { uploadMoffinPdfFromUrl } from "../_shared/moffinPdfDownload.ts";
-import {
-  extractReportLevelPdfUrl,
-  pickSatRfcPdfUrl,
-  summarizeSatRfcCertificates,
-} from "../_shared/moffinSatRfc.ts";
+import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
+import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
 import { Webhook } from "npm:svix";
 
 const corsHeaders: Record<string, string> = {
@@ -74,13 +70,20 @@ function summarizeSatRfc(
   return summarizeSatRfcCertificates(consultType, resp);
 }
 
-function pickPdfForConsult(
-  consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
-  report: Record<string, unknown>,
-): string | null {
-  const top = extractReportLevelPdfUrl(report);
-  if (top) return top;
-  return pickSatRfcPdfUrl(consultType, report);
+async function fetchMoffinReportJson(
+  base: string,
+  key: string,
+  queryId: string,
+): Promise<Record<string, unknown> | null> {
+  const url = `${base.replace(/\/$/, "")}/report/${encodeURIComponent(queryId)}?withPDF=true`;
+  const res = await fetch(url, { headers: { Authorization: `Token ${key.trim()}` } });
+  const text = await res.text();
+  if (!res.ok) return null;
+  try {
+    return text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    return null;
+  }
 }
 
 function findKawiilExternalId(obj: unknown): string | null {
@@ -202,6 +205,8 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
   const moffinApiKey = Deno.env.get("MOFFIN_API_KEY") ?? "";
+  const moffinBase =
+    (Deno.env.get("MOFFIN_BASE_URL") ?? "https://app.moffin.mx/api/v1").replace(/\/$/, "");
 
   const moffinReport = extractMoffinReport(data) ?? extractMoffinReport(verified);
   const queryId = moffinReport ? firstNumericId(moffinReport) : firstNumericId(data);
@@ -216,6 +221,7 @@ Deno.serve(async (req) => {
         organization_id: string;
         requested_by: string | null;
         document_id: string | null;
+        rfc: string;
       }
     | null = null;
 
@@ -223,7 +229,7 @@ Deno.serve(async (req) => {
     const { data: rows } = await admin
       .from("moffin_consults")
       .select(
-        "id, consult_type, project_id, client_id, organization_id, requested_by, document_id",
+        "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, rfc",
       )
       .eq("moffin_query_id", queryId)
       .order("created_at", { ascending: false })
@@ -239,7 +245,7 @@ Deno.serve(async (req) => {
       const { data: rows } = await admin
         .from("moffin_consults")
         .select(
-          "id, consult_type, project_id, client_id, organization_id, requested_by, document_id",
+          "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, rfc",
         )
         .eq("project_id", projectId)
         .eq("consult_type", consultType)
@@ -299,31 +305,40 @@ Deno.serve(async (req) => {
     st === "success" &&
     !documentId &&
     moffinReport &&
+    mr &&
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
   ) {
-    const pdfUrl = pickPdfForConsult(consultType, moffinReport);
     const docType =
       consultType === "constancia_situacion_fiscal"
         ? "constancia_situacion_fiscal"
         : "opinion_cumplimiento";
-    if (!pdfUrl) {
-      pdfWarn = "sin URL de PDF en respuesta Moffin";
-    } else {
-      const up = await uploadMoffinPdfFromUrl({
-        admin,
-        orgId: row.organization_id,
-        projectId: row.project_id,
-        clientId: row.client_id,
-        uploadedBy: row.requested_by,
-        url: pdfUrl,
-        fileBase: consultType,
-        documentDisplayName: `${consultType}_${String(row.id).slice(0, 8)}_${Date.now()}`,
-        documentType: docType,
-        moffinApiKey: moffinApiKey || null,
-      });
-      if (up.documentId) documentId = up.documentId;
-      else pdfWarn = up.failureReason ?? "descarga PDF falló";
+    const extForPdf =
+      typeof mr.externalId === "string" ? mr.externalId : extId ?? null;
+    const displayName = `${consultType}_${String(row.id).slice(0, 8)}_${Date.now()}`;
+    const uploadOpts = {
+      admin,
+      orgId: row.organization_id,
+      projectId: row.project_id,
+      clientId: row.client_id,
+      uploadedBy: row.requested_by,
+      moffinBase,
+      moffinApiKey,
+      rfc: row.rfc,
+      externalId: extForPdf,
+      consultType,
+      fileBase: consultType,
+      documentDisplayName: displayName,
+      documentType: docType,
+    };
+    let up = await tryUploadSatRfcPdf({ ...uploadOpts, report: mr });
+    if (!up.documentId && queryId && moffinApiKey.trim()) {
+      const refreshed = await fetchMoffinReportJson(moffinBase, moffinApiKey, queryId);
+      if (refreshed) {
+        up = await tryUploadSatRfcPdf({ ...uploadOpts, report: refreshed });
+      }
     }
+    if (up.documentId) documentId = up.documentId;
+    else pdfWarn = up.pdfFailure ?? "descarga PDF falló";
   }
 
   const combinedError =

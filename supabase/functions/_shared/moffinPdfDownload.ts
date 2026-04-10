@@ -91,6 +91,70 @@ export async function fetchMoffinPdfBytes(
   return { ok: false, reason: last };
 }
 
+function decodeBase64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64.replace(/\s/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+export async function uploadMoffinPdfFromBytes(opts: {
+  admin: ReturnType<typeof createClient>;
+  orgId: string;
+  projectId: string;
+  clientId: string | null;
+  uploadedBy: string | null;
+  buf: Uint8Array;
+  fileBase: string;
+  documentDisplayName: string;
+  documentType: string;
+}): Promise<{ documentId: string | null; failureReason: string | null }> {
+  const head = new TextDecoder().decode(opts.buf.slice(0, 8));
+  if (opts.buf.length < 4 || !head.startsWith("%PDF")) {
+    return { documentId: null, failureReason: "bytes no son PDF válido" };
+  }
+
+  const path = buildMoffinPdfStoragePath(opts.orgId, opts.clientId, opts.fileBase);
+  const { error: upErr } = await opts.admin.storage.from("documents").upload(path, opts.buf, {
+    contentType: "application/pdf",
+    upsert: false,
+  });
+  if (upErr) {
+    console.error("moffin storage upload:", upErr.message);
+    return { documentId: null, failureReason: `Storage: ${upErr.message}` };
+  }
+
+  const name = /\.pdf$/i.test(opts.documentDisplayName)
+    ? opts.documentDisplayName
+    : `${opts.documentDisplayName}.pdf`;
+
+  const insertRow: Record<string, unknown> = {
+    name,
+    file_path: path,
+    file_size: opts.buf.length,
+    mime_type: "application/pdf",
+    source: "supabase",
+    organization_id: opts.orgId,
+    project_id: opts.projectId,
+    client_id: opts.clientId,
+    document_type: opts.documentType,
+  };
+  if (opts.uploadedBy) insertRow.uploaded_by = opts.uploadedBy;
+
+  const { data: doc, error: docErr } = await opts.admin
+    .from("documents")
+    .insert(insertRow)
+    .select("id")
+    .single();
+
+  if (docErr) {
+    console.error("moffin document insert:", docErr.message);
+    return { documentId: null, failureReason: `DB: ${docErr.message}` };
+  }
+
+  return { documentId: doc.id as string, failureReason: null };
+}
+
 export async function uploadMoffinPdfFromUrl(opts: {
   admin: ReturnType<typeof createClient>;
   orgId: string;
