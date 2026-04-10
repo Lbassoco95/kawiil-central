@@ -47,7 +47,10 @@ import {
 } from "@/lib/savioPayload";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { savioFinanceApiFailureHint } from "@/lib/savioFinanceApiHints";
+import {
+  savioFinanceApiFailureHint,
+  savioMissingSecretsUserMessage,
+} from "@/lib/savioFinanceApiHints";
 
 const EVENT_FILTER_ALL = "todos";
 
@@ -147,7 +150,7 @@ export function SavioFinanceDashboard() {
       const body = data as { ok?: boolean; savio_error?: string; missing?: string[]; error?: string };
       if (body?.missing?.length) {
         setApiCheck("fail");
-        setApiMessage(`Faltan secretos: ${body.missing.join(", ")}`);
+        setApiMessage(savioMissingSecretsUserMessage(body.missing));
         return;
       }
       if (body?.ok) {
