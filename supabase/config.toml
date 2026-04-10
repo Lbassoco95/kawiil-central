@@ -9,6 +9,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.savio-finance-api]
     verify_jwt = true
+  [functions.savio-finance-write]
+    verify_jwt = true
   [functions.slack-events]
     verify_jwt = false
   [functions.slack-user-auth]

@@ -115,9 +115,10 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
   const syncModules = useSyncModulePermissions();
   const [moduleState, setModuleState] = useState<Record<string, boolean>>({});
   const { isAdminOrManager } = useUserRole();
-  const { data: hasSavioIncomeRow = false } = useFinanceIncomeViewerForUser(user?.user_id);
+  const { data: savioViewerRow } = useFinanceIncomeViewerForUser(user?.user_id);
   const setSavioViewer = useSetFinanceIncomeViewer();
   const [savioIncomeEnabled, setSavioIncomeEnabled] = useState(false);
+  const [savioWriteEnabled, setSavioWriteEnabled] = useState(false);
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
@@ -141,9 +142,10 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
       const ms: Record<string, boolean> = {};
       for (const k of MODULE_KEYS) ms[k] = !!userModules[k];
       setModuleState(ms);
-      setSavioIncomeEnabled(hasSavioIncomeRow);
+      setSavioIncomeEnabled(savioViewerRow?.enabled ?? false);
+      setSavioWriteEnabled(savioViewerRow?.canWriteSavio ?? false);
     }
-  }, [user, open, form, userCelulas, userModules, hasSavioIncomeRow]);
+  }, [user, open, form, userCelulas, userModules, savioViewerRow]);
 
   const toggleCelula = (celulaId: string) => {
     setSelectedCelulaIds((prev) =>
@@ -196,6 +198,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
           userId: user.user_id,
           organizationId: profile.organization_id,
           enabled: savioEffective,
+          canWriteSavio: savioEffective && savioWriteEnabled,
         });
       }
     }
@@ -337,6 +340,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                     onClick={() => {
                       setModuleState((prev) => ({ ...prev, finanzas: true }));
                       setSavioIncomeEnabled(false);
+                      setSavioWriteEnabled(false);
                     }}
                   >
                     Solo gastos
@@ -349,6 +353,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                     onClick={() => {
                       setModuleState((prev) => ({ ...prev, finanzas: true }));
                       setSavioIncomeEnabled(true);
+                      setSavioWriteEnabled(false);
                     }}
                   >
                     Gastos + ingresos Savio
@@ -359,9 +364,26 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                   <Switch
                     checked={savioIncomeEnabled}
                     disabled={!moduleState.finanzas}
-                    onCheckedChange={setSavioIncomeEnabled}
+                    onCheckedChange={(v) => {
+                      setSavioIncomeEnabled(v);
+                      if (!v) setSavioWriteEnabled(false);
+                    }}
                   />
                 </label>
+                <label className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">Crear cargos y registrar pagos (Savio)</span>
+                  <Switch
+                    checked={savioWriteEnabled}
+                    disabled={!moduleState.finanzas || !savioIncomeEnabled}
+                    onCheckedChange={setSavioWriteEnabled}
+                  />
+                </label>
+                {savioIncomeEnabled && !savioWriteEnabled && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Sin esta opción solo puede consultar listados y resúmenes; no verá los botones de escritura en
+                    Ingresos facturados.
+                  </p>
+                )}
                 {!moduleState.finanzas && savioIncomeEnabled && (
                   <p className="text-xs text-amber-700 dark:text-amber-400">
                     Activa el módulo Finanzas para poder guardar el acceso a ingresos.

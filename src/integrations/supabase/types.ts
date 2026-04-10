@@ -838,16 +838,19 @@ export type Database = {
       }
       finance_income_viewers: {
         Row: {
+          can_write_savio: boolean
           created_at: string
           organization_id: string
           user_id: string
         }
         Insert: {
+          can_write_savio?: boolean
           created_at?: string
           organization_id: string
           user_id: string
         }
         Update: {
+          can_write_savio?: boolean
           created_at?: string
           organization_id?: string
           user_id?: string
@@ -2407,6 +2410,56 @@ export type Database = {
           },
         ]
       }
+      savio_write_log: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          ok: boolean
+          operation: string
+          organization_id: string
+          request_summary: Json
+          savio_http_status: number | null
+          savio_path: string
+          savio_response_excerpt: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ok?: boolean
+          operation: string
+          organization_id: string
+          request_summary?: Json
+          savio_http_status?: number | null
+          savio_path: string
+          savio_response_excerpt?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ok?: boolean
+          operation?: string
+          organization_id?: string
+          request_summary?: Json
+          savio_http_status?: number | null
+          savio_path?: string
+          savio_response_excerpt?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "savio_write_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_assignees: {
         Row: {
           created_at: string
@@ -3063,6 +3116,7 @@ export type Database = {
       }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       can_view_savio_finance: { Args: { _user_id: string }; Returns: boolean }
+      can_write_savio_finance: { Args: { _user_id: string }; Returns: boolean }
       has_finance_access: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {

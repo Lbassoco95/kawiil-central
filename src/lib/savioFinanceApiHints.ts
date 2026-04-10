@@ -60,3 +60,40 @@ export function savioFinanceApiFailureHint(meta: SavioInvokeMeta | undefined): s
   }
   return "No se pudo leer desde Savio. Comprueba API key y URL base.";
 }
+
+/** Respuesta típica de savio-finance-write (POST a Savio). */
+export type SavioWriteInvokeMeta = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  missing?: string[];
+  data?: unknown;
+  savio_http_status?: number;
+};
+
+export function savioFinanceWriteFailureHint(meta: SavioWriteInvokeMeta | undefined): string | null {
+  if (!meta) return null;
+  if (typeof meta.message === "string" && meta.message.trim()) return meta.message;
+  if (meta.missing?.length) return savioMissingSecretsUserMessage(meta.missing);
+  if (meta.error === "forbidden") {
+    return "No tienes permiso de escritura en facturación. Pide a un administrador que active la opción en tu usuario.";
+  }
+  if (meta.savio_http_status === 401) {
+    return "Savio rechazó la API key al registrar el movimiento. Revisa secretos SAVIO_API_KEY y SAVIO_API_AUTH_MODE.";
+  }
+  if (meta.savio_http_status === 404) {
+    return "Savio respondió 404: la ruta POST puede no existir en tu versión de API. Consulta app.savio.mx/docs.";
+  }
+  if (meta.savio_http_status === 422 || meta.savio_http_status === 400) {
+    const d = meta.data;
+    if (d && typeof d === "object" && "error" in d) {
+      return `Savio no aceptó los datos: ${String((d as { error: unknown }).error)}`;
+    }
+    return "Savio no aceptó los datos enviados. Comprueba identificadores y campos obligatorios en la documentación.";
+  }
+  if (typeof meta.savio_http_status === "number") {
+    return `Savio respondió HTTP ${meta.savio_http_status} al intentar guardar.`;
+  }
+  if (typeof meta.error === "string" && meta.error) return meta.error;
+  return null;
+}

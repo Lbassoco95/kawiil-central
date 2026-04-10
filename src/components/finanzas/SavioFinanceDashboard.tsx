@@ -51,6 +51,7 @@ import {
   savioFinanceApiFailureHint,
   savioMissingSecretsUserMessage,
 } from "@/lib/savioFinanceApiHints";
+import { SavioFinanceWriteActions } from "@/components/finanzas/SavioFinanceWriteActions";
 
 const EVENT_FILTER_ALL = "todos";
 
@@ -211,6 +212,7 @@ export function SavioFinanceDashboard() {
             <RefreshCw className={cn("h-3.5 w-3.5 mr-1", busy && "animate-spin")} />
             Actualizar vista
           </Button>
+          <SavioFinanceWriteActions />
         </div>
       </div>
 
