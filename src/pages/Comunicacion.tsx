@@ -661,18 +661,46 @@ export default function Comunicacion() {
           {pushNeedsSetup && (
             <Alert className="border-amber-800/60 bg-amber-950/30 text-amber-100 py-2 px-3">
               <Bell className="h-4 w-4 text-amber-400" />
-              <AlertTitle className="text-xs font-semibold mb-1">Avisos fuera de la app</AlertTitle>
-              <AlertDescription className="text-[11px] text-amber-100/90 leading-snug">
+              <AlertTitle className="text-xs font-semibold mb-1">
+                {vapidConfigured ? "Avisos fuera de la app" : "Push: configuración pendiente (admin)"}
+              </AlertTitle>
+              <AlertDescription className="text-[11px] text-amber-100/90 leading-snug space-y-1.5">
                 {vapidConfigured ? (
-                  <>
+                  <p>
                     Para recibir mensajes de Slack con la pestaña cerrada, activa push en{" "}
                     <Link to="/notificaciones" className="underline font-medium text-amber-200">
                       Notificaciones
                     </Link>
                     .
-                  </>
+                  </p>
                 ) : (
-                  "Falta configurar VITE_VAPID_PUBLIC_KEY en el entorno (build) y los secretos VAPID en Supabase."
+                  <>
+                    <p>
+                      Hace falta Web Push (VAPID). Un admin debe configurar esto una vez; luego cada usuario activa push en{" "}
+                      <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                        Notificaciones
+                      </Link>
+                      .
+                    </p>
+                    <ul className="list-disc pl-4 space-y-0.5 text-amber-200/95">
+                      <li>
+                        <strong>Lovable / build:</strong> variable{" "}
+                        <code className="rounded bg-black/30 px-1">VITE_VAPID_PUBLIC_KEY</code> (clave pública).
+                      </li>
+                      <li>
+                        <strong>Supabase</strong> → Edge Functions → Secrets:{" "}
+                        <code className="rounded bg-black/30 px-1">VAPID_PUBLIC_KEY</code> (misma pública),{" "}
+                        <code className="rounded bg-black/30 px-1">VAPID_PRIVATE_KEY</code>,{" "}
+                        <code className="rounded bg-black/30 px-1">VAPID_CONTACT_EMAIL</code> (p. ej.{" "}
+                        <code className="rounded bg-black/30 px-1">mailto:equipo@tudominio.com</code>).
+                      </li>
+                      <li>
+                        Generar par de claves:{" "}
+                        <code className="rounded bg-black/30 px-1">npx web-push generate-vapid-keys</code>
+                      </li>
+                    </ul>
+                    <p className="text-amber-300/80">Tras guardar en Lovable, vuelve a publicar el proyecto para que el cliente lea la clave.</p>
+                  </>
                 )}
               </AlertDescription>
             </Alert>
