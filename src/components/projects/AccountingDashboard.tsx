@@ -15,7 +15,21 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, CalendarDays, CheckCircle2, Clock, AlertCircle, ChevronDown, ChevronRight, Layers } from "lucide-react";
+import {
+  Plus,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  ShieldAlert,
+  FileBadge,
+  FileCheck2,
+  Download,
+  Loader2,
+} from "lucide-react";
 import { nowMX } from "@/lib/dateUtils";
 import {
   useAccountingPeriods,
@@ -40,6 +54,32 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PhaseTaskRow } from "./PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { toast } from "sonner";
+
+type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
+
+const MOFFIN_CONSULT_META: Record<
+  MoffinConsultType,
+  { label: string; short: string; icon: typeof ShieldAlert; apiNote: string }
+> = {
+  lista_69b: {
+    label: "Lista 69-B (SAT)",
+    short: "69-B",
+    icon: ShieldAlert,
+    apiNote: "POST /query/sat_blacklist",
+  },
+  constancia_situacion_fiscal: {
+    label: "Constancia de situación fiscal",
+    short: "Constancia",
+    icon: FileBadge,
+    apiNote: "POST /query/sat_rfc (certificados)",
+  },
+  opinion_cumplimiento: {
+    label: "Opinión de cumplimiento",
+    short: "Opinión",
+    icon: FileCheck2,
+    apiNote: "POST /query/sat_rfc (certificados)",
+  },
+};
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Clock; className: string }> = {
   pendiente: { label: "Pendiente", icon: Clock, className: "bg-muted text-muted-foreground" },
@@ -292,6 +332,85 @@ export function AccountingDashboard({
     enabled: !!user && !!projectId,
   });
 
+  const [moffinBusy, setMoffinBusy] = useState<MoffinConsultType | null>(null);
+
+  const { data: moffinRows = [] } = useQuery({
+    queryKey: ["moffin-consults", projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("moffin_consults")
+        .select("id, consult_type, status, summary, created_at, document_id, documents(file_path, name)")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(60);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user && !!projectId,
+  });
+
+  const latestMoffinByType = useMemo(() => {
+    const map = new Map<string, (typeof moffinRows)[number]>();
+    for (const row of moffinRows) {
+      if (!map.has(row.consult_type)) map.set(row.consult_type, row);
+    }
+    return map;
+  }, [moffinRows]);
+
+  const runMoffinConsult = useCallback(
+    async (consultType: MoffinConsultType) => {
+      if (
+        !window.confirm(
+          "Cada consulta puede generar un cargo según tu plan con Moffin. ¿Deseas continuar?"
+        )
+      ) {
+        return;
+      }
+      setMoffinBusy(consultType);
+      try {
+        const { data, error } = await supabase.functions.invoke("moffin-query", {
+          body: { projectId, consultType },
+        });
+        const payload = (data ?? {}) as {
+          error?: string;
+          message?: string;
+          consult?: unknown;
+          statusCode?: number;
+        };
+        if (error && !payload?.error && !payload?.consult) {
+          throw new Error(error.message || "Error al invocar Moffin");
+        }
+        if (payload?.error) {
+          toast.error(
+            typeof payload.message === "string" ? payload.message : payload.error
+          );
+          if (payload.consult) {
+            queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
+          }
+          return;
+        }
+        toast.success("Consulta Moffin registrada");
+        queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["documents"] });
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : "Error al consultar Moffin");
+      } finally {
+        setMoffinBusy(null);
+      }
+    },
+    [projectId, queryClient]
+  );
+
+  const downloadMoffinFile = useCallback(async (filePath: string | null | undefined) => {
+    if (!filePath) return;
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
+    if (error || !data?.signedUrl) {
+      toast.error("No se pudo generar el enlace de descarga");
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  }, []);
+
   useEffect(() => {
     if (!periods?.length || !projectId) return;
     let cancelled = false;
@@ -332,6 +451,107 @@ export function AccountingDashboard({
   return (
     <div className="space-y-4">
       <CriticalityDelayCard projectId={projectId} />
+
+      <Card className="border-border/80">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Consultas SAT (Moffin)</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xl">
+                Lista 69-B vía <code className="text-[10px]">/query/sat_blacklist</code>. Constancia y opinión se obtienen del mismo servicio de certificados{" "}
+                <code className="text-[10px]">/query/sat_rfc</code> (tipos en <code className="text-[10px]">certificates[].type</code>). Cada clic puede ser una
+                consulta cobrable.
+              </p>
+            </div>
+          </div>
+          {!clientId ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Asocia un cliente con RFC al proyecto para usar estas consultas.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
+                const meta = MOFFIN_CONSULT_META[key];
+                const Icon = meta.icon;
+                return (
+                  <Button
+                    key={key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={!!moffinBusy}
+                    onClick={() => runMoffinConsult(key)}
+                  >
+                    {moffinBusy === key ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Icon className="h-3.5 w-3.5" />
+                    )}
+                    {meta.short}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
+          <div className="rounded-md border border-border/60 overflow-hidden">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="p-2 font-medium">Tipo</th>
+                  <th className="p-2 font-medium">Último estado</th>
+                  <th className="p-2 font-medium">Resumen</th>
+                  <th className="p-2 font-medium">Fecha</th>
+                  <th className="p-2 font-medium w-24">Archivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
+                  const row = latestMoffinByType.get(key);
+                  const doc = row?.documents as { file_path?: string | null; name?: string | null } | null;
+                  return (
+                    <tr key={key} className="border-t border-border/50">
+                      <td className="p-2 font-medium">{MOFFIN_CONSULT_META[key].label}</td>
+                      <td className="p-2">
+                        {row ? (
+                          <Badge variant={row.status === "success" ? "default" : "secondary"} className="text-[10px]">
+                            {row.status}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-muted-foreground max-w-[220px] truncate" title={row?.summary ?? undefined}>
+                        {row?.summary ?? "—"}
+                      </td>
+                      <td className="p-2 text-muted-foreground whitespace-nowrap">
+                        {row?.created_at ? new Date(row.created_at).toLocaleString("es-MX") : "—"}
+                      </td>
+                      <td className="p-2">
+                        {doc?.file_path ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => downloadMoffinFile(doc.file_path)}
+                            aria-label="Descargar PDF"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
         Cada periodo mensual tiene su propia fase en el tab <strong className="text-foreground font-medium">Tareas</strong>: puedes crear varias tareas por mes y arrastrarlas entre fases allí.
       </div>

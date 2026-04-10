@@ -840,6 +840,7 @@ export type Database = {
           created_at: string
           currency: string
           description: string
+          attachments: Json
           expense_date: string
           id: string
           notes: string | null
@@ -859,6 +860,7 @@ export type Database = {
           amount: number
           approved_at?: string | null
           approved_by?: string | null
+          attachments?: Json
           category: string
           client_id?: string | null
           created_at?: string
@@ -883,6 +885,7 @@ export type Database = {
           amount?: number
           approved_at?: string | null
           approved_by?: string | null
+          attachments?: Json
           category?: string
           client_id?: string | null
           created_at?: string
@@ -1671,6 +1674,92 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      moffin_consults: {
+        Row: {
+          id: string
+          organization_id: string
+          project_id: string
+          client_id: string | null
+          rfc: string
+          consult_type: string
+          moffin_service: string | null
+          status: string
+          error_message: string | null
+          summary: string | null
+          raw_response: Json
+          moffin_query_id: string | null
+          moffin_uuid: string | null
+          document_id: string | null
+          requested_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          project_id: string
+          client_id?: string | null
+          rfc: string
+          consult_type: string
+          moffin_service?: string | null
+          status: string
+          error_message?: string | null
+          summary?: string | null
+          raw_response?: Json
+          moffin_query_id?: string | null
+          moffin_uuid?: string | null
+          document_id?: string | null
+          requested_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          project_id?: string
+          client_id?: string | null
+          rfc?: string
+          consult_type?: string
+          moffin_service?: string | null
+          status?: string
+          error_message?: string | null
+          summary?: string | null
+          raw_response?: Json
+          moffin_query_id?: string | null
+          moffin_uuid?: string | null
+          document_id?: string | null
+          requested_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moffin_consults_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moffin_consults_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moffin_consults_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moffin_consults_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       mood_checkins: {
         Row: {

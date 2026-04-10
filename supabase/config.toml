@@ -51,6 +51,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.ai-email-draft]
     verify_jwt = true
+  [functions.moffin-query]
+    verify_jwt = true
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
   [functions.extract-ai-memories]

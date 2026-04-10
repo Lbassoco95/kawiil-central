@@ -2,10 +2,11 @@ import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import type { Expense } from "@/hooks/useExpenses";
+import { parseExpenseAttachments, type Expense } from "@/hooks/useExpenses";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { Paperclip } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   terceros: "Terceros",
@@ -59,6 +60,10 @@ export function ExpenseTable({ expenses, onSelect, showRequester = false }: Prop
             <TableHead>Categoría</TableHead>
             {showRequester && <TableHead>Solicitante</TableHead>}
             <TableHead>Descripción</TableHead>
+            <TableHead className="w-10 text-center" title="Adjuntos">
+              <span className="sr-only">Adjuntos</span>
+              <Paperclip className="h-3.5 w-3.5 mx-auto text-muted-foreground" />
+            </TableHead>
             <TableHead className="text-right">Monto</TableHead>
             <TableHead>Estado</TableHead>
           </TableRow>
@@ -83,6 +88,13 @@ export function ExpenseTable({ expenses, onSelect, showRequester = false }: Prop
               )}
               <TableCell className="max-w-[200px] truncate text-xs">
                 {exp.description}
+              </TableCell>
+              <TableCell className="text-center text-muted-foreground">
+                {parseExpenseAttachments(exp).length > 0 ? (
+                  <Paperclip className="h-3.5 w-3.5 mx-auto" aria-label="Tiene comprobantes" />
+                ) : (
+                  <span className="text-xs">—</span>
+                )}
               </TableCell>
               <TableCell className="text-right font-medium whitespace-nowrap">
                 ${Number(exp.amount).toLocaleString("es-MX", { minimumFractionDigits: 2 })} {exp.currency}

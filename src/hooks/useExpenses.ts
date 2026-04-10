@@ -4,6 +4,36 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { createNotifications, getFinanceCelulaUserIds } from "@/lib/notificationHelpers";
 
+export type ExpenseAttachment = { path: string; name: string };
+
+function sanitizeFileSegment(name: string): string {
+  return name.replace(/[^\w.\-()+ ]/g, "_").slice(0, 180) || "archivo";
+}
+
+export function parseExpenseAttachments(expense: Expense): ExpenseAttachment[] {
+  const raw = expense.attachments;
+  const list: ExpenseAttachment[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object") continue;
+      const path = (item as { path?: unknown }).path;
+      if (typeof path !== "string" || !path) continue;
+      const name = (item as { name?: unknown }).name;
+      list.push({
+        path,
+        name: typeof name === "string" && name ? name : path.split("/").pop() || "archivo",
+      });
+    }
+  }
+  if (expense.receipt_path?.trim() && !list.some((a) => a.path === expense.receipt_path)) {
+    list.push({
+      path: expense.receipt_path,
+      name: expense.receipt_path.split("/").pop() || "comprobante",
+    });
+  }
+  return list;
+}
+
 export interface Expense {
   id: string;
   organization_id: string;
@@ -23,6 +53,7 @@ export interface Expense {
   paid_at: string | null;
   rejection_reason: string | null;
   receipt_path: string | null;
+  attachments?: ExpenseAttachment[] | null;
   notes: string | null;
   expense_date: string;
   created_at: string;
@@ -55,6 +86,7 @@ export interface CreateExpenseParams {
   expense_date: string;
   receipt_path?: string | null;
   notes?: string | null;
+  files?: File[];
 }
 
 export function useCreateExpense() {
@@ -63,6 +95,7 @@ export function useCreateExpense() {
 
   return useMutation({
     mutationFn: async (params: CreateExpenseParams) => {
+      const { files = [], ...row } = params;
       const { data: profile } = await supabase
         .from("profiles")
         .select("organization_id")
@@ -70,16 +103,41 @@ export function useCreateExpense() {
         .single();
       if (!profile) throw new Error("Perfil no encontrado");
 
+      const orgId = profile.organization_id;
+      const batchId = crypto.randomUUID();
+      const uploaded: ExpenseAttachment[] = [];
+
+      for (const file of files) {
+        const safe = sanitizeFileSegment(file.name);
+        const objectPath = `expenses/${orgId}/${batchId}/${crypto.randomUUID()}_${safe}`;
+        const { error: upErr } = await supabase.storage
+          .from("documents")
+          .upload(objectPath, file);
+        if (upErr) {
+          if (uploaded.length > 0) {
+            await supabase.storage.from("documents").remove(uploaded.map((u) => u.path));
+          }
+          throw upErr;
+        }
+        uploaded.push({ path: objectPath, name: file.name });
+      }
+
       const { data, error } = await supabase
         .from("expenses")
         .insert({
-          ...params,
-          organization_id: profile.organization_id,
+          ...row,
+          attachments: uploaded,
+          organization_id: orgId,
           requested_by: user!.id,
         } as any)
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        if (uploaded.length > 0) {
+          await supabase.storage.from("documents").remove(uploaded.map((u) => u.path));
+        }
+        throw error;
+      }
       return data;
     },
     onSuccess: async (data) => {

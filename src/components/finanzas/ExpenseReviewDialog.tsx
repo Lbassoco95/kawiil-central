@@ -5,11 +5,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { useUpdateExpenseStatus, Expense } from "@/hooks/useExpenses";
+import {
+  useUpdateExpenseStatus,
+  Expense,
+  parseExpenseAttachments,
+} from "@/hooks/useExpenses";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Check, X, CreditCard, Eye } from "lucide-react";
+import { Check, X, CreditCard, Eye, Paperclip, Download } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   terceros: "Terceros / cliente",
@@ -44,14 +50,32 @@ interface Props {
 export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: Props) {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showReject, setShowReject] = useState(false);
+  const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const updateStatus = useUpdateExpenseStatus();
   const { data: users = [] } = useOrgUsers();
+  const attachments = expense ? parseExpenseAttachments(expense) : [];
 
   if (!expense) return null;
 
   const getUserName = (id: string | null) => {
     if (!id) return "—";
     return users.find((u) => u.user_id === id)?.full_name || "—";
+  };
+
+  const openAttachment = async (path: string, name: string) => {
+    setDownloadingPath(path);
+    try {
+      const { data, error } = await supabase.storage
+        .from("documents")
+        .createSignedUrl(path, 3600, { download: name });
+      if (error) throw error;
+      if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "No se pudo abrir el archivo";
+      toast.error(msg);
+    } finally {
+      setDownloadingPath(null);
+    }
   };
 
   const handleAction = async (status: string) => {
@@ -121,6 +145,31 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
             <div>
               <span className="text-muted-foreground">Notas</span>
               <p>{expense.notes}</p>
+            </div>
+          )}
+
+          {attachments.length > 0 && (
+            <div>
+              <span className="text-muted-foreground flex items-center gap-1">
+                <Paperclip className="h-3.5 w-3.5" />
+                Comprobantes
+              </span>
+              <ul className="mt-1.5 space-y-1">
+                {attachments.map((a) => (
+                  <li key={a.path}>
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="h-auto p-0 text-sm font-normal inline-flex items-center gap-1"
+                      disabled={downloadingPath === a.path}
+                      onClick={() => openAttachment(a.path, a.name)}
+                    >
+                      <Download className="h-3.5 w-3.5 shrink-0" />
+                      {downloadingPath === a.path ? "Abriendo…" : a.name}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
