@@ -15,6 +15,35 @@ const EMOJI_PICKER_KEYS = Object.keys(SLACK_EMOJI).slice(0, 48);
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
+/** Slack reproduce bien AAC/M4A; WebM/Opus a veces se sube pero no suena en algunos clientes. Preferir MP4 cuando MediaRecorder lo permita. */
+const VOICE_RECORD_MIME_PRIORITY = [
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/mp4",
+  "audio/webm;codecs=opus",
+  "audio/webm",
+] as const;
+
+function pickVoiceRecorderMime(): string | null {
+  for (const mime of VOICE_RECORD_MIME_PRIORITY) {
+    if (MediaRecorder.isTypeSupported(mime)) return mime;
+  }
+  return null;
+}
+
+function extensionAndTypeForVoiceBlob(mime: string): { ext: string; type: string } {
+  const m = mime.toLowerCase();
+  if (m.includes("mp4") || m.includes("m4a") || m.includes("aac")) {
+    return { ext: "m4a", type: m.startsWith("audio/") ? mime.split(";")[0].trim() : "audio/mp4" };
+  }
+  if (m.includes("webm")) {
+    return { ext: "webm", type: "audio/webm" };
+  }
+  if (m.includes("ogg")) {
+    return { ext: "ogg", type: "audio/ogg" };
+  }
+  return { ext: "webm", type: mime.split(";")[0].trim() || "application/octet-stream" };
+}
+
 function defaultScheduleLocalValue(): string {
   const d = new Date(Date.now() + 3600_000);
   d.setSeconds(0, 0);
@@ -67,6 +96,8 @@ export function SlackComposer({
   const recChunksRef = useRef<BlobPart[]>([]);
   const mediaRecRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  /** MIME real de la grabación (el Blob debe coincidir; antes se forzaba webm y Safari/MP4 quedaba corrupto para Slack). */
+  const recMimeRef = useRef<string>("");
 
   useEffect(() => {
     const el = ta.current;
@@ -186,9 +217,16 @@ export function SlackComposer({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const mime = pickVoiceRecorderMime();
+      if (!mime) {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        toast.error("Tu navegador no permite grabar audio en un formato compatible. Prueba con Chrome, Edge o Safari actualizado.");
+        return;
+      }
       const rec = new MediaRecorder(stream, { mimeType: mime });
       mediaRecRef.current = rec;
+      recMimeRef.current = rec.mimeType || mime;
       recChunksRef.current = [];
       rec.ondataavailable = (ev) => {
         if (ev.data.size > 0) recChunksRef.current.push(ev.data);
@@ -207,6 +245,7 @@ export function SlackComposer({
   const cancelRecording = () => {
     stopRecording();
     recChunksRef.current = [];
+    recMimeRef.current = "";
     setRecState("idle");
   };
 
@@ -216,11 +255,13 @@ export function SlackComposer({
       cancelRecording();
       return;
     }
-    const blob = new Blob(parts, { type: "audio/webm" });
-    const ext = blob.type.includes("webm") ? "webm" : "m4a";
+    const mime = recMimeRef.current || pickVoiceRecorderMime() || "audio/webm";
+    const { ext, type } = extensionAndTypeForVoiceBlob(mime);
+    const blob = new Blob(parts, { type });
     const file = new File([blob], `nota-voz-${Date.now()}.${ext}`, { type: blob.type });
     stopRecording();
     recChunksRef.current = [];
+    recMimeRef.current = "";
     setRecState("idle");
     const cap = value.trim() ? value.trim() : "Nota de voz";
     onUploadFile(file, cap);
