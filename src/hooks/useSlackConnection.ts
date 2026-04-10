@@ -26,7 +26,16 @@ export function useSlackConnection() {
 
   const connectMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("slack-user-auth");
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        throw new Error("Inicia sesión de nuevo para conectar Slack.");
+      }
+
+      const { data, error } = await supabase.functions.invoke("slack-user-auth", {
+        headers: { Authorization: `Bearer ${token}` },
+        body: {},
+      });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
@@ -55,9 +64,16 @@ export function useSlackConnection() {
       toast.success("Slack conectado");
     },
     onError: (e: Error) => {
-      if (!e.message.includes("Tiempo de espera")) {
-        toast.error(e.message || "No se pudo conectar Slack");
+      if (e.message.includes("Tiempo de espera")) return;
+      const msg = e.message || "";
+      if (msg.includes("Failed to send a request") || msg.includes("Edge Function")) {
+        toast.error(
+          "No se alcanzó la función slack-user-auth en Supabase. Despliégala con la CLI (supabase functions deploy slack-user-auth) y confirma VITE_SUPABASE_URL / claves del mismo proyecto.",
+          { duration: 8000 },
+        );
+        return;
       }
+      toast.error(msg || "No se pudo conectar Slack");
     },
   });
 

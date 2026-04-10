@@ -10,13 +10,13 @@ project_id = "qppfampapbxdgednkofc"
   [functions.slack-events]
     verify_jwt = false
   [functions.slack-user-auth]
-    verify_jwt = true
+    verify_jwt = false
   [functions.slack-user-callback]
     verify_jwt = false
   [functions.slack-api]
-    verify_jwt = true
+    verify_jwt = false
   [functions.push-subscribe]
-    verify_jwt = true
+    verify_jwt = false
   [functions.microsoft-auth]
     verify_jwt = false
   [functions.microsoft-callback]

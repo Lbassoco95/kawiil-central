@@ -29,9 +29,12 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - backup-data, process-document, generate-phrase
 - savio-webhook, slack-events, calendly-webhook
 - slack-user-callback (redirect OAuth de Slack; sin JWT)
+- slack-user-auth, slack-api, push-subscribe (verify_jwt false en config; validan sesión con getUser + Authorization en código, igual que microsoft-api)
 
-Las siguientes usan JWT de usuario (desplegar con verificación JWT activa, valor por defecto):
-- slack-user-auth, slack-api, push-subscribe, savio-api-health
+Otras con JWT en gateway (por defecto):
+- savio-api-health, index-chat-attachment, etc. según `supabase/config.toml`
+
+Si el cliente muestra "Failed to send a request to the Edge Function", suele ser función no desplegada en ese proyecto o `VITE_SUPABASE_URL` apuntando a otro Supabase que no tiene esa función.
 
 ## Si algo se rompe despues de publicar desde Lovable:
 
