@@ -44,10 +44,10 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: isAdmin } = await adminClient.rpc("is_admin_or_manager", { _user_id: user.id });
-    if (!isAdmin) {
+    const { data: financeOk } = await adminClient.rpc("has_finance_access", { _user_id: user.id });
+    if (!financeOk) {
       return new Response(
-        JSON.stringify({ error: "Forbidden", message: "Solo administradores y managers." }),
+        JSON.stringify({ error: "Forbidden", message: "Requiere acceso al módulo Finanzas." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

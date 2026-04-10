@@ -32,7 +32,7 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - slack-user-auth, slack-api, push-subscribe (verify_jwt false en config; validan sesión con getUser + Authorization en código, igual que microsoft-api)
 
 Otras con JWT en gateway (por defecto):
-- savio-api-health, index-chat-attachment, etc. según `supabase/config.toml`
+- savio-api-health, savio-finance-api, index-chat-attachment, etc. según `supabase/config.toml`
 
 Si el cliente muestra "Failed to send a request to the Edge Function", suele ser función no desplegada en ese proyecto o `VITE_SUPABASE_URL` apuntando a otro Supabase que no tiene esa función.
 

@@ -10,7 +10,7 @@ export type SavioFinanceEvent = Pick<
   "id" | "created_at" | "event_type" | "savio_id" | "status" | "payload"
 >;
 
-const PAGE_SIZE = 300;
+const PAGE_SIZE = 500;
 
 export function useSavioWebhookEvents() {
   const { user } = useAuth();
