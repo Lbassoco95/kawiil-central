@@ -722,6 +722,7 @@ export function AccountingDashboard({
               </Button>
             </div>
           ) : null}
+          <p className="text-[10px] text-muted-foreground font-medium">Vista rápida (última consulta por tipo)</p>
           <div className="rounded-md border border-border/60 overflow-hidden">
             <table className="w-full text-left text-[11px]">
               <thead className="bg-muted/40 text-muted-foreground">
@@ -781,6 +782,73 @@ export function AccountingDashboard({
               </tbody>
             </table>
           </div>
+          {clientId && moffinRows.length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-muted-foreground font-medium pt-2">
+                Historial de consultas (cada fila es una ejecución; conserva PDFs previos)
+              </p>
+              <div className="rounded-md border border-border/60 overflow-hidden max-h-72 overflow-y-auto">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="bg-muted/40 text-muted-foreground sticky top-0 z-[1]">
+                    <tr>
+                      <th className="p-2 font-medium">Tipo</th>
+                      <th className="p-2 font-medium">Estado</th>
+                      <th className="p-2 font-medium">Resumen</th>
+                      <th className="p-2 font-medium">Fecha</th>
+                      <th className="p-2 font-medium min-w-[140px]">PDF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {moffinRows.map((hist) => {
+                      const hdoc = hist.documents as {
+                        file_path?: string | null;
+                        name?: string | null;
+                      } | null;
+                      const histLabel =
+                        MOFFIN_CONSULT_META[hist.consult_type as MoffinConsultType]?.label ??
+                        hist.consult_type;
+                      const histBadgeVariant =
+                        hist.status === "success"
+                          ? "default"
+                          : hist.status === "fail" || hist.status === "error"
+                            ? "destructive"
+                            : "secondary";
+                      return (
+                        <tr key={hist.id} className="border-t border-border/50">
+                          <td className="p-2 font-medium align-top">{histLabel}</td>
+                          <td className="p-2 align-top">
+                            <Badge variant={histBadgeVariant} className="text-[10px]">
+                              {hist.status}
+                            </Badge>
+                          </td>
+                          <td className="p-2 text-muted-foreground max-w-[220px] align-top">
+                            <div className="line-clamp-2" title={hist.summary ?? undefined}>
+                              {hist.summary ?? "—"}
+                            </div>
+                            {hist.error_message ? (
+                              <div className="text-[10px] text-destructive mt-0.5 leading-tight line-clamp-2">
+                                {hist.error_message}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="p-2 text-muted-foreground whitespace-nowrap align-top">
+                            {hist.created_at ? new Date(hist.created_at).toLocaleString("es-MX") : "—"}
+                          </td>
+                          <td className="p-2 align-top">
+                            {hdoc?.file_path ? (
+                              <MoffinPdfActions filePath={hdoc.file_path} fileName={hdoc.name} />
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

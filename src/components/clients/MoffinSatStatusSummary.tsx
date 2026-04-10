@@ -27,6 +27,12 @@ const toneClass: Record<string, string> = {
   bad: "bg-destructive/15 text-destructive",
 };
 
+const MOFFIN_TYPE_LABEL: Record<string, string> = {
+  lista_69b: "Lista 69-B",
+  constancia_situacion_fiscal: "Constancia",
+  opinion_cumplimiento: "Opinión",
+};
+
 interface Props {
   clientId: string;
   /** Título de la tarjeta (mismo contenido en cliente vs contabilidad) */
@@ -149,6 +155,7 @@ export function MoffinSatStatusSummary({
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando…
         </p>
       ) : (
+        <>
         <ul className="space-y-3 text-[13px]">
           <li className="rounded-md border border-border/60 p-3 bg-background/40">
             <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -225,6 +232,60 @@ export function MoffinSatStatusSummary({
             </div>
           </li>
         </ul>
+        {rows.length > 0 ? (
+          <div className="mt-4 pt-4 border-t border-border/60 space-y-2">
+            <h3 className="text-xs font-medium text-muted-foreground">Historial reciente (por consulta)</h3>
+            <div className="max-h-56 overflow-y-auto rounded-md border border-border/60 overflow-hidden">
+              <table className="w-full text-left text-[11px]">
+                <thead className="bg-muted/40 text-muted-foreground sticky top-0">
+                  <tr>
+                    <th className="p-2 font-medium">Tipo</th>
+                    <th className="p-2 font-medium">Estado</th>
+                    <th className="p-2 font-medium">Fecha</th>
+                    <th className="p-2 font-medium min-w-[120px]">PDF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 40).map((hist) => {
+                    const hdoc = hist.documents;
+                    const label = MOFFIN_TYPE_LABEL[hist.consult_type] ?? hist.consult_type;
+                    const histBadgeVariant =
+                      hist.status === "success"
+                        ? "default"
+                        : hist.status === "fail" || hist.status === "error"
+                          ? "destructive"
+                          : "secondary";
+                    return (
+                      <tr key={hist.id} className="border-t border-border/50">
+                        <td className="p-2 font-medium align-top">{label}</td>
+                        <td className="p-2 align-top">
+                          <Badge variant={histBadgeVariant} className="text-[10px]">
+                            {hist.status}
+                          </Badge>
+                        </td>
+                        <td className="p-2 text-muted-foreground whitespace-nowrap align-top">
+                          {fmtDate(hist.created_at)}
+                        </td>
+                        <td className="p-2 align-top">
+                          {hdoc?.file_path ? (
+                            <MoffinPdfActions
+                              className="shrink-0"
+                              filePath={hdoc.file_path}
+                              fileName={hdoc.name}
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+        </>
       )}
     </section>
   );

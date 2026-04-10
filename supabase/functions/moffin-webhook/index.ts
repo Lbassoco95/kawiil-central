@@ -9,7 +9,7 @@
  * Deploy: verify_jwt = false (ver supabase/config.toml)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { buildMoffinPdfStoragePath } from "../_shared/moffinStoragePath.ts";
+import { uploadMoffinPdfFromUrl } from "../_shared/moffinPdfDownload.ts";
 import {
   extractReportLevelPdfUrl,
   pickSatRfcPdfUrl,
@@ -133,56 +133,6 @@ function firstNumericId(obj: unknown): string | null {
   return null;
 }
 
-async function uploadPdfFromUrl(
-  admin: ReturnType<typeof createClient>,
-  orgId: string,
-  projectId: string,
-  clientId: string | null,
-  uploadedBy: string | null,
-  url: string,
-  fileBase: string,
-  documentType: string,
-): Promise<string | null> {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const head = new TextDecoder().decode(buf.slice(0, 8));
-  if (buf.length < 4 || !head.startsWith("%PDF")) {
-    return null;
-  }
-  const path = buildMoffinPdfStoragePath(orgId, clientId, fileBase);
-  const { error: upErr } = await admin.storage.from("documents").upload(path, buf, {
-    contentType: "application/pdf",
-    upsert: false,
-  });
-  if (upErr) {
-    console.error("moffin-webhook storage upload:", upErr.message);
-    return null;
-  }
-  const insertRow: Record<string, unknown> = {
-    name: `${fileBase}.pdf`,
-    file_path: path,
-    file_size: buf.length,
-    mime_type: "application/pdf",
-    source: "supabase",
-    organization_id: orgId,
-    project_id: projectId,
-    client_id: clientId,
-    document_type: documentType,
-  };
-  if (uploadedBy) insertRow.uploaded_by = uploadedBy;
-  const { data: doc, error: docErr } = await admin
-    .from("documents")
-    .insert(insertRow)
-    .select("id")
-    .single();
-  if (docErr) {
-    console.error("moffin-webhook document insert:", docErr.message);
-    return null;
-  }
-  return doc.id;
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -251,6 +201,7 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  const moffinApiKey = Deno.env.get("MOFFIN_API_KEY") ?? "";
 
   const moffinReport = extractMoffinReport(data) ?? extractMoffinReport(verified);
   const queryId = moffinReport ? firstNumericId(moffinReport) : firstNumericId(data);
@@ -343,6 +294,7 @@ Deno.serve(async (req) => {
       : null;
 
   let documentId = row.document_id;
+  let pdfWarn: string | null = null;
   if (
     st === "success" &&
     !documentId &&
@@ -350,28 +302,40 @@ Deno.serve(async (req) => {
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
   ) {
     const pdfUrl = pickPdfForConsult(consultType, moffinReport);
-    if (pdfUrl) {
-      const docType =
-        consultType === "constancia_situacion_fiscal"
-          ? "constancia_situacion_fiscal"
-          : "opinion_cumplimiento";
-      const newDoc = await uploadPdfFromUrl(
+    const docType =
+      consultType === "constancia_situacion_fiscal"
+        ? "constancia_situacion_fiscal"
+        : "opinion_cumplimiento";
+    if (!pdfUrl) {
+      pdfWarn = "sin URL de PDF en respuesta Moffin";
+    } else {
+      const up = await uploadMoffinPdfFromUrl({
         admin,
-        row.organization_id,
-        row.project_id,
-        row.client_id,
-        row.requested_by,
-        pdfUrl,
-        consultType,
-        docType,
-      );
-      if (newDoc) documentId = newDoc;
+        orgId: row.organization_id,
+        projectId: row.project_id,
+        clientId: row.client_id,
+        uploadedBy: row.requested_by,
+        url: pdfUrl,
+        fileBase: consultType,
+        documentDisplayName: `${consultType}_${String(row.id).slice(0, 8)}_${Date.now()}`,
+        documentType: docType,
+        moffinApiKey: moffinApiKey || null,
+      });
+      if (up.documentId) documentId = up.documentId;
+      else pdfWarn = up.failureReason ?? "descarga PDF falló";
     }
   }
 
+  const combinedError =
+    st === "fail" || st === "error"
+      ? errMsg
+      : pdfWarn
+        ? `PDF no guardado: ${pdfWarn}`.slice(0, 500)
+        : null;
+
   const patch: Record<string, unknown> = {
     status: st,
-    error_message: errMsg,
+    error_message: combinedError,
     summary,
     raw_response: mergedRaw,
     document_id: documentId,

@@ -3,7 +3,7 @@ import {
   decryptFielSecret,
   formatFielMaterial,
 } from "../_shared/moffinFielCrypto.ts";
-import { buildMoffinPdfStoragePath } from "../_shared/moffinStoragePath.ts";
+import { uploadMoffinPdfFromUrl } from "../_shared/moffinPdfDownload.ts";
 import {
   extractReportLevelPdfUrl,
   pickSatRfcPdfUrl,
@@ -143,6 +143,7 @@ async function persistMoffinReportToConsult(
   row: MoffinConsultDbRow,
   report: Record<string, unknown>,
   fallbackUserId: string,
+  moffinApiKey: string,
 ): Promise<{ error?: string }> {
   const allowed: ConsultType[] = ["lista_69b", "constancia_situacion_fiscal", "opinion_cumplimiento"];
   if (!allowed.includes(row.consult_type as ConsultType)) {
@@ -161,23 +162,29 @@ async function persistMoffinReportToConsult(
 
   const uploadUid = row.requested_by ?? fallbackUserId;
   let documentId = row.document_id;
+  let pdfFailure: string | null = null;
 
   if (st === "success" && !documentId && (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento")) {
     const pdfUrl = pickPdfForConsult(ct, report);
-    if (pdfUrl) {
-      const docType =
-        ct === "constancia_situacion_fiscal" ? "constancia_situacion_fiscal" : "opinion_cumplimiento";
-      const newDoc = await uploadPdfFromUrl(
+    const docType =
+      ct === "constancia_situacion_fiscal" ? "constancia_situacion_fiscal" : "opinion_cumplimiento";
+    if (!pdfUrl) {
+      pdfFailure = "sin URL de PDF en respuesta Moffin";
+    } else {
+      const up = await uploadMoffinPdfFromUrl({
         admin,
-        row.organization_id,
-        row.project_id,
-        row.client_id,
-        uploadUid,
-        pdfUrl,
-        ct,
-        docType,
-      );
-      if (newDoc) documentId = newDoc;
+        orgId: row.organization_id,
+        projectId: row.project_id,
+        clientId: row.client_id,
+        uploadedBy: uploadUid,
+        url: pdfUrl,
+        fileBase: ct,
+        documentDisplayName: `${ct}_${String(row.id).slice(0, 8)}_${Date.now()}`,
+        documentType: docType,
+        moffinApiKey,
+      });
+      if (up.documentId) documentId = up.documentId;
+      else pdfFailure = up.failureReason ?? "descarga PDF falló";
     }
   }
 
@@ -194,7 +201,12 @@ async function persistMoffinReportToConsult(
 
   const patch: Record<string, unknown> = {
     status: st,
-    error_message: st === "success" ? null : errMsg,
+    error_message:
+      st === "success"
+        ? pdfFailure
+          ? `PDF no guardado: ${pdfFailure}`.slice(0, 500)
+          : null
+        : errMsg,
     summary,
     raw_response: mergedRaw,
     document_id: documentId,
@@ -205,55 +217,6 @@ async function persistMoffinReportToConsult(
   const { error: upErr } = await admin.from("moffin_consults").update(patch).eq("id", row.id);
   if (upErr) return { error: upErr.message };
   return {};
-}
-
-async function uploadPdfFromUrl(
-  admin: ReturnType<typeof createClient>,
-  orgId: string,
-  projectId: string,
-  clientId: string | null,
-  userId: string,
-  url: string,
-  fileBase: string,
-  documentType: string,
-): Promise<string | null> {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const head = new TextDecoder().decode(buf.slice(0, 8));
-  if (buf.length < 4 || !head.startsWith("%PDF")) {
-    return null;
-  }
-  const path = buildMoffinPdfStoragePath(orgId, clientId, fileBase);
-  const { error: upErr } = await admin.storage.from("documents").upload(path, buf, {
-    contentType: "application/pdf",
-    upsert: false,
-  });
-  if (upErr) {
-    console.error("moffin storage upload:", upErr.message);
-    return null;
-  }
-  const { data: doc, error: docErr } = await admin
-    .from("documents")
-    .insert({
-      name: `${fileBase}.pdf`,
-      file_path: path,
-      file_size: buf.length,
-      mime_type: "application/pdf",
-      source: "supabase",
-      organization_id: orgId,
-      project_id: projectId,
-      client_id: clientId,
-      document_type: documentType,
-      uploaded_by: userId,
-    })
-    .select("id")
-    .single();
-  if (docErr) {
-    console.error("moffin document insert:", docErr.message);
-    return null;
-  }
-  return doc.id;
 }
 
 Deno.serve(async (req) => {
@@ -395,6 +358,7 @@ Deno.serve(async (req) => {
         row as MoffinConsultDbRow,
         fr.json,
         user.id,
+        moffinKey,
       );
       if (pe.error) {
         results.push({ id: row.id, ok: false, error: pe.error });
@@ -457,6 +421,7 @@ Deno.serve(async (req) => {
         row as MoffinConsultDbRow,
         fr.json,
         user.id,
+        moffinKey,
       );
       if (pe.error) {
         results.push({ id: row.id, ok: false, error: pe.error });
@@ -678,28 +643,64 @@ Deno.serve(async (req) => {
   }
 
   let documentId: string | null = null;
+  let pdfSidecarError: string | null = null;
+  const moffinQueryIdStr = json.id != null ? String(json.id) : null;
+
   if (
     moffinStatus === "success" &&
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
   ) {
-    const pdfUrl = pickPdfForConsult(consultType, json);
-    if (pdfUrl) {
-      const docType =
-        consultType === "constancia_situacion_fiscal"
-          ? "constancia_situacion_fiscal"
-          : "opinion_cumplimiento";
-      documentId = await uploadPdfFromUrl(
+    const docType =
+      consultType === "constancia_situacion_fiscal"
+        ? "constancia_situacion_fiscal"
+        : "opinion_cumplimiento";
+    const displayBase = `${consultType}_${Date.now()}`;
+    let sawPdfUrl = false;
+
+    const tryUploadFromReport = async (report: Record<string, unknown>) => {
+      const pdfUrl = pickPdfForConsult(consultType, report);
+      if (!pdfUrl) return;
+      sawPdfUrl = true;
+      const up = await uploadMoffinPdfFromUrl({
         admin,
-        project.organization_id,
+        orgId: project.organization_id,
         projectId,
-        project.client_id,
-        user.id,
-        pdfUrl,
-        consultType,
-        docType,
-      );
+        clientId: project.client_id,
+        uploadedBy: user.id,
+        url: pdfUrl,
+        fileBase: consultType,
+        documentDisplayName: displayBase,
+        documentType: docType,
+        moffinApiKey: moffinKey,
+      });
+      if (up.documentId) {
+        documentId = up.documentId;
+        pdfSidecarError = null;
+      } else {
+        pdfSidecarError = up.failureReason ?? "descarga PDF falló";
+      }
+    };
+
+    await tryUploadFromReport(json);
+    if (!documentId && moffinQueryIdStr) {
+      const fr = await fetchMoffinReportById(moffinBase, moffinKey, moffinQueryIdStr);
+      if (fr.ok) await tryUploadFromReport(fr.json);
+    }
+    if (!documentId) {
+      if (!sawPdfUrl) {
+        pdfSidecarError = "sin URL de PDF en respuesta Moffin";
+      } else if (!pdfSidecarError) {
+        pdfSidecarError = "no se pudo guardar el PDF";
+      }
     }
   }
+
+  const insertErrorMessage =
+    !moffinRes.ok
+      ? errMsg
+      : pdfSidecarError
+        ? `PDF no guardado: ${pdfSidecarError}`.slice(0, 500)
+        : null;
 
   const { data: inserted, error: insErr } = await admin
     .from("moffin_consults")
@@ -711,7 +712,7 @@ Deno.serve(async (req) => {
       consult_type: consultType,
       moffin_service: consultType === "lista_69b" ? "sat_blacklist" : "sat_rfc",
       status: moffinRes.ok ? moffinStatus : "error",
-      error_message: errMsg,
+      error_message: insertErrorMessage,
       summary,
       raw_response: json,
       moffin_query_id: json.id != null ? String(json.id) : null,
