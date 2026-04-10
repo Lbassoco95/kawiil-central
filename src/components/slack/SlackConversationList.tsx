@@ -51,18 +51,34 @@ type Props = {
   channelsInCustomGroups?: Set<string>;
   onReorderCustomGroup?: (groupId: string, orderedChannelIds: string[]) => void;
   headerActions?: ReactNode;
+  /** Notificaciones Slack no leídas por channel_id (Kawiil). */
+  unreadByChannel?: Record<string, number>;
 };
 
-function SectionHeader({ label }: { label: string }) {
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  const label = count > 99 ? "99+" : String(count);
   return (
-    <CollapsibleTrigger className="flex w-full items-center gap-1 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90">
-      <ChevronDown className="h-3 w-3 transition-transform" />
+    <span
+      className="shrink-0 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center tabular-nums leading-none"
+      aria-label={`${count} sin leer`}
+    >
       {label}
+    </span>
+  );
+}
+
+function SectionHeader({ label, unreadInSection = 0 }: { label: string; unreadInSection?: number }) {
+  return (
+    <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 min-w-0">
+      <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
+      <span className="truncate min-w-0 flex-1 text-left">{label}</span>
+      <UnreadBadge count={unreadInSection} />
     </CollapsibleTrigger>
   );
 }
 
-function SortableConvRow(props: Parameters<typeof ConvRow>[0] & { id: string }) {
+function SortableConvRow(props: Parameters<typeof ConvRow>[0] & { id: string; unreadCount?: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -96,6 +112,7 @@ function ConvRow({
   onToggleStar,
   isVip,
   onToggleVip,
+  unreadCount = 0,
 }: {
   c: SlackConversation;
   selected: boolean;
@@ -106,6 +123,7 @@ function ConvRow({
   onToggleStar?: () => void;
   isVip?: boolean;
   onToggleVip?: () => void;
+  unreadCount?: number;
 }) {
   return (
     <div
@@ -119,11 +137,19 @@ function ConvRow({
         onClick={onClick}
         className={cn(
           "relative flex-1 text-left pl-3 pr-1 py-1.5 rounded-md text-[13px] flex items-center gap-2 min-w-0",
-          selected ? "font-medium text-white" : "text-zinc-200",
+          selected ? "font-medium text-white" : unreadCount > 0 ? "font-semibold text-zinc-50" : "text-zinc-200",
         )}
+        title={isPublicChannel && c.name ? `#${c.name} — ${title}` : title}
       >
         {selected && (
           <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-primary" aria-hidden />
+        )}
+        {unreadCount > 0 && (
+          <span
+            className="shrink-0 h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#1a1d21]"
+            aria-hidden
+            title={`${unreadCount} notificación${unreadCount > 1 ? "es" : ""} en Kawiil`}
+          />
         )}
         {c.is_im ? (
           <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-70" />
@@ -135,6 +161,9 @@ function ConvRow({
           <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
         )}
         <span className="truncate min-w-0">{isPublicChannel && c.name ? `#${c.name}` : title}</span>
+        {unreadCount > 1 ? (
+          <span className="shrink-0 text-[10px] font-bold tabular-nums text-red-400">{unreadCount > 99 ? "99+" : unreadCount}</span>
+        ) : null}
       </button>
       {onToggleVip && (
         <button
@@ -189,8 +218,13 @@ export function SlackConversationList({
   channelsInCustomGroups = new Set<string>(),
   onReorderCustomGroup,
   headerActions,
+  unreadByChannel = {},
 }: Props) {
   const [q, setQ] = useState("");
+
+  const unreadFor = (channelId: string) => unreadByChannel[channelId] || 0;
+  const sumUnread = (convs: SlackConversation[]) =>
+    convs.reduce((acc, c) => acc + unreadFor(c.id), 0);
 
   const filterMatch = (c: SlackConversation) => {
     if (!q.trim()) return true;
@@ -278,6 +312,7 @@ export function SlackConversationList({
       onToggleStar: () => onToggleStar(c.id),
       isVip: !!p?.is_vip,
       onToggleVip: () => onToggleVip(c.id),
+      unreadCount: unreadFor(c.id),
     };
     if (sortable) {
       return <SortableConvRow key={c.id} id={c.id} {...common} />;
@@ -356,7 +391,7 @@ export function SlackConversationList({
         <div className="p-2 pb-6 space-y-1">
           {vipFiltered.length > 0 && (
             <Collapsible open={openVip} onOpenChange={setOpenVip}>
-              <SectionHeader label="VIP · siempre notificar" />
+              <SectionHeader label="VIP · siempre notificar" unreadInSection={sumUnread(vipFiltered)} />
               <CollapsibleContent>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndVip}>
                   <SortableContext items={vipFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
@@ -374,7 +409,7 @@ export function SlackConversationList({
 
           {starFiltered.length > 0 && (
             <Collapsible open={openStar} onOpenChange={setOpenStar}>
-              <SectionHeader label="Destacados" />
+              <SectionHeader label="Destacados" unreadInSection={sumUnread(starFiltered)} />
               <CollapsibleContent>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndStarred}>
                   <SortableContext items={starFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
@@ -393,9 +428,10 @@ export function SlackConversationList({
           {customGroupsFiltered.map((g) => (
             <Collapsible key={g.id} defaultOpen>
               <div className="flex items-stretch gap-0.5 px-1">
-                <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 rounded-md">
+                <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 rounded-md">
                   <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
-                  <span className="truncate">{g.title}</span>
+                  <span className="truncate min-w-0 flex-1 text-left">{g.title}</span>
+                  <UnreadBadge count={sumUnread(g.conversations)} />
                 </CollapsibleTrigger>
                 <Link
                   to={`/asistente-ia?slackGroup=${encodeURIComponent(g.id)}`}
@@ -427,7 +463,7 @@ export function SlackConversationList({
 
           {publicFiltered.length > 0 && (
             <Collapsible open={openPub} onOpenChange={setOpenPub}>
-              <SectionHeader label="Canales" />
+              <SectionHeader label="Canales" unreadInSection={sumUnread(publicFiltered)} />
               <CollapsibleContent className="space-y-0.5 mt-1">
                 {publicFiltered.map((c) => renderConv(c, true, false))}
               </CollapsibleContent>
@@ -436,7 +472,7 @@ export function SlackConversationList({
 
           {privateFiltered.length > 0 && (
             <Collapsible open={openPriv} onOpenChange={setOpenPriv}>
-              <SectionHeader label="Canales privados" />
+              <SectionHeader label="Canales privados" unreadInSection={sumUnread(privateFiltered)} />
               <CollapsibleContent className="space-y-0.5 mt-1">
                 {privateFiltered.map((c) => renderConv(c, false, false))}
               </CollapsibleContent>
@@ -445,7 +481,7 @@ export function SlackConversationList({
 
           {dmFiltered.length > 0 && (
             <Collapsible open={openDm} onOpenChange={setOpenDm}>
-              <SectionHeader label="Mensajes directos" />
+              <SectionHeader label="Mensajes directos" unreadInSection={sumUnread(dmFiltered)} />
               <CollapsibleContent className="space-y-0.5 mt-1">
                 {dmFiltered.map((c) => renderConv(c, false, false))}
               </CollapsibleContent>

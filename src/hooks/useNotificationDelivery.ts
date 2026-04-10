@@ -42,6 +42,9 @@ export function useNotificationDelivery() {
           const row = payload.new as { id?: string; title?: string; body?: string | null; type?: string };
           qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
           qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+          if (row?.type === "slack_message" || row?.type === "slack_mention") {
+            qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+          }
           if (row?.title) {
             toast.info(row.title, { description: row.body || undefined });
             const allowDesktop = prefs?.desktop_browser_notifications !== false;
@@ -51,9 +54,12 @@ export function useNotificationDelivery() {
               Notification.permission === "granted"
             ) {
               try {
+                const tag = row.id ? `kawiil-${row.id}` : `kawiil-${row.type || "notif"}-${Date.now()}`;
                 new Notification(row.title, {
                   body: row.body || undefined,
-                  tag: row.id || row.type || "kawiil-notif",
+                  tag,
+                  silent: false,
+                  requireInteraction: false,
                 });
               } catch {
                 /* ignore */

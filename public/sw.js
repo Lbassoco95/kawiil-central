@@ -10,6 +10,12 @@ self.addEventListener("push", (event) => {
   const options = {
     body: data.body || "",
     icon: "/favicon.ico",
+    badge: "/favicon.ico",
+    tag: data.tag || `kawiil-${Date.now()}`,
+    renotify: true,
+    vibrate: [120, 80, 120],
+    silent: false,
+    requireInteraction: false,
     data: { url: data.url || "/" },
   };
   event.waitUntil(self.registration.showNotification(title, options));

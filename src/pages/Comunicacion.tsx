@@ -36,6 +36,10 @@ import { Button } from "@/components/ui/button";
 import { conversationTitle } from "@/components/slack/slackGrouping";
 import { Bell, Layers, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import {
+  useSlackChannelNotificationBadges,
+  markSlackChannelNotificationsRead,
+} from "@/hooks/useSlackChannelNotificationBadges";
 
 type HistoryPage = {
   messages: SlackMessage[];
@@ -45,6 +49,7 @@ type HistoryPage = {
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MPIM_MEMBERS_BATCH = 40;
 const PUSH_BANNER_DISMISS_KEY = "kawiil-slack-push-banner-dismissed";
+const SLACK_NOTIF_TYPES_ACTIVE = new Set(["slack_message", "slack_mention"]);
 
 type RawSidebarGroup = {
   id: string;
@@ -248,6 +253,59 @@ export default function Comunicacion() {
   });
 
   const conversations = conversationsQuery.data || [];
+
+  const slackUnreadByChannel = useSlackChannelNotificationBadges(user?.id);
+
+  /** Al abrir una conversación, limpiar avisos Kawiil asociados a ese canal. */
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+    void (async () => {
+      try {
+        await markSlackChannelNotificationsRead(user.id, selectedChannel);
+        await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+        await qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+        await qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+      } catch {
+        /* RLS u offline: no bloquear la UI */
+      }
+    })();
+  }, [selectedChannel, user?.id, qc]);
+
+  /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+
+    const rt = supabase
+      .channel(`slack-active-read-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          const row = payload.new as {
+            id?: string;
+            entity_type?: string;
+            entity_id?: string;
+            type?: string;
+          };
+          if (row.entity_type !== "slack" || !row.entity_id?.startsWith(`${selectedChannel}|`)) return;
+          if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type) || !row.id) return;
+          await supabase.from("notifications").update({ is_read: true }).eq("id", row.id);
+          qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(rt);
+    };
+  }, [user?.id, selectedChannel, qc]);
 
   const { data: sidebarGroupsRaw = [] } = useQuery({
     queryKey: ["slack-sidebar-groups", user?.id],
@@ -743,6 +801,7 @@ export default function Comunicacion() {
       customGroups={customGroupsVm}
       channelsInCustomGroups={channelsInCustomGroups}
       onReorderCustomGroup={handleReorderCustomGroup}
+      unreadByChannel={slackUnreadByChannel}
       headerActions={
         <div className="flex flex-col gap-1.5">
           {showSlackPushBanner && (

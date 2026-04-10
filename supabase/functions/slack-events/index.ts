@@ -124,6 +124,7 @@ async function sendWebPushForUsers(
   title: string,
   body: string,
   url: string,
+  pushTag?: string,
 ) {
   const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
   const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
@@ -150,7 +151,12 @@ async function sendWebPushForUsers(
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify({ title, body, url }),
+          JSON.stringify({
+            title,
+            body,
+            url,
+            tag: pushTag || `kawiil-slack-${Date.now()}`,
+          }),
         );
       } catch (e: unknown) {
         const code = (e as { statusCode?: number })?.statusCode;
@@ -305,8 +311,9 @@ async function handleMessageNotificationEvent(
 
   const deepUrl = `/comunicacion?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(ts)}`;
   const bodyPush = preview || "Nuevo mensaje";
+  const pushTag = `slack-${channel}-${ts}`.replace(/\s/g, "");
   for (const row of rows) {
-    await sendWebPushForUsers(supabase, [row.user_id], row.title, bodyPush, deepUrl);
+    await sendWebPushForUsers(supabase, [row.user_id], row.title, bodyPush, deepUrl, pushTag);
   }
 }
 
