@@ -38,6 +38,8 @@ Si el cliente muestra "Failed to send a request to the Edge Function", suele ser
 
 OAuth Slack por usuario (`slack-user-auth` / `slack-user-callback`): en **Project Settings → Edge Functions → Secrets** del proyecto Supabase deben existir al menos `SLACK_CLIENT_ID` y `SLACK_CLIENT_SECRET` (de la app en [api.slack.com/apps](https://api.slack.com/apps)). Sin `SLACK_CLIENT_ID`, la función responde 500 con `Slack OAuth not configured`. Opcional: `SLACK_USER_SCOPES` (si no, usa los del código).
 
+La Edge `slack-api` expone acciones entre otras: `conversations.list`, `conversations.history`, `conversations.members`, `conversations.members.batch`, `conversations.replies`, `conversations.info`, `chat.postMessage`, `users.info.batch` (JWT en gateway según `supabase/config.toml`).
+
 ## Si algo se rompe despues de publicar desde Lovable:
 
 1. Verificar que `.env` no fue modificado por Lovable

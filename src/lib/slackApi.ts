@@ -21,10 +21,37 @@ export type SlackConversation = {
   is_private?: boolean;
 };
 
+export type SlackFile = {
+  id?: string;
+  name?: string;
+  title?: string;
+  mimetype?: string;
+  filetype?: string;
+  size?: number;
+  url_private?: string;
+  thumb_360?: string;
+  thumb_80?: string;
+  permalink?: string;
+};
+
+export type SlackReaction = {
+  name: string;
+  count: number;
+  users?: string[];
+};
+
 export type SlackMessage = {
   ts: string;
   thread_ts?: string;
   user?: string;
   text?: string;
   bot_id?: string;
+  subtype?: string;
+  type?: string;
+  reply_count?: number;
+  reply_users_count?: number;
+  reactions?: SlackReaction[];
+  files?: SlackFile[];
+  attachments?: Record<string, unknown>[];
+  blocks?: unknown[];
 };

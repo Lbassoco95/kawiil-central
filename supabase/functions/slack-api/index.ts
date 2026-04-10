@@ -8,6 +8,9 @@ const corsHeaders = {
 type SlackMethod =
   | "conversations.list"
   | "conversations.history"
+  | "conversations.members"
+  | "conversations.replies"
+  | "conversations.info"
   | "chat.postMessage"
   | "users.info";
 
@@ -118,6 +121,87 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "conversations.members") {
+      const channel = json.channel as string;
+      if (!channel) {
+        return new Response(JSON.stringify({ error: "channel required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const data = await slackCall(conn.access_token, "conversations.members", {
+        channel,
+        cursor: json.cursor as string | undefined,
+        limit: (json.limit as number) || 200,
+      });
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "conversations.members.batch") {
+      const raw = json.channel_ids as unknown;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        return new Response(JSON.stringify({ error: "channel_ids array required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const ids = [...new Set(raw.map((x) => String(x)).filter(Boolean))].slice(0, 40);
+      const members_by_channel: Record<string, string[]> = {};
+      for (const ch of ids) {
+        const data = await slackCall(conn.access_token, "conversations.members", {
+          channel: ch,
+          limit: 100,
+        });
+        if (data.ok && Array.isArray(data.members)) {
+          members_by_channel[ch] = data.members as string[];
+        } else {
+          members_by_channel[ch] = [];
+        }
+      }
+      return new Response(JSON.stringify({ ok: true, members_by_channel }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "conversations.replies") {
+      const channel = json.channel as string;
+      const ts = json.ts as string;
+      if (!channel || !ts) {
+        return new Response(JSON.stringify({ error: "channel and ts required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const data = await slackCall(conn.access_token, "conversations.replies", {
+        channel,
+        ts,
+        cursor: json.cursor as string | undefined,
+        limit: (json.limit as number) || 50,
+        inclusive: "true",
+      });
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "conversations.info") {
+      const channel = json.channel as string;
+      if (!channel) {
+        return new Response(JSON.stringify({ error: "channel required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const data = await slackCall(conn.access_token, "conversations.info", {
+        channel,
+      });
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "chat.postMessage") {
       const channel = json.channel as string;
       const text = json.text as string;
@@ -145,7 +229,7 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const unique = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 80);
+      const unique = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 200);
       const users: Record<string, { display_name: string | null; real_name: string | null; avatar_url: string | null }> = {};
 
       const chunk = 8;
@@ -179,7 +263,16 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "unknown_action",
-        allowed: ["conversations.list", "conversations.history", "chat.postMessage", "users.info.batch"],
+        allowed: [
+          "conversations.list",
+          "conversations.history",
+          "conversations.members",
+          "conversations.members.batch",
+          "conversations.replies",
+          "conversations.info",
+          "chat.postMessage",
+          "users.info.batch",
+        ],
       }),
       {
         status: 400,

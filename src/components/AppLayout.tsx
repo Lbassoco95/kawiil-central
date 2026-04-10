@@ -64,9 +64,17 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
         <div className="absolute -bottom-1/4 -left-1/4 w-[500px] h-[500px] rounded-full bg-accent/[0.03] blur-3xl" />
       </div>
       <AppSidebar />
-      <main className="flex-1 overflow-auto w-full relative z-10">
+      <main
+        className={`flex-1 w-full relative z-10 min-h-0 ${
+          isFullWidth ? "flex flex-col overflow-hidden" : "overflow-auto"
+        }`}
+      >
         {/* Global date/time bar */}
-        <div className={`sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border/50 ${isMobile ? "px-4 pt-12 pb-2" : "px-6 py-2"}`}>
+        <div
+          className={`shrink-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border/50 ${
+            isFullWidth ? "sticky top-0" : "sticky top-0"
+          } ${isMobile ? "px-4 pt-12 pb-2" : "px-6 py-2"}`}
+        >
           <div className={`${isFullWidth ? "w-full max-w-none px-0" : "max-w-7xl mx-auto"} flex items-center gap-3`}>
             {!isMobile && <GlobalAISearch />}
             <div className="flex items-center gap-3 ml-auto">
@@ -83,7 +91,7 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
         <div
           className={`animate-fade-in ${
             isFullWidth
-              ? `w-full max-w-none min-h-[calc(100vh-3.5rem)] ${isMobile ? "px-0 pb-0 pt-0" : "px-0 pb-0"}`
+              ? `w-full max-w-none flex-1 min-h-0 flex flex-col overflow-hidden ${isMobile ? "px-0 pb-0 pt-0" : "px-0 pb-0"}`
               : `max-w-7xl mx-auto ${isMobile ? "p-4" : "p-6"}`
           }`}
         >
