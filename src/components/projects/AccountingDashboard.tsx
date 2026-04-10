@@ -27,13 +27,13 @@ import {
   ShieldAlert,
   FileBadge,
   FileCheck2,
-  Download,
   Loader2,
   RefreshCw,
 } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
 import { nowMX } from "@/lib/dateUtils";
-import type { MoffinConsultRow } from "@/lib/moffinDisplay";
+import { MoffinPdfActions } from "@/components/clients/MoffinPdfActions";
+import { moffinConsultNeedsApiSync, type MoffinConsultRow } from "@/lib/moffinDisplay";
 import {
   useAccountingPeriods,
   useCreateAccountingPeriod,
@@ -429,7 +429,7 @@ export function AccountingDashboard({
     enabled: !!user && !!projectId,
     refetchInterval: (q) => {
       const list = q.state.data as MoffinConsultRow[] | undefined;
-      return list?.some((r) => r.status === "pending" && r.moffin_query_id) ? 55_000 : false;
+      return list?.some((r) => moffinConsultNeedsApiSync(r)) ? 55_000 : false;
     },
   });
 
@@ -442,7 +442,7 @@ export function AccountingDashboard({
   }, [moffinRows]);
 
   const hasPendingMoffinSync = useMemo(
-    () => moffinRows.some((r) => r.status === "pending" && r.moffin_query_id),
+    () => moffinRows.some((r) => moffinConsultNeedsApiSync(r)),
     [moffinRows],
   );
 
@@ -483,7 +483,7 @@ export function AccountingDashboard({
       } else {
         toast.success(
           payload.pendingFound === 0
-            ? "No había consultas pendientes para sincronizar."
+            ? "No había filas que requieran sincronizar con Moffin."
             : "Consultas actualizadas desde Moffin.",
         );
       }
@@ -560,16 +560,6 @@ export function AccountingDashboard({
     },
     [projectId, clientId, queryClient, moffinFielStatus?.configured, fielPassword]
   );
-
-  const downloadMoffinFile = useCallback(async (filePath: string | null | undefined) => {
-    if (!filePath) return;
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(filePath, 3600);
-    if (error || !data?.signedUrl) {
-      toast.error("No se pudo generar el enlace de descarga");
-      return;
-    }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  }, []);
 
   useEffect(() => {
     if (!periods?.length || !projectId) return;
@@ -740,7 +730,7 @@ export function AccountingDashboard({
                   <th className="p-2 font-medium">Último estado</th>
                   <th className="p-2 font-medium">Resumen</th>
                   <th className="p-2 font-medium">Fecha</th>
-                  <th className="p-2 font-medium w-24">Archivo</th>
+                  <th className="p-2 font-medium min-w-[140px]">PDF</th>
                 </tr>
               </thead>
               <tbody>
@@ -778,18 +768,9 @@ export function AccountingDashboard({
                       <td className="p-2 text-muted-foreground whitespace-nowrap">
                         {row?.created_at ? new Date(row.created_at).toLocaleString("es-MX") : "—"}
                       </td>
-                      <td className="p-2">
+                      <td className="p-2 align-top">
                         {doc?.file_path ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => downloadMoffinFile(doc.file_path)}
-                            aria-label="Descargar PDF"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
+                          <MoffinPdfActions filePath={doc.file_path} fileName={doc.name} />
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

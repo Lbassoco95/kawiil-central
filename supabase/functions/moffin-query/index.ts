@@ -4,6 +4,11 @@ import {
   formatFielMaterial,
 } from "../_shared/moffinFielCrypto.ts";
 import { buildMoffinPdfStoragePath } from "../_shared/moffinStoragePath.ts";
+import {
+  extractReportLevelPdfUrl,
+  pickSatRfcPdfUrl,
+  summarizeSatRfcCertificates,
+} from "../_shared/moffinSatRfc.ts";
 
 /**
  * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs (ReDoc en https://moffin.mx/docs)
@@ -78,68 +83,19 @@ function summarizeBlacklist(resp: Record<string, unknown>): string {
   return parts.length ? parts.join(" · ") : "Lista 69-B consultada";
 }
 
-function certMatchesConstancia(type: string): boolean {
-  return /constancia|situaci[oó]n|CIF|csf|identific/i.test(type);
-}
-
-function certMatchesOpinion(type: string): boolean {
-  return /opini[oó]n|cumplimiento|OIC|positiva|negativa/i.test(type);
-}
-
 function summarizeSatRfc(
   consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
   resp: Record<string, unknown>,
 ): string {
-  const r = resp?.response as Record<string, unknown> | null | undefined;
-  if (!r || typeof r !== "object") {
-    return resp?.status === "PENDING"
-      ? "Certificados SAT: consulta en proceso"
-      : "Sin respuesta de certificados";
-  }
-  const data = r.data as Record<string, unknown> | null | undefined;
-  const certs = (data?.certificates as Array<Record<string, unknown>> | undefined) ?? [];
-  const pred =
-    consultType === "constancia_situacion_fiscal"
-      ? certMatchesConstancia
-      : certMatchesOpinion;
-  const match = certs.find((c) => pred(String(c.type ?? "")));
-  if (match) {
-    return `Certificado (${match.type}): ${match.state ?? ""}`.trim();
-  }
-  if (certs.length) {
-    const types = certs.map((c) => String(c.type ?? "?")).join(", ");
-    return `Certificados: ${types} (ajustar heurística type si falta constancia/opinión)`;
-  }
-  const exists = r.exists;
-  const ok = r.success;
-  return `SAT RFC: success=${ok}, exists=${exists}`;
-}
-
-function pickCertificateUrl(
-  consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
-  resp: Record<string, unknown>,
-): string | null {
-  const r = resp?.response as Record<string, unknown> | null | undefined;
-  const data = r?.data as Record<string, unknown> | null | undefined;
-  const certs = (data?.certificates as Array<Record<string, unknown>> | undefined) ?? [];
-  const pred =
-    consultType === "constancia_situacion_fiscal"
-      ? certMatchesConstancia
-      : certMatchesOpinion;
-  const match = certs.find((c) => pred(String(c.type ?? "")));
-  const url = String(match?.url ?? "");
-  if (url.startsWith("http")) return url;
-  const firstHttp = certs.map((c) => String(c.url ?? "")).find((u) => u.startsWith("http"));
-  return firstHttp ?? null;
+  return summarizeSatRfcCertificates(consultType, resp);
 }
 
 function pickPdfForConsult(consultType: ConsultType, report: Record<string, unknown>): string | null {
   if (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") {
-    const u = pickCertificateUrl(consultType, report);
+    const u = pickSatRfcPdfUrl(consultType, report);
     if (u) return u;
   }
-  const top = String(report.pdfURL ?? "");
-  return top.startsWith("http") ? top : null;
+  return extractReportLevelPdfUrl(report);
 }
 
 type MoffinConsultDbRow = {
@@ -416,7 +372,7 @@ Deno.serve(async (req) => {
       .select(consultSelect)
       .eq("project_id", refreshProjectId)
       .eq("organization_id", orgId)
-      .eq("status", "pending")
+      .or("status.eq.pending,and(status.eq.success,document_id.is.null)")
       .not("moffin_query_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(15);
@@ -478,7 +434,7 @@ Deno.serve(async (req) => {
       .select(consultSelect)
       .eq("client_id", refreshClientId)
       .eq("organization_id", orgId)
-      .eq("status", "pending")
+      .or("status.eq.pending,and(status.eq.success,document_id.is.null)")
       .not("moffin_query_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(15);

@@ -10,6 +10,11 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildMoffinPdfStoragePath } from "../_shared/moffinStoragePath.ts";
+import {
+  extractReportLevelPdfUrl,
+  pickSatRfcPdfUrl,
+  summarizeSatRfcCertificates,
+} from "../_shared/moffinSatRfc.ts";
 import { Webhook } from "npm:svix";
 
 const corsHeaders: Record<string, string> = {
@@ -62,69 +67,20 @@ function summarizeBlacklist(resp: Record<string, unknown>): string {
   return parts.length ? parts.join(" · ") : "Lista 69-B consultada";
 }
 
-function certMatchesConstancia(type: string): boolean {
-  return /constancia|situaci[oó]n|CIF|csf|identific/i.test(type);
-}
-
-function certMatchesOpinion(type: string): boolean {
-  return /opini[oó]n|cumplimiento|OIC|positiva|negativa/i.test(type);
-}
-
 function summarizeSatRfc(
   consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
   resp: Record<string, unknown>,
 ): string {
-  const r = resp?.response as Record<string, unknown> | null | undefined;
-  if (!r || typeof r !== "object") {
-    return resp?.status === "PENDING"
-      ? "Certificados SAT: consulta en proceso"
-      : "Sin respuesta de certificados";
-  }
-  const data = r.data as Record<string, unknown> | null | undefined;
-  const certs = (data?.certificates as Array<Record<string, unknown>> | undefined) ?? [];
-  const pred =
-    consultType === "constancia_situacion_fiscal"
-      ? certMatchesConstancia
-      : certMatchesOpinion;
-  const match = certs.find((c) => pred(String(c.type ?? "")));
-  if (match) {
-    return `Certificado (${match.type}): ${match.state ?? ""}`.trim();
-  }
-  if (certs.length) {
-    const types = certs.map((c) => String(c.type ?? "?")).join(", ");
-    return `Certificados: ${types}`;
-  }
-  const exists = r.exists;
-  const ok = r.success;
-  return `SAT RFC: success=${ok}, exists=${exists}`;
-}
-
-function pickCertificateUrl(
-  consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
-  resp: Record<string, unknown>,
-): string | null {
-  const r = resp?.response as Record<string, unknown> | null | undefined;
-  const data = r?.data as Record<string, unknown> | null | undefined;
-  const certs = (data?.certificates as Array<Record<string, unknown>> | undefined) ?? [];
-  const pred =
-    consultType === "constancia_situacion_fiscal"
-      ? certMatchesConstancia
-      : certMatchesOpinion;
-  const match = certs.find((c) => pred(String(c.type ?? "")));
-  const url = String(match?.url ?? "");
-  if (url.startsWith("http")) return url;
-  const firstHttp = certs.map((c) => String(c.url ?? "")).find((u) => u.startsWith("http"));
-  return firstHttp ?? null;
+  return summarizeSatRfcCertificates(consultType, resp);
 }
 
 function pickPdfForConsult(
   consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
   report: Record<string, unknown>,
 ): string | null {
-  const u = pickCertificateUrl(consultType, report);
+  const u = pickSatRfcPdfUrl(consultType, report);
   if (u) return u;
-  const top = String(report.pdfURL ?? "");
-  return top.startsWith("http") ? top : null;
+  return extractReportLevelPdfUrl(report);
 }
 
 function findKawiilExternalId(obj: unknown): string | null {

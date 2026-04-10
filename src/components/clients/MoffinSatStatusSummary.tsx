@@ -4,12 +4,13 @@ import { useMoffinConsultsByClient } from "@/hooks/useMoffinConsultsByClient";
 import {
   certConsultLine,
   lista69bHeadline,
+  moffinConsultNeedsApiSync,
   pickLatestMoffinByType,
 } from "@/lib/moffinDisplay";
-import { supabase } from "@/integrations/supabase/client";
+import { MoffinPdfActions } from "@/components/clients/MoffinPdfActions";
 import { format, differenceInMinutes } from "date-fns";
 import { es } from "date-fns/locale";
-import { Download, Landmark, Loader2, RefreshCw } from "lucide-react";
+import { Landmark, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43,10 +44,7 @@ export function MoffinSatStatusSummary({
   const [syncBusy, setSyncBusy] = useState(false);
   const byType = pickLatestMoffinByType(rows);
 
-  const hasPendingSyncable = useMemo(
-    () => rows.some((r) => r.status === "pending" && r.moffin_query_id),
-    [rows],
-  );
+  const hasPendingSyncable = useMemo(() => rows.some((r) => moffinConsultNeedsApiSync(r)), [rows]);
 
   const stalePending = useMemo(
     () =>
@@ -109,18 +107,6 @@ export function MoffinSatStatusSummary({
     "Opinión de cumplimiento",
     byType.get("opinion_cumplimiento")
   );
-
-  const openPdf = async (filePath: string | null | undefined) => {
-    if (!filePath) return;
-    const { data, error } = await supabase.storage
-      .from("documents")
-      .createSignedUrl(filePath, 3600);
-    if (error || !data?.signedUrl) {
-      toast.error("No se pudo abrir el PDF");
-      return;
-    }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  };
 
   const fmtDate = (iso: string | undefined) =>
     iso
@@ -199,19 +185,12 @@ export function MoffinSatStatusSummary({
                   </p>
                 ) : null}
               </div>
-              {opinion.hasFile &&
-              byType.get("opinion_cumplimiento")?.documents?.file_path ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 shrink-0 gap-1 text-xs"
-                  onClick={() =>
-                    openPdf(byType.get("opinion_cumplimiento")!.documents!.file_path)
-                  }
-                >
-                  <Download className="h-3.5 w-3.5" /> PDF
-                </Button>
+              {opinion.hasFile && byType.get("opinion_cumplimiento")?.documents?.file_path ? (
+                <MoffinPdfActions
+                  className="shrink-0"
+                  filePath={byType.get("opinion_cumplimiento")!.documents!.file_path!}
+                  fileName={byType.get("opinion_cumplimiento")?.documents?.name}
+                />
               ) : null}
             </div>
           </li>
@@ -236,19 +215,12 @@ export function MoffinSatStatusSummary({
                   </p>
                 ) : null}
               </div>
-              {constancia.hasFile &&
-              byType.get("constancia_situacion_fiscal")?.documents?.file_path ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 shrink-0 gap-1 text-xs"
-                  onClick={() =>
-                    openPdf(byType.get("constancia_situacion_fiscal")!.documents!.file_path)
-                  }
-                >
-                  <Download className="h-3.5 w-3.5" /> PDF
-                </Button>
+              {constancia.hasFile && byType.get("constancia_situacion_fiscal")?.documents?.file_path ? (
+                <MoffinPdfActions
+                  className="shrink-0"
+                  filePath={byType.get("constancia_situacion_fiscal")!.documents!.file_path!}
+                  fileName={byType.get("constancia_situacion_fiscal")?.documents?.name}
+                />
               ) : null}
             </div>
           </li>

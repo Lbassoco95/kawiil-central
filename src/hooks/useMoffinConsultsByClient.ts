@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import type { MoffinConsultRow } from "@/lib/moffinDisplay";
+import { moffinConsultNeedsApiSync, type MoffinConsultRow } from "@/lib/moffinDisplay";
 
 export function useMoffinConsultsByClient(clientId: string | undefined) {
   const { user } = useAuth();
@@ -23,8 +23,7 @@ export function useMoffinConsultsByClient(clientId: string | undefined) {
     enabled: !!user && !!clientId,
     refetchInterval: (q) => {
       const rows = q.state.data as MoffinConsultRow[] | undefined;
-      const pend = rows?.some((r) => r.status === "pending" && r.moffin_query_id) ?? false;
-      return pend ? 55_000 : false;
+      return rows?.some((r) => moffinConsultNeedsApiSync(r)) ? 55_000 : false;
     },
   });
 }

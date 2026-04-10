@@ -11,6 +11,23 @@ export type MoffinConsultRow = {
   documents?: { file_path: string | null; name: string | null } | null;
 };
 
+/** Pendiente en Moffin o éxito sin PDF guardado aún (reintento vía sincronizar). */
+export function moffinConsultNeedsApiSync(
+  row: Pick<MoffinConsultRow, "status" | "moffin_query_id" | "document_id" | "consult_type">,
+): boolean {
+  if (!row.moffin_query_id) return false;
+  if (row.status === "pending") return true;
+  if (
+    row.status === "success" &&
+    !row.document_id &&
+    (row.consult_type === "constancia_situacion_fiscal" ||
+      row.consult_type === "opinion_cumplimiento")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Útil para UI: respuesta GET /report o POST mezclada en raw_response. */
 function lista69bInnerFromRaw(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -104,6 +121,20 @@ export function certConsultLine(
   }
   const doc = row.documents;
   const hasFile = !!(doc?.file_path);
+  const isCert =
+    row.consult_type === "constancia_situacion_fiscal" ||
+    row.consult_type === "opinion_cumplimiento";
+  if (row.status === "success" && !hasFile && isCert) {
+    return {
+      title: label,
+      detail: [row.summary, "PDF aún no guardado: usa «Sincronizar con Moffin»."]
+        .filter(Boolean)
+        .join(" ")
+        .trim(),
+      hasFile: false,
+      tone: "warn",
+    };
+  }
   return {
     title: label,
     detail: row.summary ?? undefined,
