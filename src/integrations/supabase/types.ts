@@ -556,6 +556,8 @@ export type Database = {
           primary_area: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id: string | null
           rfc: string | null
+          sat_fiel_location_hint: string | null
+          sat_fiel_managed_by_firm: boolean
           services: Database["public"]["Enums"]["service_area"][]
           status: Database["public"]["Enums"]["client_status"]
           updated_at: string
@@ -578,6 +580,8 @@ export type Database = {
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
           rfc?: string | null
+          sat_fiel_location_hint?: string | null
+          sat_fiel_managed_by_firm?: boolean
           services?: Database["public"]["Enums"]["service_area"][]
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
@@ -600,6 +604,8 @@ export type Database = {
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
           rfc?: string | null
+          sat_fiel_location_hint?: string | null
+          sat_fiel_managed_by_firm?: boolean
           services?: Database["public"]["Enums"]["service_area"][]
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
