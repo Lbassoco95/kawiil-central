@@ -64,7 +64,7 @@ export default function Finanzas() {
   }, [hasFinanceAccess, canViewSavioIncome]);
 
   useEffect(() => {
-    if (hasFinanceAccess && !savioIncomeLoading && !canViewSavioIncome && (financeTab === "resumen" || financeTab === "savio")) {
+    if (hasFinanceAccess && !savioIncomeLoading && !canViewSavioIncome && financeTab === "savio") {
       setFinanceTab("gastos");
     }
   }, [hasFinanceAccess, savioIncomeLoading, canViewSavioIncome, financeTab]);
@@ -113,7 +113,7 @@ export default function Finanzas() {
     if (canViewSavioIncome) {
       return "Control financiero del despacho: resumen, gastos internos e ingresos (Savio).";
     }
-    return "Gastos internos, aprobaciones y pagos del despacho.";
+    return "Resumen mensual de gastos, aprobaciones y pagos del despacho.";
   }, [hasFinanceAccess, canViewSavioIncome]);
 
   const gastosSection = (
@@ -237,7 +237,7 @@ export default function Finanzas() {
               </TabsList>
 
               <TabsContent value="resumen" className="mt-0">
-                <FinanceExecutiveSummary expenses={expenses} />
+                <FinanceExecutiveSummary expenses={expenses} savioEnabled />
               </TabsContent>
 
               <TabsContent value="gastos" className="mt-0">
@@ -249,7 +249,24 @@ export default function Finanzas() {
               </TabsContent>
             </Tabs>
           ) : (
-            gastosSection
+            <Tabs value={financeTab} onValueChange={(v) => setFinanceTab(v as FinanceTab)} className="space-y-4">
+              <TabsList className="h-9 flex-wrap">
+                <TabsTrigger value="resumen" className="text-xs gap-1.5">
+                  <LayoutDashboard className="h-3.5 w-3.5" /> Resumen
+                </TabsTrigger>
+                <TabsTrigger value="gastos" className="text-xs gap-1.5">
+                  <Wallet className="h-3.5 w-3.5" /> Gastos internos
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="resumen" className="mt-0">
+                <FinanceExecutiveSummary expenses={expenses} savioEnabled={false} />
+              </TabsContent>
+
+              <TabsContent value="gastos" className="mt-0">
+                {gastosSection}
+              </TabsContent>
+            </Tabs>
           )
         ) : (
           <div className="space-y-4">

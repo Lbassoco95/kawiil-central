@@ -1,9 +1,12 @@
-import { useMemo } from "react";
-import { subDays } from "date-fns";
+import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Bar,
   BarChart,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -11,10 +14,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Expense } from "@/hooks/useExpenses";
-import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
-import { computeSavioIncomeBuckets } from "@/lib/savioApiNormalize";
+import { useFinanceDashboardData } from "@/hooks/useFinanceDashboardData";
+import {
+  addMonths,
+  FINANCE_DASHBOARD_MONTH_LOOKBACK,
+  yearMonthFromDate,
+  type YearMonth,
+} from "@/lib/financeMonthMetrics";
+import { computeSavioIncomeBuckets, toInvoiceRowView } from "@/lib/savioApiNormalize";
 import { savioFinanceApiFailureHint } from "@/lib/savioFinanceApiHints";
 
 const PIE_COLORS = {
@@ -29,43 +39,70 @@ const PIE_LABELS: Record<string, string> = {
   por_cobrar: "Por cobrar / otro",
 };
 
+function ymCompare(a: YearMonth, b: YearMonth): number {
+  return a.year !== b.year ? a.year - b.year : a.month - b.month;
+}
+
 function formatMoney(n: number) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
 
-interface Props {
-  expenses: Expense[];
+function monthTitle(ym: YearMonth) {
+  return format(new Date(ym.year, ym.month - 1, 1), "MMMM yyyy", { locale: es });
 }
 
-export function FinanceExecutiveSummary({ expenses }: Props) {
+interface Props {
+  expenses: Expense[];
+  /** Si es false, no se consulta Savio: solo gastos y tendencia de gastos. */
+  savioEnabled?: boolean;
+}
+
+export function FinanceExecutiveSummary({ expenses, savioEnabled = true }: Props) {
+  const [selectedYm, setSelectedYm] = useState<YearMonth>(() => yearMonthFromDate(new Date()));
+
   const {
-    invoiceRows,
-    paymentAgg,
-    isLoading: apiLoading,
+    kpis,
+    trendBars,
+    trendMonths,
+    currentYm,
+    truncated,
+    isLoading,
+    savioError,
     reactQueryError,
-    invoicesMeta,
-    paymentsMeta,
-  } = useSavioFinanceApiData();
+    invoiceRows,
+  } = useFinanceDashboardData(selectedYm, expenses, { enableSavio: savioEnabled });
 
-  const since = useMemo(() => subDays(new Date(), 30), []);
+  const savioHint = savioFinanceApiFailureHint(savioError ?? undefined);
 
-  const expenseMetrics = useMemo(() => {
-    const inPeriod = (e: Expense) => new Date(e.expense_date) >= since;
-    const paid = expenses.filter((e) => e.status === "pagado" && inPeriod(e));
-    const approved = expenses.filter((e) => e.status === "aprobado");
-    const pendingFlow = expenses.filter((e) => ["solicitado", "en_revision"].includes(e.status));
-    const sum = (arr: Expense[]) => arr.reduce((s, e) => s + Number(e.amount), 0);
-    return {
-      paid30: sum(paid),
-      paid30Count: paid.length,
-      approvedTotal: sum(approved),
-      approvedCount: approved.length,
-      pendingTotal: sum(pendingFlow),
-      pendingCount: pendingFlow.length,
-    };
-  }, [expenses, since]);
+  const earliestSelectableYm = useMemo(
+    () => addMonths(currentYm, -FINANCE_DASHBOARD_MONTH_LOOKBACK),
+    [currentYm],
+  );
 
-  const buckets = useMemo(() => computeSavioIncomeBuckets(invoiceRows), [invoiceRows]);
+  useEffect(() => {
+    setSelectedYm((prev) => {
+      if (ymCompare(prev, earliestSelectableYm) < 0) return earliestSelectableYm;
+      if (ymCompare(prev, currentYm) > 0) return currentYm;
+      return prev;
+    });
+  }, [currentYm, earliestSelectableYm]);
+
+  const chartData = useMemo(
+    () =>
+      trendBars.map((row, i) => ({
+        name: format(new Date(trendMonths[i].year, trendMonths[i].month - 1, 1), "MMM", { locale: es }),
+        ingresos: row.ingresos,
+        gastos: row.gastos,
+      })),
+    [trendBars, trendMonths],
+  );
+
+  const invoiceViews = useMemo(
+    () => invoiceRows.map((raw, i) => toInvoiceRowView(raw, i)),
+    [invoiceRows],
+  );
+
+  const buckets = useMemo(() => computeSavioIncomeBuckets(invoiceViews), [invoiceViews]);
 
   const pieData = useMemo(() => {
     const rows = [
@@ -80,72 +117,182 @@ export function FinanceExecutiveSummary({ expenses }: Props) {
     }));
   }, [buckets]);
 
-  const cobradoDesdePagos = paymentAgg.sum;
-  const compareData = useMemo(
-    () => [
-      { name: "Ingresos (pagos Savio)", monto: cobradoDesdePagos },
-      { name: "Gastos pagados (30 d)", monto: expenseMetrics.paid30 },
-    ],
-    [cobradoDesdePagos, expenseMetrics.paid30],
-  );
+  const pipeline = useMemo(() => {
+    const approved = expenses.filter((e) => e.status === "aprobado");
+    const pendingFlow = expenses.filter((e) => ["solicitado", "en_revision"].includes(e.status));
+    const sum = (arr: Expense[]) => arr.reduce((s, e) => s + Number(e.amount), 0);
+    return {
+      approvedTotal: sum(approved),
+      approvedCount: approved.length,
+      pendingTotal: sum(pendingFlow),
+      pendingCount: pendingFlow.length,
+    };
+  }, [expenses]);
 
-  const apiIncomplete =
-    !apiLoading &&
-    invoicesMeta?.ok !== true &&
-    paymentsMeta?.ok !== true &&
-    invoiceRows.length === 0 &&
-    paymentAgg.withAmount === 0;
-
-  const savioConfigHint =
-    savioFinanceApiFailureHint(invoicesMeta) ?? savioFinanceApiFailureHint(paymentsMeta);
+  const nextDisabled = ymCompare(selectedYm, currentYm) >= 0;
+  const prevDisabled = ymCompare(selectedYm, earliestSelectableYm) <= 0;
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground max-w-3xl">
-        Vista consolidada (últimos 30 días para gastos pagados). Los cargos Savio se clasifican por texto de
-        estado; si Savio usa otros valores, los totales se pueden afinar más adelante.
-      </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label="Mes anterior"
+            disabled={prevDisabled}
+            onClick={() => setSelectedYm((ym) => addMonths(ym, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label="Mes siguiente"
+            disabled={nextDisabled}
+            onClick={() => setSelectedYm((ym) => addMonths(ym, 1))}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <div>
+            <p className="text-sm font-medium capitalize">{monthTitle(selectedYm)}</p>
+            <p className="text-xs text-muted-foreground max-w-xl">
+              Mes calendario según la zona horaria de tu navegador. Cobrado: pagos Savio con{" "}
+              <span className="font-medium">payment_date</span> en el mes. Gastos pagados:{" "}
+              <span className="font-medium">paid_at</span> (o <span className="font-medium">expense_date</span> si no
+              hay fecha de pago). Savio puede filtrar por fecha de actualización en servidor; las cifras del mes se
+              afinan en cliente con las fechas del registro. Navegación limitada a los últimos{" "}
+              {FINANCE_DASHBOARD_MONTH_LOOKBACK} meses respecto al mes actual.
+            </p>
+          </div>
+        </div>
+        {truncated && savioEnabled && (
+          <p className="text-xs text-amber-700 dark:text-amber-500 border border-amber-500/40 rounded-lg px-3 py-2 max-w-md">
+            Datos Savio truncados (límite de páginas). La cartera y los totales pueden quedar incompletos.
+          </p>
+        )}
+      </div>
 
-      {(reactQueryError || savioConfigHint) && (
+      {(reactQueryError || savioHint) && savioEnabled && (
         <p className="text-xs text-destructive border border-destructive/30 rounded-lg px-3 py-2">
           {reactQueryError
             ? `Error al cargar Savio: ${reactQueryError.message}`
-            : savioConfigHint}
+            : savioHint}
         </p>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="stat-card">
-          <div className="text-muted-foreground text-xs mb-1">Gastos pagados (30 d)</div>
-          <p className="text-lg font-semibold text-purple-600">{formatMoney(expenseMetrics.paid30)}</p>
-          <p className="text-xs text-muted-foreground">{expenseMetrics.paid30Count} movimientos</p>
-        </div>
-        <div className="stat-card">
-          <div className="text-muted-foreground text-xs mb-1">Gastos aprobados (total)</div>
-          <p className="text-lg font-semibold text-amber-700">{formatMoney(expenseMetrics.approvedTotal)}</p>
-          <p className="text-xs text-muted-foreground">{expenseMetrics.approvedCount} por pagar</p>
-        </div>
-        <div className="stat-card">
-          <div className="text-muted-foreground text-xs mb-1">En flujo solicitud</div>
-          <p className="text-lg font-semibold">{formatMoney(expenseMetrics.pendingTotal)}</p>
-          <p className="text-xs text-muted-foreground">{expenseMetrics.pendingCount} solicitudes</p>
-        </div>
-        <div className="stat-card">
-          <div className="text-muted-foreground text-xs mb-1">Pagos Savio (lista API)</div>
-          <p className="text-lg font-semibold text-green-600">{formatMoney(cobradoDesdePagos)}</p>
-          <p className="text-xs text-muted-foreground">{paymentAgg.withAmount} con monto</p>
-        </div>
+        {savioEnabled ? (
+          <>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">Cobrado (mes)</div>
+              {isLoading ? (
+                <Skeleton className="h-7 w-28 mt-1" />
+              ) : (
+                <p className="text-lg font-semibold text-green-600">{formatMoney(kpis.cobradoMes.sum)}</p>
+              )}
+              <p className="text-xs text-muted-foreground">{kpis.cobradoMes.count} pagos en el mes</p>
+            </div>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">Gastos pagados (mes)</div>
+              <p className="text-lg font-semibold text-purple-600">{formatMoney(kpis.gastosMes.sum)}</p>
+              <p className="text-xs text-muted-foreground">{kpis.gastosMes.count} movimientos</p>
+            </div>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">Por cobrar (cartera)</div>
+              {isLoading ? (
+                <Skeleton className="h-7 w-28 mt-1" />
+              ) : (
+                <p className="text-lg font-semibold text-blue-600">{formatMoney(kpis.cartera.sum)}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Facturas <span className="font-medium">valid</span> con saldo; no es “del mes”.
+              </p>
+            </div>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">Facturado (mes)</div>
+              {isLoading ? (
+                <Skeleton className="h-7 w-28 mt-1" />
+              ) : (
+                <p className="text-lg font-semibold text-emerald-700">{formatMoney(kpis.facturadoMes.sum)}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {kpis.facturadoMes.count} facturas · invoice_date (excl. void)
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">Gastos pagados (mes)</div>
+              <p className="text-lg font-semibold text-purple-600">{formatMoney(kpis.gastosMes.sum)}</p>
+              <p className="text-xs text-muted-foreground">{kpis.gastosMes.count} movimientos</p>
+            </div>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">Gastos aprobados (total)</div>
+              <p className="text-lg font-semibold text-amber-700">{formatMoney(pipeline.approvedTotal)}</p>
+              <p className="text-xs text-muted-foreground">{pipeline.approvedCount} por pagar</p>
+            </div>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">En flujo solicitud</div>
+              <p className="text-lg font-semibold">{formatMoney(pipeline.pendingTotal)}</p>
+              <p className="text-xs text-muted-foreground">{pipeline.pendingCount} solicitudes</p>
+            </div>
+            <div className="stat-card">
+              <div className="text-muted-foreground text-xs mb-1">Tendencia</div>
+              <p className="text-xs text-muted-foreground leading-snug">
+                Últimos 12 meses: solo gastos pagados (sin ingresos Savio en esta vista).
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="glass-card rounded-xl border border-border/50 p-4">
+        <h3 className="text-sm font-medium mb-1">Tendencia: últimos 12 meses</h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          {savioEnabled
+            ? "Cobrado por payment_date vs gastos pagados por mes."
+            : "Gastos pagados por mes (mismo criterio de fechas que arriba)."}
+        </p>
+        {savioEnabled && isLoading ? (
+          <Skeleton className="h-[280px] w-full rounded-lg" />
+        ) : (
+          <div className="h-[280px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v: number) => formatMoney(v)} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {savioEnabled && (
+                  <Bar dataKey="ingresos" name="Cobrado (pagos)" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
+                )}
+                <Bar dataKey="gastos" name="Gastos pagados" fill="hsl(270 60% 52%)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        {!savioEnabled && chartData.every((d) => d.gastos === 0) && (
+          <p className="text-sm text-muted-foreground text-center py-4">Sin gastos pagados en esta ventana.</p>
+        )}
+      </div>
+
+      {savioEnabled && (
         <div className="glass-card rounded-xl border border-border/50 p-4">
           <h3 className="text-sm font-medium mb-1">Cargos por estado (Savio)</h3>
-          <p className="text-xs text-muted-foreground mb-4">Suma de montos en la lista de facturas/cargos</p>
-          {apiLoading ? (
+          <p className="text-xs text-muted-foreground mb-4">
+            Lista de facturas en la ventana consultada (hasta ~48 meses atrás); heurística por estado textual.
+          </p>
+          {isLoading ? (
             <Skeleton className="h-[220px] w-full rounded-lg" />
           ) : pieData.length === 0 ? (
             <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
-              {apiIncomplete
+              {savioHint || reactQueryError
                 ? "Sin datos de cargos o la API no respondió. Revisa conexión Savio en la pestaña Ingresos."
                 : "Ningún monto clasificado en cargos. Los estados pueden venir vacíos o en otro formato."}
             </div>
@@ -178,26 +325,7 @@ export function FinanceExecutiveSummary({ expenses }: Props) {
             <li>Por cobrar / otro: {formatMoney(buckets.por_cobrar)}</li>
           </ul>
         </div>
-
-        <div className="glass-card rounded-xl border border-border/50 p-4">
-          <h3 className="text-sm font-medium mb-1">Ingresos (pagos) vs gastos pagados</h3>
-          <p className="text-xs text-muted-foreground mb-4">Misma ventana de 30 días en gastos; pagos Savio de la lista actual</p>
-          {apiLoading ? (
-            <Skeleton className="h-[220px] w-full rounded-lg" />
-          ) : (
-            <div className="h-[240px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={compareData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-12} textAnchor="end" height={56} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: number) => formatMoney(v)} />
-                  <Bar dataKey="monto" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
