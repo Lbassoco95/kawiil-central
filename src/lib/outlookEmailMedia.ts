@@ -272,6 +272,9 @@ export function inferMimeFromFileName(name: string): string | null {
   if (/\.bmp$/i.test(n)) return "image/bmp";
   if (/\.(tiff?)$/i.test(n)) return "image/tiff";
   if (/\.pdf$/i.test(n)) return "application/pdf";
+  if (/\.docx$/i.test(n)) {
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  }
   return null;
 }
 
