@@ -26,6 +26,27 @@ type InvokeResult = {
   message?: string;
 };
 
+async function invokeErrorBody(error: unknown): Promise<InvokeResult | null> {
+  if (!error || typeof error !== "object") return null;
+  const ctx = (error as { context?: unknown }).context;
+  if (
+    ctx &&
+    typeof ctx === "object" &&
+    "json" in ctx &&
+    typeof (ctx as Response).json === "function"
+  ) {
+    try {
+      const parsed = await (ctx as Response).json();
+      if (parsed && typeof parsed === "object") {
+        return { ok: false, ...(parsed as InvokeResult) };
+      }
+    } catch {
+      /* cuerpo no JSON */
+    }
+  }
+  return null;
+}
+
 async function fetchSavioResource(
   action: SavioFinanceApiAction,
   query: Record<string, string>,
@@ -34,6 +55,8 @@ async function fetchSavioResource(
     body: { action, query },
   });
   if (error) {
+    const fromHttp = await invokeErrorBody(error);
+    if (fromHttp) return fromHttp;
     return { ok: false, error: error.message || "invoke_error" };
   }
   return (data || {}) as InvokeResult;

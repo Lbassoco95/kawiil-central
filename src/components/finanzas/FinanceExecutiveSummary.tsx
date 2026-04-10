@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Expense } from "@/hooks/useExpenses";
 import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
 import { computeSavioIncomeBuckets } from "@/lib/savioApiNormalize";
+import { savioFinanceApiFailureHint } from "@/lib/savioFinanceApiHints";
 
 const PIE_COLORS = {
   cobrado: "hsl(142 76% 36%)",
@@ -95,6 +96,9 @@ export function FinanceExecutiveSummary({ expenses }: Props) {
     invoiceRows.length === 0 &&
     paymentAgg.withAmount === 0;
 
+  const savioConfigHint =
+    savioFinanceApiFailureHint(invoicesMeta) ?? savioFinanceApiFailureHint(paymentsMeta);
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted-foreground max-w-3xl">
@@ -102,9 +106,11 @@ export function FinanceExecutiveSummary({ expenses }: Props) {
         estado; si Savio usa otros valores, los totales se pueden afinar más adelante.
       </p>
 
-      {reactQueryError && (
+      {(reactQueryError || savioConfigHint) && (
         <p className="text-xs text-destructive border border-destructive/30 rounded-lg px-3 py-2">
-          Error al cargar Savio: {reactQueryError.message}
+          {reactQueryError
+            ? `Error al cargar Savio: ${reactQueryError.message}`
+            : savioConfigHint}
         </p>
       )}
 

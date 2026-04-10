@@ -66,9 +66,9 @@ Deno.serve(async (req) => {
           ok: false,
           error: "missing_secrets",
           missing,
-          hint: "Supabase Dashboard → Edge Functions → Secrets.",
+          hint: "Supabase Dashboard → Project Settings → Edge Functions → Secrets",
         }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 

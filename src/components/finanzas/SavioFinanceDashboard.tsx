@@ -47,32 +47,12 @@ import {
 } from "@/lib/savioPayload";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { savioFinanceApiFailureHint } from "@/lib/savioFinanceApiHints";
 
 const EVENT_FILTER_ALL = "todos";
 
 function formatMoney(n: number) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
-}
-
-function savioApiFailureHint(meta: {
-  ok?: boolean;
-  error?: string;
-  missing?: string[];
-  data?: unknown;
-  savio_http_status?: number;
-} | undefined) {
-  if (!meta || meta.ok === true) return null;
-  if (typeof meta.error === "string" && meta.error) return meta.error;
-  if (meta.ok === undefined && !meta.missing && meta.savio_http_status === undefined) return null;
-  if (meta.missing?.length) return `Faltan secretos en Supabase: ${meta.missing.join(", ")}.`;
-  const d = meta.data;
-  if (d && typeof d === "object" && "error" in d) {
-    return `Savio: ${String((d as { error: unknown }).error)}`;
-  }
-  if (typeof meta.savio_http_status === "number") {
-    return `Savio respondió HTTP ${meta.savio_http_status}. Revisa la ruta en la documentación (app.savio.mx/docs) y los secretos SAVIO_API_PATH_* si aplica.`;
-  }
-  return "No se pudo leer desde Savio. Comprueba API key y URL base.";
 }
 
 export function SavioFinanceDashboard() {
@@ -183,8 +163,8 @@ export function SavioFinanceDashboard() {
     }
   }
 
-  const invoiceFail = savioApiFailureHint(invoicesMeta);
-  const paymentFail = savioApiFailureHint(paymentsMeta);
+  const invoiceFail = savioFinanceApiFailureHint(invoicesMeta);
+  const paymentFail = savioFinanceApiFailureHint(paymentsMeta);
 
   function refreshCurrent() {
     if (section === "resumen") void refetchAll();

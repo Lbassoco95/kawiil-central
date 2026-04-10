@@ -128,9 +128,15 @@ Deno.serve(async (req) => {
     if (!base) missing.push("SAVIO_API_BASE_URL");
     if (!apiKey) missing.push("SAVIO_API_KEY");
     if (missing.length > 0) {
+      //200 para que el cliente JS reciba el cuerpo JSON (evita FunctionsHttpError / pantalla en blanco en Lovable).
       return new Response(
-        JSON.stringify({ ok: false, error: "missing_secrets", missing }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({
+          ok: false,
+          error: "missing_secrets",
+          missing,
+          hint: "Supabase Dashboard → Project Settings → Edge Functions → Secrets",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
