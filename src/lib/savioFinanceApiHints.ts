@@ -35,6 +35,20 @@ export function savioFinanceApiFailureHint(meta: SavioInvokeMeta | undefined): s
   if (meta.missing?.length) {
     return savioMissingSecretsUserMessage(meta.missing);
   }
+  if (meta.ok === false && meta.savio_http_status === 401) {
+    const detail =
+      meta.data && typeof meta.data === "object" && "error" in meta.data
+        ? String((meta.data as { error: unknown }).error)
+        : "";
+    return [
+      "Savio respondió 401: la API key no fue aceptada.",
+      detail ? `Detalle: ${detail}` : "",
+      "Comprueba clave y entorno (sandbox: https://api-sandbox.savio.mx).",
+      "Si sigue fallando, en Supabase Secrets prueba SAVIO_API_AUTH_MODE=bearer (por defecto enviamos la clave sin prefijo Bearer, según OpenAPI de Savio).",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
   if (typeof meta.error === "string" && meta.error) return meta.error;
   if (meta.ok === undefined && !meta.missing && meta.savio_http_status === undefined) return null;
   const d = meta.data;

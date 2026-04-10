@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { savioAuthorizationHeaderValue } from "../_shared/savioAuthHeaders.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
     }
 
     const savioRes = await fetch(`${base}/api/v1/me`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: savioAuthorizationHeaderValue(apiKey) },
     });
 
     let savioErrorMessage: string | undefined;
@@ -99,7 +100,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify(body), {
-      status: ok ? 200 : 502,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

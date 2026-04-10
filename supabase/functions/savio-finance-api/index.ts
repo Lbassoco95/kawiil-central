@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { savioAuthorizationHeaderValue } from "../_shared/savioAuthHeaders.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -144,7 +145,7 @@ Deno.serve(async (req) => {
     const savioRes = await fetch(url, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: savioAuthorizationHeaderValue(apiKey),
         Accept: "application/json",
       },
     });
@@ -157,7 +158,7 @@ Deno.serve(async (req) => {
           error: "response_too_large",
           savio_http_status: savioRes.status,
         }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -168,6 +169,7 @@ Deno.serve(async (req) => {
       parsed = { _raw: text.slice(0, 2000) };
     }
 
+    // Siempre 200 para que supabase.functions.invoke devuelva `data` (evita pantalla en blanco en Lovable).
     return new Response(
       JSON.stringify({
         ok: savioRes.ok,
@@ -176,10 +178,7 @@ Deno.serve(async (req) => {
         path: relPath,
         data: parsed,
       }),
-      {
-        status: savioRes.ok ? 200 : 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
     console.error("savio-finance-api:", e);
