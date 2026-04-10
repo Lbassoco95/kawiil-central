@@ -1,5 +1,29 @@
 import { supabase } from "@/integrations/supabase/client";
 
+type InvokePayload = { error?: string; message?: string };
+
+/**
+ * Mensaje para el usuario cuando la Edge Function responde error pero el cuerpo JSON trae detalle.
+ */
+export function functionInvokeUserMessage(data: unknown, invokeError: unknown): string {
+  const payload = data as InvokePayload | null;
+  if (payload && typeof payload === "object") {
+    if (payload.error === "fiel_not_configured") {
+      return (
+        "Falta el secreto MOFFIN_FIEL_SECRET en Supabase (Project Settings → Edge Functions → Secrets). " +
+        "Debe tener al menos 32 caracteres. Un administrador del proyecto debe crearlo; luego vuelve a guardar la FIEL."
+      );
+    }
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message;
+    }
+    if (typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error;
+    }
+  }
+  return invokeError instanceof Error ? invokeError.message : "La función devolvió un error.";
+}
+
 /**
  * Invoca una Edge Function con el access_token actual (evita 401 si invoke no adjunta el header).
  */

@@ -36,6 +36,8 @@ Otras con JWT en gateway (por defecto):
 
 Si el cliente muestra "Failed to send a request to the Edge Function", suele ser función no desplegada en ese proyecto o `VITE_SUPABASE_URL` apuntando a otro Supabase que no tiene esa función.
 
+**Moffin FIEL (`moffin-fiel`, guardar .cer/.key cifrados):** en **Edge Functions → Secrets** debe existir `MOFFIN_FIEL_SECRET` con **mínimo 32 caracteres** (cadena aleatoria fuerte; no es la contraseña del SAT). Sin él, al guardar FIEL la función responde **503** `fiel_not_configured`. CLI: `openssl rand -base64 48 | tr -d '\n'` y `supabase secrets set MOFFIN_FIEL_SECRET="..."`.
+
 OAuth Slack por usuario (`slack-user-auth` / `slack-user-callback`): en **Project Settings → Edge Functions → Secrets** del proyecto Supabase deben existir al menos `SLACK_CLIENT_ID` y `SLACK_CLIENT_SECRET` (de la app en [api.slack.com/apps](https://api.slack.com/apps)). Sin `SLACK_CLIENT_ID`, la función responde 500 con `Slack OAuth not configured`. Opcional: `SLACK_USER_SCOPES` (si no, usa los del código).
 
 La Edge `slack-api` expone acciones entre otras: `conversations.list`, `conversations.history`, `conversations.members`, `conversations.members.batch`, `conversations.replies`, `conversations.info`, `chat.postMessage`, `users.info.batch` (JWT en gateway según `supabase/config.toml`).

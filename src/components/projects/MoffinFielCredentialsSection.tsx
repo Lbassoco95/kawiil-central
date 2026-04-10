@@ -13,7 +13,10 @@ import {
 import { toast } from "sonner";
 import { KeyRound, Upload, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
+import {
+  functionInvokeUserMessage,
+  invokeFunctionWithSession,
+} from "@/lib/supabaseInvoke";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -48,10 +51,9 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
         action: "status",
         clientId,
       });
-      if (error) throw new Error(error.message);
       const payload = (data ?? {}) as FielStatus & { error?: string; message?: string };
-      if (payload.error) {
-        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
+      if (payload.error || error) {
+        throw new Error(functionInvokeUserMessage(data, error));
       }
       return payload as FielStatus;
     },
@@ -71,10 +73,9 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
         certificateBase64,
         privateKeyBase64,
       });
-      if (error) throw new Error(error.message);
-      const payload = (data ?? {}) as { error?: string; message?: string };
-      if (payload.error) {
-        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
+      const payload = (data ?? {}) as { error?: string; message?: string; ok?: boolean };
+      if (payload.error || error) {
+        throw new Error(functionInvokeUserMessage(data, error));
       }
     },
     onSuccess: () => {
@@ -95,10 +96,9 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
         action: "delete",
         clientId,
       });
-      if (error) throw new Error(error.message);
       const payload = (data ?? {}) as { error?: string; message?: string };
-      if (payload.error) {
-        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
+      if (payload.error || error) {
+        throw new Error(functionInvokeUserMessage(data, error));
       }
     },
     onSuccess: () => {
