@@ -14,6 +14,13 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
         "Debe tener al menos 32 caracteres. Un administrador del proyecto debe crearlo; luego vuelve a guardar la FIEL."
       );
     }
+    if (payload.error === "moffin_not_configured") {
+      return (
+        "Falta MOFFIN_API_KEY en Supabase (Edge Functions → Secrets): es el token de API de tu cuenta Moffin " +
+        "(producción o sandbox, según MOFFIN_BASE_URL). Sin esta clave no se pueden ejecutar consultas SAT " +
+        "(69-B, constancia, opinión)."
+      );
+    }
     if (typeof payload.message === "string" && payload.message.trim()) {
       return payload.message;
     }

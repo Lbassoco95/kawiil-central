@@ -54,7 +54,10 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PhaseTaskRow } from "./PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { toast } from "sonner";
-import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
+import {
+  functionInvokeUserMessage,
+  invokeFunctionWithSession,
+} from "@/lib/supabaseInvoke";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -464,13 +467,8 @@ export function AccountingDashboard({
           consult?: unknown;
           statusCode?: number;
         };
-        if (error && !payload?.error && !payload?.consult) {
-          throw new Error(error.message || "Error al invocar Moffin");
-        }
-        if (payload?.error) {
-          toast.error(
-            typeof payload.message === "string" ? payload.message : payload.error
-          );
+        if (payload.error || error) {
+          toast.error(functionInvokeUserMessage(data, error));
           if (payload.consult) {
             queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
           }
