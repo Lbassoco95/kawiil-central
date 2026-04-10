@@ -162,6 +162,24 @@ async function handleMessageNotificationEvent(
     targets.set(w.user_id, { organization_id: w.organization_id });
   }
 
+  /** VIP: cada mensaje en la conversación; ignora notify_slack_channel_watch pero respeta notify_slack_vip. */
+  const { data: vipRows } = await supabase
+    .from("slack_communication_prefs")
+    .select("user_id, organization_id")
+    .eq("channel_id", channel)
+    .eq("is_vip", true);
+
+  for (const v of vipRows || []) {
+    if (v.user_id === senderKawiilId) continue;
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("notify_slack_vip")
+      .eq("user_id", v.user_id)
+      .maybeSingle();
+    if (prof?.notify_slack_vip === false) continue;
+    targets.set(v.user_id, { organization_id: v.organization_id });
+  }
+
   if (targets.size === 0) return;
 
   const preview = text.replace(/<@[A-Z0-9]+>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 200);

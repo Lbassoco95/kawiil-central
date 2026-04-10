@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,7 +22,9 @@ import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDraf
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
 import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
 import { SlackWorkspaceLayout } from "@/components/slack/SlackWorkspaceLayout";
-import { SlackConversationList } from "@/components/slack/SlackConversationList";
+import { SlackConversationList, type SlackCommPrefRow } from "@/components/slack/SlackConversationList";
+import { SlackStatusPresets } from "@/components/slack/SlackStatusPresets";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SlackChannelHeader } from "@/components/slack/SlackChannelHeader";
 import { SlackMessageList } from "@/components/slack/SlackMessageList";
 import { SlackComposer } from "@/components/slack/SlackComposer";
@@ -30,7 +32,7 @@ import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { Button } from "@/components/ui/button";
 import { conversationTitle } from "@/components/slack/slackGrouping";
-import { Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
+import { Bell, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 type HistoryPage = {
@@ -115,6 +117,100 @@ export default function Comunicacion() {
     enabled: !!user && isConnected,
   });
 
+  const { data: slackCommPrefs = [], isFetched: slackPrefsFetched } = useQuery({
+    queryKey: ["slack-comm-prefs", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("slack_communication_prefs").select("*").eq("user_id", user!.id);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id && isConnected,
+  });
+
+  const vapidConfigured = !!(import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)?.trim();
+
+  const { data: pushSetup } = useQuery({
+    queryKey: ["comunicacion-push-setup", user?.id],
+    queryFn: async () => {
+      const [{ count }, { data: prof }] = await Promise.all([
+        supabase.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", user!.id),
+        supabase.from("profiles").select("desktop_push_notifications").eq("user_id", user!.id).single(),
+      ]);
+      return {
+        subCount: count ?? 0,
+        desktopPush: prof?.desktop_push_notifications === true,
+      };
+    },
+    enabled: !!user?.id && isConnected,
+  });
+
+  const commPrefsByChannel = useMemo(() => {
+    const r: Record<string, SlackCommPrefRow> = {};
+    for (const row of slackCommPrefs) {
+      r[row.channel_id] = {
+        is_vip: row.is_vip,
+        is_starred: row.is_starred,
+        sort_order: row.sort_order,
+      };
+    }
+    return r;
+  }, [slackCommPrefs]);
+
+  const savePrefMutation = useMutation({
+    mutationFn: async (p: {
+      delete?: boolean;
+      channelId: string;
+      is_vip?: boolean;
+      is_starred?: boolean;
+      sort_order?: number;
+    }) => {
+      if (!user?.id || !profile?.organization_id) throw new Error("Sin sesión u organización");
+      if (p.delete) {
+        const { error } = await supabase
+          .from("slack_communication_prefs")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("channel_id", p.channelId);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.from("slack_communication_prefs").upsert(
+        {
+          user_id: user.id,
+          organization_id: profile.organization_id,
+          channel_id: p.channelId,
+          is_vip: p.is_vip!,
+          is_starred: p.is_starred!,
+          sort_order: p.sort_order!,
+        },
+        { onConflict: "user_id,channel_id" },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user?.id] }),
+  });
+
+  const reorderPrefsMutation = useMutation({
+    mutationFn: async (rows: { channelId: string; is_vip: boolean; is_starred: boolean; sort_order: number }[]) => {
+      if (!user?.id || !profile?.organization_id) throw new Error("Sin sesión u organización");
+      for (const r of rows) {
+        const { error } = await supabase.from("slack_communication_prefs").upsert(
+          {
+            user_id: user.id,
+            organization_id: profile.organization_id,
+            channel_id: r.channelId,
+            is_vip: r.is_vip,
+            is_starred: r.is_starred,
+            sort_order: r.sort_order,
+          },
+          { onConflict: "user_id,channel_id" },
+        );
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user?.id] }),
+  });
+
   const conversationsQuery = useQuery({
     queryKey: ["slack-conversations", connection?.id],
     queryFn: () => fetchAllSlackConversations(),
@@ -123,6 +219,137 @@ export default function Comunicacion() {
   });
 
   const conversations = conversationsQuery.data || [];
+
+  useEffect(() => {
+    if (!user?.id || !profile?.organization_id || !isConnected || !conversationsQuery.isSuccess || !slackPrefsFetched) {
+      return;
+    }
+    const mark = `slack-prefs-migrated-${user.id}`;
+    if (localStorage.getItem(mark)) return;
+    if (slackCommPrefs.length > 0) return;
+    let ids: string[] = [];
+    try {
+      const raw = localStorage.getItem(`slack-sidebar-fav-${user.id}`);
+      ids = raw ? (JSON.parse(raw) as unknown[]) : [];
+      if (!Array.isArray(ids)) ids = [];
+    } catch {
+      localStorage.setItem(mark, "1");
+      return;
+    }
+    ids = ids.filter((x): x is string => typeof x === "string" && conversations.some((c) => c.id === x));
+    if (ids.length === 0) {
+      localStorage.setItem(mark, "1");
+      return;
+    }
+    void (async () => {
+      const rows = ids.map((channel_id, i) => ({
+        user_id: user.id,
+        organization_id: profile.organization_id,
+        channel_id,
+        is_vip: false,
+        is_starred: true,
+        sort_order: i,
+      }));
+      const { error } = await supabase.from("slack_communication_prefs").upsert(rows, {
+        onConflict: "user_id,channel_id",
+      });
+      if (!error) {
+        localStorage.setItem(mark, "1");
+        qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user.id] });
+      }
+    })();
+  }, [
+    user?.id,
+    profile?.organization_id,
+    isConnected,
+    conversationsQuery.isSuccess,
+    conversations,
+    slackPrefsFetched,
+    slackCommPrefs.length,
+    qc,
+  ]);
+
+  const handleToggleVip = useCallback(
+    (channelId: string) => {
+      const cur = commPrefsByChannel[channelId] || { is_vip: false, is_starred: false, sort_order: 0 };
+      const nv = !cur.is_vip;
+      if (!nv && !cur.is_starred) {
+        savePrefMutation.mutate({ channelId, delete: true });
+        return;
+      }
+      let sort = cur.sort_order;
+      if (nv) {
+        const orders = Object.values(commPrefsByChannel)
+          .filter((p) => p.is_vip)
+          .map((p) => p.sort_order);
+        sort = (orders.length ? Math.max(...orders) : -1) + 1;
+      }
+      savePrefMutation.mutate({
+        channelId,
+        is_vip: nv,
+        is_starred: cur.is_starred,
+        sort_order: sort,
+      });
+    },
+    [commPrefsByChannel, savePrefMutation],
+  );
+
+  const handleToggleStar = useCallback(
+    (channelId: string) => {
+      const cur = commPrefsByChannel[channelId] || { is_vip: false, is_starred: false, sort_order: 0 };
+      const ns = !cur.is_starred;
+      if (!ns && !cur.is_vip) {
+        savePrefMutation.mutate({ channelId, delete: true });
+        return;
+      }
+      let sort = cur.sort_order;
+      if (ns && !cur.is_starred) {
+        const orders = Object.values(commPrefsByChannel)
+          .filter((p) => p.is_starred && !p.is_vip)
+          .map((p) => p.sort_order);
+        sort = (orders.length ? Math.max(...orders) : -1) + 1;
+      }
+      savePrefMutation.mutate({
+        channelId,
+        is_vip: cur.is_vip,
+        is_starred: ns,
+        sort_order: sort,
+      });
+    },
+    [commPrefsByChannel, savePrefMutation],
+  );
+
+  const handleReorderVip = useCallback(
+    (orderedChannelIds: string[]) => {
+      const rows = orderedChannelIds.map((channelId, i) => {
+        const cur = commPrefsByChannel[channelId] || { is_vip: true, is_starred: false, sort_order: i };
+        return {
+          channelId,
+          is_vip: true,
+          is_starred: cur.is_starred,
+          sort_order: i,
+        };
+      });
+      reorderPrefsMutation.mutate(rows);
+    },
+    [commPrefsByChannel, reorderPrefsMutation],
+  );
+
+  const handleReorderStarred = useCallback(
+    (orderedChannelIds: string[]) => {
+      const rows = orderedChannelIds.map((channelId, i) => {
+        const cur = commPrefsByChannel[channelId] || { is_vip: false, is_starred: true, sort_order: i };
+        return {
+          channelId,
+          is_vip: false,
+          is_starred: true,
+          sort_order: i,
+        };
+      });
+      reorderPrefsMutation.mutate(rows);
+    },
+    [commPrefsByChannel, reorderPrefsMutation],
+  );
 
   const mpimIds = useMemo(() => conversations.filter((c) => c.is_mpim).map((c) => c.id), [conversations]);
 
@@ -410,6 +637,11 @@ export default function Comunicacion() {
     );
   }
 
+  const pushNeedsSetup =
+    isConnected &&
+    pushSetup &&
+    (!pushSetup.desktopPush || pushSetup.subCount === 0);
+
   const sidebar = (
     <SlackConversationList
       conversations={conversations}
@@ -419,9 +651,33 @@ export default function Comunicacion() {
       isLoading={conversationsQuery.isLoading}
       error={conversationsQuery.error as Error | null}
       titleOpts={titleOpts}
-      userId={user?.id}
+      commPrefsByChannel={commPrefsByChannel}
+      onToggleVip={handleToggleVip}
+      onToggleStar={handleToggleStar}
+      onReorderVip={handleReorderVip}
+      onReorderStarred={handleReorderStarred}
       headerActions={
         <div className="flex flex-col gap-1.5">
+          {pushNeedsSetup && (
+            <Alert className="border-amber-800/60 bg-amber-950/30 text-amber-100 py-2 px-3">
+              <Bell className="h-4 w-4 text-amber-400" />
+              <AlertTitle className="text-xs font-semibold mb-1">Avisos fuera de la app</AlertTitle>
+              <AlertDescription className="text-[11px] text-amber-100/90 leading-snug">
+                {vapidConfigured ? (
+                  <>
+                    Para recibir mensajes de Slack con la pestaña cerrada, activa push en{" "}
+                    <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                      Notificaciones
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  "Falta configurar VITE_VAPID_PUBLIC_KEY en el entorno (build) y los secretos VAPID en Supabase."
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+          <SlackStatusPresets />
           <Button
             type="button"
             variant="secondary"
@@ -439,7 +695,7 @@ export default function Comunicacion() {
             className="w-full h-7 text-[10px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
             onClick={() => connect()}
             disabled={isConnecting}
-            title="Vuelve a abrir Slack para aplicar permisos nuevos (im:write, mpim:write)"
+            title="Vuelve a abrir Slack para aplicar permisos (p. ej. users.profile:write para estado)"
           >
             {isConnecting ? (
               <Loader2 className="h-3 w-3 mr-1 animate-spin shrink-0" />

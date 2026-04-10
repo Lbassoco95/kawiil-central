@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { urlBase64ToUint8Array } from "@/lib/webPush";
+import { registerWebPushSubscription } from "@/lib/registerWebPush";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
@@ -117,7 +117,7 @@ function NotificationDeliveryPreferences() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "desktop_browser_notifications, desktop_push_notifications, notify_slack_mentions, notify_slack_channel_watch",
+          "desktop_browser_notifications, desktop_push_notifications, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip",
         )
         .eq("user_id", user!.id)
         .single();
@@ -153,23 +153,7 @@ function NotificationDeliveryPreferences() {
 
   const registerPush = useMutation({
     mutationFn: async () => {
-      if (!vapid?.trim()) throw new Error("VAPID no configurado (VITE_VAPID_PUBLIC_KEY)");
-      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-        throw new Error("Push no disponible en este navegador");
-      }
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapid.trim()),
-      });
-      const j = sub.toJSON();
-      if (!j.endpoint || !j.keys?.p256dh || !j.keys?.auth) throw new Error("Suscripción inválida");
-      const { data, error } = await supabase.functions.invoke("push-subscribe", {
-        body: { endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth } },
-      });
-      if (error) throw error;
-      const d = data as { error?: string };
-      if (d?.error) throw new Error(d.error);
+      await registerWebPushSubscription();
       const { error: uerr } = await supabase
         .from("profiles")
         .update({ desktop_push_notifications: true })
@@ -178,7 +162,42 @@ function NotificationDeliveryPreferences() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
+      qc.invalidateQueries({ queryKey: ["comunicacion-push-setup", user?.id] });
       toast.success("Avisos con la app cerrada activados");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const toggleDesktopPush = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      if (!enabled) {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ desktop_push_notifications: false })
+          .eq("user_id", user!.id);
+        if (error) throw error;
+        return;
+      }
+      if (!vapid?.trim()) {
+        throw new Error("VAPID no configurado (VITE_VAPID_PUBLIC_KEY). Configura la variable en el build.");
+      }
+      if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+        const p = await Notification.requestPermission();
+        if (p !== "granted") {
+          throw new Error("Permiso de notificaciones denegado. Actívalo en el candado del sitio.");
+        }
+      }
+      await registerWebPushSubscription();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ desktop_push_notifications: true })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, enabled) => {
+      qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
+      qc.invalidateQueries({ queryKey: ["comunicacion-push-setup", user?.id] });
+      if (enabled) toast.success("Push activado: recibirás avisos aunque cierres la pestaña");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -221,8 +240,21 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.desktop_push_notifications === true}
+            disabled={toggleDesktopPush.isPending || updateFields.isPending || !profile}
+            onCheckedChange={(v) => toggleDesktopPush.mutate(v)}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Slack: conversaciones VIP (siempre notificar)</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Marca canales o DMs como VIP en Comunicación. Si lo desactivas, conservas la lista pero no recibes avisos.
+            </p>
+          </div>
+          <Switch
+            checked={profile?.notify_slack_vip !== false}
             disabled={updateFields.isPending || !profile}
-            onCheckedChange={(v) => updateFields.mutate({ desktop_push_notifications: v })}
+            onCheckedChange={(v) => updateFields.mutate({ notify_slack_vip: v })}
           />
         </div>
         <div className="flex items-center justify-between gap-4">

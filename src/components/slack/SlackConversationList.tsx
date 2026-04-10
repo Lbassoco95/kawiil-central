@@ -1,8 +1,8 @@
-import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Hash, Lock, MessageCircle, Users, Search, ChevronDown, Star, GripVertical } from "lucide-react";
+import { Loader2, Hash, Lock, MessageCircle, Users, Search, ChevronDown, Star, GripVertical, Crown } from "lucide-react";
 import type { SlackConversation } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { groupSlackConversations, conversationTitle, type ConversationTitleOpts } from "./slackGrouping";
@@ -25,6 +25,12 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+export type SlackCommPrefRow = {
+  is_vip: boolean;
+  is_starred: boolean;
+  sort_order: number;
+};
+
 type Props = {
   conversations: SlackConversation[];
   userMap: Record<string, SlackUserProfile | undefined>;
@@ -33,29 +39,14 @@ type Props = {
   isLoading: boolean;
   error: Error | null;
   titleOpts?: ConversationTitleOpts;
-  userId?: string;
-  /** Controles encima del buscador (p. ej. nuevo DM). */
+  /** Preferencias por canal (VIP, destacado, orden). */
+  commPrefsByChannel: Record<string, SlackCommPrefRow>;
+  onToggleVip: (channelId: string) => void;
+  onToggleStar: (channelId: string) => void;
+  onReorderVip: (orderedChannelIds: string[]) => void;
+  onReorderStarred: (orderedChannelIds: string[]) => void;
   headerActions?: ReactNode;
 };
-
-function favStorageKey(uid: string | undefined) {
-  return uid ? `slack-sidebar-fav-${uid}` : "slack-sidebar-fav-anon";
-}
-
-function loadFavs(uid: string | undefined): Set<string> {
-  try {
-    const raw = localStorage.getItem(favStorageKey(uid));
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw) as string[];
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveFavs(uid: string | undefined, ids: string[]) {
-  localStorage.setItem(favStorageKey(uid), JSON.stringify(ids));
-}
 
 function SectionHeader({ label }: { label: string }) {
   return (
@@ -98,6 +89,8 @@ function ConvRow({
   isPublicChannel,
   starred,
   onToggleStar,
+  isVip,
+  onToggleVip,
 }: {
   c: SlackConversation;
   selected: boolean;
@@ -106,6 +99,8 @@ function ConvRow({
   isPublicChannel: boolean;
   starred?: boolean;
   onToggleStar?: () => void;
+  isVip?: boolean;
+  onToggleVip?: () => void;
 }) {
   return (
     <div
@@ -136,6 +131,22 @@ function ConvRow({
         )}
         <span className="truncate min-w-0">{isPublicChannel && c.name ? `#${c.name}` : title}</span>
       </button>
+      {onToggleVip && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleVip();
+          }}
+          className={cn(
+            "p-1.5 rounded-md shrink-0 text-zinc-500 hover:text-amber-300",
+            isVip && "text-amber-400",
+          )}
+          title={isVip ? "Quitar VIP (siempre notificar)" : "VIP: siempre notificar mensajes"}
+        >
+          <Crown className={cn("h-3.5 w-3.5", isVip && "fill-amber-400")} />
+        </button>
+      )}
       {onToggleStar && (
         <button
           type="button"
@@ -164,46 +175,14 @@ export function SlackConversationList({
   isLoading,
   error,
   titleOpts,
-  userId,
+  commPrefsByChannel,
+  onToggleVip,
+  onToggleStar,
+  onReorderVip,
+  onReorderStarred,
   headerActions,
 }: Props) {
   const [q, setQ] = useState("");
-  const [favSet, setFavSet] = useState<Set<string>>(() => loadFavs(userId));
-  const [favOrder, setFavOrder] = useState<string[]>(() => [...loadFavs(userId)]);
-
-  useEffect(() => {
-    setFavSet(loadFavs(userId));
-    setFavOrder([...loadFavs(userId)]);
-  }, [userId]);
-
-  const persistFavs = useCallback(
-    (next: Set<string>) => {
-      const ids = [...next];
-      setFavSet(new Set(ids));
-      saveFavs(userId, ids);
-      setFavOrder((prev) => {
-        const keep = prev.filter((id) => next.has(id));
-        const add = ids.filter((id) => !keep.includes(id));
-        return [...keep, ...add];
-      });
-    },
-    [userId],
-  );
-
-  const toggleStar = (id: string) => {
-    const next = new Set(favSet);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    persistFavs(next);
-  };
-
-  const groups = useMemo(() => groupSlackConversations(conversations), [conversations]);
-
-  const byId = useMemo(() => {
-    const m = new Map<string, SlackConversation>();
-    for (const c of conversations) m.set(c.id, c);
-    return m;
-  }, [conversations]);
 
   const filterMatch = (c: SlackConversation) => {
     if (!q.trim()) return true;
@@ -213,46 +192,84 @@ export function SlackConversationList({
     return t.includes(needle) || n.includes(needle) || c.id.toLowerCase().includes(needle);
   };
 
-  const favIdsOrdered = useMemo(() => {
-    const inFav = favOrder.filter((id) => favSet.has(id) && byId.has(id));
-    for (const id of favSet) {
-      if (byId.has(id) && !inFav.includes(id)) inFav.push(id);
-    }
-    return inFav;
-  }, [favSet, favOrder, byId]);
+  const pinnedOrVip = (c: SlackConversation) => {
+    const p = commPrefsByChannel[c.id];
+    return !!(p?.is_vip || p?.is_starred);
+  };
+
+  const vipOrdered = useMemo(() => {
+    const rows = conversations
+      .filter((c) => commPrefsByChannel[c.id]?.is_vip)
+      .map((c) => ({
+        c,
+        o: commPrefsByChannel[c.id]?.sort_order ?? 0,
+      }))
+      .sort((a, b) => a.o - b.o || a.c.id.localeCompare(b.c.id));
+    return rows.map((r) => r.c);
+  }, [conversations, commPrefsByChannel]);
+
+  const starredOrdered = useMemo(() => {
+    const rows = conversations
+      .filter((c) => commPrefsByChannel[c.id]?.is_starred && !commPrefsByChannel[c.id]?.is_vip)
+      .map((c) => ({
+        c,
+        o: commPrefsByChannel[c.id]?.sort_order ?? 0,
+      }))
+      .sort((a, b) => a.o - b.o || a.c.id.localeCompare(b.c.id));
+    return rows.map((r) => r.c);
+  }, [conversations, commPrefsByChannel]);
+
+  const groups = useMemo(() => groupSlackConversations(conversations), [conversations]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const onDragEnd = (event: DragEndEvent) => {
+  const onDragEndVip = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = favIdsOrdered.indexOf(String(active.id));
-    const newIndex = favIdsOrdered.indexOf(String(over.id));
+    const ids = vipOrdered.map((c) => c.id);
+    const oldIndex = ids.indexOf(String(active.id));
+    const newIndex = ids.indexOf(String(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(favIdsOrdered, oldIndex, newIndex);
-    setFavOrder(next);
-    saveFavs(userId, next);
+    onReorderVip(arrayMove(ids, oldIndex, newIndex));
+  };
+
+  const onDragEndStarred = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const ids = starredOrdered.map((c) => c.id);
+    const oldIndex = ids.indexOf(String(active.id));
+    const newIndex = ids.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    onReorderStarred(arrayMove(ids, oldIndex, newIndex));
   };
 
   const renderConv = (c: SlackConversation, isPublicChannel: boolean, sortable: boolean) => {
+    const p = commPrefsByChannel[c.id];
     const common = {
       c,
       selected: selectedChannel === c.id,
       onClick: () => onSelect(c.id),
       title: conversationTitle(c, userMap, titleOpts),
       isPublicChannel,
-      starred: favSet.has(c.id),
-      onToggleStar: () => toggleStar(c.id),
+      starred: !!p?.is_starred,
+      onToggleStar: () => onToggleStar(c.id),
+      isVip: !!p?.is_vip,
+      onToggleVip: () => onToggleVip(c.id),
     };
     if (sortable) {
       return <SortableConvRow key={c.id} id={c.id} {...common} />;
     }
-    return <ConvRow key={c.id} {...common} />;
+    return (
+      <div key={c.id} className="rounded-md">
+        <ConvRow {...common} />
+      </div>
+    );
   };
 
+  const [openVip, setOpenVip] = useState(true);
   const [openPub, setOpenPub] = useState(true);
   const [openPriv, setOpenPriv] = useState(true);
   const [openDm, setOpenDm] = useState(true);
@@ -270,11 +287,18 @@ export function SlackConversationList({
     return <div className="p-4 text-sm text-destructive">{error.message}</div>;
   }
 
-  const publicFiltered = groups.publicChannels.filter((c) => !favSet.has(c.id)).filter(filterMatch);
-  const privateFiltered = groups.privateChannels.filter((c) => !favSet.has(c.id)).filter(filterMatch);
-  const dmFiltered = groups.allDirectMessages.filter((c) => !favSet.has(c.id)).filter(filterMatch);
-  const favConvs = favIdsOrdered.map((id) => byId.get(id)).filter(Boolean) as SlackConversation[];
-  const favFiltered = favConvs.filter(filterMatch);
+  const vipFiltered = vipOrdered.filter(filterMatch);
+  const starFiltered = starredOrdered.filter(filterMatch);
+
+  const publicFiltered = groups.publicChannels
+    .filter((c) => !pinnedOrVip(c))
+    .filter(filterMatch);
+  const privateFiltered = groups.privateChannels
+    .filter((c) => !pinnedOrVip(c))
+    .filter(filterMatch);
+  const dmFiltered = groups.allDirectMessages
+    .filter((c) => !pinnedOrVip(c))
+    .filter(filterMatch);
 
   return (
     <div className="flex flex-col h-full min-h-0 text-zinc-100">
@@ -292,14 +316,32 @@ export function SlackConversationList({
       </div>
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-2 pb-6 space-y-1">
-          {favFiltered.length > 0 && (
+          {vipFiltered.length > 0 && (
+            <Collapsible open={openVip} onOpenChange={setOpenVip}>
+              <SectionHeader label="VIP · siempre notificar" />
+              <CollapsibleContent>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndVip}>
+                  <SortableContext items={vipFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-0.5 mt-1">
+                      {vipFiltered.map((c) => {
+                        const isPub = !c.is_private && !c.is_im && !c.is_mpim;
+                        return renderConv(c, isPub, true);
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {starFiltered.length > 0 && (
             <Collapsible open={openStar} onOpenChange={setOpenStar}>
               <SectionHeader label="Destacados" />
               <CollapsibleContent>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-                  <SortableContext items={favFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndStarred}>
+                  <SortableContext items={starFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-0.5 mt-1">
-                      {favFiltered.map((c) => {
+                      {starFiltered.map((c) => {
                         const isPub = !c.is_private && !c.is_im && !c.is_mpim;
                         return renderConv(c, isPub, true);
                       })}

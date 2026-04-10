@@ -2055,6 +2055,7 @@ export type Database = {
           desktop_push_notifications: boolean
           notify_slack_mentions: boolean
           notify_slack_channel_watch: boolean
+          notify_slack_vip: boolean
           updated_at: string
           user_id: string
         }
@@ -2078,6 +2079,7 @@ export type Database = {
           desktop_push_notifications?: boolean
           notify_slack_mentions?: boolean
           notify_slack_channel_watch?: boolean
+          notify_slack_vip?: boolean
           updated_at?: string
           user_id: string
         }
@@ -2101,6 +2103,7 @@ export type Database = {
           desktop_push_notifications?: boolean
           notify_slack_mentions?: boolean
           notify_slack_channel_watch?: boolean
+          notify_slack_vip?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -2706,6 +2709,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "slack_channel_watches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slack_communication_prefs: {
+        Row: {
+          id: string
+          user_id: string
+          organization_id: string
+          channel_id: string
+          is_vip: boolean
+          is_starred: boolean
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          organization_id: string
+          channel_id: string
+          is_vip?: boolean
+          is_starred?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          organization_id?: string
+          channel_id?: string
+          is_vip?: boolean
+          is_starred?: boolean
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slack_communication_prefs_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

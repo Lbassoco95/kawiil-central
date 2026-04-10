@@ -201,6 +201,22 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
   return res.json();
 }
 
+/** users.profile.set requiere `profile` como JSON en el cuerpo form-urlencoded. */
+async function slackUsersProfileSet(token: string, profile: Record<string, unknown>) {
+  const body = new URLSearchParams();
+  body.set("profile", JSON.stringify(profile));
+  const res = await fetch("https://slack.com/api/users.profile.set", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+  const data = (await res.json()) as Record<string, unknown>;
+  return annotateSlackResponse(data);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -432,6 +448,24 @@ Deno.serve(async (req) => {
       return jsonOk(data);
     }
 
+    if (action === "users.profile.set") {
+      const clear = json.clear_status === true;
+      const profileRaw = json.profile as Record<string, unknown> | undefined;
+      if (clear) {
+        const data = await slackUsersProfileSet(conn.access_token, {
+          status_text: "",
+          status_emoji: "",
+          status_expiration: 0,
+        });
+        return jsonOk(data);
+      }
+      if (!profileRaw || typeof profileRaw !== "object") {
+        return jsonOk({ ok: false, error: "profile object required, or clear_status: true" });
+      }
+      const data = await slackUsersProfileSet(conn.access_token, profileRaw);
+      return jsonOk(data);
+    }
+
     if (action === "files.upload") {
       const channel = json.channel as string;
       const filename = (json.filename as string) || "upload";
@@ -501,6 +535,7 @@ Deno.serve(async (req) => {
         "conversations.info",
         "chat.postMessage",
         "chat.scheduleMessage",
+        "users.profile.set",
         "files.upload",
         "users.info.batch",
       ],
