@@ -62,6 +62,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MoffinFielCredentialsSection } from "./MoffinFielCredentialsSection";
+import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 
 type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
 
@@ -71,25 +72,22 @@ function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
 
 const MOFFIN_CONSULT_META: Record<
   MoffinConsultType,
-  { label: string; short: string; icon: typeof ShieldAlert; apiNote: string }
+  { label: string; short: string; icon: typeof ShieldAlert }
 > = {
   lista_69b: {
     label: "Lista 69-B (SAT)",
     short: "69-B",
     icon: ShieldAlert,
-    apiNote: "POST /query/sat_blacklist",
   },
   constancia_situacion_fiscal: {
     label: "Constancia de situación fiscal",
     short: "Constancia",
     icon: FileBadge,
-    apiNote: "POST /query/sat_rfc (certificados)",
   },
   opinion_cumplimiento: {
     label: "Opinión de cumplimiento",
     short: "Opinión",
     icon: FileCheck2,
-    apiNote: "POST /query/sat_rfc (certificados)",
   },
 };
 
@@ -471,11 +469,17 @@ export function AccountingDashboard({
           toast.error(functionInvokeUserMessage(data, error));
           if (payload.consult) {
             queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
+            if (clientId) {
+              queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
+            }
           }
           return;
         }
         toast.success("Consulta Moffin registrada");
         queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
+        if (clientId) {
+          queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
+        }
         queryClient.invalidateQueries({ queryKey: ["documents"] });
       } catch (e: unknown) {
         toast.error(e instanceof Error ? e.message : "Error al consultar Moffin");
@@ -483,7 +487,7 @@ export function AccountingDashboard({
         setMoffinBusy(null);
       }
     },
-    [projectId, queryClient, moffinFielStatus?.configured, fielPassword]
+    [projectId, clientId, queryClient, moffinFielStatus?.configured, fielPassword]
   );
 
   const downloadMoffinFile = useCallback(async (filePath: string | null | undefined) => {
@@ -494,12 +498,6 @@ export function AccountingDashboard({
       return;
     }
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-  }, []);
-
-  const moffinWebhookUrl = useMemo(() => {
-    const base = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-    if (!base) return "";
-    return `${base.replace(/\/$/, "")}/functions/v1/moffin-webhook`;
   }, []);
 
   useEffect(() => {
@@ -545,44 +543,18 @@ export function AccountingDashboard({
 
       <Card className="border-border/80">
         <CardContent className="p-4 space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Consultas SAT (Moffin)</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5 max-w-xl">
-                Lista 69-B vía <code className="text-[10px]">/query/sat_blacklist</code>. Constancia y opinión se obtienen del mismo servicio de certificados{" "}
-                <code className="text-[10px]">/query/sat_rfc</code> (tipos en <code className="text-[10px]">certificates[].type</code>). Cada clic puede ser una
-                consulta cobrable. Para callbacks asíncronos (Svix), el endpoint debe ser{" "}
-                <code className="text-[10px] break-all">moffin-webhook</code> (no <code className="text-[10px]">moffin-query</code>) con secreto{" "}
-                <code className="text-[10px]">MOFFIN_SVIX_SIGNING_SECRET</code> en Supabase.
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
-                Cadencia sugerida en despacho: <span className="text-foreground/90">constancia mensual</span>,{" "}
-                <span className="text-foreground/90">opinión semanal</span>. Kawiil aún no dispara estas consultas solo; úsalas
-                desde aquí o automatiza fuera de la app si tu plan Moffin lo permite.
-              </p>
-              {moffinWebhookUrl ? (
-                <p className="text-[10px] text-muted-foreground font-mono break-all mt-1 max-w-2xl">
-                  URL webhook: {moffinWebhookUrl}
-                </p>
-              ) : null}
-            </div>
-          </div>
+          <h3 className="text-sm font-semibold text-foreground">Consultas SAT (Moffin)</h3>
+          {clientId ? (
+            <>
+              <MoffinSatStatusSummary
+                clientId={clientId}
+                title="Resumen para este cliente"
+                className="bg-muted/15 border-border/70"
+              />
+            </>
+          ) : null}
           {clientId ? (
             <div className="space-y-3">
-              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-1.5 text-[11px]">
-                <p className="font-medium text-foreground">e.firma y consultas Moffin</p>
-                <ol className="list-decimal list-inside space-y-1 text-muted-foreground leading-relaxed">
-                  <li>
-                    <span className="text-foreground font-medium">Primera vez:</span> usa el bloque de abajo para cargar{" "}
-                    <span className="text-foreground">.cer</span> y <span className="text-foreground">.key</span>.
-                  </li>
-                  <li>
-                    <span className="text-foreground font-medium">Después:</span> solo actualiza esos archivos si el SAT te
-                    renovó el certificado; para ejecutar constancia u opinión escribe la contraseña de la llave (no va al
-                    servidor).
-                  </li>
-                </ol>
-              </div>
               <MoffinFielCredentialsSection clientId={clientId} />
               {moffinFielStatus?.configured ? (
                 <div className="space-y-2 max-w-sm">

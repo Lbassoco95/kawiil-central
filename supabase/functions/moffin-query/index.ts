@@ -3,6 +3,7 @@ import {
   decryptFielSecret,
   formatFielMaterial,
 } from "../_shared/moffinFielCrypto.ts";
+import { buildMoffinPdfStoragePath } from "../_shared/moffinStoragePath.ts";
 
 /**
  * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs (ReDoc en https://moffin.mx/docs)
@@ -136,7 +137,7 @@ async function uploadPdfFromUrl(
   if (buf.length < 4 || !head.startsWith("%PDF")) {
     return null;
   }
-  const path = `${orgId}/moffin/${projectId}/${Date.now()}_${fileBase}.pdf`;
+  const path = buildMoffinPdfStoragePath(orgId, clientId, fileBase);
   const { error: upErr } = await admin.storage.from("documents").upload(path, buf, {
     contentType: "application/pdf",
     upsert: false,

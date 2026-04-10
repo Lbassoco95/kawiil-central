@@ -34,20 +34,10 @@ export function ClientSatFiscalSection({ client, projects }: ClientSatFiscalSect
         Constancia, opinión y 69-B (SAT)
       </h2>
       <div className="space-y-3 text-[13px] text-muted-foreground leading-relaxed">
-        <p>
-          En <strong className="text-foreground font-medium">Hub → Finanzas</strong> integración{" "}
-          <strong className="text-foreground font-medium">Savio</strong> es para cobranza y facturación. Las consultas de{" "}
-          <strong className="text-foreground font-medium">constancia de situación fiscal</strong>,{" "}
-          <strong className="text-foreground font-medium">opinión de cumplimiento</strong> y{" "}
-          <strong className="text-foreground font-medium">lista 69-B</strong> se ejecutan desde el{" "}
-          <strong className="text-foreground font-medium">proyecto de Contabilidad</strong> del cliente (integración Moffin),
-          usando el <strong className="text-foreground font-medium">RFC</strong> de esta ficha.
-        </p>
-               <p className="text-[12px]">
-          Uso habitual en despacho: <span className="text-foreground">constancia mensual</span>,{" "}
-          <span className="text-foreground">opinión semanal</span>. En la pestaña Contabilidad del proyecto, carga una vez el{" "}
-          <span className="text-foreground">.cer</span> y el <span className="text-foreground">.key</span>; la contraseña
-          de la e.firma se pide solo al ejecutar cada consulta.
+        <p className="text-[12px]">
+          Para ejecutar 69-B, constancia u opinión abre la pestaña{" "}
+          <strong className="text-foreground">Contabilidad</strong> del proyecto. El resumen SAT del cliente está al inicio
+          de esta pestaña General.
         </p>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <span className="text-muted-foreground">RFC:</span>
@@ -75,10 +65,6 @@ export function ClientSatFiscalSection({ client, projects }: ClientSatFiscalSect
             <span className="text-foreground whitespace-pre-wrap">{client.sat_fiel_location_hint}</span>
           </p>
         ) : null}
-        <p className="text-[11px] text-muted-foreground">
-          No guardamos contraseñas ni archivos de llave en Kawiil. Si Moffin pide credenciales para descargar un PDF, usa tu
-          flujo seguro habitual (por ejemplo contraseña fuera de la app).
-        </p>
         {accountingProjects.length === 0 ? (
           <p className="text-[12px] text-amber-700 dark:text-amber-400">
             No hay proyecto de contabilidad (o softlanding) activo para este cliente. Activa el servicio o crea el proyecto

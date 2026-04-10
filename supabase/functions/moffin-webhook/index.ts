@@ -9,6 +9,7 @@
  * Deploy: verify_jwt = false (ver supabase/config.toml)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildMoffinPdfStoragePath } from "../_shared/moffinStoragePath.ts";
 import { Webhook } from "npm:svix";
 
 const corsHeaders: Record<string, string> = {
@@ -171,7 +172,7 @@ async function uploadPdfFromUrl(
   if (buf.length < 4 || !head.startsWith("%PDF")) {
     return null;
   }
-  const path = `${orgId}/moffin/${projectId}/${Date.now()}_${fileBase}.pdf`;
+  const path = buildMoffinPdfStoragePath(orgId, clientId, fileBase);
   const { error: upErr } = await admin.storage.from("documents").upload(path, buf, {
     contentType: "application/pdf",
     upsert: false,

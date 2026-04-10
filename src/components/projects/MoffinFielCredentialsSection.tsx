@@ -122,13 +122,9 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
           <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-[11px] font-medium text-foreground">e.firma (FIEL) para constancia y opinión</span>
         </div>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
-          <strong className="text-foreground/90">Paso 1 (solo la primera vez o si cambias certificado):</strong> sube el{" "}
-          <strong className="text-foreground/90">.cer</strong> y el <strong className="text-foreground/90">.key</strong> del
-          contribuyente. <strong className="text-foreground/90">Paso 2 (cada consulta SAT):</strong> en la sección de
-          abajo escribe la contraseña de la llave; no la guardamos en servidor (opcional: recordar solo en esta sesión del
-          navegador). Si Moffin rechaza el payload, revisa variables <code className="text-[9px]">MOFFIN_FIEL_FIELD_*</code>{" "}
-          en Supabase.
+        <p className="text-[10px] text-muted-foreground">
+          Sube <strong className="text-foreground/90">.cer</strong> y{" "}
+          <strong className="text-foreground/90">.key</strong> una vez; la contraseña de la llave va abajo en cada consulta.
         </p>
         {isLoading ? (
           <p className="text-[10px] text-muted-foreground flex items-center gap-1">

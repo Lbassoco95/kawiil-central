@@ -11,6 +11,7 @@ import {
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
 import { ClientSatFiscalSection } from "@/components/clients/ClientSatFiscalSection";
+import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
 import { DropboxFolderBrowser } from "@/components/clients/DropboxFolderBrowser";
@@ -209,6 +210,8 @@ const ClienteDetalle = () => {
         {/* General Tab */}
         {tab === "general" && (
           <div className="grid gap-6 md:grid-cols-2 animate-fade-in">
+            <MoffinSatStatusSummary clientId={client.id} className="glass-card md:col-span-2" />
+
             <section className="glass-card p-5">
               <h2 className="text-sm font-medium text-muted-foreground mb-3">Contacto</h2>
               <div className="space-y-2.5">
