@@ -20,6 +20,7 @@ import {
   Wallet,
   BookOpen,
   Kanban,
+  MessageSquare,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar, moduleKey: "calendario" },
       { title: "Correo", url: "/microsoft365/correo", icon: Mail, moduleKey: "correo" },
+      { title: "Comunicación", url: "/comunicacion", icon: MessageSquare },
       { title: "Notificaciones", url: "/notificaciones", icon: Bell },
     ],
   },

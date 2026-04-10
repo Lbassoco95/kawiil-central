@@ -1,53 +1,22 @@
 import { ReactNode, useState, useEffect, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { NewTaskModalContext } from "@/contexts/NewTaskModalContext";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { AppSidebar } from "@/components/AppSidebar";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { GlobalAISearch } from "@/components/shared/GlobalAISearch";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { useNotificationDelivery } from "@/hooks/useNotificationDelivery";
 import { nowMX } from "@/lib/dateUtils";
 import { OPEN_NEW_TASK_MODAL_EVENT, openNewTaskModal } from "@/lib/openNewTaskModal";
 import { Clock } from "lucide-react";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
-  const { user } = useAuth();
-  const qc = useQueryClient();
   useTasksRealtime();
   useActivityTracker();
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const channel = supabase
-      .channel(`notifications-rt-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const row = payload.new as { title?: string; body?: string | null };
-          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-          if (row?.title) {
-            toast.info(row.title, { description: row.body || undefined });
-          }
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id, qc]);
+  useNotificationDelivery();
 
   const [currentTime, setCurrentTime] = useState(() => nowMX());
 

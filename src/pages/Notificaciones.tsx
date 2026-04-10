@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
@@ -15,17 +15,26 @@ import { formatMX } from "@/lib/dateUtils";
 import {
   AlertTriangle, CalendarClock, ArrowRight,
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
-  Bot, BrainCircuit, Settings, Sparkles, Lightbulb,
+  Bot, BrainCircuit, Settings, Sparkles, Lightbulb, Bell,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { urlBase64ToUint8Array } from "@/lib/webPush";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
 const MENTION_TYPES = ["mention"];
-const ACTIVITY_TYPES = ["task_assigned", "task_reassigned", "expense_created", "expense_status_changed"];
+const ACTIVITY_TYPES = [
+  "task_assigned",
+  "task_reassigned",
+  "expense_created",
+  "expense_status_changed",
+  "slack_message",
+];
 const KNOWN_TYPES = [...MENTION_TYPES, ...ACTIVITY_TYPES];
 
 function getNotificationIcon(type: string) {
@@ -37,6 +46,7 @@ function getNotificationIcon(type: string) {
   if (type === "deadline_due_tomorrow_task") return <CalendarClock className="h-3.5 w-3.5 text-amber-600" />;
   if (type === "improvement_suggestion") return <Lightbulb className="h-3.5 w-3.5 text-amber-500" />;
   if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-primary" />;
+  if (type === "slack_message") return <MessageSquare className="h-3.5 w-3.5 text-[#611f69]" />;
   return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
@@ -96,6 +106,170 @@ function NotificationAiPreferences() {
   );
 }
 
+function NotificationDeliveryPreferences() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const vapid = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+
+  const { data: profile } = useQuery({
+    queryKey: ["profile-notification-prefs", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(
+          "desktop_browser_notifications, desktop_push_notifications, notify_slack_mentions, notify_slack_channel_watch",
+        )
+        .eq("user_id", user!.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const updateFields = useMutation({
+    mutationFn: async (patch: Record<string, boolean>) => {
+      const { error } = await supabase.from("profiles").update(patch).eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
+      qc.invalidateQueries({ queryKey: ["notification-delivery-prefs", user?.id] });
+    },
+  });
+
+  const requestBrowserPermission = useCallback(async () => {
+    if (!("Notification" in window)) {
+      toast.error("Tu navegador no soporta notificaciones del sistema");
+      return;
+    }
+    const r = await Notification.requestPermission();
+    if (r === "granted") toast.success("Avisos del sistema activados");
+    else
+      toast.message("Permiso no concedido", {
+        description: "Actívalo en la configuración del sitio (candado en la barra de direcciones).",
+      });
+  }, []);
+
+  const registerPush = useMutation({
+    mutationFn: async () => {
+      if (!vapid?.trim()) throw new Error("VAPID no configurado (VITE_VAPID_PUBLIC_KEY)");
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        throw new Error("Push no disponible en este navegador");
+      }
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapid.trim()),
+      });
+      const j = sub.toJSON();
+      if (!j.endpoint || !j.keys?.p256dh || !j.keys?.auth) throw new Error("Suscripción inválida");
+      const { data, error } = await supabase.functions.invoke("push-subscribe", {
+        body: { endpoint: j.endpoint, keys: { p256dh: j.keys.p256dh, auth: j.keys.auth } },
+      });
+      if (error) throw error;
+      const d = data as { error?: string };
+      if (d?.error) throw new Error(d.error);
+      const { error: uerr } = await supabase
+        .from("profiles")
+        .update({ desktop_push_notifications: true })
+        .eq("user_id", user!.id);
+      if (uerr) throw uerr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
+      toast.success("Avisos con la app cerrada activados");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (!user) return null;
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Bell className="h-4 w-4" /> Avisos en el equipo
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Ventana emergente en la app (Sonner)</Label>
+            <p className="text-xs text-muted-foreground">Siempre activo al recibir notificaciones.</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Aviso del navegador / escritorio</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Notificación del sistema mientras Kawiil está abierto (requiere permiso del navegador).
+            </p>
+          </div>
+          <Switch
+            checked={profile?.desktop_browser_notifications !== false}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ desktop_browser_notifications: v })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Push con la pestaña cerrada</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Recibe avisos aunque no tengas Kawiil abierto (Slack y otras notificaciones que envíen push).
+            </p>
+          </div>
+          <Switch
+            checked={profile?.desktop_push_notifications === true}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ desktop_push_notifications: v })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Slack: avisarme si me @mencionan</Label>
+          </div>
+          <Switch
+            checked={profile?.notify_slack_mentions !== false}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ notify_slack_mentions: v })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Slack: canales que sigo en Comunicación</Label>
+          </div>
+          <Switch
+            checked={profile?.notify_slack_channel_watch !== false}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ notify_slack_channel_watch: v })}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" onClick={requestBrowserPermission}>
+            Pedir permiso del navegador
+          </Button>
+          {vapid?.trim() ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => registerPush.mutate()}
+              disabled={registerPush.isPending}
+            >
+              Registrar push (app cerrada)
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          En Comunicación activa &quot;Avisos de mensajes&quot; en un canal para enterarte sin @mención. En Slack
+          configura la misma URL de eventos que slash commands (<code className="text-[11px]">slack-events</code>).
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Notificaciones() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -148,6 +322,17 @@ export default function Notificaciones() {
       navigate("/conocimiento?tab=sugerencias");
     } else if (m.type === "ai_proactive_tip") {
       navigate("/");
+    } else if (m.entity_type === "slack" && m.entity_id) {
+      const pipe = m.entity_id.indexOf("|");
+      if (pipe > 0) {
+        const ch = m.entity_id.slice(0, pipe);
+        const ts = m.entity_id.slice(pipe + 1);
+        navigate(`/comunicacion?channel=${encodeURIComponent(ch)}&ts=${encodeURIComponent(ts)}`);
+      } else {
+        navigate("/comunicacion");
+      }
+    } else if (m.type === "slack_message") {
+      navigate("/comunicacion");
     }
   };
 
@@ -241,7 +426,7 @@ export default function Notificaciones() {
                       <>
                         <Activity className="mx-auto h-10 w-10 text-muted-foreground/40" />
                         <p className="mt-3 text-sm text-muted-foreground">
-                          Sin actividad reciente. Asignaciones de tareas y gastos aparecerán aquí.
+                          Sin actividad reciente. Asignaciones, gastos y mensajes de Slack (@mención o canal en seguimiento) aparecerán aquí.
                         </p>
                       </>
                     ) : (
@@ -408,6 +593,7 @@ export default function Notificaciones() {
               </div>
             )}
 
+            <NotificationDeliveryPreferences />
             <NotificationAiPreferences />
           </>
         )}

@@ -7,6 +7,14 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.slack-events]
     verify_jwt = false
+  [functions.slack-user-auth]
+    verify_jwt = true
+  [functions.slack-user-callback]
+    verify_jwt = false
+  [functions.slack-api]
+    verify_jwt = true
+  [functions.push-subscribe]
+    verify_jwt = true
   [functions.microsoft-auth]
     verify_jwt = false
   [functions.microsoft-callback]

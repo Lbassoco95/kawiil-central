@@ -28,6 +28,10 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - auth-email-hook, activate-recovery-link
 - backup-data, process-document, generate-phrase
 - savio-webhook, slack-events, calendly-webhook
+- slack-user-callback (redirect OAuth de Slack; sin JWT)
+
+Las siguientes usan JWT de usuario (desplegar con verificación JWT activa, valor por defecto):
+- slack-user-auth, slack-api, push-subscribe
 
 ## Si algo se rompe despues de publicar desde Lovable:
 

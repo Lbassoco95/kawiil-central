@@ -1930,6 +1930,10 @@ export type Database = {
           organization_id: string
           phone: string | null
           proactive_ai_notifications: boolean
+          desktop_browser_notifications: boolean
+          desktop_push_notifications: boolean
+          notify_slack_mentions: boolean
+          notify_slack_channel_watch: boolean
           updated_at: string
           user_id: string
         }
@@ -1949,6 +1953,10 @@ export type Database = {
           organization_id: string
           phone?: string | null
           proactive_ai_notifications?: boolean
+          desktop_browser_notifications?: boolean
+          desktop_push_notifications?: boolean
+          notify_slack_mentions?: boolean
+          notify_slack_channel_watch?: boolean
           updated_at?: string
           user_id: string
         }
@@ -1968,6 +1976,10 @@ export type Database = {
           organization_id?: string
           phone?: string | null
           proactive_ai_notifications?: boolean
+          desktop_browser_notifications?: boolean
+          desktop_push_notifications?: boolean
+          notify_slack_mentions?: boolean
+          notify_slack_channel_watch?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -2511,6 +2523,118 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tax_obligation_types_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          endpoint?: string
+          p256dh?: string
+          auth?: string
+          user_agent?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      slack_channel_watches: {
+        Row: {
+          id: string
+          user_id: string
+          organization_id: string
+          channel_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          organization_id: string
+          channel_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          organization_id?: string
+          channel_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slack_channel_watches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_slack_connections: {
+        Row: {
+          id: string
+          user_id: string
+          organization_id: string
+          slack_team_id: string
+          slack_user_id: string
+          access_token: string
+          refresh_token: string | null
+          token_expires_at: string | null
+          scopes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          organization_id: string
+          slack_team_id: string
+          slack_user_id: string
+          access_token: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          scopes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          organization_id?: string
+          slack_team_id?: string
+          slack_user_id?: string
+          access_token?: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          scopes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_slack_connections_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

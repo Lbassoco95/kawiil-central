@@ -1,3 +1,8 @@
+/**
+ * Slash commands + Event API (reacciones y mensajes para notificaciones Kawiil).
+ * En Slack: suscribir eventos message.channels, message.groups, message.im, message.mpim
+ * (además de reaction_added). Misma Request URL que esta función.
+ */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as hexEncode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
@@ -36,6 +41,162 @@ function getSupabaseAdmin() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+}
+
+async function sendWebPushForUsers(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  userIds: string[],
+  title: string,
+  body: string,
+  url: string,
+) {
+  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
+  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
+  if (!publicKey || !privateKey || userIds.length === 0) return;
+
+  const webpush = (await import("npm:web-push@3.6.6")).default;
+  const contact = Deno.env.get("VAPID_CONTACT_EMAIL") || "mailto:hello@kawiil.com";
+  webpush.setVapidDetails(contact, publicKey, privateKey);
+
+  for (const uid of userIds) {
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("desktop_push_notifications")
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (prof?.desktop_push_notifications !== true) continue;
+
+    const { data: subs } = await supabase
+      .from("push_subscriptions")
+      .select("id, endpoint, p256dh, auth")
+      .eq("user_id", uid);
+
+    for (const s of subs || []) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          JSON.stringify({ title, body, url }),
+        );
+      } catch (e: unknown) {
+        const code = (e as { statusCode?: number })?.statusCode;
+        if (code === 404 || code === 410) {
+          await supabase.from("push_subscriptions").delete().eq("id", s.id);
+        }
+        console.error("webpush error:", code);
+      }
+    }
+  }
+}
+
+/** Notificaciones in-app (+ push) por @mención a usuarios conectados o canales en slack_channel_watches */
+async function handleMessageNotificationEvent(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  event: Record<string, unknown>,
+  teamId: string,
+) {
+  const subtype = event.subtype as string | undefined;
+  if (
+    subtype &&
+    ["message_changed", "message_deleted", "channel_join", "channel_leave", "channel_topic"].includes(
+      subtype,
+    )
+  ) {
+    return;
+  }
+  if (event.hidden) return;
+
+  const channel = event.channel as string | undefined;
+  const ts = event.ts as string | undefined;
+  const senderSlackId = event.user as string | undefined;
+  const text = (event.text as string) || "";
+
+  if (!channel || !ts || !senderSlackId) return;
+  if (event.bot_id && subtype === "bot_message") return;
+
+  const { data: senderConn } = await supabase
+    .from("user_slack_connections")
+    .select("user_id")
+    .eq("slack_team_id", teamId)
+    .eq("slack_user_id", senderSlackId)
+    .maybeSingle();
+  const senderKawiilId = senderConn?.user_id as string | undefined;
+
+  const targets = new Map<string, { organization_id: string }>();
+
+  const mentionMatches = [...text.matchAll(/<@([A-Z0-9]+)>/g)];
+  const mentionIds = [...new Set(mentionMatches.map((m) => m[1]))];
+
+  if (mentionIds.length > 0) {
+    const { data: mentionRows } = await supabase
+      .from("user_slack_connections")
+      .select("user_id, organization_id, slack_user_id")
+      .eq("slack_team_id", teamId)
+      .in("slack_user_id", mentionIds);
+
+    for (const row of mentionRows || []) {
+      if (row.user_id === senderKawiilId) continue;
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("notify_slack_mentions")
+        .eq("user_id", row.user_id)
+        .maybeSingle();
+      if (prof?.notify_slack_mentions === false) continue;
+      targets.set(row.user_id, { organization_id: row.organization_id });
+    }
+  }
+
+  const { data: watches } = await supabase
+    .from("slack_channel_watches")
+    .select("user_id, organization_id")
+    .eq("channel_id", channel);
+
+  for (const w of watches || []) {
+    if (w.user_id === senderKawiilId) continue;
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("notify_slack_channel_watch")
+      .eq("user_id", w.user_id)
+      .maybeSingle();
+    if (prof?.notify_slack_channel_watch === false) continue;
+    targets.set(w.user_id, { organization_id: w.organization_id });
+  }
+
+  if (targets.size === 0) return;
+
+  const preview = text.replace(/<@[A-Z0-9]+>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 200);
+  const channelType = (event.channel_type as string) || "channel";
+  const titleLabel =
+    channelType === "im"
+      ? "Slack · Mensaje directo"
+      : channelType === "mpim"
+      ? "Slack · Grupo"
+      : "Slack · Canal";
+
+  const rows = [...targets.entries()].map(([user_id, { organization_id }]) => ({
+    user_id,
+    organization_id,
+    type: "slack_message",
+    title: titleLabel,
+    body: preview || "(sin texto)",
+    entity_type: "slack",
+    entity_id: `${channel}|${ts}`,
+    source_user_id: null as string | null,
+  }));
+
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) {
+    console.error("slack message notifications insert:", error);
+    return;
+  }
+
+  const deepUrl = `/comunicacion?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(ts)}`;
+  await sendWebPushForUsers(
+    supabase,
+    [...targets.keys()],
+    titleLabel,
+    preview || "Nuevo mensaje",
+    deepUrl,
   );
 }
 
@@ -410,6 +571,11 @@ serve(async (req) => {
     // Event callbacks
     if (data.type === "event_callback") {
       const event = data.event;
+      const teamId = data.team_id as string | undefined;
+
+      if (event.type === "message" && teamId) {
+        await handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId);
+      }
 
       if (event.type === "reaction_added") {
         await handleReactionEvent(event);

@@ -21,6 +21,7 @@ import Microsoft365Calendario from "./pages/Microsoft365Calendario";
 import Microsoft365Correo from "./pages/Microsoft365Correo";
 import Hub from "./pages/Hub";
 import Notificaciones from "./pages/Notificaciones";
+import Comunicacion from "./pages/Comunicacion";
 import AsistenteIA from "./pages/AsistenteIA";
 import BaseConocimiento from "./pages/BaseConocimiento";
 import Finanzas from "./pages/Finanzas";
@@ -82,6 +83,7 @@ const App = () => (
               <Route path="/hub" element={<ProtectedRoute><ModuleGate moduleKey="hub"><Hub /></ModuleGate></ProtectedRoute>} />
               <Route path="/despacho" element={<Navigate to="/hub" replace />} />
               <Route path="/notificaciones" element={<ProtectedRoute><Notificaciones /></ProtectedRoute>} />
+              <Route path="/comunicacion" element={<ProtectedRoute><Comunicacion /></ProtectedRoute>} />
               <Route path="/asistente" element={<ProtectedRoute><ModuleGate moduleKey="ai"><AsistenteIA /></ModuleGate></ProtectedRoute>} />
               <Route path="/conocimiento" element={<ProtectedRoute><ModuleGate moduleKey="conocimiento"><BaseConocimiento /></ModuleGate></ProtectedRoute>} />
               <Route path="/finanzas" element={<ProtectedRoute><ModuleGate moduleKey="finanzas"><Finanzas /></ModuleGate></ProtectedRoute>} />
