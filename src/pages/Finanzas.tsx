@@ -111,7 +111,7 @@ export default function Finanzas() {
       return "Registra solicitudes de pago y da seguimiento a tus solicitudes.";
     }
     if (canViewSavioIncome) {
-      return "Control financiero del despacho: resumen, gastos internos e ingresos (Savio).";
+      return "Control financiero del despacho: resumen mensual, gastos internos e ingresos facturados.";
     }
     return "Resumen mensual de gastos, aprobaciones y pagos del despacho.";
   }, [hasFinanceAccess, canViewSavioIncome]);
@@ -232,7 +232,7 @@ export default function Finanzas() {
                   <Wallet className="h-3.5 w-3.5" /> Gastos internos
                 </TabsTrigger>
                 <TabsTrigger value="savio" className="text-xs gap-1.5">
-                  <Landmark className="h-3.5 w-3.5" /> Ingresos (Savio)
+                  <Landmark className="h-3.5 w-3.5" /> Ingresos facturados
                 </TabsTrigger>
               </TabsList>
 
