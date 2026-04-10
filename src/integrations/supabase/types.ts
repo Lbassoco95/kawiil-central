@@ -2760,6 +2760,73 @@ export type Database = {
           },
         ]
       }
+      slack_sidebar_group_channels: {
+        Row: {
+          id: string
+          group_id: string
+          channel_id: string
+          sort_order: number
+        }
+        Insert: {
+          id?: string
+          group_id: string
+          channel_id: string
+          sort_order?: number
+        }
+        Update: {
+          id?: string
+          group_id?: string
+          channel_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slack_sidebar_group_channels_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "slack_sidebar_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slack_sidebar_groups: {
+        Row: {
+          id: string
+          user_id: string
+          organization_id: string
+          title: string
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          organization_id: string
+          title?: string
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          organization_id?: string
+          title?: string
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slack_sidebar_groups_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_slack_connections: {
         Row: {
           id: string

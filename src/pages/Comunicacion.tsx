@@ -24,6 +24,7 @@ import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
 import { SlackWorkspaceLayout } from "@/components/slack/SlackWorkspaceLayout";
 import { SlackConversationList, type SlackCommPrefRow } from "@/components/slack/SlackConversationList";
 import { SlackStatusPresets } from "@/components/slack/SlackStatusPresets";
+import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SlackChannelHeader } from "@/components/slack/SlackChannelHeader";
 import { SlackMessageList } from "@/components/slack/SlackMessageList";
@@ -32,7 +33,7 @@ import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { Button } from "@/components/ui/button";
 import { conversationTitle } from "@/components/slack/slackGrouping";
-import { Bell, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
+import { Bell, Layers, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 type HistoryPage = {
@@ -42,6 +43,14 @@ type HistoryPage = {
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MPIM_MEMBERS_BATCH = 40;
+const PUSH_BANNER_DISMISS_KEY = "kawiil-slack-push-banner-dismissed";
+
+type RawSidebarGroup = {
+  id: string;
+  title: string;
+  sort_order: number;
+  slack_sidebar_group_channels: { channel_id: string; sort_order: number }[] | null;
+};
 
 export default function Comunicacion() {
   const { user } = useAuth();
@@ -59,6 +68,10 @@ export default function Comunicacion() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [newDmOpen, setNewDmOpen] = useState(false);
+  const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
+  const [pushBannerDismissed, setPushBannerDismissed] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(PUSH_BANNER_DISMISS_KEY) === "1",
+  );
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const switchChannel = useCallback(
@@ -211,6 +224,20 @@ export default function Comunicacion() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user?.id] }),
   });
 
+  const reorderCustomGroupMutation = useMutation({
+    mutationFn: async ({ groupId, ids }: { groupId: string; ids: string[] }) => {
+      for (let i = 0; i < ids.length; i++) {
+        const { error } = await supabase
+          .from("slack_sidebar_group_channels")
+          .update({ sort_order: i })
+          .eq("group_id", groupId)
+          .eq("channel_id", ids[i]);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["slack-sidebar-groups", user?.id] }),
+  });
+
   const conversationsQuery = useQuery({
     queryKey: ["slack-conversations", connection?.id],
     queryFn: () => fetchAllSlackConversations(),
@@ -219,6 +246,48 @@ export default function Comunicacion() {
   });
 
   const conversations = conversationsQuery.data || [];
+
+  const { data: sidebarGroupsRaw = [] } = useQuery({
+    queryKey: ["slack-sidebar-groups", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("slack_sidebar_groups")
+        .select("id, title, sort_order, slack_sidebar_group_channels(channel_id, sort_order)")
+        .eq("user_id", user!.id)
+        .order("sort_order");
+      if (error) throw error;
+      return (data || []) as RawSidebarGroup[];
+    },
+    enabled: !!user?.id && isConnected,
+  });
+
+  const customGroupsVm = useMemo(() => {
+    const sortedG = [...sidebarGroupsRaw].sort((a, b) => a.sort_order - b.sort_order);
+    return sortedG.map((g) => {
+      const ch = [...(g.slack_sidebar_group_channels || [])].sort((a, b) => a.sort_order - b.sort_order);
+      const convs = ch
+        .map((r) => conversations.find((c) => c.id === r.channel_id))
+        .filter(Boolean) as SlackConversation[];
+      return { id: g.id, title: g.title, conversations: convs };
+    });
+  }, [sidebarGroupsRaw, conversations]);
+
+  const channelsInCustomGroups = useMemo(() => {
+    const s = new Set<string>();
+    for (const g of sidebarGroupsRaw) {
+      for (const ch of g.slack_sidebar_group_channels || []) {
+        s.add(ch.channel_id);
+      }
+    }
+    return s;
+  }, [sidebarGroupsRaw]);
+
+  const handleReorderCustomGroup = useCallback(
+    (groupId: string, orderedChannelIds: string[]) => {
+      reorderCustomGroupMutation.mutate({ groupId, ids: orderedChannelIds });
+    },
+    [reorderCustomGroupMutation],
+  );
 
   useEffect(() => {
     if (!user?.id || !profile?.organization_id || !isConnected || !conversationsQuery.isSuccess || !slackPrefsFetched) {
@@ -642,6 +711,15 @@ export default function Comunicacion() {
     pushSetup &&
     (!pushSetup.desktopPush || pushSetup.subCount === 0);
 
+  const dismissPushBanner = () => {
+    try {
+      localStorage.setItem(PUSH_BANNER_DISMISS_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setPushBannerDismissed(true);
+  };
+
   const sidebar = (
     <SlackConversationList
       conversations={conversations}
@@ -656,9 +734,12 @@ export default function Comunicacion() {
       onToggleStar={handleToggleStar}
       onReorderVip={handleReorderVip}
       onReorderStarred={handleReorderStarred}
+      customGroups={customGroupsVm}
+      channelsInCustomGroups={channelsInCustomGroups}
+      onReorderCustomGroup={handleReorderCustomGroup}
       headerActions={
         <div className="flex flex-col gap-1.5">
-          {pushNeedsSetup && (
+          {pushNeedsSetup && !pushBannerDismissed && (
             <Alert className="border-amber-800/60 bg-amber-950/30 text-amber-100 py-2 px-3">
               <Bell className="h-4 w-4 text-amber-400" />
               <AlertTitle className="text-xs font-semibold mb-1">
@@ -702,9 +783,30 @@ export default function Comunicacion() {
                     <p className="text-amber-300/80">Tras guardar en Lovable, vuelve a publicar el proyecto para que el cliente lea la clave.</p>
                   </>
                 )}
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[10px] border-amber-700/50 bg-amber-950/40 text-amber-100 hover:bg-amber-900/50"
+                    onClick={dismissPushBanner}
+                  >
+                    Ocultar aviso
+                  </Button>
+                </div>
               </AlertDescription>
             </Alert>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full h-8 text-xs justify-start gap-2 bg-zinc-800/80 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+            onClick={() => setGroupsDialogOpen(true)}
+          >
+            <Layers className="h-3.5 w-3.5 shrink-0 opacity-80" />
+            Organizar grupos
+          </Button>
           <SlackStatusPresets />
           <Button
             type="button"
@@ -819,6 +921,16 @@ export default function Comunicacion() {
 
   return (
     <AppLayout contentMaxWidth="full">
+      {profile?.organization_id && (
+        <SlackGroupsOrganizerDialog
+          open={groupsDialogOpen}
+          onOpenChange={setGroupsDialogOpen}
+          conversations={conversations}
+          organizationId={profile.organization_id}
+          titleOpts={titleOpts}
+          userMap={userMap}
+        />
+      )}
       <SlackNewDmDialog
         open={newDmOpen}
         onOpenChange={setNewDmOpen}

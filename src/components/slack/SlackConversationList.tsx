@@ -1,8 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Hash, Lock, MessageCircle, Users, Search, ChevronDown, Star, GripVertical, Crown } from "lucide-react";
+import { Loader2, Hash, Lock, MessageCircle, Users, Search, ChevronDown, Star, GripVertical, Crown, Sparkles } from "lucide-react";
 import type { SlackConversation } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { groupSlackConversations, conversationTitle, type ConversationTitleOpts } from "./slackGrouping";
@@ -45,6 +46,10 @@ type Props = {
   onToggleStar: (channelId: string) => void;
   onReorderVip: (orderedChannelIds: string[]) => void;
   onReorderStarred: (orderedChannelIds: string[]) => void;
+  /** Grupos personalizados (tras VIP y destacados). */
+  customGroups?: Array<{ id: string; title: string; conversations: SlackConversation[] }>;
+  channelsInCustomGroups?: Set<string>;
+  onReorderCustomGroup?: (groupId: string, orderedChannelIds: string[]) => void;
   headerActions?: ReactNode;
 };
 
@@ -180,6 +185,9 @@ export function SlackConversationList({
   onToggleStar,
   onReorderVip,
   onReorderStarred,
+  customGroups = [],
+  channelsInCustomGroups = new Set<string>(),
+  onReorderCustomGroup,
   headerActions,
 }: Props) {
   const [q, setQ] = useState("");
@@ -246,6 +254,18 @@ export function SlackConversationList({
     onReorderStarred(arrayMove(ids, oldIndex, newIndex));
   };
 
+  const onDragEndCustomGroup =
+    (groupId: string, groupConvs: SlackConversation[]) => (event: DragEndEvent) => {
+      if (!onReorderCustomGroup) return;
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const ids = groupConvs.map((c) => c.id);
+      const oldIndex = ids.indexOf(String(active.id));
+      const newIndex = ids.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return;
+      onReorderCustomGroup(groupId, arrayMove(ids, oldIndex, newIndex));
+    };
+
   const renderConv = (c: SlackConversation, isPublicChannel: boolean, sortable: boolean) => {
     const p = commPrefsByChannel[c.id];
     const common = {
@@ -275,6 +295,8 @@ export function SlackConversationList({
   const [openDm, setOpenDm] = useState(true);
   const [openStar, setOpenStar] = useState(true);
 
+  const inSidebarSpecial = (c: SlackConversation) => pinnedOrVip(c) || channelsInCustomGroups.has(c.id);
+
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -291,14 +313,30 @@ export function SlackConversationList({
   const starFiltered = starredOrdered.filter(filterMatch);
 
   const publicFiltered = groups.publicChannels
-    .filter((c) => !pinnedOrVip(c))
+    .filter((c) => !inSidebarSpecial(c))
     .filter(filterMatch);
   const privateFiltered = groups.privateChannels
-    .filter((c) => !pinnedOrVip(c))
+    .filter((c) => !inSidebarSpecial(c))
     .filter(filterMatch);
   const dmFiltered = groups.allDirectMessages
-    .filter((c) => !pinnedOrVip(c))
+    .filter((c) => !inSidebarSpecial(c))
     .filter(filterMatch);
+
+  const customGroupsFiltered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return customGroups
+      .map((g) => ({
+        ...g,
+        conversations: !needle
+          ? g.conversations
+          : g.conversations.filter((c) => {
+              const t = conversationTitle(c, userMap, titleOpts).toLowerCase();
+              const n = (c.name || "").toLowerCase();
+              return t.includes(needle) || n.includes(needle) || c.id.toLowerCase().includes(needle);
+            }),
+      }))
+      .filter((g) => g.conversations.length > 0);
+  }, [customGroups, q, userMap, titleOpts]);
 
   return (
     <div className="flex flex-col h-full min-h-0 text-zinc-100">
@@ -351,6 +389,41 @@ export function SlackConversationList({
               </CollapsibleContent>
             </Collapsible>
           )}
+
+          {customGroupsFiltered.map((g) => (
+            <Collapsible key={g.id} defaultOpen>
+              <div className="flex items-stretch gap-0.5 px-1">
+                <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 rounded-md">
+                  <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
+                  <span className="truncate">{g.title}</span>
+                </CollapsibleTrigger>
+                <Link
+                  to={`/asistente-ia?slackGroup=${encodeURIComponent(g.id)}`}
+                  className="inline-flex items-center gap-0.5 shrink-0 rounded-md px-2 py-1.5 text-[10px] font-medium text-amber-300 bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-600 self-center"
+                  title="Analizar mensajes recientes de este grupo con Kawiil IA"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  IA
+                </Link>
+              </div>
+              <CollapsibleContent>
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={onDragEndCustomGroup(g.id, g.conversations)}
+                >
+                  <SortableContext items={g.conversations.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-0.5 mt-1">
+                      {g.conversations.map((c) => {
+                        const isPub = !c.is_private && !c.is_im && !c.is_mpim;
+                        return renderConv(c, isPub, !!onReorderCustomGroup);
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </CollapsibleContent>
+            </Collapsible>
+          ))}
 
           {publicFiltered.length > 0 && (
             <Collapsible open={openPub} onOpenChange={setOpenPub}>

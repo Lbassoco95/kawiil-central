@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeSlackApi } from "@/lib/slackApi";
 import { ProjectSidebar } from "@/components/ai/ProjectSidebar";
 import { KnowledgePanel } from "@/components/ai/KnowledgePanel";
 import { ArtifactCard } from "@/components/ai/ArtifactCard";
@@ -197,6 +198,69 @@ const AsistenteIA = () => {
       setAiProject(projectParam);
     }
   }, [searchParams]);
+
+  const slackGroupPrefillApplied = useRef<string | null>(null);
+  const slackGroupIdParam = searchParams.get("slackGroup");
+  useEffect(() => {
+    const gid = slackGroupIdParam;
+    if (!gid) {
+      slackGroupPrefillApplied.current = null;
+      return;
+    }
+    if (!user?.id || slackGroupPrefillApplied.current === gid) return;
+    let cancelled = false;
+    slackGroupPrefillApplied.current = gid;
+    void (async () => {
+      const { data: g, error: ge } = await supabase
+        .from("slack_sidebar_groups")
+        .select("title")
+        .eq("id", gid)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (ge || !g) {
+        slackGroupPrefillApplied.current = null;
+        return;
+      }
+      const { data: rows } = await supabase
+        .from("slack_sidebar_group_channels")
+        .select("channel_id")
+        .eq("group_id", gid)
+        .order("sort_order");
+      const cids = (rows || []).map((r) => r.channel_id).slice(0, 12);
+      const parts: string[] = [];
+      for (const cid of cids) {
+        try {
+          const d = await invokeSlackApi<{
+            ok: boolean;
+            messages?: { text?: string }[];
+          }>({
+            action: "conversations.history",
+            channel: cid,
+            limit: 8,
+          });
+          if (d.ok && d.messages?.length) {
+            const texts = [...d.messages]
+              .reverse()
+              .map((m) => (m.text || "").replace(/\s+/g, " ").trim().slice(0, 500))
+              .filter(Boolean);
+            if (texts.length) parts.push(`Conversación ${cid}:\n${texts.join("\n—\n")}`);
+          }
+        } catch {
+          /* omit canal si falla API */
+        }
+      }
+      const body = parts.length ? parts.join("\n\n") : "(No se pudieron cargar mensajes recientes; revisa conexión Slack.)";
+      if (!cancelled) {
+        setInput(
+          `Tengo en Slack un grupo llamado «${g.title}». Últimos mensajes (recortados):\n\n${body}\n\nResume temas abiertos, riesgos y próximos pasos sugeridos.`,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slackGroupIdParam, user?.id]);
 
   useEffect(() => {
     if (activeProject) setShowKnowledge(true);
