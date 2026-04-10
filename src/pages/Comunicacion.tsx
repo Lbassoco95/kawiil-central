@@ -21,7 +21,7 @@ import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { Button } from "@/components/ui/button";
 import { conversationTitle } from "@/components/slack/slackGrouping";
-import { Loader2, MessageSquarePlus } from "lucide-react";
+import { Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 type HistoryPage = {
@@ -397,16 +397,34 @@ export default function Comunicacion() {
       titleOpts={titleOpts}
       userId={user?.id}
       headerActions={
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className="w-full h-8 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border-zinc-700"
-          onClick={() => setNewDmOpen(true)}
-        >
-          <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5 shrink-0" />
-          Nuevo mensaje directo
-        </Button>
+        <div className="flex flex-col gap-1.5">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full h-8 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border-zinc-700"
+            onClick={() => setNewDmOpen(true)}
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5 shrink-0" />
+            Nuevo mensaje directo
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full h-7 text-[10px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+            onClick={() => connect()}
+            disabled={isConnecting}
+            title="Vuelve a abrir Slack para aplicar permisos nuevos (im:write, mpim:write)"
+          >
+            {isConnecting ? (
+              <Loader2 className="h-3 w-3 mr-1 animate-spin shrink-0" />
+            ) : (
+              <RefreshCw className="h-3 w-3 mr-1 shrink-0" />
+            )}
+            Actualizar permisos Slack
+          </Button>
+        </div>
       }
     />
   );

@@ -67,8 +67,15 @@ export function SlackNewDmDialog({
     },
     onError: (e: Error) => {
       const msg = e.message || "";
-      if (msg.includes("missing_scope") || msg.includes("not_allowed_token")) {
-        toast.error("Falta permiso en Slack. Vuelve a conectar tu cuenta (im:write / mpim:write).");
+      if (
+        msg.includes("missing_scope") ||
+        msg.includes("not_allowed_token") ||
+        msg.includes("invalid_scope")
+      ) {
+        toast.error(
+          "Slack no autorizó abrir DMs con tu sesión actual. Un admin debe añadir en api.slack.com → tu app → OAuth & Permissions → User Token Scopes: im:write y mpim:write. Luego pulsa «Actualizar permisos Slack» en la barra lateral y acepta de nuevo. Si en Supabase existe el secret SLACK_USER_SCOPES, debe incluir esos scopes o elimínalo para usar los predeterminados.",
+          { duration: 18_000 },
+        );
       } else {
         toast.error(msg);
       }
@@ -81,7 +88,10 @@ export function SlackNewDmDialog({
         <DialogHeader className="px-4 pt-4 pb-2 space-y-1">
           <DialogTitle>Nuevo mensaje directo</DialogTitle>
           <DialogDescription>
-            Elige una persona del workspace. Si Slack pide permisos, vuelve a conectar tu cuenta en Comunicación.
+            Elige una persona del workspace. Si ves error de permisos, el administrador de la app Slack debe añadir{" "}
+            <span className="font-mono text-[11px]">im:write</span> y{" "}
+            <span className="font-mono text-[11px]">mpim:write</span> en User Token Scopes; después usa «Actualizar
+            permisos Slack» en la barra lateral.
           </DialogDescription>
         </DialogHeader>
         <Command className="rounded-none border-0 shadow-none [&_[cmdk-input-wrapper]]:border-t">
