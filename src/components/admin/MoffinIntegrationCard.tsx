@@ -108,6 +108,13 @@ export function MoffinIntegrationCard() {
             <code className="text-foreground">MOFFIN_FIEL_FIELD_PASSWORD</code> (y opcional{" "}
             <code className="text-foreground">MOFFIN_FIEL_KEY_FORMAT=utf8</code> para llave PEM).
           </p>
+          <p>
+            Si necesitáis constancia u opinión en PDF del SAT y Moffin solo devuelve certificados{" "}
+            <code className="text-foreground">.cer</code>, hay que cerrar el alcance con su soporte; en paralelo se pueden
+            definir secretos <code className="text-foreground">MOFFIN_QUERY_EXTRA_BODY_*</code> y{" "}
+            <code className="text-foreground">MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES</code> cuando den la especificación
+            (ver comentarios en <code className="text-foreground">moffin-query</code>).
+          </p>
         </div>
 
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">

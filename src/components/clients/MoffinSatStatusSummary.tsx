@@ -127,7 +127,8 @@ export function MoffinSatStatusSummary({
       </h2>
       <p className="text-[10px] text-muted-foreground leading-snug mb-3">
         Constancia y opinión aquí son consultas de certificados RFC vía Moffin; un PDF oficial del SAT solo aparecerá si
-        Moffin lo entrega en tu contrato.
+        Moffin lo entrega en tu contrato. Si no forma parte del producto, habrá que obtener esos PDF por otro medio
+        (SAT u otro proveedor).
       </p>
       {!isLoading && hasPendingSyncable ? (
         <div className="flex flex-wrap items-center gap-2 mb-3">

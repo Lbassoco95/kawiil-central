@@ -4,7 +4,7 @@
 
 import {
   isLikelyMoffinDownloadUrl,
-  keyLooksLikePdfDownloadField,
+  isMoffinPdfUrlFieldName,
   urlLooksLikeMoffinCertificateFile,
 } from "./moffinSatRfc.ts";
 
@@ -47,7 +47,7 @@ function readPdfUrlFromRowDeep(row: unknown): string | null {
     for (const [k, v] of Object.entries(o)) {
       if (typeof v === "string" && isLikelyMoffinDownloadUrl(v) && !urlLooksLikeMoffinCertificateFile(v)) {
         const kn = k.replace(/_/g, "").toLowerCase();
-        if (keyLooksLikePdfDownloadField(k) || kn === "url" || kn === "href" || kn === "link") {
+        if (isMoffinPdfUrlFieldName(k) || kn === "url" || kn === "href" || kn === "link") {
           return v.trim();
         }
       }

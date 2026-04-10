@@ -3,6 +3,7 @@ import {
   decryptFielSecret,
   formatFielMaterial,
 } from "../_shared/moffinFielCrypto.ts";
+import { mergeMoffinQueryPayloadExtras } from "../_shared/moffinQueryPayloadExtras.ts";
 import {
   moffinQueryPathForConsult,
   moffinQueryServiceSegment,
@@ -33,6 +34,30 @@ import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
  * 2) Si todo pasa por sat_rfc: ¿qué campo del body/metadata dispara PDF vs solo certificados?
  * 3) ¿El PDF llega solo en webhook Svix, en GET /report/{id}, o en otro campo?
  * 4) ¿El plan contratado incluye esos PDF o solo validación de certificados?
+ *
+ * --- Correo listo para copiar a Moffin (soporte / cuenta técnica) ---
+ * Asunto: API — constancia y opinión en PDF vs respuesta sat_rfc (solo .cer)
+ *
+ * Hola,
+ *
+ * Integramos POST /query/sat_rfc con FIEL. En éxito recibimos solo certificates[].url a archivos .cer
+ * (SELLO/FIEL) en almacenamiento firmado, p. ej.:
+ *   { "success": true, "data": { "certificates": [
+ *     { "url": "https://…/…/sat/XXXXXXXX.cer?...", "type": "SELLO", "state": "Activo" },
+ *     { "url": "https://…/…/sat/XXXXXXXX.cer?...", "type": "FIEL", "state": "Activo" }
+ *   ]}}
+ * Necesitamos los PDF oficiales del SAT: constancia de situación fiscal y opinión de cumplimiento.
+ * ¿Existe otro path, query string, campo en el body o metadata para obtener esos PDF?
+ * ¿Se entregan en webhook Svix, en GET /report/{id} (¿con qué flags?) u otro endpoint?
+ * ¿Nuestro plan contratado incluye esos documentos o únicamente validación de certificados?
+ *
+ * Gracias.
+ *
+ * --- Tras respuesta de Moffin (sin redeploy de lógica si solo cambian datos) ---
+ * - MOFFIN_QUERY_EXTRA_BODY_CONSTANCIA_SITUACION_FISCAL — JSON objeto fusionado al body (constancia).
+ * - MOFFIN_QUERY_EXTRA_BODY_OPINION_CUMPLIMIENTO — igual para opinión (ver moffinQueryPayloadExtras.ts).
+ * - MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES — nombres de campos con URL de PDF separados por coma
+ *   (p. ej. constanciaPdfUrl) para que pickSatRfcPdfUrlForConsult los detecte en el JSON.
  *
  * FIEL: .cer/.key cifrados (moffin-fiel); contraseña por solicitud. MOFFIN_FIEL_FIELD_* en secretos.
  * Logs útiles: moffin_service_queries_diag, moffin_sat_pdf, moffin_webhook_sat_rfc_payload_shape.
@@ -606,6 +631,12 @@ Deno.serve(async (req) => {
     payload[keyField] = formatFielMaterial(keyB64, keyFmt);
     payload[passField] = fielPassword;
     payload.metadata = { tags: [`kawiil:${consultType}`] };
+    if (
+      consultType === "constancia_situacion_fiscal" ||
+      consultType === "opinion_cumplimiento"
+    ) {
+      mergeMoffinQueryPayloadExtras(payload, consultType);
+    }
   }
 
   let moffinRes: Response;

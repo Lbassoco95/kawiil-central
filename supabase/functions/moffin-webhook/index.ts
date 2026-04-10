@@ -2,8 +2,9 @@
  * Webhook Svix (Moffin): verifica firma y actualiza moffin_consults cuando llega el resultado asíncrono.
  *
  * sat_rfc (constancia/opinión en Kawiil): la API pública documenta certificados RFC; el payload puede traer
- * `.cer` u otros campos. Revisa logs `moffin_webhook_sat_rfc_payload_shape` y compáralos con lo que indique Moffin
- * si en el futuro entregan PDF en campos distintos.
+ * `.cer` u otros campos. Revisa logs `moffin_webhook_sat_rfc_payload_shape` y compáralos con lo que indique Moffin.
+ * Si documentan nombres de campo con URL de PDF, configura `MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES` en Edge (misma
+ * variable que usa moffin-query / pickSatRfcPdfUrlForConsult).
  *
  * Configuración:
  * - MOFFIN_SVIX_SIGNING_SECRET = whsec_... (Svix / Moffin)

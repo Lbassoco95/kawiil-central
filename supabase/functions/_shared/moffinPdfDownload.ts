@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildMoffinPdfStoragePath } from "./moffinStoragePath.ts";
 import {
   isLikelyMoffinDownloadUrl,
-  keyLooksLikePdfDownloadField,
+  isMoffinPdfUrlFieldName,
   urlLooksLikeMoffinCertificateFile,
 } from "./moffinSatRfc.ts";
 
@@ -19,7 +19,12 @@ function extractPdfUrlFromJsonParsed(j: unknown): string | null {
     if (typeof o !== "object") return null;
     const rec = o as Record<string, unknown>;
     for (const [k, v] of Object.entries(rec)) {
-      if (typeof v === "string" && keyLooksLikePdfDownloadField(k) && isLikelyMoffinDownloadUrl(v)) {
+      if (
+        typeof v === "string" &&
+        isMoffinPdfUrlFieldName(k) &&
+        isLikelyMoffinDownloadUrl(v) &&
+        !urlLooksLikeMoffinCertificateFile(v)
+      ) {
         return v.trim();
       }
     }

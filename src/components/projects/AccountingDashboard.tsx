@@ -608,7 +608,9 @@ export function AccountingDashboard({
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
               «RFC · constancia» y «RFC · opinión» usan la misma consulta de certificados RFC de Moffin (no son por sí
-              solas el PDF oficial del SAT). Si tu plan no entrega PDF, confirma el producto con Moffin.
+              solas el PDF oficial del SAT). Si tu plan no entrega PDF, confirma con Moffin o usa otro canal (SAT,
+              otro proveedor) para los documentos oficiales; la plantilla de correo y secretos opcionales están
+              documentados en el código de la función Edge <code className="text-[9px]">moffin-query</code>.
             </p>
           ) : null}
           {clientId ? (

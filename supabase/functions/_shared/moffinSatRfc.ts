@@ -53,6 +53,31 @@ export function resolveMoffinPathToAbsolute(pathVal: string, moffinBase: string)
   return null;
 }
 
+export function keyLooksLikePdfDownloadField(k: string): boolean {
+  const n = k.replace(/_/g, "").toLowerCase();
+  return n === "pdfurl" || n === "fileurl" || n === "downloadurl";
+}
+
+function extraPdfFieldNamesFromEnv(): string[] {
+  const t = Deno.env.get("MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES")?.trim();
+  if (!t) return [];
+  return t.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+function fieldNameMatchesExtraPdfKey(k: string, extras: string[]): boolean {
+  const low = k.toLowerCase();
+  return extras.some((e) => e.length > 0 && low === e.toLowerCase());
+}
+
+/**
+ * Heurística pdfURL/fileURL/downloadURL más nombres en
+ * `MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES` (coma-separados, p. ej. `constanciaPdfUrl,opinionDocument`).
+ */
+export function isMoffinPdfUrlFieldName(k: string): boolean {
+  if (keyLooksLikePdfDownloadField(k)) return true;
+  return fieldNameMatchesExtraPdfKey(k, extraPdfFieldNamesFromEnv());
+}
+
 /** No usar `url` genérico: en sat_rfc suele apuntar a un endpoint JSON (~2 KB), no al PDF. */
 function stringsFromCert(c: Record<string, unknown>): string[] {
   const keys = ["pdfURL", "pdfUrl", "fileURL", "fileUrl", "downloadUrl", "downloadURL"];
@@ -61,6 +86,19 @@ function stringsFromCert(c: Record<string, unknown>): string[] {
     const v = c[k];
     if (typeof v === "string" && isLikelyMoffinDownloadUrl(v) && !urlLooksLikeMoffinCertificateFile(v)) {
       out.push(v.trim());
+    }
+  }
+  const extras = extraPdfFieldNamesFromEnv();
+  for (const [k, v] of Object.entries(c)) {
+    if (keys.includes(k)) continue;
+    if (
+      typeof v === "string" &&
+      fieldNameMatchesExtraPdfKey(k, extras) &&
+      isLikelyMoffinDownloadUrl(v) &&
+      !urlLooksLikeMoffinCertificateFile(v)
+    ) {
+      const t = v.trim();
+      if (!out.includes(t)) out.push(t);
     }
   }
   return out;
@@ -199,11 +237,6 @@ function pickSatRfcCertificatePathPdfUrl(
   return allOrdered[1] ?? allOrdered[0] ?? null;
 }
 
-export function keyLooksLikePdfDownloadField(k: string): boolean {
-  const n = k.replace(/_/g, "").toLowerCase();
-  return n === "pdfurl" || n === "fileurl" || n === "downloadurl";
-}
-
 function collectUrlsByPdfLikeKeys(obj: unknown, out: string[], depth: number): void {
   if (depth > 24 || obj == null) return;
   if (typeof obj !== "object") return;
@@ -215,7 +248,7 @@ function collectUrlsByPdfLikeKeys(obj: unknown, out: string[], depth: number): v
   for (const [k, v] of Object.entries(o)) {
     if (
       typeof v === "string" &&
-      keyLooksLikePdfDownloadField(k) &&
+      isMoffinPdfUrlFieldName(k) &&
       isLikelyMoffinDownloadUrl(v) &&
       !urlLooksLikeMoffinCertificateFile(v)
     ) {
