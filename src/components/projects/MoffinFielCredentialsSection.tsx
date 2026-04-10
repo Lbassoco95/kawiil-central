@@ -120,7 +120,7 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
       <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-[11px] font-medium text-foreground">e.firma (FIEL) para constancia y opinión</span>
+          <span className="text-[11px] font-medium text-foreground">e.firma (FIEL) para consultas RFC Moffin</span>
         </div>
         <p className="text-[10px] text-muted-foreground">
           Sube <strong className="text-foreground/90">.cer</strong> y{" "}

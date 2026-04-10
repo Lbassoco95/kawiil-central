@@ -1,12 +1,15 @@
 /**
  * Webhook Svix (Moffin): verifica firma y actualiza moffin_consults cuando llega el resultado asíncrono.
  *
- * Configuración:
- * - Supabase Secrets: MOFFIN_SVIX_SIGNING_SECRET = whsec_... (del portal Svix / Moffin)
- * - En Svix, la URL debe ser: https://<ref>.supabase.co/functions/v1/moffin-webhook
- *   (NO uses moffin-query: esa función exige JWT de usuario.)
+ * sat_rfc (constancia/opinión en Kawiil): la API pública documenta certificados RFC; el payload puede traer
+ * `.cer` u otros campos. Revisa logs `moffin_webhook_sat_rfc_payload_shape` y compáralos con lo que indique Moffin
+ * si en el futuro entregan PDF en campos distintos.
  *
- * Deploy: verify_jwt = false (ver supabase/config.toml)
+ * Configuración:
+ * - MOFFIN_SVIX_SIGNING_SECRET = whsec_... (Svix / Moffin)
+ * - URL: https://<ref>.supabase.co/functions/v1/moffin-webhook (no usar moffin-query: exige JWT)
+ *
+ * Deploy: verify_jwt = false (supabase/config.toml)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
@@ -68,6 +71,41 @@ function summarizeSatRfc(
   resp: Record<string, unknown>,
 ): string {
   return summarizeSatRfcCertificates(consultType, resp);
+}
+
+/** Forma superficial del informe para cotejar con Moffin (PDF, URLs, claves en certificates[]). */
+function logMoffinWebhookSatPayloadShape(
+  consultType: ConsultType,
+  mr: Record<string, unknown> | null | undefined,
+) {
+  if (!mr || typeof mr !== "object") return;
+  if (
+    consultType !== "constancia_situacion_fiscal" &&
+    consultType !== "opinion_cumplimiento"
+  ) {
+    return;
+  }
+  const resp = mr.response as Record<string, unknown> | undefined;
+  const data = resp?.data as Record<string, unknown> | undefined;
+  const certs = Array.isArray(data?.certificates) ? (data.certificates as unknown[]) : [];
+  const first = certs[0];
+  const firstKeys =
+    first && typeof first === "object" && !Array.isArray(first)
+      ? Object.keys(first as Record<string, unknown>)
+      : [];
+  console.log(
+    JSON.stringify({
+      moffin_webhook_sat_rfc_payload_shape: {
+        consultType,
+        reportKeys: Object.keys(mr).slice(0, 48),
+        responseKeys:
+          resp && typeof resp === "object" ? Object.keys(resp).slice(0, 48) : [],
+        dataKeys: data && typeof data === "object" ? Object.keys(data).slice(0, 48) : [],
+        firstCertificateKeys: firstKeys,
+        hasReportPdfURL: typeof (mr as { pdfURL?: string }).pdfURL === "string",
+      },
+    }),
+  );
 }
 
 async function fetchMoffinReportJson(
@@ -276,6 +314,7 @@ Deno.serve(async (req) => {
   };
 
   const consultType = row.consult_type as ConsultType;
+  logMoffinWebhookSatPayloadShape(consultType, moffinReport);
   let summary: string | null = null;
   if (moffinReport && typeof moffinReport === "object") {
     if (consultType === "lista_69b") {
@@ -346,7 +385,7 @@ Deno.serve(async (req) => {
     st === "fail" || st === "error"
       ? errMsg
       : pdfWarn
-        ? `PDF no guardado: ${pdfWarn}`.slice(0, 500)
+        ? `Sin PDF adjunto: ${pdfWarn}`.slice(0, 500)
         : null;
 
   const patch: Record<string, unknown> = {

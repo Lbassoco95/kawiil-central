@@ -97,7 +97,7 @@ export function MoffinIntegrationCard() {
         )}
 
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
-          <p className="font-medium text-foreground">FIEL en Kawiil (constancia / opinión)</p>
+          <p className="font-medium text-foreground">FIEL en Kawiil (consultas RFC Moffin)</p>
           <p>
             En Secrets de Edge Functions agrega <code className="text-foreground">MOFFIN_FIEL_SECRET</code> (≥32
             caracteres) para cifrar los archivos <code className="text-foreground">.cer</code> y{" "}
@@ -119,8 +119,8 @@ export function MoffinIntegrationCard() {
             </li>
             <li>Proyecto con área contabilidad vinculado a ese cliente.</li>
             <li>
-              Tab <strong className="text-foreground">Contabilidad</strong>: carga FIEL (.cer/.key), luego botones 69-B,
-              Constancia, Opinión.
+              Tab <strong className="text-foreground">Contabilidad</strong>: carga FIEL (.cer/.key), luego 69-B y RFC ·
+              constancia / opinión (misma API de certificados salvo que Moffin indique otro path).
             </li>
             <li>
               Webhook Svix debe apuntar a <code className="break-all text-foreground">{webhookUrl || "…/moffin-webhook"}</code>

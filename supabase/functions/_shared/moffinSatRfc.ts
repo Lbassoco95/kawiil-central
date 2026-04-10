@@ -1,12 +1,28 @@
 /**
- * Extracción de PDF / URLs de respuestas sat_rfc (constancia, opinión).
- * Moffin suele devolver certificates[].type como "SELLO" | "FIEL"; las heurísticas
- * antiguas solo buscaban "constancia"/"opinión" y no encontraban URL.
+ * Extracción de PDF / URLs de respuestas POST /query/sat_rfc (OpenAPI: “SAT RFC Certificates”).
+ * Lo habitual son certificados FIEL/SELLO con `path`/`url` a objetos `.cer`, no PDF del SAT.
+ * No se deben tratar esos `.cer` como constancia u opinión en PDF.
  */
 
 export type MoffinSatRfcConsultType =
   | "constancia_situacion_fiscal"
   | "opinion_cumplimiento";
+
+/** URL de descarga que apunta a certificado digital (.cer), no a PDF fiscal. */
+export function urlLooksLikeMoffinCertificateFile(u: string): boolean {
+  const t = u.trim();
+  try {
+    if (new URL(t).pathname.toLowerCase().endsWith(".cer")) return true;
+  } catch {
+    if (/\.cer(\?|#|$)/i.test(t)) return true;
+  }
+  return false;
+}
+
+function asSatPdfUrlCandidate(u: string | null): string | null {
+  if (!u) return null;
+  return urlLooksLikeMoffinCertificateFile(u) ? null : u;
+}
 
 export function isLikelyMoffinDownloadUrl(u: string): boolean {
   const t = u.trim();
@@ -43,7 +59,9 @@ function stringsFromCert(c: Record<string, unknown>): string[] {
   const out: string[] = [];
   for (const k of keys) {
     const v = c[k];
-    if (typeof v === "string" && isLikelyMoffinDownloadUrl(v)) out.push(v.trim());
+    if (typeof v === "string" && isLikelyMoffinDownloadUrl(v) && !urlLooksLikeMoffinCertificateFile(v)) {
+      out.push(v.trim());
+    }
   }
   return out;
 }
@@ -195,7 +213,12 @@ function collectUrlsByPdfLikeKeys(obj: unknown, out: string[], depth: number): v
   }
   const o = obj as Record<string, unknown>;
   for (const [k, v] of Object.entries(o)) {
-    if (typeof v === "string" && keyLooksLikePdfDownloadField(k) && isLikelyMoffinDownloadUrl(v)) {
+    if (
+      typeof v === "string" &&
+      keyLooksLikePdfDownloadField(k) &&
+      isLikelyMoffinDownloadUrl(v) &&
+      !urlLooksLikeMoffinCertificateFile(v)
+    ) {
       const t = v.trim();
       if (!out.includes(t)) out.push(t);
     }
@@ -212,14 +235,16 @@ export function pickSatRfcPdfUrlForConsult(
   report: Record<string, unknown>,
   moffinBase?: string | null,
 ): string | null {
-  const top = extractReportLevelPdfUrl(report);
+  const top = asSatPdfUrlCandidate(extractReportLevelPdfUrl(report));
   if (top) return top;
   const base = moffinBase?.trim();
   if (base) {
-    const fromPath = pickSatRfcCertificatePathPdfUrl(consultType, report, base);
+    const fromPath = asSatPdfUrlCandidate(
+      pickSatRfcCertificatePathPdfUrl(consultType, report, base),
+    );
     if (fromPath) return fromPath;
   }
-  return pickSatRfcPdfUrl(consultType, report);
+  return asSatPdfUrlCandidate(pickSatRfcPdfUrl(consultType, report));
 }
 
 function keyLooksLikeBase64PayloadField(k: string): boolean {
@@ -294,11 +319,17 @@ export function extractReportLevelPdfUrl(report: Record<string, unknown>): strin
     (report.state as Record<string, unknown> | undefined)?.pdfURL,
   ];
   for (const c of candidates) {
-    if (typeof c === "string" && isLikelyMoffinDownloadUrl(c)) return c.trim();
+    if (typeof c === "string" && isLikelyMoffinDownloadUrl(c)) {
+      const t = c.trim();
+      if (!urlLooksLikeMoffinCertificateFile(t)) return t;
+    }
   }
   const deep: string[] = [];
   collectUrlsByPdfLikeKeys(report, deep, 0);
-  return deep[0] ?? null;
+  for (const u of deep) {
+    if (!urlLooksLikeMoffinCertificateFile(u)) return u;
+  }
+  return null;
 }
 
 export function summarizeSatRfcCertificates(
@@ -317,7 +348,7 @@ export function summarizeSatRfcCertificates(
       : certMatchesOpinionKeyword;
   const match = certs.find((c) => pred(String(c.type ?? "")));
   if (match) {
-    return `Certificado (${match.type}): ${match.state ?? ""}`.trim();
+    return `Verificación RFC · certificado ${match.type}: ${match.state ?? ""}`.trim();
   }
   if (certs.length) {
     const parts = certs.map((c) => {
@@ -325,7 +356,7 @@ export function summarizeSatRfcCertificates(
       const stt = c.state != null ? String(c.state) : "";
       return stt ? `${t} (${stt})` : t;
     });
-    return `Certificados SAT: ${parts.join(", ")}`;
+    return `Verificación RFC · certificados SAT: ${parts.join(", ")}`;
   }
   const exists = r.exists;
   const ok = r.success;

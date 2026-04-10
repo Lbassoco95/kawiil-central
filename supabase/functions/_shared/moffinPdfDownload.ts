@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildMoffinPdfStoragePath } from "./moffinStoragePath.ts";
-import { isLikelyMoffinDownloadUrl, keyLooksLikePdfDownloadField } from "./moffinSatRfc.ts";
+import {
+  isLikelyMoffinDownloadUrl,
+  keyLooksLikePdfDownloadField,
+  urlLooksLikeMoffinCertificateFile,
+} from "./moffinSatRfc.ts";
 
 function extractPdfUrlFromJsonParsed(j: unknown): string | null {
   const walk = (o: unknown): string | null => {
@@ -51,6 +55,7 @@ function extractBestFileUrlFromJsonTree(j: unknown, excludeUrl: string): string 
   const score = (u: string): number => {
     const low = u.toLowerCase();
     let s = 0;
+    if (urlLooksLikeMoffinCertificateFile(u)) s -= 12;
     if (/\.pdf(\?|#|$)/i.test(low)) s += 6;
     if (/download|\/file|blob|s3\.|cloudfront|storage|cdn|presigned|signed/i.test(low)) s += 4;
     if (/\/query\/|\/service_queries|\/report\/\d+$/i.test(low)) s -= 3;
@@ -111,6 +116,11 @@ export async function fetchMoffinPdfBytes(
       const head = new TextDecoder().decode(buf.slice(0, 8));
       if (buf.length >= 4 && head.startsWith("%PDF")) {
         return { ok: true, buf };
+      }
+      if (buf.length >= 2 && buf[0] === 0x30 && (buf[1] === 0x82 || buf[1] === 0x81)) {
+        last =
+          "el archivo descargado parece certificado X.509 (.cer), no PDF; sat_rfc suele devolver certificados, no constancia/opinión en PDF salvo que Moffin lo documente";
+        continue;
       }
       const nested = tryExtractPdfUrlFromJsonBody(buf, url);
       if (nested && nested !== url) {
@@ -203,6 +213,13 @@ export async function uploadMoffinPdfFromUrl(opts: {
   documentType: string;
   moffinApiKey?: string | null;
 }): Promise<{ documentId: string | null; failureReason: string | null }> {
+  if (urlLooksLikeMoffinCertificateFile(opts.url)) {
+    return {
+      documentId: null,
+      failureReason:
+        "La URL apunta a un certificado .cer (FIEL/SELLO), no a un PDF de constancia u opinión del SAT. Confirma con Moffin si tu plan incluye esos PDF.",
+    };
+  }
   const dl = await fetchMoffinPdfBytes(opts.url, opts.moffinApiKey);
   if (!dl.ok) {
     return { documentId: null, failureReason: dl.reason };

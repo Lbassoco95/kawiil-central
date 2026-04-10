@@ -83,13 +83,13 @@ const MOFFIN_CONSULT_META: Record<
     icon: ShieldAlert,
   },
   constancia_situacion_fiscal: {
-    label: "Constancia de situación fiscal",
-    short: "Constancia",
+    label: "Verificación RFC (constancia · Moffin)",
+    short: "RFC · constancia",
     icon: FileBadge,
   },
   opinion_cumplimiento: {
-    label: "Opinión de cumplimiento",
-    short: "Opinión",
+    label: "Verificación RFC (opinión · Moffin)",
+    short: "RFC · opinión",
     icon: FileCheck2,
   },
 };
@@ -606,6 +606,12 @@ export function AccountingDashboard({
         <CardContent className="p-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Consultas SAT (Moffin)</h3>
           {clientId ? (
+            <p className="text-[10px] text-muted-foreground leading-snug">
+              «RFC · constancia» y «RFC · opinión» usan la misma consulta de certificados RFC de Moffin (no son por sí
+              solas el PDF oficial del SAT). Si tu plan no entrega PDF, confirma el producto con Moffin.
+            </p>
+          ) : null}
+          {clientId ? (
             <>
               <MoffinSatStatusSummary
                 clientId={clientId}
@@ -627,7 +633,7 @@ export function AccountingDashboard({
                     type="password"
                     autoComplete="new-password"
                     className="h-8 text-xs"
-                    placeholder="Requerida para constancia y opinión"
+                    placeholder="Requerida para las consultas RFC (constancia / opinión)"
                     value={fielPassword}
                     onChange={(e) => setFielPassword(e.target.value)}
                   />

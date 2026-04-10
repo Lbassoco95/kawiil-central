@@ -31,11 +31,11 @@ export function ClientSatFiscalSection({ client, projects }: ClientSatFiscalSect
     <section className="glass-card p-5 md:col-span-2">
       <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
         <Calculator className="h-3.5 w-3.5" />
-        Constancia, opinión y 69-B (SAT)
+        SAT: 69-B y consultas RFC (Moffin)
       </h2>
       <div className="space-y-3 text-[13px] text-muted-foreground leading-relaxed">
         <p className="text-[12px]">
-          Para ejecutar 69-B, constancia u opinión abre la pestaña{" "}
+          Para 69-B o las consultas RFC (constancia/opinión en la app) abre la pestaña{" "}
           <strong className="text-foreground">Contabilidad</strong> del proyecto. El resumen SAT del cliente está al inicio
           de esta pestaña General.
         </p>

@@ -127,7 +127,11 @@ export function certConsultLine(
   if (row.status === "success" && !hasFile && isCert) {
     return {
       title: label,
-      detail: [row.summary, "PDF aún no guardado: usa «Sincronizar con Moffin»."]
+      detail: [
+        row.summary,
+        row.error_message,
+        "Sin PDF adjunto: la consulta suele devolver certificados RFC, no constancia/opinión en PDF salvo que Moffin lo incluya en tu plan. Puedes «Sincronizar con Moffin» por si el archivo llegó después.",
+      ]
         .filter(Boolean)
         .join(" ")
         .trim(),

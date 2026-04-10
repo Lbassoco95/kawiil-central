@@ -3,21 +3,39 @@ import {
   decryptFielSecret,
   formatFielMaterial,
 } from "../_shared/moffinFielCrypto.ts";
+import {
+  moffinQueryPathForConsult,
+  moffinQueryServiceSegment,
+} from "../_shared/moffinQueryPaths.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
 
 /**
- * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs (ReDoc en https://moffin.mx/docs)
- * - Lista 69-B / contribuyentes: POST /query/sat_blacklist
- * - Certificados SAT (constancia / opinión en certificates[].type): POST /query/sat_rfc
+ * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs · https://moffin.mx/docs
  * Auth: Authorization: Token <MOFFIN_API_KEY>
- * Producción base: https://app.moffin.mx/api/v1 — Sandbox: https://sandbox.moffin.mx/api/v1
+ * Base: MOFFIN_BASE_URL (p. ej. https://app.moffin.mx/api/v1 o sandbox).
  *
- * Constancia / opinión (sat_rfc): suelen requerir e.firma. Se guardan .cer/.key cifrados (moffin-fiel);
- * la contraseña va en cada solicitud (fielPassword). Nombres de campos: MOFFIN_FIEL_FIELD_* en Supabase.
+ * --- Qué hace hoy cada botón en Kawiil ---
+ * - Lista 69-B → POST /query/sat_blacklist (por defecto).
+ * - «Constancia» y «Opinión» → el mismo POST documentado como consulta de certificados RFC
+ *   (`sat_rfc` salvo overrides por secretos; ver moffinQueryPaths.ts).
+ *   La respuesta típica incluye certificados FIEL/SELLO con enlaces a archivos `.cer`, no PDF oficiales
+ *   de constancia de situación fiscal ni de opinión de cumplimiento del SAT.
  *
- * Si no hay PDF pese a SUCCESS: revisar logs `moffin_service_queries_diag` / `moffin_sat_pdf` en Edge;
- * si Moffin no expone enlace de archivo para sat_rfc en el producto contratado, confirmar con su soporte.
+ * --- Overrides de ruta (tras confirmar con Moffin) ---
+ * - MOFFIN_QUERY_PATH_SAT_BLACKLIST
+ * - MOFFIN_QUERY_PATH_CONSTANCIA_SITUACION_FISCAL
+ * - MOFFIN_QUERY_PATH_OPINION_CUMPLIMIENTO
+ * - MOFFIN_SERVICE_QUERIES_SERVICE (GET /service_queries `service=`, default sat_rfc)
+ *
+ * --- Preguntas para soporte / cuenta técnica Moffin (plantilla) ---
+ * 1) ¿Existe path o producto distinto para constancia y opinión en PDF del SAT?
+ * 2) Si todo pasa por sat_rfc: ¿qué campo del body/metadata dispara PDF vs solo certificados?
+ * 3) ¿El PDF llega solo en webhook Svix, en GET /report/{id}, o en otro campo?
+ * 4) ¿El plan contratado incluye esos PDF o solo validación de certificados?
+ *
+ * FIEL: .cer/.key cifrados (moffin-fiel); contraseña por solicitud. MOFFIN_FIEL_FIELD_* en secretos.
+ * Logs útiles: moffin_service_queries_diag, moffin_sat_pdf, moffin_webhook_sat_rfc_payload_shape.
  */
 
 const corsHeaders: Record<string, string> = {
@@ -207,7 +225,7 @@ async function persistMoffinReportToConsult(
     error_message:
       st === "success"
         ? pdfFailure
-          ? `PDF no guardado: ${pdfFailure}`.slice(0, 500)
+          ? `Sin PDF adjunto: ${pdfFailure}`.slice(0, 500)
           : null
         : errMsg,
     summary,
@@ -502,8 +520,8 @@ Deno.serve(async (req) => {
   const accountType = moffinAccountType(clientRow?.client_type, rfcRaw);
   const externalId = `kawiil-${projectId}-${consultType}-${Date.now()}`;
 
-  const path =
-    consultType === "lista_69b" ? "/query/sat_blacklist" : "/query/sat_rfc";
+  const path = moffinQueryPathForConsult(consultType);
+  const moffinServiceName = moffinQueryServiceSegment(path);
   const moffinUrl = `${moffinBase}${path}`;
 
   const payload: Record<string, unknown> = {
@@ -519,7 +537,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           error: "fiel_storage_not_configured",
           message:
-            "Configura MOFFIN_FIEL_SECRET (≥32 caracteres) en Edge Functions para usar constancia u opinión con FIEL almacenada.",
+            "Configura MOFFIN_FIEL_SECRET (≥32 caracteres) en Edge Functions para consultas RFC (constancia/opinión) con FIEL almacenada.",
         }),
         { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -546,7 +564,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           error: "fiel_required",
           message:
-            "Configura el certificado (.cer) y la llave privada (.key) del cliente en Contabilidad antes de consultar constancia u opinión.",
+            "Configura el certificado (.cer) y la llave privada (.key) del cliente en Contabilidad antes de las consultas RFC (constancia/opinión).",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -610,7 +628,7 @@ Deno.serve(async (req) => {
         client_id: project.client_id,
         rfc: rfcRaw,
         consult_type: consultType,
-        moffin_service: consultType === "lista_69b" ? "sat_blacklist" : "sat_rfc",
+        moffin_service: moffinServiceName,
         status: "error",
         error_message: msg,
         raw_response: {},
@@ -698,7 +716,7 @@ Deno.serve(async (req) => {
     !moffinRes.ok
       ? errMsg
       : pdfSidecarError
-        ? `PDF no guardado: ${pdfSidecarError}`.slice(0, 500)
+        ? `Sin PDF adjunto: ${pdfSidecarError}`.slice(0, 500)
         : null;
 
   const { data: inserted, error: insErr } = await admin
@@ -709,7 +727,7 @@ Deno.serve(async (req) => {
       client_id: project.client_id,
       rfc: rfcRaw,
       consult_type: consultType,
-      moffin_service: consultType === "lista_69b" ? "sat_blacklist" : "sat_rfc",
+      moffin_service: moffinServiceName,
       status: moffinRes.ok ? moffinStatus : "error",
       error_message: insertErrorMessage,
       summary,

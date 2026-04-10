@@ -38,8 +38,8 @@ function decodeBase64ToBytes(b64: string): Uint8Array | null {
 }
 
 /**
- * Intenta obtener PDF de constancia/opinión: URL en reporte, base64 en JSON,
- * o GET /service_queries?withFileURL=true (OpenAPI Moffin para sat_rfc).
+ * Intenta obtener un PDF de constancia/opinión si Moffin lo expone (reporte, base64 o service_queries).
+ * Si solo hay enlaces a `.cer`, no se suben como PDF (ver urlLooksLikeMoffinCertificateFile).
  */
 export async function tryUploadSatRfcPdf(
   opts: SatRfcUploadContext & {

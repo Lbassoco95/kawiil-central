@@ -2,7 +2,11 @@
  * GET /service_queries con withFileURL=true: enlaces de descarga para sat_rfc (OpenAPI Moffin).
  */
 
-import { isLikelyMoffinDownloadUrl, keyLooksLikePdfDownloadField } from "./moffinSatRfc.ts";
+import {
+  isLikelyMoffinDownloadUrl,
+  keyLooksLikePdfDownloadField,
+  urlLooksLikeMoffinCertificateFile,
+} from "./moffinSatRfc.ts";
 
 function readServiceQueryRows(json: Record<string, unknown>): unknown[] {
   const sq = json.serviceQueries;
@@ -41,7 +45,7 @@ function readPdfUrlFromRowDeep(row: unknown): string | null {
     }
     const o = obj as Record<string, unknown>;
     for (const [k, v] of Object.entries(o)) {
-      if (typeof v === "string" && isLikelyMoffinDownloadUrl(v)) {
+      if (typeof v === "string" && isLikelyMoffinDownloadUrl(v) && !urlLooksLikeMoffinCertificateFile(v)) {
         const kn = k.replace(/_/g, "").toLowerCase();
         if (keyLooksLikePdfDownloadField(k) || kn === "url" || kn === "href" || kn === "link") {
           return v.trim();
@@ -104,7 +108,10 @@ async function fetchServiceQueriesOnce(
   params.set("offset", "0");
   params.set("order", "DESC");
   params.set("withFileURL", "true");
-  params.set("service", "sat_rfc");
+  params.set(
+    "service",
+    Deno.env.get("MOFFIN_SERVICE_QUERIES_SERVICE")?.trim() || "sat_rfc",
+  );
   if (rfc.trim()) params.set("search", rfc.trim());
   if (withExternalFilter) {
     params.set("filter", JSON.stringify({ externalId__eq: withExternalFilter }));

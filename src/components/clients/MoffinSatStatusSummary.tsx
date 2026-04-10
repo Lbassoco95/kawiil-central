@@ -29,8 +29,8 @@ const toneClass: Record<string, string> = {
 
 const MOFFIN_TYPE_LABEL: Record<string, string> = {
   lista_69b: "Lista 69-B",
-  constancia_situacion_fiscal: "Constancia",
-  opinion_cumplimiento: "Opinión",
+  constancia_situacion_fiscal: "RFC · constancia",
+  opinion_cumplimiento: "RFC · opinión",
 };
 
 interface Props {
@@ -106,11 +106,11 @@ export function MoffinSatStatusSummary({
   }, [clientId, refetch, user]);
   const r69 = lista69bHeadline(byType.get("lista_69b"));
   const constancia = certConsultLine(
-    "Constancia de situación fiscal",
+    "RFC · constancia (Moffin)",
     byType.get("constancia_situacion_fiscal")
   );
   const opinion = certConsultLine(
-    "Opinión de cumplimiento",
+    "RFC · opinión (Moffin)",
     byType.get("opinion_cumplimiento")
   );
 
@@ -121,10 +121,14 @@ export function MoffinSatStatusSummary({
 
   return (
     <section className={cn("rounded-xl border border-border/60 bg-card/40 p-5 shadow-sm", className)}>
-      <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
+      <h2 className="text-sm font-medium text-muted-foreground mb-1 flex items-center gap-1.5">
         <Landmark className="h-3.5 w-3.5" />
         {title}
       </h2>
+      <p className="text-[10px] text-muted-foreground leading-snug mb-3">
+        Constancia y opinión aquí son consultas de certificados RFC vía Moffin; un PDF oficial del SAT solo aparecerá si
+        Moffin lo entrega en tu contrato.
+      </p>
       {!isLoading && hasPendingSyncable ? (
         <div className="flex flex-wrap items-center gap-2 mb-3">
           {stalePending ? (
@@ -175,7 +179,7 @@ export function MoffinSatStatusSummary({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                  <span className="text-muted-foreground text-xs font-medium">Opinión</span>
+                  <span className="text-muted-foreground text-xs font-medium">RFC · opinión</span>
                   <Badge
                     variant="outline"
                     className={toneClass[opinion.tone] ?? toneClass.muted}
@@ -205,7 +209,7 @@ export function MoffinSatStatusSummary({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                  <span className="text-muted-foreground text-xs font-medium">Constancia</span>
+                  <span className="text-muted-foreground text-xs font-medium">RFC · constancia</span>
                   <Badge
                     variant="outline"
                     className={toneClass[constancia.tone] ?? toneClass.muted}
