@@ -48,6 +48,11 @@ import {
   type OutlookAttachment,
 } from "@/lib/outlookEmailMedia";
 import {
+  buildEmailSheetPreview,
+  EMAIL_ATTACHMENT_PREVIEW_MAX_BYTES,
+  type EmailSheetPreviewData,
+} from "@/lib/emailAttachmentSheetPreview";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -59,7 +64,7 @@ import {
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List,
-  Eye, ExternalLink, Download,
+  Eye, Download,
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import {
@@ -267,16 +272,13 @@ function getAvatarColor(email?: string): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv20-docx-preview";
-
-/** Límite para convertir DOCX con Mammoth en memoria (vista previa en el diálogo). */
-const EMAIL_ATTACHMENT_DOCX_PREVIEW_MAX_BYTES = 20 * 1024 * 1024;
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv22-sheet-csv-preview";
 
 type AttachmentPreviewState = {
   url: string;
   name: string;
-  kind: "image" | "pdf" | "docx" | "other";
-  /** Requerido para `kind === "docx"` (Mammoth). */
+  kind: "image" | "pdf" | "docx" | "sheet" | "other";
+  /** Requerido para `docx` y `sheet` (Mammoth / SheetJS). */
   sourceBlob?: Blob;
 };
 
@@ -1819,6 +1821,9 @@ function AttachmentPreviewDialog({
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const [docxLoading, setDocxLoading] = useState(false);
   const [docxErr, setDocxErr] = useState<string | null>(null);
+  const [sheetData, setSheetData] = useState<EmailSheetPreviewData | null>(null);
+  const [sheetLoading, setSheetLoading] = useState(false);
+  const [sheetErr, setSheetErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!preview || preview.kind !== "docx") {
@@ -1834,7 +1839,7 @@ function AttachmentPreviewDialog({
       setDocxLoading(false);
       return;
     }
-    if (blob.size > EMAIL_ATTACHMENT_DOCX_PREVIEW_MAX_BYTES) {
+    if (blob.size > EMAIL_ATTACHMENT_PREVIEW_MAX_BYTES) {
       setDocxErr(
         "El archivo supera el límite de vista previa (20 MB). Descárgalo para abrirlo en Word u otra aplicación.",
       );
@@ -1859,6 +1864,49 @@ function AttachmentPreviewDialog({
         }
       } finally {
         if (!cancelled) setDocxLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [preview]);
+
+  useEffect(() => {
+    if (!preview || preview.kind !== "sheet") {
+      setSheetData(null);
+      setSheetErr(null);
+      setSheetLoading(false);
+      return;
+    }
+    const blob = preview.sourceBlob;
+    if (!blob) {
+      setSheetErr("No hay datos del adjunto para previsualizar.");
+      setSheetData(null);
+      setSheetLoading(false);
+      return;
+    }
+    if (blob.size > EMAIL_ATTACHMENT_PREVIEW_MAX_BYTES) {
+      setSheetErr(
+        "El archivo supera el límite de vista previa (20 MB). Descárgalo para abrirlo en Excel u otra aplicación.",
+      );
+      setSheetData(null);
+      setSheetLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSheetLoading(true);
+    setSheetErr(null);
+    setSheetData(null);
+    void (async () => {
+      try {
+        const data = await buildEmailSheetPreview(blob, preview.name || "adjunto");
+        if (!cancelled) setSheetData(data);
+      } catch (e) {
+        if (!cancelled) {
+          setSheetErr(e instanceof Error ? e.message : "No se pudo leer la hoja de cálculo.");
+        }
+      } finally {
+        if (!cancelled) setSheetLoading(false);
       }
     })();
     return () => {
@@ -1916,11 +1964,69 @@ function AttachmentPreviewDialog({
               )}
             </div>
           )}
+          {preview?.kind === "sheet" && (
+            <div className="flex flex-col min-h-0">
+              {sheetLoading && (
+                <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground px-4">
+                  <Loader2 className="h-5 w-5 animate-spin shrink-0" />
+                  Leyendo tabla…
+                </div>
+              )}
+              {!sheetLoading && sheetErr && (
+                <p className="text-sm text-destructive/90 whitespace-pre-wrap px-4 py-3">{sheetErr}</p>
+              )}
+              {!sheetLoading && !sheetErr && sheetData && (
+                <>
+                  <p className="text-xs text-muted-foreground px-4 pt-3 pb-2 shrink-0 border-b border-border/50">
+                    Hoja «{sheetData.sheetName}»
+                    {sheetData.extraSheets > 0
+                      ? ` · ${sheetData.extraSheets} hoja(s) más en el archivo (solo se muestra la primera)`
+                      : ""}
+                    {sheetData.truncatedRows || sheetData.truncatedCols
+                      ? " · Vista truncada (filas/columnas). Descarga el archivo para ver todo."
+                      : ""}
+                  </p>
+                  <div className="overflow-auto max-h-[min(70vh,640px)] px-2 pb-3">
+                    {sheetData.rows.length === 0 ? (
+                      <p className="text-sm text-muted-foreground p-3">Sin filas de datos.</p>
+                    ) : (
+                      <table className="w-max min-w-full text-xs border-collapse">
+                        <tbody>
+                          {sheetData.rows.map((row, i) => (
+                            <tr
+                              key={i}
+                              className={
+                                i === 0
+                                  ? "bg-muted/70 font-medium"
+                                  : i % 2 === 0
+                                    ? "bg-background"
+                                    : "bg-muted/20"
+                              }
+                            >
+                              {row.map((cell, j) => (
+                                <td
+                                  key={j}
+                                  className="border border-border px-2 py-1 align-top whitespace-nowrap max-w-[220px] truncate"
+                                  title={cell}
+                                >
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           {preview?.kind === "other" && (
             <div className="p-4">
               <p className="text-sm text-muted-foreground">
-                Vista previa no disponible para este tipo de archivo. Puedes descargarlo o usar «Abrir» en la tarjeta
-                del adjunto.
+                Vista previa no disponible para este tipo de archivo en el navegador. Usa «Descargar» en la tarjeta del
+                adjunto para abrirlo en tu equipo.
               </p>
             </div>
           )}
@@ -1993,6 +2099,45 @@ function EmailAttachmentTile({
   const isDocx =
     effectiveMime.includes("wordprocessingml") ||
     /\.docx$/i.test(att.name || "");
+  const isSheet =
+    /\.(xlsx|xlsm|xls|csv|tsv)$/i.test(att.name || "") ||
+    effectiveMime.includes("spreadsheetml") ||
+    effectiveMime.includes("spreadsheet") ||
+    effectiveMime === "application/vnd.ms-excel" ||
+    effectiveMime === "text/csv" ||
+    effectiveMime === "text/tab-separated-values" ||
+    effectiveMime === "application/csv";
+
+  const openPreviewOnly = () => {
+    const name = att.name || "adjunto";
+    if (isImage) {
+      onPreview({ url: blobUrl, name, kind: "image" });
+      return;
+    }
+    if (isPdf) {
+      onPreview({ url: blobUrl, name, kind: "pdf" });
+      return;
+    }
+    if (isDocx) {
+      if (att.size > EMAIL_ATTACHMENT_PREVIEW_MAX_BYTES) {
+        toast.error("Archivo demasiado grande para vista previa (máx. 20 MB). Usa Descargar.");
+        return;
+      }
+      if (!dataBlob) return;
+      onPreview({ url: blobUrl, name, kind: "docx", sourceBlob: dataBlob });
+      return;
+    }
+    if (isSheet) {
+      if (att.size > EMAIL_ATTACHMENT_PREVIEW_MAX_BYTES) {
+        toast.error("Archivo demasiado grande para vista previa (máx. 20 MB). Usa Descargar.");
+        return;
+      }
+      if (!dataBlob) return;
+      onPreview({ url: blobUrl, name, kind: "sheet", sourceBlob: dataBlob });
+      return;
+    }
+    onPreview({ url: blobUrl, name, kind: "other" });
+  };
 
   if (loading) {
     return <div className="h-36 w-full max-w-[220px] rounded-lg border bg-muted animate-pulse" />;
@@ -2018,7 +2163,7 @@ function EmailAttachmentTile({
         <button
           type="button"
           className="relative block w-full p-0 border-0 bg-transparent cursor-pointer group"
-          onClick={() => onPreview(blobUrl, att.name, "image")}
+          onClick={openPreviewOnly}
         >
           <img src={blobUrl} alt="" className="max-h-40 w-full object-contain bg-muted/30" />
           <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/35 transition-opacity">
@@ -2044,29 +2189,6 @@ function EmailAttachmentTile({
           {att.size > 1024 * 1024 ? `${(att.size / 1024 / 1024).toFixed(1)} MB` : `${Math.round(att.size / 1024)} KB`}
         </span>
         <div className="flex flex-wrap gap-1">
-          {(isImage || isPdf || isDocx) && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => {
-                const name = att.name || "adjunto";
-                if (isDocx) {
-                  if (att.size > EMAIL_ATTACHMENT_DOCX_PREVIEW_MAX_BYTES) {
-                    toast.error("Archivo demasiado grande para vista previa (máx. 20 MB). Descárgalo para abrirlo.");
-                    return;
-                  }
-                  if (!dataBlob) return;
-                  onPreview({ url: blobUrl, name, kind: "docx", sourceBlob: dataBlob });
-                  return;
-                }
-                onPreview({ url: blobUrl, name, kind: isPdf ? "pdf" : "image" });
-              }}
-            >
-              {isDocx ? "Vista previa" : "Ampliar"}
-            </Button>
-          )}
           <Button
             type="button"
             variant="outline"
@@ -2078,12 +2200,12 @@ function EmailAttachmentTile({
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             className="h-7 text-xs gap-1"
-            onClick={() => window.open(blobUrl, "_blank", "noopener,noreferrer")}
+            onClick={openPreviewOnly}
           >
-            <ExternalLink className="h-3 w-3" /> Abrir
+            <Eye className="h-3 w-3" /> Abrir
           </Button>
         </div>
       </div>

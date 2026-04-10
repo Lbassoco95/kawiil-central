@@ -275,6 +275,15 @@ export function inferMimeFromFileName(name: string): string | null {
   if (/\.docx$/i.test(n)) {
     return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   }
+  if (/\.xlsx$/i.test(n)) {
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  }
+  if (/\.xlsm$/i.test(n)) {
+    return "application/vnd.ms-excel.sheet.macroEnabled.12";
+  }
+  if (/\.xls$/i.test(n)) return "application/vnd.ms-excel";
+  if (/\.csv$/i.test(n)) return "text/csv";
+  if (/\.tsv$/i.test(n)) return "text/tab-separated-values";
   return null;
 }
 
