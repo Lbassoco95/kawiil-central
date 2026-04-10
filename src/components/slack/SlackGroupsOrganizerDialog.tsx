@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -25,6 +26,32 @@ import { conversationTitle, type ConversationTitleOpts } from "@/components/slac
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { Loader2, Plus, Trash2, ChevronUp, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
+
+const MSG_SLACK_GROUPS_TABLE_MISSING =
+  "Faltan las tablas de grupos en Supabase. Un administrador debe ejecutar la migración del archivo " +
+  "supabase/migrations/20260411120000_slack_sidebar_groups.sql (por ejemplo: Supabase Dashboard → SQL, o " +
+  "`supabase db query --linked -f supabase/migrations/20260411120000_slack_sidebar_groups.sql`).";
+
+function friendlySlackGroupDbError(err: unknown): string {
+  const pg = err as PostgrestError | undefined;
+  const code = pg?.code ?? "";
+  const msg =
+    err instanceof Error
+      ? err.message
+      : pg?.message
+        ? pg.message
+        : err && typeof err === "object" && "message" in err
+          ? String((err as { message: unknown }).message)
+          : String(err);
+  if (
+    code === "PGRST205" ||
+    /could not find the table/i.test(msg) ||
+    (/slack_sidebar_groups/i.test(msg) && /schema cache/i.test(msg))
+  ) {
+    return MSG_SLACK_GROUPS_TABLE_MISSING;
+  }
+  return msg;
+}
 
 type GroupRow = {
   id: string;
@@ -56,7 +83,7 @@ export function SlackGroupsOrganizerDialog({
   const [addToGroupId, setAddToGroupId] = useState<string>("");
   const [addChannelId, setAddChannelId] = useState<string>("");
 
-  const { data: groups = [], isLoading } = useQuery({
+  const { data: groups = [], isLoading, isError, error: groupsQueryError } = useQuery({
     queryKey: ["slack-sidebar-groups", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -91,20 +118,26 @@ export function SlackGroupsOrganizerDialog({
     mutationFn: async (title: string) => {
       const t = title.trim() || "Nuevo grupo";
       const nextOrder = groups.length ? Math.max(...groups.map((g) => g.sort_order)) + 1 : 0;
-      const { error } = await supabase.from("slack_sidebar_groups").insert({
-        user_id: user!.id,
-        organization_id: organizationId,
-        title: t,
-        sort_order: nextOrder,
-      });
+      const { data, error } = await supabase
+        .from("slack_sidebar_groups")
+        .insert({
+          user_id: user!.id,
+          organization_id: organizationId,
+          title: t,
+          sort_order: nextOrder,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+      return data as { id: string };
     },
-    onSuccess: () => {
+    onSuccess: (row) => {
       invalidate();
       setNewGroupTitle("");
+      if (row?.id) setAddToGroupId(row.id);
       toast.success("Grupo creado");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(friendlySlackGroupDbError(e)),
   });
 
   const deleteGroup = useMutation({
@@ -116,7 +149,7 @@ export function SlackGroupsOrganizerDialog({
       invalidate();
       toast.success("Grupo eliminado");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(friendlySlackGroupDbError(e)),
   });
 
   const renameGroup = useMutation({
@@ -125,7 +158,7 @@ export function SlackGroupsOrganizerDialog({
       if (error) throw error;
     },
     onSuccess: () => invalidate(),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(friendlySlackGroupDbError(e)),
   });
 
   const moveGroupOrder = useMutation({
@@ -141,7 +174,7 @@ export function SlackGroupsOrganizerDialog({
       await supabase.from("slack_sidebar_groups").update({ sort_order: a.sort_order }).eq("id", b.id);
     },
     onSuccess: () => invalidate(),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(friendlySlackGroupDbError(e)),
   });
 
   const addChannel = useMutation({
@@ -164,7 +197,7 @@ export function SlackGroupsOrganizerDialog({
       setAddChannelId("");
       toast.success("Conversación añadida al grupo");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(friendlySlackGroupDbError(e)),
   });
 
   const removeChannel = useMutation({
@@ -177,7 +210,7 @@ export function SlackGroupsOrganizerDialog({
       if (error) throw error;
     },
     onSuccess: () => invalidate(),
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => toast.error(friendlySlackGroupDbError(e)),
   });
 
   const sortedGroups = useMemo(
@@ -196,6 +229,12 @@ export function SlackGroupsOrganizerDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {isError && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {friendlySlackGroupDbError(groupsQueryError)}
+          </div>
+        )}
+
         <div className="space-y-4 py-2">
           <div className="flex gap-2 items-end">
             <div className="flex-1 space-y-1.5">
@@ -204,6 +243,12 @@ export function SlackGroupsOrganizerDialog({
                 id="new-grp"
                 value={newGroupTitle}
                 onChange={(e) => setNewGroupTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (!createGroup.isPending) createGroup.mutate(newGroupTitle);
+                  }
+                }}
                 placeholder="Ej. Clientes, Interno, Urgentes…"
               />
             </div>
