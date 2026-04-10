@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -34,6 +34,8 @@ type Props = {
   error: Error | null;
   titleOpts?: ConversationTitleOpts;
   userId?: string;
+  /** Controles encima del buscador (p. ej. nuevo DM). */
+  headerActions?: ReactNode;
 };
 
 function favStorageKey(uid: string | undefined) {
@@ -163,6 +165,7 @@ export function SlackConversationList({
   error,
   titleOpts,
   userId,
+  headerActions,
 }: Props) {
   const [q, setQ] = useState("");
   const [favSet, setFavSet] = useState<Set<string>>(() => loadFavs(userId));
@@ -275,7 +278,8 @@ export function SlackConversationList({
 
   return (
     <div className="flex flex-col h-full min-h-0 text-zinc-100">
-      <div className="p-2 border-b border-zinc-700/80 shrink-0">
+      <div className="p-2 border-b border-zinc-700/80 shrink-0 space-y-2">
+        {headerActions}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
           <Input

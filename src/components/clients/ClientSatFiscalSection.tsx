@@ -43,10 +43,11 @@ export function ClientSatFiscalSection({ client, projects }: ClientSatFiscalSect
           <strong className="text-foreground font-medium">proyecto de Contabilidad</strong> del cliente (integración Moffin),
           usando el <strong className="text-foreground font-medium">RFC</strong> de esta ficha.
         </p>
-        <p className="text-[12px]">
+               <p className="text-[12px]">
           Uso habitual en despacho: <span className="text-foreground">constancia mensual</span>,{" "}
-          <span className="text-foreground">opinión semanal</span>. La app aún no programa recordatorios automáticos; puedes
-          lanzar consultas cuando corresponda desde la pestaña Contabilidad del proyecto.
+          <span className="text-foreground">opinión semanal</span>. En la pestaña Contabilidad del proyecto, carga una vez el{" "}
+          <span className="text-foreground">.cer</span> y el <span className="text-foreground">.key</span>; la contraseña
+          de la e.firma se pide solo al ejecutar cada consulta.
         </p>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <span className="text-muted-foreground">RFC:</span>

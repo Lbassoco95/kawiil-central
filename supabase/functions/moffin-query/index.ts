@@ -1,4 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  decryptFielSecret,
+  formatFielMaterial,
+} from "../_shared/moffinFielCrypto.ts";
 
 /**
  * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs (ReDoc en https://moffin.mx/docs)
@@ -6,6 +10,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
  * - Certificados SAT (constancia / opinión en certificates[].type): POST /query/sat_rfc
  * Auth: Authorization: Token <MOFFIN_API_KEY>
  * Producción base: https://app.moffin.mx/api/v1 — Sandbox: https://sandbox.moffin.mx/api/v1
+ *
+ * Constancia / opinión (sat_rfc): suelen requerir e.firma. Se guardan .cer/.key cifrados (moffin-fiel);
+ * la contraseña va en cada solicitud (fielPassword). Nombres de campos: MOFFIN_FIEL_FIELD_* en Supabase.
  */
 
 const corsHeaders: Record<string, string> = {
@@ -209,7 +216,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  let body: { projectId?: string; consultType?: ConsultType };
+  let body: { projectId?: string; consultType?: ConsultType; fielPassword?: string };
   try {
     body = await req.json();
   } catch {
@@ -221,6 +228,8 @@ Deno.serve(async (req) => {
 
   const projectId = body.projectId?.trim();
   const consultType = body.consultType;
+  const fielPassword =
+    typeof body.fielPassword === "string" ? body.fielPassword.trim() : "";
   const allowed: ConsultType[] = [
     "lista_69b",
     "constancia_situacion_fiscal",
@@ -291,6 +300,83 @@ Deno.serve(async (req) => {
     accountType,
     externalId,
   };
+
+  if (consultType !== "lista_69b") {
+    const fielSecret = Deno.env.get("MOFFIN_FIEL_SECRET") ?? "";
+    if (fielSecret.length < 32) {
+      return new Response(
+        JSON.stringify({
+          error: "fiel_storage_not_configured",
+          message:
+            "Configura MOFFIN_FIEL_SECRET (≥32 caracteres) en Edge Functions para usar constancia u opinión con FIEL almacenada.",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!project.client_id) {
+      return new Response(
+        JSON.stringify({
+          error: "client_required",
+          message: "El proyecto debe tener un cliente asociado para consultas con FIEL.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const { data: fielRow } = await admin
+      .from("moffin_client_fiel")
+      .select("cert_ciphertext, key_ciphertext")
+      .eq("client_id", project.client_id)
+      .maybeSingle();
+
+    if (!fielRow) {
+      return new Response(
+        JSON.stringify({
+          error: "fiel_required",
+          message:
+            "Configura el certificado (.cer) y la llave privada (.key) del cliente en Contabilidad antes de consultar constancia u opinión.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!fielPassword) {
+      return new Response(
+        JSON.stringify({
+          error: "fiel_password_required",
+          message: "Ingresa la contraseña de la e.firma para esta consulta.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    let certB64: string;
+    let keyB64: string;
+    try {
+      certB64 = await decryptFielSecret(fielRow.cert_ciphertext, fielSecret);
+      keyB64 = await decryptFielSecret(fielRow.key_ciphertext, fielSecret);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(
+        JSON.stringify({
+          error: "fiel_decrypt_failed",
+          message: msg,
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const certField = Deno.env.get("MOFFIN_FIEL_FIELD_CERT") ?? "certificate";
+    const keyField = Deno.env.get("MOFFIN_FIEL_FIELD_KEY") ?? "privateKey";
+    const passField = Deno.env.get("MOFFIN_FIEL_FIELD_PASSWORD") ?? "password";
+    const certFmt = Deno.env.get("MOFFIN_FIEL_CERT_FORMAT") === "utf8" ? "utf8" : "b64";
+    const keyFmt = Deno.env.get("MOFFIN_FIEL_KEY_FORMAT") === "utf8" ? "utf8" : "b64";
+
+    payload[certField] = formatFielMaterial(certB64, certFmt);
+    payload[keyField] = formatFielMaterial(keyB64, keyFmt);
+    payload[passField] = fielPassword;
+  }
 
   let moffinRes: Response;
   try {

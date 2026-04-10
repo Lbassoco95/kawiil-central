@@ -8,6 +8,7 @@ import { useSlackConnection } from "@/hooks/useSlackConnection";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { invokeSlackApi, type SlackConversation, type SlackMessage } from "@/lib/slackApi";
+import { fetchAllSlackConversations } from "@/lib/slackWorkspaceFetch";
 import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
 import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
@@ -17,8 +18,10 @@ import { SlackChannelHeader } from "@/components/slack/SlackChannelHeader";
 import { SlackMessageList } from "@/components/slack/SlackMessageList";
 import { SlackComposer } from "@/components/slack/SlackComposer";
 import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
+import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
+import { Button } from "@/components/ui/button";
 import { conversationTitle } from "@/components/slack/slackGrouping";
-import { Loader2 } from "lucide-react";
+import { Loader2, MessageSquarePlus } from "lucide-react";
 import { toast } from "sonner";
 
 type HistoryPage = {
@@ -27,6 +30,7 @@ type HistoryPage = {
 };
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MPIM_MEMBERS_BATCH = 40;
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -56,6 +60,7 @@ export default function Comunicacion() {
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
+  const [newDmOpen, setNewDmOpen] = useState(false);
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const switchChannel = useCallback(
@@ -116,15 +121,7 @@ export default function Comunicacion() {
 
   const conversationsQuery = useQuery({
     queryKey: ["slack-conversations", connection?.id],
-    queryFn: async () => {
-      const data = await invokeSlackApi<{ ok: boolean; channels?: SlackConversation[]; error?: string }>({
-        action: "conversations.list",
-        types: "public_channel,private_channel,mpim,im",
-        limit: 200,
-      });
-      if (!data.ok) throw new Error(data.error || "No se pudieron cargar conversaciones");
-      return (data.channels || []).filter((c) => c.id);
-    },
+    queryFn: () => fetchAllSlackConversations(),
     enabled: isConnected,
     staleTime: 60_000,
   });
@@ -137,14 +134,19 @@ export default function Comunicacion() {
     queryKey: ["slack-mpim-members", mpimIds.sort().join(",")],
     queryFn: async () => {
       if (mpimIds.length === 0) return {} as Record<string, string[]>;
-      const d = await invokeSlackApi<{
-        ok: boolean;
-        members_by_channel?: Record<string, string[]>;
-      }>({
-        action: "conversations.members.batch",
-        channel_ids: mpimIds,
-      });
-      return d.members_by_channel || {};
+      const merged: Record<string, string[]> = {};
+      for (let i = 0; i < mpimIds.length; i += MPIM_MEMBERS_BATCH) {
+        const slice = mpimIds.slice(i, i + MPIM_MEMBERS_BATCH);
+        const d = await invokeSlackApi<{
+          ok: boolean;
+          members_by_channel?: Record<string, string[]>;
+        }>({
+          action: "conversations.members.batch",
+          channel_ids: slice,
+        });
+        Object.assign(merged, d.members_by_channel || {});
+      }
+      return merged;
     },
     enabled: isConnected && mpimIds.length > 0,
     staleTime: 300_000,
@@ -408,6 +410,18 @@ export default function Comunicacion() {
       error={conversationsQuery.error as Error | null}
       titleOpts={titleOpts}
       userId={user?.id}
+      headerActions={
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="w-full h-8 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border-zinc-700"
+          onClick={() => setNewDmOpen(true)}
+        >
+          <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5 shrink-0" />
+          Nuevo mensaje directo
+        </Button>
+      }
     />
   );
 
@@ -493,6 +507,13 @@ export default function Comunicacion() {
 
   return (
     <AppLayout contentMaxWidth="full">
+      <SlackNewDmDialog
+        open={newDmOpen}
+        onOpenChange={setNewDmOpen}
+        connectionId={connection?.id}
+        slackSelfUserId={connection?.slack_user_id}
+        onChannelReady={(channelId) => selectChannel(channelId)}
+      />
       <SlackWorkspaceLayout
         sidebar={sidebar}
         main={<div className="flex flex-col flex-1 min-h-0 overflow-hidden">{main}</div>}

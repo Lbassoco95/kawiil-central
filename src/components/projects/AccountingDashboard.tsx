@@ -54,8 +54,15 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PhaseTaskRow } from "./PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MoffinFielCredentialsSection } from "./MoffinFielCredentialsSection";
 
 type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
+
+function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
+  return consultType !== "lista_69b";
+}
 
 const MOFFIN_CONSULT_META: Record<
   MoffinConsultType,
@@ -333,6 +340,33 @@ export function AccountingDashboard({
   });
 
   const [moffinBusy, setMoffinBusy] = useState<MoffinConsultType | null>(null);
+  const [fielPassword, setFielPassword] = useState("");
+
+  const { data: moffinFielStatus } = useQuery({
+    queryKey: ["moffin-fiel-status", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("moffin-fiel", {
+        body: { action: "status", clientId: clientId! },
+      });
+      if (error) throw new Error(error.message);
+      const payload = (data ?? {}) as {
+        configured?: boolean;
+        certFingerprint?: string | null;
+        updatedAt?: string | null;
+        error?: string;
+        message?: string;
+      };
+      if (payload.error) {
+        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
+      }
+      return {
+        configured: !!payload.configured,
+        certFingerprint: payload.certFingerprint ?? null,
+        updatedAt: payload.updatedAt ?? null,
+      };
+    },
+    enabled: !!user && !!clientId,
+  });
 
   const { data: moffinRows = [] } = useQuery({
     queryKey: ["moffin-consults", projectId],
@@ -359,6 +393,16 @@ export function AccountingDashboard({
 
   const runMoffinConsult = useCallback(
     async (consultType: MoffinConsultType) => {
+      if (moffinNeedsFiel(consultType)) {
+        if (!moffinFielStatus?.configured) {
+          toast.error("Primero carga el .cer y el .key del cliente en el bloque de e.firma.");
+          return;
+        }
+        if (!fielPassword.trim()) {
+          toast.error("Ingresa la contraseña de la e.firma para esta consulta.");
+          return;
+        }
+      }
       if (
         !window.confirm(
           "Cada consulta puede generar un cargo según tu plan con Moffin. ¿Deseas continuar?"
@@ -369,7 +413,13 @@ export function AccountingDashboard({
       setMoffinBusy(consultType);
       try {
         const { data, error } = await supabase.functions.invoke("moffin-query", {
-          body: { projectId, consultType },
+          body: {
+            projectId,
+            consultType,
+            ...(moffinNeedsFiel(consultType)
+              ? { fielPassword: fielPassword.trim() }
+              : {}),
+          },
         });
         const payload = (data ?? {}) as {
           error?: string;
@@ -398,7 +448,7 @@ export function AccountingDashboard({
         setMoffinBusy(null);
       }
     },
-    [projectId, queryClient]
+    [projectId, queryClient, moffinFielStatus?.configured, fielPassword]
   );
 
   const downloadMoffinFile = useCallback(async (filePath: string | null | undefined) => {
@@ -482,6 +532,27 @@ export function AccountingDashboard({
               ) : null}
             </div>
           </div>
+          {clientId ? (
+            <div className="space-y-3">
+              <MoffinFielCredentialsSection clientId={clientId} />
+              {moffinFielStatus?.configured ? (
+                <div className="space-y-1 max-w-sm">
+                  <Label htmlFor="moffin-fiel-password" className="text-[10px] text-muted-foreground">
+                    Contraseña e.firma (constancia y opinión; no se guarda)
+                  </Label>
+                  <Input
+                    id="moffin-fiel-password"
+                    type="password"
+                    autoComplete="new-password"
+                    className="h-8 text-xs"
+                    placeholder="Obligatoria en cada consulta SAT con certificados"
+                    value={fielPassword}
+                    onChange={(e) => setFielPassword(e.target.value)}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {!clientId ? (
             <p className="text-xs text-amber-700 dark:text-amber-400">
               Asocia un cliente con RFC al proyecto para usar estas consultas.
@@ -491,6 +562,7 @@ export function AccountingDashboard({
               {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
                 const meta = MOFFIN_CONSULT_META[key];
                 const Icon = meta.icon;
+                const needsCert = moffinNeedsFiel(key);
                 return (
                   <Button
                     key={key}
@@ -498,7 +570,12 @@ export function AccountingDashboard({
                     variant="outline"
                     size="sm"
                     className="gap-1.5"
-                    disabled={!!moffinBusy}
+                    disabled={!!moffinBusy || (needsCert && !moffinFielStatus?.configured)}
+                    title={
+                      needsCert && !moffinFielStatus?.configured
+                        ? "Carga .cer y .key antes de consultar"
+                        : undefined
+                    }
                     onClick={() => runMoffinConsult(key)}
                   >
                     {moffinBusy === key ? (

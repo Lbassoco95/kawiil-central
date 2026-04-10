@@ -5,36 +5,84 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+/** HTTP 200 siempre que sea posible: el cliente Supabase `invoke` solo expone el cuerpo si la respuesta es 2xx. */
+function jsonOk(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 type SlackMethod =
   | "conversations.list"
+  | "conversations.open"
   | "conversations.history"
   | "conversations.members"
   | "conversations.replies"
   | "conversations.info"
   | "chat.postMessage"
   | "chat.scheduleMessage"
-  | "users.info";
+  | "users.info"
+  | "users.list";
 
 const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
 
-async function slackFilesUpload(
+/**
+ * Flujo recomendado por Slack (sustituye files.upload clásico, a menudo rechazado o limitado).
+ * 1) getUploadURLExternal 2) PUT binario 3) completeUploadExternal
+ */
+async function slackFilesUploadExternal(
   token: string,
   channel: string,
   filename: string,
   bytes: Uint8Array,
   initialComment?: string,
 ) {
-  const form = new FormData();
-  form.append("channels", channel);
-  form.append("filename", filename);
-  form.append("file", new Blob([bytes]), filename);
-  if (initialComment?.trim()) form.append("initial_comment", initialComment.trim());
-  const res = await fetch("https://slack.com/api/files.upload", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-    body: form,
+  const step1Params = new URLSearchParams({
+    filename,
+    length: String(bytes.byteLength),
   });
-  return res.json();
+  const gRes = await fetch("https://slack.com/api/files.getUploadURLExternal", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: step1Params,
+  });
+  const gu = await gRes.json() as {
+    ok?: boolean;
+    error?: string;
+    upload_url?: string;
+    file_id?: string;
+  };
+  if (!gu.ok || !gu.upload_url || !gu.file_id) {
+    return gu;
+  }
+
+  const putRes = await fetch(gu.upload_url, {
+    method: "PUT",
+    body: bytes,
+    headers: { "Content-Type": "application/octet-stream" },
+  });
+  if (!putRes.ok) {
+    return { ok: false, error: `upload_to_slack_url_failed_${putRes.status}` };
+  }
+
+  const comp = new URLSearchParams();
+  comp.set("channel_id", channel);
+  comp.set("files", JSON.stringify([{ id: gu.file_id, title: filename }]));
+  if (initialComment?.trim()) comp.set("initial_comment", initialComment.trim());
+
+  const cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: comp,
+  });
+  return cRes.json();
 }
 
 async function slackCall(token: string, method: SlackMethod, params: Record<string, string | number | undefined>) {
@@ -102,36 +150,86 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (connErr || !conn?.access_token) {
-      return new Response(JSON.stringify({ error: "slack_not_connected", message: "Conecta Slack primero." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk({ ok: false, error: "slack_not_connected", message: "Conecta Slack primero." });
     }
 
-    const json = await req.json().catch(() => ({}));
+    const ct = req.headers.get("content-type") || "";
+    let json: Record<string, unknown> = {};
+    let multipart: FormData | null = null;
+
+    if (ct.includes("multipart/form-data")) {
+      multipart = await req.formData();
+      json = { action: String(multipart.get("action") || "") };
+    } else {
+      json = await req.json().catch(() => ({}));
+    }
+
     const action = json.action as string;
+
+    if (action === "files.upload" && multipart) {
+      const channel = String(multipart.get("channel") || "");
+      const filename = String(multipart.get("filename") || "upload");
+      const initialComment = multipart.get("initial_comment")?.toString();
+      const file = multipart.get("file");
+      if (!channel) {
+        return jsonOk({ ok: false, error: "channel required" });
+      }
+      if (!(file instanceof File)) {
+        return jsonOk({ ok: false, error: "file required" });
+      }
+      const buf = await file.arrayBuffer();
+      const binary = new Uint8Array(buf);
+      if (binary.byteLength > MAX_UPLOAD_BYTES) {
+        return jsonOk({ ok: false, error: "file too large (max ~50MB)" });
+      }
+      const name = filename || file.name || "upload";
+      const data = await slackFilesUploadExternal(conn.access_token, channel, name, binary, initialComment);
+      return jsonOk(data);
+    }
+
+    if (multipart && action !== "files.upload") {
+      return jsonOk({ ok: false, error: "multipart_only_supported_for_files.upload" });
+    }
 
     if (action === "conversations.list") {
       const types = (json.types as string) || "public_channel,private_channel,mpim,im";
       const cursor = json.cursor as string | undefined;
-      const limit = (json.limit as number) || 200;
+      const rawLimit = (json.limit as number) || 200;
+      const limit = Math.min(1000, Math.max(1, rawLimit));
       const data = await slackCall(conn.access_token, "conversations.list", {
         types,
         cursor,
         limit,
       });
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return jsonOk(data);
+    }
+
+    if (action === "conversations.open") {
+      const users = (json.users as string)?.trim();
+      if (!users) {
+        return jsonOk({ ok: false, error: "users required (Slack user IDs, comma-separated for grupos)" });
+      }
+      const data = await slackCall(conn.access_token, "conversations.open", {
+        users: users.replace(/\s+/g, ""),
       });
+      return jsonOk(data);
+    }
+
+    if (action === "users.list") {
+      const cursor = json.cursor as string | undefined;
+      const rawLimit = (json.limit as number) || 200;
+      const limit = Math.min(1000, Math.max(1, rawLimit));
+      const data = await slackCall(conn.access_token, "users.list", {
+        cursor,
+        limit,
+      });
+      return jsonOk(data);
     }
 
     if (action === "conversations.history") {
       const channel = json.channel as string;
       if (!channel) {
-        return new Response(JSON.stringify({ error: "channel required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel required" });
       }
       const data = await slackCall(conn.access_token, "conversations.history", {
         channel,
@@ -139,36 +237,26 @@ Deno.serve(async (req) => {
         limit: (json.limit as number) || 50,
         inclusive: "true",
       });
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk(data);
     }
 
     if (action === "conversations.members") {
       const channel = json.channel as string;
       if (!channel) {
-        return new Response(JSON.stringify({ error: "channel required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel required" });
       }
       const data = await slackCall(conn.access_token, "conversations.members", {
         channel,
         cursor: json.cursor as string | undefined,
         limit: (json.limit as number) || 200,
       });
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk(data);
     }
 
     if (action === "conversations.members.batch") {
       const raw = json.channel_ids as unknown;
       if (!Array.isArray(raw) || raw.length === 0) {
-        return new Response(JSON.stringify({ error: "channel_ids array required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel_ids array required" });
       }
       const ids = [...new Set(raw.map((x) => String(x)).filter(Boolean))].slice(0, 40);
       const members_by_channel: Record<string, string[]> = {};
@@ -183,19 +271,14 @@ Deno.serve(async (req) => {
           members_by_channel[ch] = [];
         }
       }
-      return new Response(JSON.stringify({ ok: true, members_by_channel }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk({ ok: true, members_by_channel });
     }
 
     if (action === "conversations.replies") {
       const channel = json.channel as string;
       const ts = json.ts as string;
       if (!channel || !ts) {
-        return new Response(JSON.stringify({ error: "channel and ts required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel and ts required" });
       }
       const data = await slackCall(conn.access_token, "conversations.replies", {
         channel,
@@ -204,44 +287,32 @@ Deno.serve(async (req) => {
         limit: (json.limit as number) || 50,
         inclusive: "true",
       });
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk(data);
     }
 
     if (action === "conversations.info") {
       const channel = json.channel as string;
       if (!channel) {
-        return new Response(JSON.stringify({ error: "channel required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel required" });
       }
       const data = await slackCall(conn.access_token, "conversations.info", {
         channel,
       });
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk(data);
     }
 
     if (action === "chat.postMessage") {
       const channel = json.channel as string;
       const text = json.text as string;
       if (!channel || !text?.trim()) {
-        return new Response(JSON.stringify({ error: "channel and text required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel and text required" });
       }
       const data = await slackCall(conn.access_token, "chat.postMessage", {
         channel,
         text: text.trim(),
         thread_ts: json.thread_ts as string | undefined,
       });
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk(data);
     }
 
     if (action === "chat.scheduleMessage") {
@@ -250,10 +321,7 @@ Deno.serve(async (req) => {
       const postAtRaw = json.post_at as number | string | undefined;
       const postAt = typeof postAtRaw === "string" ? parseInt(postAtRaw, 10) : postAtRaw;
       if (!channel || !text?.trim() || postAt == null || Number.isNaN(postAt)) {
-        return new Response(JSON.stringify({ error: "channel, text and post_at required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel, text and post_at required" });
       }
       const data = await slackCall(conn.access_token, "chat.scheduleMessage", {
         channel,
@@ -261,9 +329,7 @@ Deno.serve(async (req) => {
         post_at: postAt,
         thread_ts: json.thread_ts as string | undefined,
       });
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk(data);
     }
 
     if (action === "files.upload") {
@@ -272,39 +338,25 @@ Deno.serve(async (req) => {
       const base64 = json.base64 as string;
       const initialComment = json.initial_comment as string | undefined;
       if (!channel || !base64?.length) {
-        return new Response(JSON.stringify({ error: "channel and base64 required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "channel and base64 required" });
       }
       let binary: Uint8Array;
       try {
         binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       } catch {
-        return new Response(JSON.stringify({ error: "invalid base64" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "invalid base64" });
       }
       if (binary.byteLength > MAX_UPLOAD_BYTES) {
-        return new Response(JSON.stringify({ error: "file too large (max ~50MB)" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "file too large (max ~50MB)" });
       }
-      const data = await slackFilesUpload(conn.access_token, channel, filename, binary, initialComment);
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const data = await slackFilesUploadExternal(conn.access_token, channel, filename, binary, initialComment);
+      return jsonOk(data);
     }
 
     if (action === "users.info.batch") {
       const rawIds = json.user_ids as unknown;
       if (!Array.isArray(rawIds) || rawIds.length === 0) {
-        return new Response(JSON.stringify({ error: "user_ids array required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonOk({ ok: false, error: "user_ids array required" });
       }
       const unique = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 200);
       const users: Record<string, { display_name: string | null; real_name: string | null; avatar_url: string | null }> = {};
@@ -332,37 +384,29 @@ Deno.serve(async (req) => {
         );
       }
 
-      return new Response(JSON.stringify({ ok: true, users }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonOk({ ok: true, users });
     }
 
-    return new Response(
-      JSON.stringify({
-        error: "unknown_action",
-        allowed: [
-          "conversations.list",
-          "conversations.history",
-          "conversations.members",
-          "conversations.members.batch",
-          "conversations.replies",
-          "conversations.info",
-          "chat.postMessage",
-          "chat.scheduleMessage",
-          "files.upload",
-          "users.info.batch",
-        ],
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return jsonOk({
+      ok: false,
+      error: "unknown_action",
+      allowed: [
+        "conversations.list",
+        "conversations.open",
+        "users.list",
+        "conversations.history",
+        "conversations.members",
+        "conversations.members.batch",
+        "conversations.replies",
+        "conversations.info",
+        "chat.postMessage",
+        "chat.scheduleMessage",
+        "files.upload",
+        "users.info.batch",
+      ],
+    });
   } catch (error) {
     console.error("slack-api:", error);
-    return new Response(JSON.stringify({ error: (error as Error).message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonOk({ ok: false, error: (error as Error).message });
   }
 });
