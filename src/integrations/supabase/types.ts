@@ -2051,11 +2051,13 @@ export type Database = {
           organization_id: string
           phone: string | null
           proactive_ai_notifications: boolean
+          reminders_hourly_digest: boolean
           desktop_browser_notifications: boolean
           desktop_push_notifications: boolean
           notify_slack_mentions: boolean
           notify_slack_channel_watch: boolean
           notify_slack_vip: boolean
+          notify_slack_dm: boolean
           updated_at: string
           user_id: string
         }
@@ -2075,11 +2077,13 @@ export type Database = {
           organization_id: string
           phone?: string | null
           proactive_ai_notifications?: boolean
+          reminders_hourly_digest?: boolean
           desktop_browser_notifications?: boolean
           desktop_push_notifications?: boolean
           notify_slack_mentions?: boolean
           notify_slack_channel_watch?: boolean
           notify_slack_vip?: boolean
+          notify_slack_dm?: boolean
           updated_at?: string
           user_id: string
         }
@@ -2099,11 +2103,13 @@ export type Database = {
           organization_id?: string
           phone?: string | null
           proactive_ai_notifications?: boolean
+          reminders_hourly_digest?: boolean
           desktop_browser_notifications?: boolean
           desktop_push_notifications?: boolean
           notify_slack_mentions?: boolean
           notify_slack_channel_watch?: boolean
           notify_slack_vip?: boolean
+          notify_slack_dm?: boolean
           updated_at?: string
           user_id?: string
         }

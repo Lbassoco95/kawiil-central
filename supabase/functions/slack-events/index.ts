@@ -44,6 +44,80 @@ function getSupabaseAdmin() {
   );
 }
 
+/** Miembros del canal (DM/mpim/canal); requiere SLACK_BOT_TOKEN con scopes im:read, mpim:read, channels:read o conversations:read. */
+async function slackConversationMembers(channelId: string, botToken: string): Promise<string[]> {
+  const out: string[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const u = new URL("https://slack.com/api/conversations.members");
+    u.searchParams.set("channel", channelId);
+    if (cursor) u.searchParams.set("cursor", cursor);
+    const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${botToken}` } });
+    const j = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      members?: string[];
+      response_metadata?: { next_cursor?: string };
+    };
+    if (!j.ok) {
+      console.warn("conversations.members:", j.error || "unknown");
+      break;
+    }
+    out.push(...(j.members || []));
+    cursor = j.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+type SlackTargetFlags = {
+  organization_id: string;
+  mention: boolean;
+  watch: boolean;
+  vip: boolean;
+  dm: boolean;
+};
+
+function mergeSlackTarget(
+  targets: Map<string, SlackTargetFlags>,
+  userId: string,
+  organizationId: string,
+  flag: "mention" | "watch" | "vip" | "dm",
+) {
+  const cur = targets.get(userId);
+  if (!cur) {
+    targets.set(userId, {
+      organization_id: organizationId,
+      mention: flag === "mention",
+      watch: flag === "watch",
+      vip: flag === "vip",
+      dm: flag === "dm",
+    });
+    return;
+  }
+  if (flag === "mention") cur.mention = true;
+  if (flag === "watch") cur.watch = true;
+  if (flag === "vip") cur.vip = true;
+  if (flag === "dm") cur.dm = true;
+  targets.set(userId, cur);
+}
+
+function slackNotificationTitle(flags: SlackTargetFlags, channelType: string): string {
+  if (flags.mention) return "Slack · Te mencionaron";
+  if (flags.dm) {
+    return channelType === "im" ? "Slack · Mensaje directo" : "Slack · Grupo privado";
+  }
+  if (flags.vip) return "Slack · VIP · Nuevo mensaje";
+  if (flags.watch) return "Slack · Canal en seguimiento";
+  if (channelType === "im") return "Slack · Mensaje directo";
+  if (channelType === "mpim") return "Slack · Grupo privado";
+  return "Slack · Canal";
+}
+
+function slackNotificationType(flags: SlackTargetFlags): string {
+  return flags.mention ? "slack_mention" : "slack_message";
+}
+
 async function sendWebPushForUsers(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   userIds: string[],
@@ -89,7 +163,7 @@ async function sendWebPushForUsers(
   }
 }
 
-/** Notificaciones in-app (+ push) por @mención a usuarios conectados o canales en slack_channel_watches */
+/** Notificaciones in-app (+ push): @mención, seguimiento, VIP, MD/grupo privado (con SLACK_BOT_TOKEN). */
 async function handleMessageNotificationEvent(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   event: Record<string, unknown>,
@@ -122,7 +196,7 @@ async function handleMessageNotificationEvent(
     .maybeSingle();
   const senderKawiilId = senderConn?.user_id as string | undefined;
 
-  const targets = new Map<string, { organization_id: string }>();
+  const targets = new Map<string, SlackTargetFlags>();
 
   const mentionMatches = [...text.matchAll(/<@([A-Z0-9]+)>/g)];
   const mentionIds = [...new Set(mentionMatches.map((m) => m[1]))];
@@ -142,7 +216,7 @@ async function handleMessageNotificationEvent(
         .eq("user_id", row.user_id)
         .maybeSingle();
       if (prof?.notify_slack_mentions === false) continue;
-      targets.set(row.user_id, { organization_id: row.organization_id });
+      mergeSlackTarget(targets, row.user_id, row.organization_id, "mention");
     }
   }
 
@@ -159,7 +233,7 @@ async function handleMessageNotificationEvent(
       .eq("user_id", w.user_id)
       .maybeSingle();
     if (prof?.notify_slack_channel_watch === false) continue;
-    targets.set(w.user_id, { organization_id: w.organization_id });
+    mergeSlackTarget(targets, w.user_id, w.organization_id, "watch");
   }
 
   /** VIP: cada mensaje en la conversación; ignora notify_slack_channel_watch pero respeta notify_slack_vip. */
@@ -177,25 +251,46 @@ async function handleMessageNotificationEvent(
       .eq("user_id", v.user_id)
       .maybeSingle();
     if (prof?.notify_slack_vip === false) continue;
-    targets.set(v.user_id, { organization_id: v.organization_id });
+    mergeSlackTarget(targets, v.user_id, v.organization_id, "vip");
+  }
+
+  const channelType = (event.channel_type as string) || "channel";
+
+  /** MD y grupos privados: notificar al resto de participantes con cuenta Kawiil (notify_slack_dm). */
+  if ((channelType === "im" || channelType === "mpim") && channel) {
+    const bot = Deno.env.get("SLACK_BOT_TOKEN");
+    if (bot) {
+      const members = await slackConversationMembers(channel, bot);
+      for (const sid of members) {
+        if (sid === senderSlackId) continue;
+        const { data: conn } = await supabase
+          .from("user_slack_connections")
+          .select("user_id, organization_id")
+          .eq("slack_team_id", teamId)
+          .eq("slack_user_id", sid)
+          .maybeSingle();
+        if (!conn?.user_id) continue;
+        if (conn.user_id === senderKawiilId) continue;
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("notify_slack_dm")
+          .eq("user_id", conn.user_id)
+          .maybeSingle();
+        if (prof?.notify_slack_dm === false) continue;
+        mergeSlackTarget(targets, conn.user_id, conn.organization_id, "dm");
+      }
+    }
   }
 
   if (targets.size === 0) return;
 
   const preview = text.replace(/<@[A-Z0-9]+>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 200);
-  const channelType = (event.channel_type as string) || "channel";
-  const titleLabel =
-    channelType === "im"
-      ? "Slack · Mensaje directo"
-      : channelType === "mpim"
-      ? "Slack · Grupo"
-      : "Slack · Canal";
 
-  const rows = [...targets.entries()].map(([user_id, { organization_id }]) => ({
+  const rows = [...targets.entries()].map(([user_id, flags]) => ({
     user_id,
-    organization_id,
-    type: "slack_message",
-    title: titleLabel,
+    organization_id: flags.organization_id,
+    type: slackNotificationType(flags),
+    title: slackNotificationTitle(flags, channelType),
     body: preview || "(sin texto)",
     entity_type: "slack",
     entity_id: `${channel}|${ts}`,
@@ -209,13 +304,10 @@ async function handleMessageNotificationEvent(
   }
 
   const deepUrl = `/comunicacion?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(ts)}`;
-  await sendWebPushForUsers(
-    supabase,
-    [...targets.keys()],
-    titleLabel,
-    preview || "Nuevo mensaje",
-    deepUrl,
-  );
+  const bodyPush = preview || "Nuevo mensaje";
+  for (const row of rows) {
+    await sendWebPushForUsers(supabase, [row.user_id], row.title, bodyPush, deepUrl);
+  }
 }
 
 // Find user by Slack email lookup

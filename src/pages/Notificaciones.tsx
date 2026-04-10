@@ -27,7 +27,7 @@ import { registerWebPushSubscription } from "@/lib/registerWebPush";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
-const MENTION_TYPES = ["mention"];
+const MENTION_TYPES = ["mention", "slack_mention"];
 const ACTIVITY_TYPES = [
   "task_assigned",
   "task_reassigned",
@@ -46,6 +46,7 @@ function getNotificationIcon(type: string) {
   if (type === "deadline_due_tomorrow_task") return <CalendarClock className="h-3.5 w-3.5 text-amber-600" />;
   if (type === "improvement_suggestion") return <Lightbulb className="h-3.5 w-3.5 text-amber-500" />;
   if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-primary" />;
+  if (type === "slack_mention") return <AtSign className="h-3.5 w-3.5 text-[#611f69]" />;
   if (type === "slack_message") return <MessageSquare className="h-3.5 w-3.5 text-[#611f69]" />;
   return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
 }
@@ -117,7 +118,7 @@ function NotificationDeliveryPreferences() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "desktop_browser_notifications, desktop_push_notifications, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip",
+          "desktop_browser_notifications, desktop_push_notifications, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip, notify_slack_dm",
         )
         .eq("user_id", user!.id)
         .single();
@@ -277,6 +278,19 @@ function NotificationDeliveryPreferences() {
             onCheckedChange={(v) => updateFields.mutate({ notify_slack_channel_watch: v })}
           />
         </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Slack: MD y grupos privados</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Avisos cuando te escriben por mensaje directo o grupo privado (sin @mención).
+            </p>
+          </div>
+          <Switch
+            checked={profile?.notify_slack_dm !== false}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ notify_slack_dm: v })}
+          />
+        </div>
         <div className="flex flex-wrap gap-2 pt-1">
           <Button type="button" variant="outline" size="sm" onClick={requestBrowserPermission}>
             Pedir permiso del navegador
@@ -363,7 +377,7 @@ export default function Notificaciones() {
       } else {
         navigate("/comunicacion");
       }
-    } else if (m.type === "slack_message") {
+    } else if (m.type === "slack_message" || m.type === "slack_mention") {
       navigate("/comunicacion");
     }
   };
