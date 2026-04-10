@@ -2,8 +2,11 @@ import { FunctionsHttpError } from "@supabase/functions-js";
 import { supabase } from "@/integrations/supabase/client";
 
 async function readInvokeFailureMessage(error: unknown): Promise<string | null> {
-  if (!(error instanceof FunctionsHttpError)) return null;
-  const ctx = error.context;
+  const ctx = error instanceof FunctionsHttpError
+    ? error.context
+    : (error && typeof error === "object" && "context" in error
+      ? (error as { context?: unknown }).context
+      : undefined);
   if (!(ctx instanceof Response)) return null;
   try {
     const j = (await ctx.clone().json()) as { error?: string; message?: string };

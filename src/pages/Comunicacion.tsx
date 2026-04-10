@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSlackConnection } from "@/hooks/useSlackConnection";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { invokeSlackApi, type SlackConversation, type SlackMessage } from "@/lib/slackApi";
+import { invokeSlackApi, invokeSlackFileUpload, type SlackConversation, type SlackMessage } from "@/lib/slackApi";
 import { fetchAllSlackConversations } from "@/lib/slackWorkspaceFetch";
 import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
@@ -31,19 +31,6 @@ type HistoryPage = {
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MPIM_MEMBERS_BATCH = 40;
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => {
-      const s = r.result as string;
-      const i = s.indexOf(",");
-      resolve(i >= 0 ? s.slice(i + 1) : s);
-    };
-    r.onerror = () => reject(new Error("No se pudo leer el archivo"));
-    r.readAsDataURL(file);
-  });
-}
 
 export default function Comunicacion() {
   const { user } = useAuth();
@@ -319,15 +306,14 @@ export default function Comunicacion() {
   const uploadMutation = useMutation({
     mutationFn: async (vars: { file: File; initial_comment?: string }) => {
       if (vars.file.size > MAX_UPLOAD_BYTES) throw new Error("El archivo supera 50 MB");
-      const base64 = await fileToBase64(vars.file);
-      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
-        action: "files.upload",
-        channel: selectedChannel!,
-        filename: vars.file.name,
-        base64,
-        initial_comment: vars.initial_comment,
-      });
-      if (!data.ok) throw new Error(data.error || "No se pudo subir el archivo");
+      const form = new FormData();
+      form.append("action", "files.upload");
+      form.append("channel", selectedChannel!);
+      form.append("filename", vars.file.name);
+      form.append("file", vars.file);
+      if (vars.initial_comment?.trim()) form.append("initial_comment", vars.initial_comment.trim());
+      const data = (await invokeSlackFileUpload(form)) as { ok?: boolean; error?: string };
+      if (!data.ok) throw new Error(String(data.error || "No se pudo subir el archivo"));
     },
     onSuccess: () => {
       toast.success("Archivo enviado a Slack");
