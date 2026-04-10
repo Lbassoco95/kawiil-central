@@ -763,20 +763,38 @@ export default function Comunicacion() {
                 ) : isTransformador ? (
                   <>
                     <p>
-                      Falta Web Push (VAPID) en el despliegue. Configúralo una vez; después cada usuario puede activar push en{" "}
-                      <Link to="/notificaciones" className="underline font-medium text-amber-200">
-                        Notificaciones
-                      </Link>
-                      .
+                      Falta la variable{" "}
+                      <code className="rounded bg-black/30 px-1 text-[10px]">VITE_VAPID_PUBLIC_KEY</code> en Lovable; sin
+                      ella no hay push en segundo plano. Puedes{" "}
+                      <button
+                        type="button"
+                        className="underline font-medium text-amber-200 hover:text-amber-100"
+                        onClick={dismissPushBanner}
+                      >
+                        ocultar este aviso
+                      </button>{" "}
+                      mientras tanto.
                     </p>
                     <details className="rounded border border-amber-800/40 bg-black/20 px-2 py-1.5">
                       <summary className="cursor-pointer text-amber-200/95 font-medium select-none">
-                        Pasos técnicos (Lovable y Supabase)
+                        Pasos: generar claves, Lovable, Supabase y publicar
                       </summary>
+                      <p className="mt-2 text-amber-100/90">
+                        Cuando esté configurado, cada usuario activa push en{" "}
+                        <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                          Notificaciones
+                        </Link>
+                        .
+                      </p>
                       <ul className="list-disc pl-4 mt-2 space-y-0.5 text-amber-200/95">
                         <li>
-                          <strong>Lovable / build:</strong>{" "}
-                          <code className="rounded bg-black/30 px-1">VITE_VAPID_PUBLIC_KEY</code> (clave pública).
+                          Generar par:{" "}
+                          <code className="rounded bg-black/30 px-1">npx web-push generate-vapid-keys</code>
+                        </li>
+                        <li>
+                          <strong>Lovable</strong> (variables de entorno):{" "}
+                          <code className="rounded bg-black/30 px-1">VITE_VAPID_PUBLIC_KEY</code> = clave{" "}
+                          <em>pública</em> del comando anterior.
                         </li>
                         <li>
                           <strong>Supabase</strong> → Edge Functions → Secrets:{" "}
@@ -785,13 +803,10 @@ export default function Comunicacion() {
                           <code className="rounded bg-black/30 px-1">VAPID_CONTACT_EMAIL</code> (p. ej.{" "}
                           <code className="rounded bg-black/30 px-1">mailto:equipo@tudominio.com</code>).
                         </li>
-                        <li>
-                          Generar claves:{" "}
-                          <code className="rounded bg-black/30 px-1">npx web-push generate-vapid-keys</code>
-                        </li>
                       </ul>
                       <p className="text-amber-300/80 mt-1.5">
-                        Tras guardar en Lovable, vuelve a publicar el proyecto para que el cliente lea la clave.
+                        Tras guardar en Lovable, vuelve a <strong>publicar</strong> el proyecto para que el navegador
+                        reciba la clave pública.
                       </p>
                     </details>
                   </>
