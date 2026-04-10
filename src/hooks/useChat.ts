@@ -52,6 +52,40 @@ const MSG_ANTHROPIC_BILLING_FALLBACK =
   "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
   "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
 
+const MSG_CLAUDE_OVERLOADED =
+  "Claude está temporalmente saturado (muchas peticiones en Anthropic). Espera unos segundos e inténtalo de nuevo.";
+
+/** Detecta saturación Anthropic (529, 503 claude_overloaded, o JSON antiguo con detail overloaded_error). */
+function parseAnthropicOverloadFromAiChatBody(
+  errRaw: string,
+  status: number,
+): { overload: boolean; retryAfterMs: number } {
+  let retryAfterMs = 12_000;
+  try {
+    const j = JSON.parse(errRaw) as {
+      code?: string;
+      retry_after?: number;
+      message?: string;
+      error?: string;
+      detail?: string;
+    };
+    if (typeof j.retry_after === "number" && j.retry_after > 0) {
+      retryAfterMs = Math.min(120_000, j.retry_after * 1000 + 2000);
+    }
+    if (j.code === "claude_overloaded") return { overload: true, retryAfterMs };
+    const d = typeof j.detail === "string" ? j.detail : "";
+    if (d.includes("overloaded_error") || d.includes('"type":"overloaded_error"')) {
+      return { overload: true, retryAfterMs };
+    }
+    if (status === 529) return { overload: true, retryAfterMs };
+    const combined = `${j.message ?? ""} ${j.error ?? ""}`;
+    if (status === 503 && /saturado|overload/i.test(combined)) return { overload: true, retryAfterMs };
+  } catch {
+    if (status === 529) return { overload: true, retryAfterMs };
+  }
+  return { overload: false, retryAfterMs };
+}
+
 /** Entre invocaciones: el Edge ahora procesa muchas páginas/trozos por llamada; breve pausa ante 429. */
 const MIN_MS_BETWEEN_INDEX_INVOKES = 120;
 /** Páginas por petición al Edge (texto ya extraído en el navegador). */
@@ -626,6 +660,36 @@ export function useChat() {
           resp = await fetchChatResilient();
         }
 
+        for (let rOv = 0; rOv < 6; rOv++) {
+          if (resp.status !== 503 && resp.status !== 529) break;
+          const errRaw = await resp.text();
+          const { overload, retryAfterMs } = parseAnthropicOverloadFromAiChatBody(errRaw, resp.status);
+          if (!overload) {
+            resp = new Response(errRaw, {
+              status: resp.status,
+              headers: { "content-type": resp.headers.get("content-type") || "application/json" },
+            });
+            break;
+          }
+          if (rOv >= 5) {
+            resp = new Response(
+              JSON.stringify({
+                error: MSG_CLAUDE_OVERLOADED,
+                message: MSG_CLAUDE_OVERLOADED,
+                code: "claude_overloaded",
+              }),
+              { status: 503, headers: { "content-type": "application/json" } },
+            );
+            break;
+          }
+          pushProgress(
+            "overload",
+            `El servicio de IA está muy cargado. Esperando ${Math.round(retryAfterMs / 1000)} s (reintento ${rOv + 1}/5)…`,
+          );
+          await new Promise((r) => setTimeout(r, retryAfterMs));
+          resp = await fetchChatResilient();
+        }
+
         const ct = resp.headers.get("content-type") || "";
 
         if (!resp.ok) {
@@ -645,6 +709,13 @@ export function useChat() {
               };
               if (resp.status === 402 || j.code === "anthropic_billing") {
                 errMsg = j.message || j.error || MSG_ANTHROPIC_BILLING_FALLBACK;
+              } else if (j.code === "claude_overloaded") {
+                errMsg = j.message || j.error || MSG_CLAUDE_OVERLOADED;
+              } else if (
+                typeof j.detail === "string" &&
+                (j.detail.includes("overloaded_error") || j.detail.includes('"type":"overloaded_error"'))
+              ) {
+                errMsg = MSG_CLAUDE_OVERLOADED;
               } else if (resp.status === 413 || j.code === "context_too_long") {
                 errMsg =
                   j.message ||
@@ -822,11 +893,17 @@ export function useChat() {
         const msg = e?.message || "Error al enviar mensaje";
         pushProgress("error", msg);
         toast.error(msg);
+        const overloadHint =
+          /saturado|overloaded|529|claude_overloaded/i.test(msg) || msg === MSG_CLAUDE_OVERLOADED;
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: `**No se pudo completar la respuesta.**\n\n${msg}\n\nSi el problema continúa, revisa que la función **ai-chat** esté desplegada y que haya créditos del proveedor de IA.`,
+            content: `**No se pudo completar la respuesta.**\n\n${msg}\n\n${
+              overloadHint
+                ? "Es un fallo temporal del proveedor de IA; suele bastar con reintentar en unos minutos."
+                : "Si el problema continúa, revisa que la función **ai-chat** esté desplegada y que haya créditos del proveedor de IA."
+            }`,
             isError: true,
           },
         ]);

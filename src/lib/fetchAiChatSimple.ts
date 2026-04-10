@@ -6,6 +6,18 @@ const MSG_ANTHROPIC_BILLING_FALLBACK =
   "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
   "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
 
+const MSG_CLAUDE_OVERLOADED =
+  "Claude está temporalmente saturado (muchas peticiones en Anthropic). Espera unos segundos e inténtalo de nuevo.";
+
+function isOverloadResponse(status: number, raw: string, parsed: Record<string, unknown> | null): boolean {
+  if (status === 529) return true;
+  if (parsed?.code === "claude_overloaded") return true;
+  const detail = typeof parsed?.detail === "string" ? parsed.detail : "";
+  if (detail.includes("overloaded_error") || detail.includes('"type":"overloaded_error"')) return true;
+  if (status === 503 && /saturado|overload/i.test(`${parsed?.message ?? ""} ${parsed?.error ?? ""}`)) return true;
+  return raw.includes("overloaded_error");
+}
+
 export type AiChatSimpleMessage = {
   role: "user" | "assistant" | "system";
   content: string;
@@ -64,6 +76,32 @@ export async function fetchAiChatSimpleContent(
         continue;
       }
       throw lastError;
+    }
+
+    if (resp.status === 503 || resp.status === 529) {
+      const raw = await resp.text();
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        parsed = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        /* ignore */
+      }
+      if (isOverloadResponse(resp.status, raw, parsed)) {
+        let retryAfterMs = 12_000;
+        const ra = parsed?.retry_after;
+        if (typeof ra === "number" && ra > 0) retryAfterMs = Math.min(120_000, ra * 1000 + 2000);
+        lastError = new Error(MSG_CLAUDE_OVERLOADED);
+        if (attempt < maxAttempts - 1) {
+          await new Promise((r) => setTimeout(r, retryAfterMs));
+          continue;
+        }
+        throw lastError;
+      }
+      const msg =
+        (typeof parsed?.message === "string" && parsed.message) ||
+        (typeof parsed?.error === "string" && parsed.error) ||
+        `Error ${resp.status}`;
+      throw new Error(msg);
     }
 
     if (resp.status === 402) {
