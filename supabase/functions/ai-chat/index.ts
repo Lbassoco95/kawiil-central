@@ -10,16 +10,36 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_429_MAX_ATTEMPTS = 7;
+/** Reintentos con backoff ante 429, 529 (overload) y 503 transitorios. */
+const ANTHROPIC_RETRY_MAX_ATTEMPTS = 7;
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** POST a /v1/messages con reintentos si Anthropic responde 429 (rate limit). */
+function anthropicErrorTypeFromBody(errText: string): string | undefined {
+  try {
+    const j = JSON.parse(errText) as { error?: { type?: string } };
+    return j?.error?.type;
+  } catch {
+    return undefined;
+  }
+}
+
+/** True si conviene reintentar el POST a /v1/messages. */
+function anthropicResponseIsRetryable(status: number, errText: string): boolean {
+  const t = anthropicErrorTypeFromBody(errText);
+  if (t === "overloaded_error" || t === "rate_limit_error") return true;
+  if (errText.includes("overloaded_error")) return true;
+  return status === 429 || status === 529 || status === 503;
+}
+
+/** POST a /v1/messages con reintentos si Anthropic responde 429, 529 u overload en cuerpo. */
 async function anthropicMessagesFetch(apiKey: string, body: Record<string, unknown>): Promise<Response> {
-  let lastResp: Response | undefined;
-  for (let attempt = 0; attempt < ANTHROPIC_429_MAX_ATTEMPTS; attempt++) {
+  let lastErrText = '{"error":{"type":"unknown"}}';
+  let lastStatus = 500;
+
+  for (let attempt = 0; attempt < ANTHROPIC_RETRY_MAX_ATTEMPTS; attempt++) {
     const resp = await fetch(ANTHROPIC_API_URL, {
       method: "POST",
       headers: {
@@ -29,20 +49,28 @@ async function anthropicMessagesFetch(apiKey: string, body: Record<string, unkno
       },
       body: JSON.stringify(body),
     });
-    lastResp = resp;
+
     if (resp.ok) return resp;
-    if (resp.status !== 429) return resp;
 
     const errText = await resp.text();
-    if (attempt >= ANTHROPIC_429_MAX_ATTEMPTS - 1) {
-      console.warn("Anthropic 429 tras reintentos:", errText.slice(0, 240));
+    lastErrText = errText;
+    lastStatus = resp.status;
+
+    const retryable =
+      attempt < ANTHROPIC_RETRY_MAX_ATTEMPTS - 1 && anthropicResponseIsRetryable(resp.status, errText);
+
+    if (!retryable) {
       return new Response(errText, {
-        status: 429,
-        headers: { "content-type": "application/json" },
+        status: resp.status,
+        headers: { "content-type": resp.headers.get("content-type") || "application/json" },
       });
     }
 
     let waitMs = Math.min(90_000, 3000 * 2 ** attempt);
+    if (resp.status === 529 || resp.status === 503 || anthropicErrorTypeFromBody(errText) === "overloaded_error") {
+      waitMs = Math.min(120_000, Math.max(waitMs, 4000 * 2 ** attempt));
+    }
+
     const retryHdr = resp.headers.get("retry-after");
     if (retryHdr) {
       const sec = parseInt(retryHdr, 10);
@@ -55,10 +83,17 @@ async function anthropicMessagesFetch(apiKey: string, body: Record<string, unkno
     } catch {
       /* ignore */
     }
-    console.warn(`Anthropic 429, reintento ${attempt + 2}/${ANTHROPIC_429_MAX_ATTEMPTS} en ${waitMs}ms`);
+
+    console.warn(
+      `Anthropic ${resp.status} (${anthropicErrorTypeFromBody(errText) || "?"}), reintento ${attempt + 2}/${ANTHROPIC_RETRY_MAX_ATTEMPTS} en ${waitMs}ms`,
+    );
     await sleepMs(waitMs);
   }
-  return lastResp!;
+
+  return new Response(lastErrText, {
+    status: lastStatus,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 /** Se lanza desde handleClaudeChat y se traduce a HTTP 402 + JSON con code estable. */
@@ -2051,6 +2086,28 @@ serve(async (req) => {
         });
       }
 
+      if (
+        resp.status === 529 ||
+        resp.status === 503 ||
+        errText.includes("overloaded_error") ||
+        anthropicErrorTypeFromBody(errText) === "overloaded_error"
+      ) {
+        const msg =
+          "Claude está temporalmente saturado (muchas peticiones en Anthropic). Espera unos segundos e inténtalo de nuevo.";
+        return new Response(
+          JSON.stringify({
+            error: msg,
+            message: msg,
+            code: "claude_overloaded",
+            retry_after: 15,
+          }),
+          {
+            status: 503,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
       if (resp.status === 400 && isAnthropicPromptTooLongMessage(errText)) {
         const msg =
           "La conversación o los adjuntos superan el límite de contexto del modelo. Inicia un chat nuevo o reduce el historial.";
@@ -2103,6 +2160,22 @@ serve(async (req) => {
           },
         );
       }
+      if (errMsg.includes("CLAUDE_OVERLOADED")) {
+        const msg =
+          "Claude está temporalmente saturado (muchas peticiones en Anthropic). Espera unos segundos e inténtalo de nuevo.";
+        return new Response(
+          JSON.stringify({
+            error: msg,
+            message: msg,
+            code: "claude_overloaded",
+            retry_after: 15,
+          }),
+          {
+            status: 503,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
       if (errMsg.includes(ANTHROPIC_BILLING_THROW) || textLooksLikeAnthropicBilling(errMsg)) {
         return responseAnthropicBilling();
       }
@@ -2128,6 +2201,19 @@ serve(async (req) => {
     console.error("ai-chat error:", e);
     const outerMsg = e instanceof Error ? e.message : "Error desconocido";
     const low = outerMsg.toLowerCase();
+    if (outerMsg.includes("CLAUDE_OVERLOADED") || low.includes("overloaded_error")) {
+      const msg =
+        "Claude está temporalmente saturado (muchas peticiones en Anthropic). Espera unos segundos e inténtalo de nuevo.";
+      return new Response(
+        JSON.stringify({
+          error: msg,
+          message: msg,
+          code: "claude_overloaded",
+          retry_after: 15,
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     if (
       low.includes("prompt is too long") ||
       outerMsg.includes("CLAUDE_CONTEXT_TOO_LONG") ||
@@ -2685,6 +2771,15 @@ async function handleClaudeChat(
       if (resp.status === 429) {
         console.warn("Claude 429 tras reintentos en handleClaudeChat");
         throw new Error("RATE_LIMIT_429");
+      }
+      if (
+        resp.status === 529 ||
+        resp.status === 503 ||
+        errText.includes("overloaded_error") ||
+        anthropicErrorTypeFromBody(errText) === "overloaded_error"
+      ) {
+        console.warn("Claude overload tras reintentos:", errText.slice(0, 220));
+        throw new Error("CLAUDE_OVERLOADED");
       }
       if (isAnthropicCreditBalanceLow(resp.status, errText)) {
         throw new Error(ANTHROPIC_BILLING_THROW);
