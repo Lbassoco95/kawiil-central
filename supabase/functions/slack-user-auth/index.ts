@@ -2,7 +2,7 @@
  * Inicia OAuth de Slack (token de usuario). En la app Slack: Redirect URL =
  * {SUPABASE_URL}/functions/v1/slack-user-callback
  * Scopes de usuario (user_scope): channels:history,channels:read,groups:history,groups:read,
- * im:history,im:read,mpim:history,mpim:read,users:read,users:read.email,chat:write
+ * im:history,im:read,mpim:history,mpim:read,users:read,users:read.email,chat:write,files:write
  * Event Subscriptions (misma app, slack-events): message.channels, message.groups, message.im, message.mpim
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -24,6 +24,7 @@ const DEFAULT_USER_SCOPES = [
   "users:read",
   "users:read.email",
   "chat:write",
+  "files:write",
 ].join(",");
 
 Deno.serve(async (req) => {

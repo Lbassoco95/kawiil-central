@@ -1,14 +1,26 @@
-import { FormEvent, KeyboardEvent, useRef, useEffect, useState, useMemo } from "react";
+import { FormEvent, KeyboardEvent, useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Loader2, SendHorizontal, Smile, AtSign } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Loader2, SendHorizontal, Smile, AtSign, CalendarClock, Paperclip, Mic, Square, RotateCcw } from "lucide-react";
 import { SLACK_EMOJI } from "@/lib/slackFormatting";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { slackUserDisplayName } from "./slackGrouping";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const EMOJI_PICKER_KEYS = Object.keys(SLACK_EMOJI).slice(0, 48);
+
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+function defaultScheduleLocalValue(): string {
+  const d = new Date(Date.now() + 3600_000);
+  d.setSeconds(0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 type Props = {
   value: string;
@@ -20,6 +32,12 @@ type Props = {
   mentionUserIds?: string[];
   userMap?: Record<string, SlackUserProfile | undefined>;
   compact?: boolean;
+  onSchedule?: (postAtUnixSeconds: number) => void;
+  scheduling?: boolean;
+  onUploadFile?: (file: File, initialComment?: string) => void;
+  uploading?: boolean;
+  showRestoreDraft?: boolean;
+  onRestoreDraft?: () => void;
 };
 
 export function SlackComposer({
@@ -32,10 +50,23 @@ export function SlackComposer({
   mentionUserIds = [],
   userMap = {},
   compact,
+  onSchedule,
+  scheduling,
+  onUploadFile,
+  uploading,
+  showRestoreDraft,
+  onRestoreDraft,
 }: Props) {
   const ta = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleLocal, setScheduleLocal] = useState(defaultScheduleLocalValue);
+  const [recState, setRecState] = useState<"idle" | "recording" | "stopped">("idle");
+  const recChunksRef = useRef<BlobPart[]>([]);
+  const mediaRecRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     const el = ta.current;
@@ -43,6 +74,13 @@ export function SlackComposer({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, compact ? 120 : 160)}px`;
   }, [value, compact]);
+
+  useEffect(() => {
+    return () => {
+      mediaRecRef.current?.stop();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   const submit = () => {
     const t = value.trim();
@@ -124,15 +162,106 @@ export function SlackComposer({
     submit();
   };
 
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !onUploadFile) return;
+    if (f.size > MAX_FILE_BYTES) {
+      toast.error("El archivo supera 50 MB");
+      return;
+    }
+    const cap = value.trim() || undefined;
+    onUploadFile(f, cap);
+  };
+
+  const stopRecording = useCallback(() => {
+    mediaRecRef.current?.stop();
+    mediaRecRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }, []);
+
+  const startRecording = async () => {
+    if (!onUploadFile || disabled || sending || uploading) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const rec = new MediaRecorder(stream, { mimeType: mime });
+      mediaRecRef.current = rec;
+      recChunksRef.current = [];
+      rec.ondataavailable = (ev) => {
+        if (ev.data.size > 0) recChunksRef.current.push(ev.data);
+      };
+      rec.onstop = () => {
+        setRecState("stopped");
+      };
+      rec.start(250);
+      setRecState("recording");
+    } catch {
+      setRecState("idle");
+      toast.error("No se pudo acceder al micrófono. Revisa los permisos del navegador.");
+    }
+  };
+
+  const cancelRecording = () => {
+    stopRecording();
+    recChunksRef.current = [];
+    setRecState("idle");
+  };
+
+  const sendRecording = () => {
+    const parts = recChunksRef.current;
+    if (!onUploadFile || parts.length === 0) {
+      cancelRecording();
+      return;
+    }
+    const blob = new Blob(parts, { type: "audio/webm" });
+    const ext = blob.type.includes("webm") ? "webm" : "m4a";
+    const file = new File([blob], `nota-voz-${Date.now()}.${ext}`, { type: blob.type });
+    stopRecording();
+    recChunksRef.current = [];
+    setRecState("idle");
+    const cap = value.trim() ? value.trim() : "Nota de voz";
+    onUploadFile(file, cap);
+  };
+
+  const applySchedule = () => {
+    if (!onSchedule) return;
+    const d = new Date(scheduleLocal);
+    if (Number.isNaN(d.getTime())) {
+      toast.error("Fecha u hora no válida");
+      return;
+    }
+    const now = Date.now();
+    const postAt = Math.floor(d.getTime() / 1000);
+    const min = Math.floor(now / 1000) + 90;
+    if (postAt < min) {
+      toast.error("Elige una hora al menos 90 segundos en el futuro");
+      return;
+    }
+    onSchedule(postAt);
+    setScheduleOpen(false);
+  };
+
   const placeholder = channelLabel
     ? `Escribe un mensaje en ${channelLabel.includes("#") || channelLabel.length < 2 ? channelLabel : `«${channelLabel}»`}…`
     : "Escribe un mensaje…";
+
+  const busy = disabled || sending || scheduling || uploading;
 
   return (
     <form
       onSubmit={onSubmitForm}
       className={cn("shrink-0 border-t border-border/80 bg-muted/20", compact ? "p-2" : "p-3")}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={onPickFile}
+        accept="*/*"
+      />
       <div
         className={cn(
           "mx-auto flex gap-2 items-end rounded-xl border border-border/80 bg-background shadow-sm px-2 py-2 focus-within:ring-1 focus-within:ring-primary/25",
@@ -146,7 +275,7 @@ export function SlackComposer({
               variant="ghost"
               size="icon"
               className="h-10 w-10 shrink-0 rounded-lg"
-              disabled={disabled || sending}
+              disabled={busy}
               onClick={() => {
                 insertAtCursor("@");
                 setMentionFilter("");
@@ -178,7 +307,7 @@ export function SlackComposer({
         </Popover>
         <Popover>
           <PopoverTrigger asChild>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-lg" disabled={disabled || sending}>
+            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-lg" disabled={busy}>
               <Smile className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
@@ -198,25 +327,134 @@ export function SlackComposer({
             </div>
           </PopoverContent>
         </Popover>
+        {onUploadFile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-lg"
+            disabled={busy}
+            title="Adjuntar archivo (máx. 50 MB)"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+          </Button>
+        )}
+        {onUploadFile && (
+          <>
+            {recState === "recording" ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="icon"
+                className="h-10 w-10 shrink-0 rounded-lg"
+                onClick={stopRecording}
+                title="Detener grabación"
+              >
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : recState === "stopped" ? (
+              <>
+                <Button type="button" variant="secondary" size="sm" className="shrink-0 h-10" onClick={cancelRecording}>
+                  Cancelar
+                </Button>
+                <Button type="button" size="sm" className="shrink-0 h-10" onClick={sendRecording}>
+                  Enviar nota
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 shrink-0 rounded-lg"
+                disabled={busy}
+                title="Grabar nota de voz"
+                onClick={() => void startRecording()}
+              >
+                <Mic className="h-4 w-4" />
+              </Button>
+            )}
+          </>
+        )}
+        {onSchedule && (
+          <Dialog
+            open={scheduleOpen}
+            onOpenChange={(o) => {
+              setScheduleOpen(o);
+              if (o) setScheduleLocal(defaultScheduleLocalValue());
+            }}
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-lg"
+              disabled={!value.trim() || busy}
+              title="Programar envío"
+              onClick={() => {
+                setScheduleLocal(defaultScheduleLocalValue());
+                setScheduleOpen(true);
+              }}
+            >
+              {scheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+            </Button>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Programar mensaje en Slack</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  La hora es la de tu dispositivo. Slack exige al menos ~90 s en el futuro.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="slack-schedule-dt">Fecha y hora</Label>
+                  <input
+                    id="slack-schedule-dt"
+                    type="datetime-local"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={scheduleLocal}
+                    onChange={(e) => setScheduleLocal(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setScheduleOpen(false)}>
+                  Cerrar
+                </Button>
+                <Button type="button" onClick={applySchedule} disabled={scheduling}>
+                  {scheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : "Programar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+        {showRestoreDraft && onRestoreDraft && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-lg"
+            title="Restaurar borrador guardado"
+            onClick={onRestoreDraft}
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        )}
         <Textarea
           ref={ta}
           value={value}
           onChange={(e) => onChangeTextarea(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={`${placeholder} (Enter envía, Shift+Enter nueva línea)`}
-          disabled={disabled || sending}
+          disabled={busy}
           rows={1}
           className={cn(
             "min-h-[40px] max-h-[160px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm py-2.5",
             compact && "min-h-[36px] max-h-[120px]",
           )}
         />
-        <Button
-          type="submit"
-          size="icon"
-          className="shrink-0 h-10 w-10 rounded-lg"
-          disabled={sending || disabled || !value.trim()}
-        >
+        <Button type="submit" size="icon" className="shrink-0 h-10 w-10 rounded-lg" disabled={sending || disabled || !value.trim()}>
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
         </Button>
       </div>

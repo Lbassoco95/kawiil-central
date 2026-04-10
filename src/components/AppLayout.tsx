@@ -11,6 +11,7 @@ import { useNotificationDelivery } from "@/hooks/useNotificationDelivery";
 import { nowMX } from "@/lib/dateUtils";
 import { OPEN_NEW_TASK_MODAL_EVENT, openNewTaskModal } from "@/lib/openNewTaskModal";
 import { Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type AppLayoutProps = {
   children: ReactNode;
@@ -57,7 +58,12 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
 
   return (
     <NewTaskModalContext.Provider value={newTaskModalValue}>
-    <div className="flex min-h-screen w-full bg-background relative">
+    <div
+      className={cn(
+        "flex w-full bg-background relative",
+        isFullWidth ? "h-svh max-h-svh min-h-0 overflow-hidden" : "min-h-screen",
+      )}
+    >
       {/* Ambient gradient mesh */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
         <div className="absolute -top-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-primary/[0.03] blur-3xl" />

@@ -132,6 +132,15 @@ export function SlackMessageList({
     stickBottomRef.current = true;
   }, [selectedChannelId]);
 
+  useLayoutEffect(() => {
+    stickBottomRef.current = true;
+    const el = scrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [selectedChannelId]);
+
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -319,7 +328,7 @@ export function SlackMessageList({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]"
       >
         <div className="px-3 py-4 space-y-1 max-w-4xl mx-auto">
           {isFetchingMore && (

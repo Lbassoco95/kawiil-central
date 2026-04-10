@@ -12,7 +12,30 @@ type SlackMethod =
   | "conversations.replies"
   | "conversations.info"
   | "chat.postMessage"
+  | "chat.scheduleMessage"
   | "users.info";
+
+const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
+
+async function slackFilesUpload(
+  token: string,
+  channel: string,
+  filename: string,
+  bytes: Uint8Array,
+  initialComment?: string,
+) {
+  const form = new FormData();
+  form.append("channels", channel);
+  form.append("filename", filename);
+  form.append("file", new Blob([bytes]), filename);
+  if (initialComment?.trim()) form.append("initial_comment", initialComment.trim());
+  const res = await fetch("https://slack.com/api/files.upload", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  return res.json();
+}
 
 async function slackCall(token: string, method: SlackMethod, params: Record<string, string | number | undefined>) {
   const body = new URLSearchParams();
@@ -221,6 +244,60 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "chat.scheduleMessage") {
+      const channel = json.channel as string;
+      const text = json.text as string;
+      const postAtRaw = json.post_at as number | string | undefined;
+      const postAt = typeof postAtRaw === "string" ? parseInt(postAtRaw, 10) : postAtRaw;
+      if (!channel || !text?.trim() || postAt == null || Number.isNaN(postAt)) {
+        return new Response(JSON.stringify({ error: "channel, text and post_at required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const data = await slackCall(conn.access_token, "chat.scheduleMessage", {
+        channel,
+        text: text.trim(),
+        post_at: postAt,
+        thread_ts: json.thread_ts as string | undefined,
+      });
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "files.upload") {
+      const channel = json.channel as string;
+      const filename = (json.filename as string) || "upload";
+      const base64 = json.base64 as string;
+      const initialComment = json.initial_comment as string | undefined;
+      if (!channel || !base64?.length) {
+        return new Response(JSON.stringify({ error: "channel and base64 required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      let binary: Uint8Array;
+      try {
+        binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      } catch {
+        return new Response(JSON.stringify({ error: "invalid base64" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (binary.byteLength > MAX_UPLOAD_BYTES) {
+        return new Response(JSON.stringify({ error: "file too large (max ~50MB)" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const data = await slackFilesUpload(conn.access_token, channel, filename, binary, initialComment);
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "users.info.batch") {
       const rawIds = json.user_ids as unknown;
       if (!Array.isArray(rawIds) || rawIds.length === 0) {
@@ -271,6 +348,8 @@ Deno.serve(async (req) => {
           "conversations.replies",
           "conversations.info",
           "chat.postMessage",
+          "chat.scheduleMessage",
+          "files.upload",
           "users.info.batch",
         ],
       }),

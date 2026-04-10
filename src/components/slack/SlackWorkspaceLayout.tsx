@@ -10,7 +10,7 @@ type Props = {
 
 export function SlackWorkspaceLayout({ sidebar, main, mobileListOpen, onMobileListOpenChange }: Props) {
   return (
-    <div className="flex w-full flex-1 min-h-0 border-t border-border/50">
+    <div className="flex w-full h-full min-h-0 flex-1 border-t border-border/50">
       {/* Desktop rail */}
       <aside className="hidden lg:flex w-[280px] shrink-0 flex-col border-r border-zinc-800 bg-[#1a1d21] text-zinc-100">
         <div className="px-3 py-3 border-b border-zinc-800">

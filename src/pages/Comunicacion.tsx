@@ -8,6 +8,7 @@ import { useSlackConnection } from "@/hooks/useSlackConnection";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { invokeSlackApi, type SlackConversation, type SlackMessage } from "@/lib/slackApi";
+import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
 import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
 import { SlackWorkspaceLayout } from "@/components/slack/SlackWorkspaceLayout";
@@ -25,6 +26,21 @@ type HistoryPage = {
   nextCursor?: string;
 };
 
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = r.result as string;
+      const i = s.indexOf(",");
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    r.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    r.readAsDataURL(file);
+  });
+}
+
 export default function Comunicacion() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
@@ -40,10 +56,49 @@ export default function Comunicacion() {
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
+  const draftSaveTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const switchChannel = useCallback(
+    (id: string, updateUrl: boolean) => {
+      if (id === selectedChannel) {
+        setMobileListOpen(false);
+        return;
+      }
+      if (user?.id && selectedChannel && selectedChannel !== id) {
+        if (draft.trim()) saveSlackDraft(user.id, selectedChannel, draft);
+        else clearSlackDraft(user.id, selectedChannel);
+      }
+      const nextDraft = user?.id ? loadSlackDraft(user.id, id)?.text ?? "" : "";
+      setDraft(nextDraft);
+      setSelectedChannel(id);
+      if (updateUrl) {
+        setSearchParams({ channel: id });
+      }
+      setMobileListOpen(false);
+      setThreadRootTs(null);
+    },
+    [user?.id, selectedChannel, draft, setSearchParams],
+  );
 
   useEffect(() => {
-    if (channelFromUrl) setSelectedChannel(channelFromUrl);
-  }, [channelFromUrl]);
+    if (!channelFromUrl || channelFromUrl === selectedChannel) return;
+    switchChannel(channelFromUrl, false);
+  }, [channelFromUrl, selectedChannel, switchChannel]);
+
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+    setDraft((prev) => (prev === "" ? loadSlackDraft(user.id, selectedChannel)?.text ?? "" : prev));
+  }, [user?.id, selectedChannel]);
+
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+    clearTimeout(draftSaveTimer.current);
+    draftSaveTimer.current = setTimeout(() => {
+      if (draft.trim()) saveSlackDraft(user.id, selectedChannel, draft);
+      else clearSlackDraft(user.id, selectedChannel);
+    }, 500);
+    return () => clearTimeout(draftSaveTimer.current);
+  }, [draft, user?.id, selectedChannel]);
 
   const { data: profile } = useQuery({
     queryKey: ["profile-org-slack", user?.id],
@@ -227,7 +282,10 @@ export default function Comunicacion() {
       if (!data.ok) throw new Error(data.error || "No se pudo enviar");
     },
     onSuccess: (_, vars) => {
-      if (!vars.thread_ts) setDraft("");
+      if (!vars.thread_ts) {
+        setDraft("");
+        if (user?.id && selectedChannel) clearSlackDraft(user.id, selectedChannel);
+      }
       qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
       if (vars.thread_ts) {
         qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, vars.thread_ts] });
@@ -235,6 +293,56 @@ export default function Comunicacion() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const scheduleMutation = useMutation({
+    mutationFn: async (postAt: number) => {
+      const text = draft.trim();
+      if (!text) throw new Error("Escribe un mensaje para programar");
+      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+        action: "chat.scheduleMessage",
+        channel: selectedChannel!,
+        text,
+        post_at: postAt,
+      });
+      if (!data.ok) throw new Error(data.error || "No se pudo programar el mensaje");
+    },
+    onSuccess: () => {
+      toast.success("Mensaje programado en Slack");
+      setDraft("");
+      if (user?.id && selectedChannel) clearSlackDraft(user.id, selectedChannel);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (vars: { file: File; initial_comment?: string }) => {
+      if (vars.file.size > MAX_UPLOAD_BYTES) throw new Error("El archivo supera 50 MB");
+      const base64 = await fileToBase64(vars.file);
+      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+        action: "files.upload",
+        channel: selectedChannel!,
+        filename: vars.file.name,
+        base64,
+        initial_comment: vars.initial_comment,
+      });
+      if (!data.ok) throw new Error(data.error || "No se pudo subir el archivo");
+    },
+    onSuccess: () => {
+      toast.success("Archivo enviado a Slack");
+      qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const storedDraftForRestore = useMemo(() => {
+    if (!user?.id || !selectedChannel) return null;
+    return loadSlackDraft(user.id, selectedChannel);
+  }, [user?.id, selectedChannel, draft]);
+
+  const showRestoreDraft = !!(
+    storedDraftForRestore?.text &&
+    storedDraftForRestore.text !== draft
+  );
 
   const titleOpts = useMemo(
     () => ({
@@ -263,10 +371,7 @@ export default function Comunicacion() {
     typeof channelInfo?.num_members === "number" ? channelInfo.num_members : undefined;
 
   const selectChannel = (id: string) => {
-    setSelectedChannel(id);
-    setSearchParams({ channel: id });
-    setMobileListOpen(false);
-    setThreadRootTs(null);
+    switchChannel(id, true);
   };
 
   const composerMemberIds = useMemo(() => {
@@ -350,6 +455,16 @@ export default function Comunicacion() {
               channelLabel={headerTitle}
               mentionUserIds={composerMemberIds}
               userMap={userMap}
+              onSchedule={(postAt) => scheduleMutation.mutate(postAt)}
+              scheduling={scheduleMutation.isPending}
+              onUploadFile={(file, initial_comment) =>
+                uploadMutation.mutate({ file, initial_comment })
+              }
+              uploading={uploadMutation.isPending}
+              showRestoreDraft={showRestoreDraft}
+              onRestoreDraft={() => {
+                if (storedDraftForRestore?.text) setDraft(storedDraftForRestore.text);
+              }}
             />
           </div>
           <SlackThreadPanel
