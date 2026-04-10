@@ -7,21 +7,25 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-/** Solo estas acciones; rutas configurables por secreto si Savio cambia el path. */
+/** Rutas según OpenAPI Savio (prod y sandbox): GET /invoice, /payment, /customer — no /api/v1/... */
 const DEFAULT_PATHS: Record<string, string> = {
-  invoices: "/api/v1/invoices",
-  payments: "/api/v1/payments",
-  customers: "/api/v1/customers",
+  invoices: "/invoice",
+  payments: "/payment",
+  customers: "/customer",
 };
 
 const ALLOWED_QUERY_KEYS = new Set([
   "limit",
+  "cursor",
   "page",
   "offset",
   "per_page",
   "status",
   "from",
   "to",
+  "start_date",
+  "end_date",
+  "min_days_late",
   "sort",
   "order",
   "search",
@@ -30,12 +34,18 @@ const ALLOWED_QUERY_KEYS = new Set([
 
 const MAX_RESPONSE_CHARS = 1_500_000;
 
+function isAllowedSavioRelativePath(path: string): boolean {
+  const pathOnly = path.split("?")[0].trim();
+  if (!pathOnly.startsWith("/") || pathOnly.includes("..")) return false;
+  return /^\/[a-zA-Z0-9/_{}\-]+$/.test(pathOnly);
+}
+
 function pathForAction(action: string): string | null {
   const envKey = `SAVIO_API_PATH_${action.toUpperCase()}`;
   const fromEnv = Deno.env.get(envKey);
   const raw = (fromEnv || DEFAULT_PATHS[action] || "").trim();
-  if (!raw || !raw.startsWith("/api/") || raw.includes("..")) return null;
-  return raw;
+  if (!raw || !isAllowedSavioRelativePath(raw)) return null;
+  return raw.split("?")[0];
 }
 
 function buildQuery(params: Record<string, unknown> | undefined): string {

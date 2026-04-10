@@ -73,7 +73,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const savioRes = await fetch(`${base}/api/v1/me`, {
+    // OpenAPI Savio no expone /me; GET /invoice?limit=10 valida credenciales con respuesta real.
+    const healthPath = (Deno.env.get("SAVIO_API_HEALTH_PATH") || "/invoice").trim().split("?")[0];
+    if (!healthPath.startsWith("/") || healthPath.includes("..")) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "invalid_health_path", message: "SAVIO_API_HEALTH_PATH inválido." }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const savioRes = await fetch(`${base}${healthPath}?limit=10`, {
       headers: { Authorization: savioAuthorizationHeaderValue(apiKey) },
     });
 

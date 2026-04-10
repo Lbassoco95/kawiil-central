@@ -249,13 +249,16 @@ export function SavioFinanceDashboard() {
               {invoiceFail && <p>Facturas/cargos: {invoiceFail}</p>}
               {paymentFail && <p>Pagos: {paymentFail}</p>}
               <p className="text-muted-foreground dark:text-amber-200/80">
-                Confirma rutas en{" "}
+                Rutas por defecto según OpenAPI Savio:{" "}
+                <code className="text-[10px]">/invoice</code>, <code className="text-[10px]">/payment</code>. Si
+                ves “No route found”, revisa en{" "}
                 <a href="https://app.savio.mx/docs" className="underline" target="_blank" rel="noreferrer">
-                  documentación Savio
-                </a>
-                . Si los paths difieren, define secretos{" "}
+                  app.savio.mx/docs
+                </a>{" "}
+                y, solo si cambian, secretos{" "}
                 <code className="text-[10px]">SAVIO_API_PATH_INVOICES</code>,{" "}
-                <code className="text-[10px]">SAVIO_API_PATH_PAYMENTS</code> en Supabase.
+                <code className="text-[10px]">SAVIO_API_PATH_PAYMENTS</code> (y borra valores viejos tipo{" "}
+                <code className="text-[10px]">/api/v1/…</code>).
               </p>
             </div>
           )}

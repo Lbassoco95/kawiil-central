@@ -70,8 +70,17 @@ export type SavioPaymentRowView = {
 export function toInvoiceRowView(row: unknown, index: number): SavioInvoiceRowView {
   const id =
     pickSavioString(row, ["id", "uuid", "invoice_id", "charge_id"]) || `row-${index}`;
-  const folio = pickSavioString(row, ["folio", "number", "invoice_number", "numero", "reference"]);
+  const folio = pickSavioString(row, [
+    "invoice_num",
+    "folio",
+    "number",
+    "invoice_number",
+    "numero",
+    "reference",
+  ]);
   const cliente = pickSavioString(row, [
+    "customer_display_name",
+    "customer_legal_name",
     "client_name",
     "customer_name",
     "cliente",
@@ -80,6 +89,7 @@ export function toInvoiceRowView(row: unknown, index: number): SavioInvoiceRowVi
     "company_name",
   ]);
   const monto = pickSavioNumber(row, [
+    "amount_total",
     "total",
     "total_amount",
     "amount",
@@ -91,6 +101,7 @@ export function toInvoiceRowView(row: unknown, index: number): SavioInvoiceRowVi
   ]);
   const estado = pickSavioString(row, ["status", "estado", "state"]);
   const fecha = pickSavioDate(row, [
+    "invoice_date",
     "created_at",
     "updated_at",
     "date",
@@ -113,14 +124,23 @@ export function toInvoiceRowView(row: unknown, index: number): SavioInvoiceRowVi
 export function toPaymentRowView(row: unknown, index: number): SavioPaymentRowView {
   const id = pickSavioString(row, ["id", "uuid", "payment_id"]) || `pay-${index}`;
   const referencia = pickSavioString(row, [
+    "reference_num",
     "reference",
     "folio",
+    "details",
     "description",
     "concepto",
     "memo",
   ]);
-  const monto = pickSavioNumber(row, ["amount", "total", "paid_amount", "monto", "importe"]);
-  const fecha = pickSavioDate(row, ["created_at", "date", "fecha", "paid_at"]);
+  const monto = pickSavioNumber(row, [
+    "amount_paid",
+    "amount",
+    "total",
+    "paid_amount",
+    "monto",
+    "importe",
+  ]);
+  const fecha = pickSavioDate(row, ["payment_date", "created_at", "date", "fecha", "paid_at"]);
   return {
     key: id,
     id,
@@ -160,6 +180,8 @@ export type SavioIncomeBucket = "cobrado" | "pendiente" | "por_cobrar";
 /** Agrupa cargos Savio por estado textual (heurística; afinar con docs oficiales). */
 export function classifyInvoiceForIncome(estadoRaw: string): SavioIncomeBucket {
   const e = estadoRaw.toLowerCase();
+  if (e === "valid") return "pendiente";
+  if (e === "void") return "por_cobrar";
   if (/(paid|pagad|cobrad|liquid|cerrad|closed|settled|complet)/.test(e)) return "cobrado";
   if (/(pend|draft|borrador|open|activ|sent|enviad|venc|overdue|partial|parcial)/.test(e)) {
     return "pendiente";
@@ -172,6 +194,13 @@ export function computeSavioIncomeBuckets(rows: SavioInvoiceRowView[]): Record<S
   const out: Record<SavioIncomeBucket, number> = { cobrado: 0, pendiente: 0, por_cobrar: 0 };
   for (const r of rows) {
     if (r.monto === null) continue;
+    const st = r.estado.toLowerCase();
+    if (st === "void") continue;
+    const remaining = pickSavioNumber(r.raw, ["amount_remaining"]);
+    if (st === "valid" && remaining !== null && remaining <= 0) {
+      out.cobrado += r.monto;
+      continue;
+    }
     const b = classifyInvoiceForIncome(r.estado);
     out[b] += r.monto;
   }
