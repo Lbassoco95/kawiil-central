@@ -16,9 +16,10 @@ function jsonOk(body: unknown, status = 200) {
 /** Incluye `needed` de Slack en el texto de error para el toast del cliente. */
 function annotateSlackResponse(obj: Record<string, unknown>): Record<string, unknown> {
   if (obj.ok === false && obj.error === "missing_scope" && obj.needed != null) {
+    const need = Array.isArray(obj.needed) ? (obj.needed as unknown[]).join(", ") : String(obj.needed);
     return {
       ...obj,
-      error: `missing_scope — scopes requeridos: ${String(obj.needed)}`,
+      error: `missing_scope — scopes requeridos: ${need}`,
     };
   }
   return obj;
@@ -85,7 +86,7 @@ async function slackFilesUploadExternal(
     },
     body: step1Params,
   });
-   const gu = await gRes.json() as {
+  const gu = await gRes.json() as {
     ok?: boolean;
     error?: string;
     needed?: string;
@@ -140,6 +141,27 @@ async function slackFilesUploadExternal(
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: comp,
+    });
+    completed = await cRes.json() as Record<string, unknown>;
+  }
+
+  const errCode = String(completed.error || "");
+  if (
+    completed.ok === false &&
+    (errCode === "channel_not_found" || errCode === "invalid_channel")
+  ) {
+    const alt: Record<string, unknown> = {
+      channels: channel,
+      files: [{ id: gu.file_id, title: filename }],
+    };
+    if (initialComment?.trim()) alt.initial_comment = initialComment.trim();
+    cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(alt),
     });
     completed = await cRes.json() as Record<string, unknown>;
   }
@@ -260,8 +282,8 @@ Deno.serve(async (req) => {
       if (binary.byteLength > MAX_UPLOAD_BYTES) {
         return jsonOk({ ok: false, error: "file too large (max ~50MB)" });
       }
-      const name = filename || file.name || "upload";
-      const data = await slackFilesUploadExternal(conn.access_token, channel, name, binary, initialComment);
+           const name = filename || file.name || "upload";
+      const data = await slackFilesUploadWithFallback(conn.access_token, channel, name, binary, initialComment);
       return jsonOk(data);
     }
 
@@ -427,7 +449,7 @@ Deno.serve(async (req) => {
       if (binary.byteLength > MAX_UPLOAD_BYTES) {
         return jsonOk({ ok: false, error: "file too large (max ~50MB)" });
       }
-      const data = await slackFilesUploadExternal(conn.access_token, channel, filename, binary, initialComment);
+      const data = await slackFilesUploadWithFallback(conn.access_token, channel, filename, binary, initialComment);
       return jsonOk(data);
     }
 

@@ -303,6 +303,22 @@ export default function Comunicacion() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const onSlackFileUploadError = (e: Error) => {
+    const msg = e.message || "";
+    if (
+      msg.includes("missing_scope") ||
+      msg.includes("scopes requeridos") ||
+      msg.includes("files:write")
+    ) {
+      toast.error(
+        "Slack no permite subir archivos o audio con tu sesión actual. Un admin debe añadir en api.slack.com → tu app → OAuth & Permissions → User Token Scopes: files:write y files:read (y aceptar la app si pide revisión). Si en Supabase existe el secret SLACK_USER_SCOPES, debe incluir esos permisos o elimínalo. Después pulsa «Actualizar permisos Slack» en la barra lateral y vuelve a aceptar en Slack.",
+        { duration: 22_000 },
+      );
+      return;
+    }
+    toast.error(msg);
+  };
+
   const uploadMutation = useMutation({
     mutationFn: async (vars: { file: File; initial_comment?: string }) => {
       if (vars.file.size > MAX_UPLOAD_BYTES) throw new Error("El archivo supera 50 MB");
@@ -319,7 +335,7 @@ export default function Comunicacion() {
       toast.success("Archivo enviado a Slack");
       qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: onSlackFileUploadError,
   });
 
   const storedDraftForRestore = useMemo(() => {
