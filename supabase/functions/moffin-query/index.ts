@@ -92,8 +92,9 @@ function summarizeSatRfc(
 
 function pickPdfForConsult(consultType: ConsultType, report: Record<string, unknown>): string | null {
   if (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") {
-    const u = pickSatRfcPdfUrl(consultType, report);
-    if (u) return u;
+    const top = extractReportLevelPdfUrl(report);
+    if (top) return top;
+    return pickSatRfcPdfUrl(consultType, report);
   }
   return extractReportLevelPdfUrl(report);
 }

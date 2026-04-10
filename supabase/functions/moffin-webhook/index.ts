@@ -78,9 +78,9 @@ function pickPdfForConsult(
   consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
   report: Record<string, unknown>,
 ): string | null {
-  const u = pickSatRfcPdfUrl(consultType, report);
-  if (u) return u;
-  return extractReportLevelPdfUrl(report);
+  const top = extractReportLevelPdfUrl(report);
+  if (top) return top;
+  return pickSatRfcPdfUrl(consultType, report);
 }
 
 function findKawiilExternalId(obj: unknown): string | null {

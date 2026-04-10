@@ -22,8 +22,9 @@ export function isLikelyMoffinDownloadUrl(u: string): boolean {
   return true;
 }
 
+/** No usar `url` genérico: en sat_rfc suele apuntar a un endpoint JSON (~2 KB), no al PDF. */
 function stringsFromCert(c: Record<string, unknown>): string[] {
-  const keys = ["url", "downloadUrl", "pdfUrl", "pdfURL", "fileUrl", "link", "href"];
+  const keys = ["pdfURL", "pdfUrl", "fileURL", "fileUrl", "downloadUrl", "downloadURL"];
   const out: string[] = [];
   for (const k of keys) {
     const v = c[k];
@@ -104,18 +105,52 @@ export function pickSatRfcPdfUrl(
   return allOrdered[1] ?? allOrdered[0] ?? null;
 }
 
+export function keyLooksLikePdfDownloadField(k: string): boolean {
+  const n = k.replace(/_/g, "").toLowerCase();
+  return n === "pdfurl" || n === "fileurl" || n === "downloadurl";
+}
+
+function collectUrlsByPdfLikeKeys(obj: unknown, out: string[], depth: number): void {
+  if (depth > 24 || obj == null) return;
+  if (typeof obj !== "object") return;
+  if (Array.isArray(obj)) {
+    for (const x of obj) collectUrlsByPdfLikeKeys(x, out, depth + 1);
+    return;
+  }
+  const o = obj as Record<string, unknown>;
+  for (const [k, v] of Object.entries(o)) {
+    if (typeof v === "string" && keyLooksLikePdfDownloadField(k) && isLikelyMoffinDownloadUrl(v)) {
+      const t = v.trim();
+      if (!out.includes(t)) out.push(t);
+    }
+    collectUrlsByPdfLikeKeys(v, out, depth + 1);
+  }
+}
+
 export function extractReportLevelPdfUrl(report: Record<string, unknown>): string | null {
+  const resp = report.response as Record<string, unknown> | undefined;
+  const data = resp?.data as Record<string, unknown> | undefined;
   const candidates: unknown[] = [
     report.pdfURL,
     report.pdfUrl,
-    (report.response as Record<string, unknown> | undefined)?.pdfURL,
-    (report.response as Record<string, unknown> | undefined)?.pdfUrl,
+    report.fileURL,
+    report.fileUrl,
+    resp?.pdfURL,
+    resp?.pdfUrl,
+    resp?.fileURL,
+    resp?.fileUrl,
+    data?.pdfURL,
+    data?.pdfUrl,
+    data?.fileURL,
+    data?.fileUrl,
     (report.state as Record<string, unknown> | undefined)?.pdfURL,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && isLikelyMoffinDownloadUrl(c)) return c.trim();
   }
-  return null;
+  const deep: string[] = [];
+  collectUrlsByPdfLikeKeys(report, deep, 0);
+  return deep[0] ?? null;
 }
 
 export function summarizeSatRfcCertificates(

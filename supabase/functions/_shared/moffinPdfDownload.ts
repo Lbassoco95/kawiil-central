@@ -1,23 +1,66 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildMoffinPdfStoragePath } from "./moffinStoragePath.ts";
+import { isLikelyMoffinDownloadUrl, keyLooksLikePdfDownloadField } from "./moffinSatRfc.ts";
+
+function extractPdfUrlFromJsonParsed(j: unknown): string | null {
+  const walk = (o: unknown): string | null => {
+    if (o == null) return null;
+    if (Array.isArray(o)) {
+      for (const x of o) {
+        const r = walk(x);
+        if (r) return r;
+      }
+      return null;
+    }
+    if (typeof o !== "object") return null;
+    const rec = o as Record<string, unknown>;
+    for (const [k, v] of Object.entries(rec)) {
+      if (typeof v === "string" && keyLooksLikePdfDownloadField(k) && isLikelyMoffinDownloadUrl(v)) {
+        return v.trim();
+      }
+    }
+    for (const v of Object.values(rec)) {
+      const r = walk(v);
+      if (r) return r;
+    }
+    return null;
+  };
+  return walk(j);
+}
+
+/** Si Moffin devolvió JSON con pdfURL/fileURL en lugar del binario. */
+function tryExtractPdfUrlFromJsonBody(buf: Uint8Array): string | null {
+  const max = Math.min(buf.length, 262144);
+  const text = new TextDecoder().decode(buf.slice(0, max)).trim();
+  if (!text.startsWith("{") && !text.startsWith("[")) return null;
+  try {
+    return extractPdfUrlFromJsonParsed(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchMoffinPdfBytes(
   url: string,
   moffinApiKey?: string | null,
+  depth = 0,
 ): Promise<{ ok: true; buf: Uint8Array } | { ok: false; reason: string }> {
+  if (depth > 3) {
+    return { ok: false, reason: "demasiadas redirecciones JSON→URL" };
+  }
   const attempts: { label: string; headers?: HeadersInit }[] = [];
   if (moffinApiKey?.trim()) {
     attempts.push({
       label: "Token Moffin",
       headers: {
         Authorization: `Token ${moffinApiKey.trim()}`,
-        Accept: "application/pdf,*/*;q=0.8",
+        Accept: "application/pdf,application/json;q=0.5,*/*;q=0.3",
       },
     });
   }
   attempts.push({
     label: "sin Token",
-    headers: { Accept: "application/pdf,*/*;q=0.8" },
+    headers: { Accept: "application/pdf,application/json;q=0.5,*/*;q=0.3" },
   });
 
   let last = "sin intento";
@@ -30,11 +73,17 @@ export async function fetchMoffinPdfBytes(
       }
       const buf = new Uint8Array(await res.arrayBuffer());
       const head = new TextDecoder().decode(buf.slice(0, 8));
-      if (buf.length < 4 || !head.startsWith("%PDF")) {
-        last = `cuerpo no es PDF (${label}, ${buf.byteLength} bytes)`;
+      if (buf.length >= 4 && head.startsWith("%PDF")) {
+        return { ok: true, buf };
+      }
+      const nested = tryExtractPdfUrlFromJsonBody(buf);
+      if (nested && nested !== url) {
+        const inner = await fetchMoffinPdfBytes(nested, moffinApiKey, depth + 1);
+        if (inner.ok) return inner;
+        last = inner.ok ? last : `${inner.reason} (tras JSON en ${label})`;
         continue;
       }
-      return { ok: true, buf };
+      last = `cuerpo no es PDF (${label}, ${buf.byteLength} bytes)`;
     } catch (e) {
       last = `${label}: ${e instanceof Error ? e.message : String(e)}`;
     }
