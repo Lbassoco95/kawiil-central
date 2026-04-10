@@ -7,7 +7,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSlackConnection } from "@/hooks/useSlackConnection";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { invokeSlackApi, invokeSlackFileUpload, type SlackConversation, type SlackMessage } from "@/lib/slackApi";
+import {
+  invokeSlackApi,
+  invokeSlackFileUpload,
+  isSlackPermissionDeniedMessage,
+  SLACK_CHAT_API_PERMISSION_HINT,
+  SLACK_FILE_UPLOAD_PERMISSION_HINT,
+  SLACK_PERMISSION_TOAST_MS,
+  type SlackConversation,
+  type SlackMessage,
+} from "@/lib/slackApi";
 import { fetchAllSlackConversations } from "@/lib/slackWorkspaceFetch";
 import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
@@ -260,6 +269,21 @@ export default function Comunicacion() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const toastSlackPermissionDenied = (e: Error, hint: string) => {
+    const msg = e.message || "";
+    if (isSlackPermissionDeniedMessage(msg)) {
+      toast.error(hint, { duration: SLACK_PERMISSION_TOAST_MS });
+      return;
+    }
+    toast.error(msg);
+  };
+
+  const onSlackChatMutationError = (e: Error) =>
+    toastSlackPermissionDenied(e, SLACK_CHAT_API_PERMISSION_HINT);
+
+  const onSlackFileUploadError = (e: Error) =>
+    toastSlackPermissionDenied(e, SLACK_FILE_UPLOAD_PERMISSION_HINT);
+
   const postMutation = useMutation({
     mutationFn: async (payload: { text: string; thread_ts?: string }) => {
       const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
@@ -280,7 +304,7 @@ export default function Comunicacion() {
         qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, vars.thread_ts] });
       }
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: onSlackChatMutationError,
   });
 
   const scheduleMutation = useMutation({
@@ -300,24 +324,8 @@ export default function Comunicacion() {
       setDraft("");
       if (user?.id && selectedChannel) clearSlackDraft(user.id, selectedChannel);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: onSlackChatMutationError,
   });
-
-  const onSlackFileUploadError = (e: Error) => {
-    const msg = e.message || "";
-    if (
-      msg.includes("missing_scope") ||
-      msg.includes("scopes requeridos") ||
-      msg.includes("files:write")
-    ) {
-      toast.error(
-        "Slack no permite subir archivos o audio con tu sesión actual. Un admin debe añadir en api.slack.com → tu app → OAuth & Permissions → User Token Scopes: files:write y files:read (y aceptar la app si pide revisión). Si en Supabase existe el secret SLACK_USER_SCOPES, debe incluir esos permisos o elimínalo. Después pulsa «Actualizar permisos Slack» en la barra lateral y vuelve a aceptar en Slack.",
-        { duration: 22_000 },
-      );
-      return;
-    }
-    toast.error(msg);
-  };
 
   const uploadMutation = useMutation({
     mutationFn: async (vars: { file: File; initial_comment?: string }) => {

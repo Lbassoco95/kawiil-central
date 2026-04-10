@@ -1,6 +1,28 @@
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { supabase } from "@/integrations/supabase/client";
 
+/** Duración del toast cuando falta reautorizar Slack (OAuth & Permissions). */
+export const SLACK_PERMISSION_TOAST_MS = 22_000;
+
+/**
+ * Errores típicos de permisos devueltos por slack-api (incluye `missing_scope — scopes requeridos: …`).
+ */
+export function isSlackPermissionDeniedMessage(message: string): boolean {
+  const m = message || "";
+  return (
+    m.includes("missing_scope") ||
+    m.includes("scopes requeridos") ||
+    m.includes("invalid_scope") ||
+    m.includes("not_allowed_token")
+  );
+}
+
+export const SLACK_FILE_UPLOAD_PERMISSION_HINT =
+  "Slack no permite subir archivos o audio con tu sesión actual. Un admin debe añadir en api.slack.com → tu app → OAuth & Permissions → User Token Scopes: files:write y files:read (y aceptar la app si pide revisión). Si en Supabase existe el secret SLACK_USER_SCOPES, debe incluir esos permisos o elimínalo. Después pulsa «Actualizar permisos Slack» en la barra lateral y vuelve a aceptar en Slack.";
+
+export const SLACK_CHAT_API_PERMISSION_HINT =
+  "Slack rechazó el envío o la programación del mensaje. Revisa en api.slack.com → tu app → OAuth & Permissions → User Token Scopes: al menos chat:write (y chat:write.public si escribes en canales donde no eres miembro). Para archivos y notas de voz hacen falta además files:write y files:read; para abrir DMs, im:write y mpim:write. Si en Supabase existe SLACK_USER_SCOPES, alinéalo o elimínalo. Luego pulsa «Actualizar permisos Slack» en Comunicación y acepta de nuevo en Slack.";
+
 async function readInvokeFailureMessage(error: unknown): Promise<string | null> {
   const ctx = error instanceof FunctionsHttpError
     ? error.context
