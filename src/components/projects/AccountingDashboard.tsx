@@ -56,6 +56,7 @@ import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { MoffinFielCredentialsSection } from "./MoffinFielCredentialsSection";
 
 type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
@@ -116,6 +117,10 @@ Pendientes (${pending.length}):
 ${pending.map((s) => `- ⬜ ${s.label}`).join("\n") || "Ninguno"}
 
 Incluye: resumen de avance, tiempos invertidos si hay datos, alertas de pasos atrasados o bloqueados, y recomendaciones. Usa Markdown con bullets.`;
+}
+
+function moffinFielPwSessionKey(clientId: string) {
+  return `kawiil_moffin_fiel_pw_${clientId}`;
 }
 
 function buildGeneralPrompt(periods: AccountingPeriod[]) {
@@ -341,6 +346,7 @@ export function AccountingDashboard({
 
   const [moffinBusy, setMoffinBusy] = useState<MoffinConsultType | null>(null);
   const [fielPassword, setFielPassword] = useState("");
+  const [rememberFielPwSession, setRememberFielPwSession] = useState(false);
 
   const { data: moffinFielStatus } = useQuery({
     queryKey: ["moffin-fiel-status", clientId],
@@ -367,6 +373,37 @@ export function AccountingDashboard({
     },
     enabled: !!user && !!clientId,
   });
+
+  useEffect(() => {
+    if (!clientId) {
+      setFielPassword("");
+      setRememberFielPwSession(false);
+      return;
+    }
+    try {
+      const stored = sessionStorage.getItem(moffinFielPwSessionKey(clientId));
+      if (stored !== null && stored !== "") {
+        setFielPassword(stored);
+        setRememberFielPwSession(true);
+      } else {
+        setFielPassword("");
+        setRememberFielPwSession(false);
+      }
+    } catch {
+      setFielPassword("");
+      setRememberFielPwSession(false);
+    }
+  }, [clientId]);
+
+  useEffect(() => {
+    if (!clientId || !rememberFielPwSession) return;
+    try {
+      if (fielPassword) sessionStorage.setItem(moffinFielPwSessionKey(clientId), fielPassword);
+      else sessionStorage.removeItem(moffinFielPwSessionKey(clientId));
+    } catch {
+      /* ignore */
+    }
+  }, [clientId, rememberFielPwSession, fielPassword]);
 
   const { data: moffinRows = [] } = useQuery({
     queryKey: ["moffin-consults", projectId],
@@ -534,21 +571,60 @@ export function AccountingDashboard({
           </div>
           {clientId ? (
             <div className="space-y-3">
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-1.5 text-[11px]">
+                <p className="font-medium text-foreground">e.firma y consultas Moffin</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground leading-relaxed">
+                  <li>
+                    <span className="text-foreground font-medium">Primera vez:</span> usa el bloque de abajo para cargar{" "}
+                    <span className="text-foreground">.cer</span> y <span className="text-foreground">.key</span>.
+                  </li>
+                  <li>
+                    <span className="text-foreground font-medium">Después:</span> solo actualiza esos archivos si el SAT te
+                    renovó el certificado; para ejecutar constancia u opinión escribe la contraseña de la llave (no va al
+                    servidor).
+                  </li>
+                </ol>
+              </div>
               <MoffinFielCredentialsSection clientId={clientId} />
               {moffinFielStatus?.configured ? (
-                <div className="space-y-1 max-w-sm">
+                <div className="space-y-2 max-w-sm">
                   <Label htmlFor="moffin-fiel-password" className="text-[10px] text-muted-foreground">
-                    Contraseña e.firma (constancia y opinión; no se guarda)
+                    Contraseña de la llave (.key) para esta consulta
                   </Label>
                   <Input
                     id="moffin-fiel-password"
                     type="password"
                     autoComplete="new-password"
                     className="h-8 text-xs"
-                    placeholder="Obligatoria en cada consulta SAT con certificados"
+                    placeholder="Requerida para constancia y opinión"
                     value={fielPassword}
                     onChange={(e) => setFielPassword(e.target.value)}
                   />
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="moffin-fiel-remember-session"
+                      checked={rememberFielPwSession}
+                      onCheckedChange={(c) => {
+                        const on = c === true;
+                        setRememberFielPwSession(on);
+                        if (!on && clientId) {
+                          try {
+                            sessionStorage.removeItem(moffinFielPwSessionKey(clientId));
+                          } catch {
+                            /* ignore */
+                          }
+                        }
+                      }}
+                      className="mt-0.5"
+                    />
+                    <Label
+                      htmlFor="moffin-fiel-remember-session"
+                      className="text-[10px] text-muted-foreground font-normal leading-snug cursor-pointer"
+                    >
+                      Recordar contraseña en esta sesión del navegador (solo en tu equipo; al cerrar la pestaña suele
+                      borrarse)
+                    </Label>
+                  </div>
                 </div>
               ) : null}
             </div>

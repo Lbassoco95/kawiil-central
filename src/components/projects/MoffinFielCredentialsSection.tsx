@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -122,10 +123,12 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
           <span className="text-[11px] font-medium text-foreground">e.firma (FIEL) para constancia y opinión</span>
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          La primera vez sube el <strong className="text-foreground/90">.cer</strong> y el{" "}
-          <strong className="text-foreground/90">.key</strong>. No guardamos la contraseña: en cada consulta deberás
-          escribirla abajo. Si Moffin rechaza el payload, confirma con soporte Moffin los nombres de campos (variables{" "}
-          <code className="text-[9px]">MOFFIN_FIEL_FIELD_*</code> en Supabase).
+          <strong className="text-foreground/90">Paso 1 (solo la primera vez o si cambias certificado):</strong> sube el{" "}
+          <strong className="text-foreground/90">.cer</strong> y el <strong className="text-foreground/90">.key</strong> del
+          contribuyente. <strong className="text-foreground/90">Paso 2 (cada consulta SAT):</strong> en la sección de
+          abajo escribe la contraseña de la llave; no la guardamos en servidor (opcional: recordar solo en esta sesión del
+          navegador). Si Moffin rechaza el payload, revisa variables <code className="text-[9px]">MOFFIN_FIEL_FIELD_*</code>{" "}
+          en Supabase.
         </p>
         {isLoading ? (
           <p className="text-[10px] text-muted-foreground flex items-center gap-1">
