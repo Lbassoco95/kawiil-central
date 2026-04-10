@@ -470,6 +470,11 @@ export function AccountingDashboard({
                 <code className="text-[10px] break-all">moffin-webhook</code> (no <code className="text-[10px]">moffin-query</code>) con secreto{" "}
                 <code className="text-[10px]">MOFFIN_SVIX_SIGNING_SECRET</code> en Supabase.
               </p>
+              <p className="text-[11px] text-muted-foreground mt-1 max-w-xl">
+                Cadencia sugerida en despacho: <span className="text-foreground/90">constancia mensual</span>,{" "}
+                <span className="text-foreground/90">opinión semanal</span>. Kawiil aún no dispara estas consultas solo; úsalas
+                desde aquí o automatiza fuera de la app si tu plan Moffin lo permite.
+              </p>
               {moffinWebhookUrl ? (
                 <p className="text-[10px] text-muted-foreground font-mono break-all mt-1 max-w-2xl">
                   URL webhook: {moffinWebhookUrl}

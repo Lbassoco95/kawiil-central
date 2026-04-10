@@ -108,6 +108,8 @@ const clientSchema = z.object({
   contact_position: z.string().trim().max(200).optional().or(z.literal("")),
   dropbox_folder_path: z.string().trim().max(500).optional().or(z.literal("")),
   collaborator_user_ids: z.array(z.string().uuid()).default([]),
+  sat_fiel_managed_by_firm: z.boolean(),
+  sat_fiel_location_hint: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
@@ -175,6 +177,8 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       contact_position: client.contact_position || "",
       dropbox_folder_path: client.dropbox_folder_path || "",
       collaborator_user_ids: [],
+      sat_fiel_managed_by_firm: client.sat_fiel_managed_by_firm !== false,
+      sat_fiel_location_hint: client.sat_fiel_location_hint || "",
     },
   });
 
@@ -215,6 +219,8 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       contact_position: client.contact_position || "",
       dropbox_folder_path: client.dropbox_folder_path || "",
       collaborator_user_ids: collaboratorIdsFromServer,
+      sat_fiel_managed_by_firm: client.sat_fiel_managed_by_firm !== false,
+      sat_fiel_location_hint: client.sat_fiel_location_hint || "",
     });
   }, [open, collabFetched, client, collabKey, form]);
 
@@ -247,6 +253,8 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
         contact_position: values.contact_position || null,
         dropbox_folder_path: values.dropbox_folder_path || null,
         payroll_type: values.payroll_type === "none" ? null : values.payroll_type,
+        sat_fiel_managed_by_firm: values.sat_fiel_managed_by_firm,
+        sat_fiel_location_hint: values.sat_fiel_location_hint || null,
       },
       collaborator_user_ids: values.collaborator_user_ids,
     });
@@ -359,6 +367,49 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
                   </FormItem>
                 )}
               />
+
+              <div className="md:col-span-2 rounded-md border border-border/60 p-4 space-y-4 bg-muted/10">
+                <p className="text-sm font-medium text-foreground">SAT — constancia, opinión, 69-B</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Las consultas se lanzan desde el proyecto de Contabilidad (Moffin). Aquí solo registramos si la e.firma la
+                  tiene el despacho y una referencia interna (carpeta). No guardes contraseñas ni contenido de llaves.
+                </p>
+                <FormField
+                  control={form.control}
+                  name="sat_fiel_managed_by_firm"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox checked={field.value} onCheckedChange={(c) => field.onChange(c === true)} />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="font-normal cursor-pointer">La e.firma la custodia el despacho</FormLabel>
+                        <p className="text-[11px] text-muted-foreground font-normal">
+                          Coincide con el flujo en que ustedes tienen los certificados y solo faltaría contraseña puntual para
+                          descargas.
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sat_fiel_location_hint"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Referencia interna (opcional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Ej. Dropbox del cliente → FISCAL/EFIRMA/…"
+                          className="min-h-[72px] resize-y text-sm"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

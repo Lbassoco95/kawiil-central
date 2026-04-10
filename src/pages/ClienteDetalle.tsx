@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
+import { ClientSatFiscalSection } from "@/components/clients/ClientSatFiscalSection";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { ComplianceClientSection } from "@/components/compliance/ComplianceClientSection";
 import { DropboxFolderBrowser } from "@/components/clients/DropboxFolderBrowser";
@@ -275,6 +276,8 @@ const ClienteDetalle = () => {
                 </p>
               )}
             </section>
+
+            <ClientSatFiscalSection client={client} projects={projects} />
 
             <section className="md:col-span-2 glass-card p-5">
               <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
