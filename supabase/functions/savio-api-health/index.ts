@@ -44,10 +44,13 @@ Deno.serve(async (req) => {
     }
 
     const adminClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { data: financeOk } = await adminClient.rpc("has_finance_access", { _user_id: user.id });
-    if (!financeOk) {
+    const { data: savioOk } = await adminClient.rpc("can_view_savio_finance", { _user_id: user.id });
+    if (!savioOk) {
       return new Response(
-        JSON.stringify({ error: "Forbidden", message: "Requiere acceso al módulo Finanzas." }),
+        JSON.stringify({
+          error: "Forbidden",
+          message: "No tienes permiso para ver ingresos Savio (finance_income_viewers).",
+        }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

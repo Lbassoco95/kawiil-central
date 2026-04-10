@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
+import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
 import {
   extractSavioList,
   sumInvoiceTotals,
@@ -41,23 +42,26 @@ async function fetchSavioResource(
 const DEFAULT_QUERY = { limit: "100" };
 
 /**
- * Datos en vivo desde la API Savio (vía Edge). Solo si el usuario tiene acceso Finanzas.
+ * Datos en vivo desde la API Savio (vía Edge). Requiere Finanzas + permiso ingresos (finance_income_viewers).
  */
 export function useSavioFinanceApiData() {
   const { user } = useAuth();
   const { hasFinanceAccess, isLoading: accessLoading } = useFinanceAccess();
+  const { data: canViewSavioIncome = false, isLoading: savioAccessLoading } = useSavioIncomeAccess();
+
+  const allowSavio = !!user && hasFinanceAccess && canViewSavioIncome && !accessLoading && !savioAccessLoading;
 
   const invoicesQuery = useQuery({
     queryKey: ["savio-finance-api", "invoices", user?.id],
     queryFn: () => fetchSavioResource("invoices", DEFAULT_QUERY),
-    enabled: !!user && hasFinanceAccess && !accessLoading,
+    enabled: allowSavio,
     staleTime: 60_000,
   });
 
   const paymentsQuery = useQuery({
     queryKey: ["savio-finance-api", "payments", user?.id],
     queryFn: () => fetchSavioResource("payments", DEFAULT_QUERY),
-    enabled: !!user && hasFinanceAccess && !accessLoading,
+    enabled: allowSavio,
     staleTime: 60_000,
   });
 
@@ -93,6 +97,7 @@ export function useSavioFinanceApiData() {
     isFetching: invoicesQuery.isFetching || paymentsQuery.isFetching,
     refetchAll,
     reactQueryError,
-    accessLoading,
+    accessLoading: accessLoading || savioAccessLoading,
+    canViewSavioIncome,
   };
 }

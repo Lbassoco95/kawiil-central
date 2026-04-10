@@ -154,3 +154,26 @@ export function sumPaymentTotals(rows: SavioPaymentRowView[]): { sum: number; wi
   }
   return { sum, withAmount };
 }
+
+export type SavioIncomeBucket = "cobrado" | "pendiente" | "por_cobrar";
+
+/** Agrupa cargos Savio por estado textual (heurística; afinar con docs oficiales). */
+export function classifyInvoiceForIncome(estadoRaw: string): SavioIncomeBucket {
+  const e = estadoRaw.toLowerCase();
+  if (/(paid|pagad|cobrad|liquid|cerrad|closed|settled|complet)/.test(e)) return "cobrado";
+  if (/(pend|draft|borrador|open|activ|sent|enviad|venc|overdue|partial|parcial)/.test(e)) {
+    return "pendiente";
+  }
+  if (e === "—" || !e.trim()) return "por_cobrar";
+  return "por_cobrar";
+}
+
+export function computeSavioIncomeBuckets(rows: SavioInvoiceRowView[]): Record<SavioIncomeBucket, number> {
+  const out: Record<SavioIncomeBucket, number> = { cobrado: 0, pendiente: 0, por_cobrar: 0 };
+  for (const r of rows) {
+    if (r.monto === null) continue;
+    const b = classifyInvoiceForIncome(r.estado);
+    out[b] += r.monto;
+  }
+  return out;
+}

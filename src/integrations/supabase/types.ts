@@ -830,6 +830,32 @@ export type Database = {
           },
         ]
       }
+      finance_income_viewers: {
+        Row: {
+          created_at: string
+          organization_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          organization_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          organization_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_income_viewers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number
@@ -2910,6 +2936,7 @@ export type Database = {
         Returns: Json
       }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
+      can_view_savio_finance: { Args: { _user_id: string }; Returns: boolean }
       has_finance_access: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {

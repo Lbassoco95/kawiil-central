@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFinanceAccess } from "@/hooks/useFinanceAccess";
+import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
 import type { Database } from "@/integrations/supabase/types";
 
 type SavioRow = Database["public"]["Tables"]["savio_webhook_events"]["Row"];
@@ -14,6 +16,11 @@ const PAGE_SIZE = 500;
 
 export function useSavioWebhookEvents() {
   const { user } = useAuth();
+  const { hasFinanceAccess, isLoading: financeLoading } = useFinanceAccess();
+  const { data: canViewSavioIncome = false, isLoading: savioLoading } = useSavioIncomeAccess();
+
+  const enabled =
+    !!user && hasFinanceAccess && canViewSavioIncome && !financeLoading && !savioLoading;
 
   return useQuery({
     queryKey: ["savio-webhook-events", user?.id],
@@ -26,6 +33,6 @@ export function useSavioWebhookEvents() {
       if (error) throw error;
       return (data ?? []) as SavioFinanceEvent[];
     },
-    enabled: !!user,
+    enabled,
   });
 }

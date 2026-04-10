@@ -41,8 +41,12 @@ import {
   MODULE_LABELS,
   useUserModulePermissions,
   useSyncModulePermissions,
-  type ModuleKey,
 } from "@/hooks/useModulePermissions";
+import { useUserRole } from "@/hooks/useUserRole";
+import {
+  useFinanceIncomeViewerForUser,
+  useSetFinanceIncomeViewer,
+} from "@/hooks/useFinanceIncomeViewer";
 
 
 const editSchema = z.object({
@@ -110,6 +114,10 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
   const { data: userModules = {} } = useUserModulePermissions(user?.user_id);
   const syncModules = useSyncModulePermissions();
   const [moduleState, setModuleState] = useState<Record<string, boolean>>({});
+  const { isAdminOrManager } = useUserRole();
+  const { data: hasSavioIncomeRow = false } = useFinanceIncomeViewerForUser(user?.user_id);
+  const setSavioViewer = useSetFinanceIncomeViewer();
+  const [savioIncomeEnabled, setSavioIncomeEnabled] = useState(false);
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
@@ -133,8 +141,9 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
       const ms: Record<string, boolean> = {};
       for (const k of MODULE_KEYS) ms[k] = !!userModules[k];
       setModuleState(ms);
+      setSavioIncomeEnabled(hasSavioIncomeRow);
     }
-  }, [user, open, form, userCelulas, userModules]);
+  }, [user, open, form, userCelulas, userModules, hasSavioIncomeRow]);
 
   const toggleCelula = (celulaId: string) => {
     setSelectedCelulaIds((prev) =>
@@ -180,6 +189,15 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
         organizationId: profile.organization_id,
         modules: moduleState,
       });
+
+      if (isAdminOrManager) {
+        const savioEffective = !!moduleState.finanzas && savioIncomeEnabled;
+        await setSavioViewer.mutateAsync({
+          userId: user.user_id,
+          organizationId: profile.organization_id,
+          enabled: savioEffective,
+        });
+      }
     }
 
     onOpenChange(false);
@@ -287,13 +305,70 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                     <Switch
                       checked={!!moduleState[key]}
                       onCheckedChange={(checked) =>
-                        setModuleState((prev) => ({ ...prev, [key]: checked }))
+                        setModuleState((prev) => {
+                          const next = { ...prev, [key]: checked };
+                          if (key === "finanzas" && !checked) {
+                            setSavioIncomeEnabled(false);
+                          }
+                          return next;
+                        })
                       }
                     />
                   </label>
                 ))}
               </div>
             </div>
+
+            {isAdminOrManager && (
+              <div className="rounded-md border border-border/80 bg-muted/30 p-3 space-y-3">
+                <div>
+                  <p className="text-sm font-medium">Finanzas del usuario</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    El módulo &quot;Finanzas&quot; arriba controla el acceso al menú. Los atajos ajustan también
+                    si ve solo gastos o también ingresos Savio (CXC).
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="text-xs h-8"
+                    onClick={() => {
+                      setModuleState((prev) => ({ ...prev, finanzas: true }));
+                      setSavioIncomeEnabled(false);
+                    }}
+                  >
+                    Solo gastos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="text-xs h-8"
+                    onClick={() => {
+                      setModuleState((prev) => ({ ...prev, finanzas: true }));
+                      setSavioIncomeEnabled(true);
+                    }}
+                  >
+                    Gastos + ingresos Savio
+                  </Button>
+                </div>
+                <label className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">Ver ingresos / Savio en Finanzas</span>
+                  <Switch
+                    checked={savioIncomeEnabled}
+                    disabled={!moduleState.finanzas}
+                    onCheckedChange={setSavioIncomeEnabled}
+                  />
+                </label>
+                {!moduleState.finanzas && savioIncomeEnabled && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Activa el módulo Finanzas para poder guardar el acceso a ingresos.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
