@@ -471,6 +471,7 @@ export function AccountingDashboard({
             queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
             if (clientId) {
               queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
+              queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
             }
           }
           return;
@@ -479,6 +480,7 @@ export function AccountingDashboard({
         queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
         if (clientId) {
           queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
+          queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
         }
         queryClient.invalidateQueries({ queryKey: ["documents"] });
       } catch (e: unknown) {
