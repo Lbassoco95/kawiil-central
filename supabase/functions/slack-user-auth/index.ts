@@ -27,6 +27,7 @@ const DEFAULT_USER_SCOPES = [
   "users:read.email",
   "chat:write",
   "files:write",
+  "files:read",
 ].join(",");
 
 Deno.serve(async (req) => {

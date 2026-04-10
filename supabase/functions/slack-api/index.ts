@@ -13,6 +13,41 @@ function jsonOk(body: unknown, status = 200) {
   });
 }
 
+/** Incluye `needed` de Slack en el texto de error para el toast del cliente. */
+function annotateSlackResponse(obj: Record<string, unknown>): Record<string, unknown> {
+  if (obj.ok === false && obj.error === "missing_scope" && obj.needed != null) {
+    return {
+      ...obj,
+      error: `missing_scope — scopes requeridos: ${String(obj.needed)}`,
+    };
+  }
+  return obj;
+}
+
+/**
+ * Subida clásica files.upload (multipart). Misma familia de permisos que el flujo externo;
+ * algunos workspaces aún la aceptan cuando el flujo externo falla por formato de subida.
+ */
+async function slackFilesUploadClassic(
+  token: string,
+  channel: string,
+  filename: string,
+  bytes: Uint8Array,
+  initialComment?: string,
+) {
+  const form = new FormData();
+  form.append("channels", channel);
+  form.append("filename", filename);
+  form.append("file", new Blob([bytes]), filename);
+  if (initialComment?.trim()) form.append("initial_comment", initialComment.trim());
+  const res = await fetch("https://slack.com/api/files.upload", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  return res.json() as Record<string, unknown>;
+}
+
 type SlackMethod =
   | "conversations.list"
   | "conversations.open"
@@ -50,39 +85,82 @@ async function slackFilesUploadExternal(
     },
     body: step1Params,
   });
-  const gu = await gRes.json() as {
+   const gu = await gRes.json() as {
     ok?: boolean;
     error?: string;
+    needed?: string;
     upload_url?: string;
     file_id?: string;
   };
   if (!gu.ok || !gu.upload_url || !gu.file_id) {
-    return gu;
+    return annotateSlackResponse(gu as Record<string, unknown>);
   }
 
-  const putRes = await fetch(gu.upload_url, {
-    method: "PUT",
-    body: bytes,
-    headers: { "Content-Type": "application/octet-stream" },
-  });
-  if (!putRes.ok) {
-    return { ok: false, error: `upload_to_slack_url_failed_${putRes.status}` };
+  // Slack documenta POST multipart al upload_url (p. ej. curl -F file=@...); PUT en crudo a veces falla.
+  const upForm = new FormData();
+  upForm.append("file", new Blob([bytes]), filename);
+  let upRes = await fetch(gu.upload_url, { method: "POST", body: upForm });
+  if (!upRes.ok) {
+    upRes = await fetch(gu.upload_url, {
+      method: "PUT",
+      body: bytes,
+      headers: { "Content-Type": "application/octet-stream" },
+    });
+  }
+  if (!upRes.ok) {
+    return { ok: false, error: `upload_to_slack_url_failed_${upRes.status}` };
   }
 
-  const comp = new URLSearchParams();
-  comp.set("channel_id", channel);
-  comp.set("files", JSON.stringify([{ id: gu.file_id, title: filename }]));
-  if (initialComment?.trim()) comp.set("initial_comment", initialComment.trim());
+  const completePayload: Record<string, unknown> = {
+    channel_id: channel,
+    files: [{ id: gu.file_id, title: filename }],
+  };
+  if (initialComment?.trim()) completePayload.initial_comment = initialComment.trim();
 
-  const cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
+  let cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
     },
-    body: comp,
+    body: JSON.stringify(completePayload),
   });
-  return cRes.json();
+  let completed = await cRes.json() as Record<string, unknown>;
+
+  if (completed.ok === false && completed.error === "invalid_arguments") {
+    const comp = new URLSearchParams();
+    comp.set("channel_id", channel);
+    comp.set("files", JSON.stringify([{ id: gu.file_id, title: filename }]));
+    comp.set("channels", channel);
+    if (initialComment?.trim()) comp.set("initial_comment", initialComment.trim());
+    cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: comp,
+    });
+    completed = await cRes.json() as Record<string, unknown>;
+  }
+
+  return annotateSlackResponse(completed);
+}
+
+/** Si el flujo externo falla por algo distinto de permisos, intenta files.upload clásico. */
+async function slackFilesUploadWithFallback(
+  token: string,
+  channel: string,
+  filename: string,
+  bytes: Uint8Array,
+  initialComment?: string,
+): Promise<Record<string, unknown>> {
+  const ext = await slackFilesUploadExternal(token, channel, filename, bytes, initialComment);
+  if (ext.ok === true) return ext as Record<string, unknown>;
+  const err = String((ext as { error?: string }).error || "");
+  if (err.includes("missing_scope")) return ext as Record<string, unknown>;
+  const classic = await slackFilesUploadClassic(token, channel, filename, bytes, initialComment);
+  return annotateSlackResponse(classic);
 }
 
 async function slackCall(token: string, method: SlackMethod, params: Record<string, string | number | undefined>) {
