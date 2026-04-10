@@ -5,6 +5,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useSlackConnection } from "@/hooks/useSlackConnection";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -54,6 +55,7 @@ type RawSidebarGroup = {
 
 export default function Comunicacion() {
   const { user } = useAuth();
+  const { isTransformador } = useUserRole();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
@@ -706,10 +708,14 @@ export default function Comunicacion() {
     );
   }
 
-  const pushNeedsSetup =
+  /** Sin VAPID no tiene sentido pedir “activa en Notificaciones”; solo avisamos del entorno. */
+  const showSlackPushBanner =
     isConnected &&
     pushSetup &&
-    (!pushSetup.desktopPush || pushSetup.subCount === 0);
+    !pushBannerDismissed &&
+    (!vapidConfigured ||
+      !pushSetup.desktopPush ||
+      pushSetup.subCount === 0);
 
   const dismissPushBanner = () => {
     try {
@@ -739,11 +745,11 @@ export default function Comunicacion() {
       onReorderCustomGroup={handleReorderCustomGroup}
       headerActions={
         <div className="flex flex-col gap-1.5">
-          {pushNeedsSetup && !pushBannerDismissed && (
+          {showSlackPushBanner && (
             <Alert className="border-amber-800/60 bg-amber-950/30 text-amber-100 py-2 px-3">
               <Bell className="h-4 w-4 text-amber-400" />
               <AlertTitle className="text-xs font-semibold mb-1">
-                {vapidConfigured ? "Avisos fuera de la app" : "Push: configuración pendiente (admin)"}
+                {vapidConfigured ? "Avisos fuera de la app" : "Notificaciones push no disponibles"}
               </AlertTitle>
               <AlertDescription className="text-[11px] text-amber-100/90 leading-snug space-y-1.5">
                 {vapidConfigured ? (
@@ -754,34 +760,46 @@ export default function Comunicacion() {
                     </Link>
                     .
                   </p>
-                ) : (
+                ) : isTransformador ? (
                   <>
                     <p>
-                      Hace falta Web Push (VAPID). Un admin debe configurar esto una vez; luego cada usuario activa push en{" "}
+                      Falta Web Push (VAPID) en el despliegue. Configúralo una vez; después cada usuario puede activar push en{" "}
                       <Link to="/notificaciones" className="underline font-medium text-amber-200">
                         Notificaciones
                       </Link>
                       .
                     </p>
-                    <ul className="list-disc pl-4 space-y-0.5 text-amber-200/95">
-                      <li>
-                        <strong>Lovable / build:</strong> variable{" "}
-                        <code className="rounded bg-black/30 px-1">VITE_VAPID_PUBLIC_KEY</code> (clave pública).
-                      </li>
-                      <li>
-                        <strong>Supabase</strong> → Edge Functions → Secrets:{" "}
-                        <code className="rounded bg-black/30 px-1">VAPID_PUBLIC_KEY</code> (misma pública),{" "}
-                        <code className="rounded bg-black/30 px-1">VAPID_PRIVATE_KEY</code>,{" "}
-                        <code className="rounded bg-black/30 px-1">VAPID_CONTACT_EMAIL</code> (p. ej.{" "}
-                        <code className="rounded bg-black/30 px-1">mailto:equipo@tudominio.com</code>).
-                      </li>
-                      <li>
-                        Generar par de claves:{" "}
-                        <code className="rounded bg-black/30 px-1">npx web-push generate-vapid-keys</code>
-                      </li>
-                    </ul>
-                    <p className="text-amber-300/80">Tras guardar en Lovable, vuelve a publicar el proyecto para que el cliente lea la clave.</p>
+                    <details className="rounded border border-amber-800/40 bg-black/20 px-2 py-1.5">
+                      <summary className="cursor-pointer text-amber-200/95 font-medium select-none">
+                        Pasos técnicos (Lovable y Supabase)
+                      </summary>
+                      <ul className="list-disc pl-4 mt-2 space-y-0.5 text-amber-200/95">
+                        <li>
+                          <strong>Lovable / build:</strong>{" "}
+                          <code className="rounded bg-black/30 px-1">VITE_VAPID_PUBLIC_KEY</code> (clave pública).
+                        </li>
+                        <li>
+                          <strong>Supabase</strong> → Edge Functions → Secrets:{" "}
+                          <code className="rounded bg-black/30 px-1">VAPID_PUBLIC_KEY</code> (misma pública),{" "}
+                          <code className="rounded bg-black/30 px-1">VAPID_PRIVATE_KEY</code>,{" "}
+                          <code className="rounded bg-black/30 px-1">VAPID_CONTACT_EMAIL</code> (p. ej.{" "}
+                          <code className="rounded bg-black/30 px-1">mailto:equipo@tudominio.com</code>).
+                        </li>
+                        <li>
+                          Generar claves:{" "}
+                          <code className="rounded bg-black/30 px-1">npx web-push generate-vapid-keys</code>
+                        </li>
+                      </ul>
+                      <p className="text-amber-300/80 mt-1.5">
+                        Tras guardar en Lovable, vuelve a publicar el proyecto para que el cliente lea la clave.
+                      </p>
+                    </details>
                   </>
+                ) : (
+                  <p>
+                    En este entorno no están configuradas las notificaciones fuera de la app. Puedes usar Slack con normalidad; si las necesitas,
+                    pide a un administrador que configure VAPID en Lovable y Supabase.
+                  </p>
                 )}
                 <div className="pt-2">
                   <Button
