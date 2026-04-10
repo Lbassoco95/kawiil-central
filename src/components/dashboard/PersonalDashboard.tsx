@@ -33,6 +33,7 @@ import {
   Sunrise,
   BarChart3,
   X,
+  MessageSquare,
 } from "lucide-react";
 import {
   formatDateMX,
@@ -594,6 +595,24 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             </div>
           </button>
         </div>
+
+        <button
+          type="button"
+          onClick={() => navigate("/comunicacion")}
+          className="w-full text-left stat-card flex items-center justify-between gap-3 border border-border/50 hover:border-primary/20 transition-colors animate-fade-in stagger-2"
+          style={{ animationFillMode: "both" }}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+              <MessageSquare className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">Slack</p>
+              <p className="text-xs text-muted-foreground truncate">Canales y mensajes directos del workspace</p>
+            </div>
+          </div>
+          <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        </button>
 
         {/* Next action */}
         {nextAction && (

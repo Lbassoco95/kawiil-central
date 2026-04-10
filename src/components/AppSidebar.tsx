@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-type NavItem = { title: string; url: string; icon: any; moduleKey?: string };
+type NavItem = { title: string; url: string; icon: any; moduleKey?: string; tooltip?: string };
 type NavGroup = {
   label: string;
   items: NavItem[];
@@ -63,7 +63,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "Calendario", url: "/microsoft365/calendario", icon: Calendar, moduleKey: "calendario" },
       { title: "Correo", url: "/microsoft365/correo", icon: Mail, moduleKey: "correo" },
-      { title: "Comunicación", url: "/comunicacion", icon: MessageSquare },
+      { title: "Slack", url: "/comunicacion", icon: MessageSquare, tooltip: "Mensajes y canales del workspace" },
       { title: "Notificaciones", url: "/notificaciones", icon: Bell },
     ],
   },
@@ -173,6 +173,7 @@ export function AppSidebar() {
                       key={item.url}
                       to={item.url}
                       end={item.url === "/"}
+                      title={item.tooltip || item.title}
                       className="relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-sidebar-primary"
                       onClick={() => setMobileOpen(false)}
@@ -256,8 +257,25 @@ export function AppSidebar() {
                     return (
                       <Tooltip key={item.url}>
                         <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-                        <TooltipContent side="right" className="text-xs">
-                          {item.title}
+                        <TooltipContent side="right" className="text-xs max-w-[240px]">
+                          {item.tooltip ? (
+                            <>
+                              <span className="font-medium block">{item.title}</span>
+                              <span className="text-muted-foreground font-normal">{item.tooltip}</span>
+                            </>
+                          ) : (
+                            item.title
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+                  if (item.tooltip) {
+                    return (
+                      <Tooltip key={item.url}>
+                        <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-[260px]">
+                          {item.tooltip}
                         </TooltipContent>
                       </Tooltip>
                     );

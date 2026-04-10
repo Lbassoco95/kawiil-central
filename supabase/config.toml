@@ -5,6 +5,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.savio-webhook]
     verify_jwt = false
+  [functions.savio-api-health]
+    verify_jwt = true
   [functions.slack-events]
     verify_jwt = false
   [functions.slack-user-auth]

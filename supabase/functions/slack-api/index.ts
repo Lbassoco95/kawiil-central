@@ -5,7 +5,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type SlackMethod = "conversations.list" | "conversations.history" | "chat.postMessage";
+type SlackMethod =
+  | "conversations.list"
+  | "conversations.history"
+  | "chat.postMessage"
+  | "users.info";
 
 async function slackCall(token: string, method: SlackMethod, params: Record<string, string | number | undefined>) {
   const body = new URLSearchParams();
@@ -133,10 +137,55 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: "unknown_action", allowed: ["conversations.list", "conversations.history", "chat.postMessage"] }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    if (action === "users.info.batch") {
+      const rawIds = json.user_ids as unknown;
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        return new Response(JSON.stringify({ error: "user_ids array required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const unique = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 80);
+      const users: Record<string, { display_name: string | null; real_name: string | null; avatar_url: string | null }> = {};
+
+      const chunk = 8;
+      for (let i = 0; i < unique.length; i += chunk) {
+        const part = unique.slice(i, i + chunk);
+        await Promise.all(
+          part.map(async (slackUserId) => {
+            const data = await slackCall(conn.access_token, "users.info", { user: slackUserId });
+            if (data.ok && data.user) {
+              const u = data.user as {
+                profile?: { display_name?: string; real_name?: string; image_72?: string };
+                real_name?: string;
+              };
+              const dn = u.profile?.display_name?.trim() || null;
+              const rn = u.profile?.real_name?.trim() || u.real_name?.trim() || null;
+              users[slackUserId] = {
+                display_name: dn,
+                real_name: rn,
+                avatar_url: u.profile?.image_72 || null,
+              };
+            }
+          }),
+        );
+      }
+
+      return new Response(JSON.stringify({ ok: true, users }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        error: "unknown_action",
+        allowed: ["conversations.list", "conversations.history", "chat.postMessage", "users.info.batch"],
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     console.error("slack-api:", error);
     return new Response(JSON.stringify({ error: (error as Error).message }), {

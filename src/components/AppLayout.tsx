@@ -12,8 +12,15 @@ import { nowMX } from "@/lib/dateUtils";
 import { OPEN_NEW_TASK_MODAL_EVENT, openNewTaskModal } from "@/lib/openNewTaskModal";
 import { Clock } from "lucide-react";
 
-export function AppLayout({ children }: { children: ReactNode }) {
+type AppLayoutProps = {
+  children: ReactNode;
+  /** Contenido a ancho completo (p. ej. cliente Slack) */
+  contentMaxWidth?: "default" | "full";
+};
+
+export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutProps) {
   const isMobile = useIsMobile();
+  const isFullWidth = contentMaxWidth === "full";
   useTasksRealtime();
   useActivityTracker();
   useNotificationDelivery();
@@ -60,7 +67,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 overflow-auto w-full relative z-10">
         {/* Global date/time bar */}
         <div className={`sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border/50 ${isMobile ? "px-4 pt-12 pb-2" : "px-6 py-2"}`}>
-          <div className="max-w-7xl mx-auto flex items-center gap-3">
+          <div className={`${isFullWidth ? "w-full max-w-none px-0" : "max-w-7xl mx-auto"} flex items-center gap-3`}>
             {!isMobile && <GlobalAISearch />}
             <div className="flex items-center gap-3 ml-auto">
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
@@ -73,7 +80,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
-        <div className={`max-w-7xl mx-auto animate-fade-in ${isMobile ? "p-4" : "p-6"}`}>
+        <div
+          className={`animate-fade-in ${
+            isFullWidth
+              ? `w-full max-w-none min-h-[calc(100vh-3.5rem)] ${isMobile ? "px-0 pb-0 pt-0" : "px-0 pb-0"}`
+              : `max-w-7xl mx-auto ${isMobile ? "p-4" : "p-6"}`
+          }`}
+        >
           {children}
         </div>
       </main>
