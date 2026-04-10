@@ -43,7 +43,7 @@ export function savioFinanceApiFailureHint(meta: SavioInvokeMeta | undefined): s
     return [
       "Savio respondió 401: la API key no fue aceptada.",
       detail ? `Detalle: ${detail}` : "",
-      "Comprueba clave y URL base en Supabase Secrets (producción: https://api.savio.mx · sandbox: https://api-sandbox.savio.mx).",
+      "Comprueba clave y SAVIO_API_BASE_URL (debe quedar en …/api/v1; p. ej. https://api.savio.mx/api/v1).",
       "Si sigue fallando, en Supabase Secrets prueba SAVIO_API_AUTH_MODE=bearer (por defecto enviamos la clave sin prefijo Bearer, según OpenAPI de Savio).",
     ]
       .filter(Boolean)

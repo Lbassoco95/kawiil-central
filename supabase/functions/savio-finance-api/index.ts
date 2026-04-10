@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { savioAuthorizationHeaderValue } from "../_shared/savioAuthHeaders.ts";
+import { normalizeSavioApiBase } from "../_shared/savioApiBase.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,7 +134,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const base = (Deno.env.get("SAVIO_API_BASE_URL") || "").replace(/\/$/, "");
+    const base = normalizeSavioApiBase(Deno.env.get("SAVIO_API_BASE_URL") || "");
     const apiKey = Deno.env.get("SAVIO_API_KEY");
     const missing: string[] = [];
     if (!base) missing.push("SAVIO_API_BASE_URL");

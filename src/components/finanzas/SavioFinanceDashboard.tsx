@@ -249,9 +249,11 @@ export function SavioFinanceDashboard() {
               {invoiceFail && <p>Facturas/cargos: {invoiceFail}</p>}
               {paymentFail && <p>Pagos: {paymentFail}</p>}
               <p className="text-muted-foreground dark:text-amber-200/80">
-                Rutas por defecto según OpenAPI Savio:{" "}
+                La URL base debe resolver a{" "}
+                <code className="text-[10px]">…/api/v1</code> (p. ej. <code className="text-[10px]">https://api.savio.mx/api/v1</code>
+                ); el backend añade <code className="text-[10px]">/api/v1</code> si solo pones el host. Rutas:{" "}
                 <code className="text-[10px]">/invoice</code>, <code className="text-[10px]">/payment</code>. Si
-                ves “No route found”, revisa en{" "}
+                ves error de ruta, revisa{" "}
                 <a href="https://app.savio.mx/docs" className="underline" target="_blank" rel="noreferrer">
                   app.savio.mx/docs
                 </a>{" "}
