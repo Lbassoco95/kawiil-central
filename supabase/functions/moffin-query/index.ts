@@ -41,21 +41,34 @@ function moffinAccountType(
 function mapMoffinStatus(
   s: string | undefined,
 ): "success" | "fail" | "pending" | "error" {
-  if (s === "SUCCESS") return "success";
-  if (s === "PENDING") return "pending";
-  if (s === "FAIL") return "fail";
+  const u = String(s ?? "").trim().toUpperCase();
+  if (u === "SUCCESS") return "success";
+  if (u === "PENDING") return "pending";
+  if (u === "FAIL") return "fail";
   return "error";
 }
 
+/** Cuerpo útil de lista 69-B en distintas formas (POST inicial, GET /report/{id}). */
+function blacklistInner(resp: Record<string, unknown>): Record<string, unknown> | null {
+  const tryObj = (x: unknown): Record<string, unknown> | null =>
+    x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : null;
+  return (
+    tryObj(resp?.response) ??
+    tryObj(resp?.state) ??
+    tryObj((resp?.response as Record<string, unknown> | undefined)?.data) ??
+    tryObj(resp?.data) ??
+    tryObj((resp?.query as Record<string, unknown> | undefined)?.response)
+  );
+}
+
 function summarizeBlacklist(resp: Record<string, unknown>): string {
-  const inner = resp?.response as Record<string, unknown> | null | undefined;
-  if (!inner || typeof inner !== "object") {
-    return resp?.status === "PENDING"
-      ? "Consulta en proceso (Moffin)"
-      : "Sin detalle en respuesta";
+  const inner = blacklistInner(resp);
+  const st = String(resp?.status ?? "").toUpperCase();
+  if (!inner) {
+    return st === "PENDING" ? "Consulta en proceso (Moffin)" : "Sin detalle en respuesta";
   }
   const rfc = inner.RFC ?? inner.rfc;
-  const est = inner.Estatus ?? inner.estatus;
+  const est = inner.Estatus ?? inner.estatus ?? inner.resultado ?? inner.status;
   const rz = inner.RazonSocial ?? inner.razonSocial;
   const parts = [
     rfc ? `RFC: ${rfc}` : null,
@@ -118,6 +131,124 @@ function pickCertificateUrl(
   if (url.startsWith("http")) return url;
   const firstHttp = certs.map((c) => String(c.url ?? "")).find((u) => u.startsWith("http"));
   return firstHttp ?? null;
+}
+
+function pickPdfForConsult(consultType: ConsultType, report: Record<string, unknown>): string | null {
+  if (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") {
+    const u = pickCertificateUrl(consultType, report);
+    if (u) return u;
+  }
+  const top = String(report.pdfURL ?? "");
+  return top.startsWith("http") ? top : null;
+}
+
+type MoffinConsultDbRow = {
+  id: string;
+  organization_id: string;
+  project_id: string;
+  client_id: string | null;
+  consult_type: string;
+  moffin_query_id: string | null;
+  document_id: string | null;
+  requested_by: string | null;
+  raw_response: unknown;
+};
+
+async function fetchMoffinReportById(
+  moffinBase: string,
+  moffinKey: string,
+  queryId: string,
+): Promise<
+  { ok: true; json: Record<string, unknown> } | { ok: false; message: string; status: number }
+> {
+  const url = `${moffinBase}/report/${encodeURIComponent(queryId)}?withPDF=true`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Token ${moffinKey}` },
+  });
+  const text = await res.text();
+  let json: Record<string, unknown> = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    return { ok: false, message: "Respuesta de Moffin no es JSON válido", status: res.status };
+  }
+  if (!res.ok) {
+    const msg =
+      (typeof json.message === "string" && json.message) ||
+      (typeof json.error === "string" && json.error) ||
+      `HTTP ${res.status}`;
+    return { ok: false, message: msg, status: res.status };
+  }
+  return { ok: true, json };
+}
+
+async function persistMoffinReportToConsult(
+  admin: ReturnType<typeof createClient>,
+  row: MoffinConsultDbRow,
+  report: Record<string, unknown>,
+  fallbackUserId: string,
+): Promise<{ error?: string }> {
+  const allowed: ConsultType[] = ["lista_69b", "constancia_situacion_fiscal", "opinion_cumplimiento"];
+  if (!allowed.includes(row.consult_type as ConsultType)) {
+    return { error: "Tipo de consulta no reconocido" };
+  }
+  const ct = row.consult_type as ConsultType;
+  const st = mapMoffinStatus(String(report.status ?? ""));
+  let summary: string | null = null;
+  if (ct === "lista_69b") summary = summarizeBlacklist(report);
+  else summary = summarizeSatRfc(ct, report);
+
+  const errMsg =
+    st === "fail" || st === "error"
+      ? String(report.message ?? report.error ?? "Moffin reportó un fallo")
+      : null;
+
+  const uploadUid = row.requested_by ?? fallbackUserId;
+  let documentId = row.document_id;
+
+  if (st === "success" && !documentId && (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento")) {
+    const pdfUrl = pickPdfForConsult(ct, report);
+    if (pdfUrl) {
+      const docType =
+        ct === "constancia_situacion_fiscal" ? "constancia_situacion_fiscal" : "opinion_cumplimiento";
+      const newDoc = await uploadPdfFromUrl(
+        admin,
+        row.organization_id,
+        row.project_id,
+        row.client_id,
+        uploadUid,
+        pdfUrl,
+        ct,
+        docType,
+      );
+      if (newDoc) documentId = newDoc;
+    }
+  }
+
+  const prev = row.raw_response;
+  const prevObj =
+    prev && typeof prev === "object" && !Array.isArray(prev) ? (prev as Record<string, unknown>) : {};
+  const mergedRaw = {
+    ...prevObj,
+    moffinGetReportSnapshot: report,
+    _refreshedAt: new Date().toISOString(),
+  };
+
+  const reportId = report.id != null ? String(report.id) : row.moffin_query_id;
+
+  const patch: Record<string, unknown> = {
+    status: st,
+    error_message: st === "success" ? null : errMsg,
+    summary,
+    raw_response: mergedRaw,
+    document_id: documentId,
+  };
+  if (reportId) patch.moffin_query_id = reportId;
+  if (typeof report.uuid === "string") patch.moffin_uuid = report.uuid;
+
+  const { error: upErr } = await admin.from("moffin_consults").update(patch).eq("id", row.id);
+  if (upErr) return { error: upErr.message };
+  return {};
 }
 
 async function uploadPdfFromUrl(
@@ -224,7 +355,13 @@ Deno.serve(async (req) => {
     });
   }
 
-  let body: { projectId?: string; consultType?: ConsultType; fielPassword?: string };
+  let body: {
+    projectId?: string;
+    consultType?: ConsultType;
+    fielPassword?: string;
+    refreshPendingForProjectId?: string;
+    refreshPendingForClientId?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -232,6 +369,158 @@ Deno.serve(async (req) => {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  }
+
+  const admin = createClient(supabaseUrl, serviceKey);
+
+  const { data: profile, error: profErr } = await userClient
+    .from("profiles")
+    .select("organization_id")
+    .eq("user_id", user.id)
+    .single();
+  if (profErr || !profile?.organization_id) {
+    return new Response(JSON.stringify({ error: "Perfil no encontrado" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const orgId = profile.organization_id;
+
+  const refreshProjectId =
+    typeof body.refreshPendingForProjectId === "string"
+      ? body.refreshPendingForProjectId.trim()
+      : "";
+  const refreshClientId =
+    typeof body.refreshPendingForClientId === "string"
+      ? body.refreshPendingForClientId.trim()
+      : "";
+
+  const consultSelect =
+    "id, organization_id, project_id, client_id, consult_type, moffin_query_id, document_id, requested_by, raw_response";
+
+  if (refreshProjectId) {
+    const { data: projCheck, error: pce } = await userClient
+      .from("projects")
+      .select("id, organization_id")
+      .eq("id", refreshProjectId)
+      .single();
+    if (pce || !projCheck || projCheck.organization_id !== orgId) {
+      return new Response(JSON.stringify({ error: "Proyecto no encontrado" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: pendingRows, error: pre } = await admin
+      .from("moffin_consults")
+      .select(consultSelect)
+      .eq("project_id", refreshProjectId)
+      .eq("organization_id", orgId)
+      .eq("status", "pending")
+      .not("moffin_query_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(15);
+    if (pre) {
+      return new Response(JSON.stringify({ error: pre.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const results: Array<{ id: string; ok: boolean; error?: string; newStatus?: string }> = [];
+    for (const row of pendingRows ?? []) {
+      const qid = row.moffin_query_id as string;
+      const fr = await fetchMoffinReportById(moffinBase, moffinKey, qid);
+      if (!fr.ok) {
+        results.push({ id: row.id, ok: false, error: fr.message });
+        continue;
+      }
+      const pe = await persistMoffinReportToConsult(
+        admin,
+        row as MoffinConsultDbRow,
+        fr.json,
+        user.id,
+      );
+      if (pe.error) {
+        results.push({ id: row.id, ok: false, error: pe.error });
+      } else {
+        results.push({
+          id: row.id,
+          ok: true,
+          newStatus: mapMoffinStatus(String(fr.json.status ?? "")),
+        });
+      }
+    }
+    return new Response(
+      JSON.stringify({
+        refresh: true,
+        scope: "project",
+        pendingFound: pendingRows?.length ?? 0,
+        results,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
+  if (refreshClientId) {
+    const { data: clientCheck, error: cce } = await userClient
+      .from("clients")
+      .select("id, organization_id")
+      .eq("id", refreshClientId)
+      .single();
+    if (cce || !clientCheck || clientCheck.organization_id !== orgId) {
+      return new Response(JSON.stringify({ error: "Cliente no encontrado" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { data: pendingRows, error: cre } = await admin
+      .from("moffin_consults")
+      .select(consultSelect)
+      .eq("client_id", refreshClientId)
+      .eq("organization_id", orgId)
+      .eq("status", "pending")
+      .not("moffin_query_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(15);
+    if (cre) {
+      return new Response(JSON.stringify({ error: cre.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const results: Array<{ id: string; ok: boolean; error?: string; newStatus?: string }> = [];
+    for (const row of pendingRows ?? []) {
+      const qid = row.moffin_query_id as string;
+      const fr = await fetchMoffinReportById(moffinBase, moffinKey, qid);
+      if (!fr.ok) {
+        results.push({ id: row.id, ok: false, error: fr.message });
+        continue;
+      }
+      const pe = await persistMoffinReportToConsult(
+        admin,
+        row as MoffinConsultDbRow,
+        fr.json,
+        user.id,
+      );
+      if (pe.error) {
+        results.push({ id: row.id, ok: false, error: pe.error });
+      } else {
+        results.push({
+          id: row.id,
+          ok: true,
+          newStatus: mapMoffinStatus(String(fr.json.status ?? "")),
+        });
+      }
+    }
+    return new Response(
+      JSON.stringify({
+        refresh: true,
+        scope: "client",
+        pendingFound: pendingRows?.length ?? 0,
+        results,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 
   const projectId = body.projectId?.trim();
@@ -248,23 +537,11 @@ Deno.serve(async (req) => {
       JSON.stringify({
         error: "projectId y consultType requeridos",
         consultTypeValues: allowed,
+        hint:
+          "Para sincronizar consultas pendientes usa refreshPendingForProjectId o refreshPendingForClientId.",
       }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  }
-
-  const admin = createClient(supabaseUrl, serviceKey);
-
-  const { data: profile, error: profErr } = await userClient
-    .from("profiles")
-    .select("organization_id")
-    .eq("user_id", user.id)
-    .single();
-  if (profErr || !profile?.organization_id) {
-    return new Response(JSON.stringify({ error: "Perfil no encontrado" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   }
 
   const { data: project, error: projErr } = await userClient
@@ -449,7 +726,7 @@ Deno.serve(async (req) => {
     moffinStatus === "success" &&
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
   ) {
-    const pdfUrl = pickCertificateUrl(consultType, json);
+    const pdfUrl = pickPdfForConsult(consultType, json);
     if (pdfUrl) {
       const docType =
         consultType === "constancia_situacion_fiscal"

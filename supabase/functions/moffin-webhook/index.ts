@@ -26,21 +26,33 @@ const KAWIIL_EXTERNAL_RE =
 function mapMoffinStatus(
   s: string | undefined,
 ): "success" | "fail" | "pending" | "error" {
-  if (s === "SUCCESS") return "success";
-  if (s === "PENDING") return "pending";
-  if (s === "FAIL") return "fail";
+  const u = String(s ?? "").trim().toUpperCase();
+  if (u === "SUCCESS") return "success";
+  if (u === "PENDING") return "pending";
+  if (u === "FAIL") return "fail";
   return "error";
 }
 
+function blacklistInner(resp: Record<string, unknown>): Record<string, unknown> | null {
+  const tryObj = (x: unknown): Record<string, unknown> | null =>
+    x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : null;
+  return (
+    tryObj(resp?.response) ??
+    tryObj(resp?.state) ??
+    tryObj((resp?.response as Record<string, unknown> | undefined)?.data) ??
+    tryObj(resp?.data) ??
+    tryObj((resp?.query as Record<string, unknown> | undefined)?.response)
+  );
+}
+
 function summarizeBlacklist(resp: Record<string, unknown>): string {
-  const inner = resp?.response as Record<string, unknown> | null | undefined;
-  if (!inner || typeof inner !== "object") {
-    return resp?.status === "PENDING"
-      ? "Consulta en proceso (Moffin)"
-      : "Sin detalle en respuesta";
+  const inner = blacklistInner(resp);
+  const st = String(resp?.status ?? "").toUpperCase();
+  if (!inner) {
+    return st === "PENDING" ? "Consulta en proceso (Moffin)" : "Sin detalle en respuesta";
   }
   const rfc = inner.RFC ?? inner.rfc;
-  const est = inner.Estatus ?? inner.estatus;
+  const est = inner.Estatus ?? inner.estatus ?? inner.resultado ?? inner.status;
   const rz = inner.RazonSocial ?? inner.razonSocial;
   const parts = [
     rfc ? `RFC: ${rfc}` : null,
@@ -103,6 +115,16 @@ function pickCertificateUrl(
   if (url.startsWith("http")) return url;
   const firstHttp = certs.map((c) => String(c.url ?? "")).find((u) => u.startsWith("http"));
   return firstHttp ?? null;
+}
+
+function pickPdfForConsult(
+  consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
+  report: Record<string, unknown>,
+): string | null {
+  const u = pickCertificateUrl(consultType, report);
+  if (u) return u;
+  const top = String(report.pdfURL ?? "");
+  return top.startsWith("http") ? top : null;
 }
 
 function findKawiilExternalId(obj: unknown): string | null {
@@ -353,12 +375,14 @@ Deno.serve(async (req) => {
   }
 
   const st = moffinReport ? mapMoffinStatus(String(moffinReport.status ?? "")) : "pending";
+  const mr = moffinReport as Record<string, unknown> | null;
   const errMsg =
     st === "fail" || st === "error"
       ? String(
-          (moffinReport as Record<string, unknown>)?.message ??
-            (moffinReport as Record<string, unknown>)?.error ??
-            "FAIL",
+          mr?.message ??
+            mr?.error ??
+            (typeof mr?.response === "object" && mr?.response && (mr.response as Record<string, unknown>)?.message) ??
+            "Consulta Moffin fallida",
         )
       : null;
 
@@ -369,7 +393,7 @@ Deno.serve(async (req) => {
     moffinReport &&
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
   ) {
-    const pdfUrl = pickCertificateUrl(consultType, moffinReport);
+    const pdfUrl = pickPdfForConsult(consultType, moffinReport);
     if (pdfUrl) {
       const docType =
         consultType === "constancia_situacion_fiscal"

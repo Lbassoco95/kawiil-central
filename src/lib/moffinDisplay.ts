@@ -6,8 +6,26 @@ export type MoffinConsultRow = {
   created_at: string;
   raw_response: unknown;
   document_id: string | null;
+  error_message?: string | null;
+  moffin_query_id?: string | null;
   documents?: { file_path: string | null; name: string | null } | null;
 };
+
+/** Útil para UI: respuesta GET /report o POST mezclada en raw_response. */
+function lista69bInnerFromRaw(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const top =
+    (o.moffinGetReportSnapshot as Record<string, unknown> | undefined) ?? o;
+  const tryInner = (x: unknown): Record<string, unknown> | null =>
+    x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : null;
+  return (
+    tryInner(top.response) ??
+    tryInner(top.state) ??
+    tryInner((top.response as Record<string, unknown> | undefined)?.data) ??
+    tryInner(top.data)
+  );
+}
 
 export function pickLatestMoffinByType(rows: MoffinConsultRow[]): Map<string, MoffinConsultRow> {
   const map = new Map<string, MoffinConsultRow>();
@@ -27,17 +45,17 @@ export function lista69bHeadline(row: MoffinConsultRow | undefined): {
     return { title: "Sin consulta reciente", tone: "muted" };
   }
   if (row.status === "pending") {
-    return { title: "Lista 69-B en proceso", detail: row.summary ?? undefined, tone: "muted" };
+    const detail = [row.summary, row.error_message].filter(Boolean).join(" — ") || undefined;
+    return { title: "Lista 69-B en proceso", detail, tone: "muted" };
   }
   if (row.status === "fail" || row.status === "error") {
     return {
       title: "Sin resultado válido",
-      detail: row.summary ?? undefined,
+      detail: [row.error_message, row.summary].filter(Boolean).join(" — ") || undefined,
       tone: "bad",
     };
   }
-  const raw = row.raw_response as Record<string, unknown> | null | undefined;
-  const inner = raw?.response as Record<string, unknown> | undefined;
+  const inner = lista69bInnerFromRaw(row.raw_response);
   const est = String(inner?.Estatus ?? inner?.estatus ?? inner?.resultado ?? "").trim();
   const blob = `${est} ${row.summary ?? ""}`.toLowerCase();
   if (/no localizado|no se encuentra|no aparece|sin registro|no figura|vigente sin/i.test(blob)) {
@@ -71,7 +89,7 @@ export function certConsultLine(
   if (row.status === "pending") {
     return {
       title: `${label} en proceso`,
-      detail: row.summary ?? undefined,
+      detail: [row.summary, row.error_message].filter(Boolean).join(" — ") || undefined,
       hasFile: false,
       tone: "muted",
     };
@@ -79,7 +97,7 @@ export function certConsultLine(
   if (row.status === "fail" || row.status === "error") {
     return {
       title: `${label}: error`,
-      detail: row.summary ?? undefined,
+      detail: [row.error_message, row.summary].filter(Boolean).join(" — ") || undefined,
       hasFile: false,
       tone: "bad",
     };

@@ -7,11 +7,17 @@ import {
   pickLatestMoffinByType,
 } from "@/lib/moffinDisplay";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { format, differenceInMinutes } from "date-fns";
 import { es } from "date-fns/locale";
-import { Download, Landmark, Loader2 } from "lucide-react";
+import { Download, Landmark, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  functionInvokeUserMessage,
+  invokeFunctionWithSession,
+} from "@/lib/supabaseInvoke";
+import { useCallback, useMemo, useState } from "react";
 
 const toneClass: Record<string, string> = {
   ok: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-200",
@@ -32,8 +38,68 @@ export function MoffinSatStatusSummary({
   title = "SAT (Moffin)",
   className,
 }: Props) {
-  const { data: rows = [], isLoading } = useMoffinConsultsByClient(clientId);
+  const { user } = useAuth();
+  const { data: rows = [], isLoading, refetch } = useMoffinConsultsByClient(clientId);
+  const [syncBusy, setSyncBusy] = useState(false);
   const byType = pickLatestMoffinByType(rows);
+
+  const hasPendingSyncable = useMemo(
+    () => rows.some((r) => r.status === "pending" && r.moffin_query_id),
+    [rows],
+  );
+
+  const stalePending = useMemo(
+    () =>
+      rows.some(
+        (r) =>
+          r.status === "pending" &&
+          r.moffin_query_id &&
+          r.created_at &&
+          differenceInMinutes(Date.now(), new Date(r.created_at)) >= 10,
+      ),
+    [rows],
+  );
+
+  const syncWithMoffin = useCallback(async () => {
+    if (!user) {
+      toast.error("Inicia sesión para sincronizar.");
+      return;
+    }
+    setSyncBusy(true);
+    try {
+      const { data, error } = await invokeFunctionWithSession("moffin-query", {
+        refreshPendingForClientId: clientId,
+      });
+      const payload = (data ?? {}) as {
+        refresh?: boolean;
+        results?: Array<{ ok: boolean; error?: string }>;
+        pendingFound?: number;
+        error?: string;
+        message?: string;
+      };
+      if (payload.error || error) {
+        toast.error(functionInvokeUserMessage(data, error));
+        return;
+      }
+      const failed = payload.results?.filter((r) => !r.ok) ?? [];
+      if (failed.length) {
+        toast.warning(
+          `Sincronización parcial: ${failed.length} consulta(s). ${failed[0]?.error ?? ""}`.trim(),
+        );
+      } else {
+        toast.success(
+          payload.pendingFound === 0
+            ? "No había consultas pendientes con ID en Moffin."
+            : "Estado actualizado desde Moffin.",
+        );
+      }
+      await refetch();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Error al sincronizar");
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [clientId, refetch, user]);
   const r69 = lista69bHeadline(byType.get("lista_69b"));
   const constancia = certConsultLine(
     "Constancia de situación fiscal",
@@ -67,6 +133,31 @@ export function MoffinSatStatusSummary({
         <Landmark className="h-3.5 w-3.5" />
         {title}
       </h2>
+      {!isLoading && hasPendingSyncable ? (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {stalePending ? (
+            <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1.5 flex-1 min-w-[220px] leading-snug">
+              Llevan varios minutos en proceso. Si el webhook (Svix) no actualizó el resultado, fuerza la lectura en la
+              API de Moffin con el botón.
+            </p>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1 shrink-0"
+            disabled={syncBusy || !user}
+            onClick={syncWithMoffin}
+          >
+            {syncBusy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Sincronizar con Moffin
+          </Button>
+        </div>
+      ) : null}
       {isLoading ? (
         <p className="text-xs text-muted-foreground flex items-center gap-2">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando…

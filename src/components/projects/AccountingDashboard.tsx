@@ -29,8 +29,11 @@ import {
   FileCheck2,
   Download,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
+import { differenceInMinutes } from "date-fns";
 import { nowMX } from "@/lib/dateUtils";
+import type { MoffinConsultRow } from "@/lib/moffinDisplay";
 import {
   useAccountingPeriods,
   useCreateAccountingPeriod,
@@ -349,6 +352,7 @@ export function AccountingDashboard({
   const [moffinBusy, setMoffinBusy] = useState<MoffinConsultType | null>(null);
   const [fielPassword, setFielPassword] = useState("");
   const [rememberFielPwSession, setRememberFielPwSession] = useState(false);
+  const [moffinRefreshing, setMoffinRefreshing] = useState(false);
 
   const { data: moffinFielStatus } = useQuery({
     queryKey: ["moffin-fiel-status", clientId],
@@ -413,23 +417,88 @@ export function AccountingDashboard({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("moffin_consults")
-        .select("id, consult_type, status, summary, created_at, document_id, documents(file_path, name)")
+        .select(
+          "id, consult_type, status, summary, created_at, document_id, error_message, moffin_query_id, documents(file_path, name)"
+        )
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
         .limit(60);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as MoffinConsultRow[];
     },
     enabled: !!user && !!projectId,
+    refetchInterval: (q) => {
+      const list = q.state.data as MoffinConsultRow[] | undefined;
+      return list?.some((r) => r.status === "pending" && r.moffin_query_id) ? 55_000 : false;
+    },
   });
 
   const latestMoffinByType = useMemo(() => {
-    const map = new Map<string, (typeof moffinRows)[number]>();
+    const map = new Map<string, MoffinConsultRow>();
     for (const row of moffinRows) {
       if (!map.has(row.consult_type)) map.set(row.consult_type, row);
     }
     return map;
   }, [moffinRows]);
+
+  const hasPendingMoffinSync = useMemo(
+    () => moffinRows.some((r) => r.status === "pending" && r.moffin_query_id),
+    [moffinRows],
+  );
+
+  const moffinStalePending = useMemo(() => {
+    const keys = Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[];
+    return keys.some((key) => {
+      const row = latestMoffinByType.get(key);
+      return (
+        !!row &&
+        row.status === "pending" &&
+        !!row.moffin_query_id &&
+        !!row.created_at &&
+        differenceInMinutes(new Date(), new Date(row.created_at)) >= 10
+      );
+    });
+  }, [latestMoffinByType]);
+
+  const syncMoffinPending = useCallback(async () => {
+    setMoffinRefreshing(true);
+    try {
+      const { data, error } = await invokeFunctionWithSession("moffin-query", {
+        refreshPendingForProjectId: projectId,
+      });
+      const payload = (data ?? {}) as {
+        refresh?: boolean;
+        results?: Array<{ ok: boolean; error?: string }>;
+        pendingFound?: number;
+        error?: string;
+        message?: string;
+      };
+      if (payload.error || error) {
+        toast.error(functionInvokeUserMessage(data, error));
+        return;
+      }
+      const failed = payload.results?.filter((r) => !r.ok) ?? [];
+      if (failed.length) {
+        toast.warning(`Sincronización parcial: ${failed[0]?.error ?? "revisa respuesta de Moffin"}`);
+      } else {
+        toast.success(
+          payload.pendingFound === 0
+            ? "No había consultas pendientes para sincronizar."
+            : "Consultas actualizadas desde Moffin.",
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
+      if (clientId) {
+        queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
+        queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Error al sincronizar Moffin");
+    } finally {
+      setMoffinRefreshing(false);
+    }
+  }, [projectId, clientId, queryClient]);
 
   const runMoffinConsult = useCallback(
     async (consultType: MoffinConsultType) => {
@@ -637,6 +706,32 @@ export function AccountingDashboard({
               })}
             </div>
           )}
+          {clientId && moffinStalePending ? (
+            <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-2 leading-snug">
+              Consultas SAT en <strong className="font-medium">pendiente</strong> desde hace varios minutos: confirma el
+              webhook de Moffin (Svix) o usa <strong className="font-medium">Sincronizar pendientes</strong> para leer el
+              estado en la API.
+            </p>
+          ) : null}
+          {clientId && hasPendingMoffinSync ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-8 text-xs gap-1"
+                disabled={moffinRefreshing}
+                onClick={syncMoffinPending}
+              >
+                {moffinRefreshing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                Sincronizar pendientes (Moffin API)
+              </Button>
+            </div>
+          ) : null}
           <div className="rounded-md border border-border/60 overflow-hidden">
             <table className="w-full text-left text-[11px]">
               <thead className="bg-muted/40 text-muted-foreground">
@@ -652,20 +747,33 @@ export function AccountingDashboard({
                 {(Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[]).map((key) => {
                   const row = latestMoffinByType.get(key);
                   const doc = row?.documents as { file_path?: string | null; name?: string | null } | null;
+                  const statusBadgeVariant =
+                    row?.status === "success"
+                      ? "default"
+                      : row?.status === "fail" || row?.status === "error"
+                        ? "destructive"
+                        : "secondary";
                   return (
                     <tr key={key} className="border-t border-border/50">
                       <td className="p-2 font-medium">{MOFFIN_CONSULT_META[key].label}</td>
                       <td className="p-2">
                         {row ? (
-                          <Badge variant={row.status === "success" ? "default" : "secondary"} className="text-[10px]">
+                          <Badge variant={statusBadgeVariant} className="text-[10px]">
                             {row.status}
                           </Badge>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="p-2 text-muted-foreground max-w-[220px] truncate" title={row?.summary ?? undefined}>
-                        {row?.summary ?? "—"}
+                      <td className="p-2 text-muted-foreground max-w-[260px]">
+                        <div className="truncate" title={row?.summary ?? undefined}>
+                          {row?.summary ?? "—"}
+                        </div>
+                        {row?.error_message ? (
+                          <div className="text-[10px] text-destructive mt-0.5 leading-tight line-clamp-2">
+                            {row.error_message}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="p-2 text-muted-foreground whitespace-nowrap">
                         {row?.created_at ? new Date(row.created_at).toLocaleString("es-MX") : "—"}
