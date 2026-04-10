@@ -297,6 +297,22 @@ export function SlackConversationList({
 
   const inSidebarSpecial = (c: SlackConversation) => pinnedOrVip(c) || channelsInCustomGroups.has(c.id);
 
+  const customGroupsFiltered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return customGroups
+      .map((g) => ({
+        ...g,
+        conversations: !needle
+          ? g.conversations
+          : g.conversations.filter((c) => {
+              const t = conversationTitle(c, userMap, titleOpts).toLowerCase();
+              const n = (c.name || "").toLowerCase();
+              return t.includes(needle) || n.includes(needle) || c.id.toLowerCase().includes(needle);
+            }),
+      }))
+      .filter((g) => g.conversations.length > 0);
+  }, [customGroups, q, userMap, titleOpts]);
+
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -321,22 +337,6 @@ export function SlackConversationList({
   const dmFiltered = groups.allDirectMessages
     .filter((c) => !inSidebarSpecial(c))
     .filter(filterMatch);
-
-  const customGroupsFiltered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return customGroups
-      .map((g) => ({
-        ...g,
-        conversations: !needle
-          ? g.conversations
-          : g.conversations.filter((c) => {
-              const t = conversationTitle(c, userMap, titleOpts).toLowerCase();
-              const n = (c.name || "").toLowerCase();
-              return t.includes(needle) || n.includes(needle) || c.id.toLowerCase().includes(needle);
-            }),
-      }))
-      .filter((g) => g.conversations.length > 0);
-  }, [customGroups, q, userMap, titleOpts]);
 
   return (
     <div className="flex flex-col h-full min-h-0 text-zinc-100">
