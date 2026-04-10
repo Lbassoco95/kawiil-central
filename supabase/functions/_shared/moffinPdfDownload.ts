@@ -28,13 +28,49 @@ function extractPdfUrlFromJsonParsed(j: unknown): string | null {
   return walk(j);
 }
 
-/** Si Moffin devolvió JSON con pdfURL/fileURL en lugar del binario. */
-function tryExtractPdfUrlFromJsonBody(buf: Uint8Array): string | null {
+/** Cualquier https en el JSON; prioriza enlaces que parezcan archivo/PDF frente a endpoints de API. */
+function extractBestFileUrlFromJsonTree(j: unknown, excludeUrl: string): string | null {
+  const found = new Set<string>();
+  const visit = (o: unknown) => {
+    if (o == null) return;
+    if (typeof o === "string") {
+      const t = o.trim();
+      if (isLikelyMoffinDownloadUrl(t) && t !== excludeUrl) found.add(t);
+      return;
+    }
+    if (Array.isArray(o)) {
+      for (const x of o) visit(x);
+      return;
+    }
+    if (typeof o === "object") {
+      for (const v of Object.values(o as Record<string, unknown>)) visit(v);
+    }
+  };
+  visit(j);
+  if (found.size === 0) return null;
+  const score = (u: string): number => {
+    const low = u.toLowerCase();
+    let s = 0;
+    if (/\.pdf(\?|#|$)/i.test(low)) s += 6;
+    if (/download|\/file|blob|s3\.|cloudfront|storage|cdn|presigned|signed/i.test(low)) s += 4;
+    if (/\/query\/|\/service_queries|\/report\/\d+$/i.test(low)) s -= 3;
+    return s;
+  };
+  return [...found].sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+/** Si Moffin devolvió JSON con URL anidada en lugar del binario PDF. */
+function tryExtractPdfUrlFromJsonBody(buf: Uint8Array, currentUrl: string): string | null {
   const max = Math.min(buf.length, 262144);
   const text = new TextDecoder().decode(buf.slice(0, max)).trim();
   if (!text.startsWith("{") && !text.startsWith("[")) return null;
   try {
-    return extractPdfUrlFromJsonParsed(JSON.parse(text));
+    const j = JSON.parse(text) as unknown;
+    const named = extractPdfUrlFromJsonParsed(j);
+    if (named && named !== currentUrl) return named;
+    const best = extractBestFileUrlFromJsonTree(j, currentUrl);
+    if (best && best !== currentUrl) return best;
+    return null;
   } catch {
     return null;
   }
@@ -76,7 +112,7 @@ export async function fetchMoffinPdfBytes(
       if (buf.length >= 4 && head.startsWith("%PDF")) {
         return { ok: true, buf };
       }
-      const nested = tryExtractPdfUrlFromJsonBody(buf);
+      const nested = tryExtractPdfUrlFromJsonBody(buf, url);
       if (nested && nested !== url) {
         const inner = await fetchMoffinPdfBytes(nested, moffinApiKey, depth + 1);
         if (inner.ok) return inner;
