@@ -6,6 +6,8 @@ import { useReminders } from "@/hooks/useReminders";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
@@ -34,6 +36,7 @@ import {
   BarChart3,
   X,
   MessageSquare,
+  Bell,
 } from "lucide-react";
 import {
   formatDateMX,
@@ -118,7 +121,7 @@ export function PersonalDashboard() {
     queryFn: async () => {
       const { data } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, reminders_hourly_digest")
         .eq("user_id", user!.id)
         .single();
       return data;
@@ -386,6 +389,25 @@ export function PersonalDashboard() {
     addReminder.mutate({ title: newReminder.trim() });
     setNewReminder("");
   };
+
+  const updateRemindersDigest = useMutation({
+    mutationFn: async (reminders_hourly_digest: boolean) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ reminders_hourly_digest })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, reminders_hourly_digest) => {
+      qc.invalidateQueries({ queryKey: ["dashboard-profile", user?.id] });
+      toast({
+        title: reminders_hourly_digest ? "Avisos cada hora activados" : "Avisos cada hora desactivados",
+      });
+    },
+    onError: () => {
+      toast({ title: "No se pudo guardar la preferencia", variant: "destructive" });
+    },
+  });
 
   const overdueTasks =
     pendingTasksSnapshot.filter((t) => t.due_date && new Date(t.due_date) < today).length ?? 0;
@@ -830,6 +852,39 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
 
         {/* Recordatorios */}
         <TabsContent value="recordatorios" className="mt-4 animate-fade-in">
+          <Alert className="mb-4 border-border/80 bg-muted/30">
+            <Bell className="h-4 w-4" />
+            <AlertTitle>Tus recordatorios se guardan en tu cuenta</AlertTitle>
+            <AlertDescription className="space-y-3 text-muted-foreground">
+              <p>
+                No se pierden al cerrar el navegador. Opcionalmente puedes recibir un aviso cada hora mientras tengas
+                pendientes. Para verlo en el sistema operativo hace falta permiso de notificaciones; si quieres el aviso
+                con la app cerrada, activa las notificaciones push en la página de Notificaciones.
+              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <Switch
+                    id="reminders-hourly-digest"
+                    checked={profile?.reminders_hourly_digest ?? false}
+                    disabled={updateRemindersDigest.isPending}
+                    onCheckedChange={(v) => updateRemindersDigest.mutate(v)}
+                  />
+                  <Label htmlFor="reminders-hourly-digest" className="text-sm font-normal cursor-pointer leading-snug">
+                    Avisarme cada hora si tengo recordatorios pendientes
+                  </Label>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 w-full sm:w-auto"
+                  onClick={() => navigate("/notificaciones")}
+                >
+                  Configurar notificaciones
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
           <div className="flex items-center gap-2 mb-4">
             <Input
               placeholder="Agregar recordatorio..."
