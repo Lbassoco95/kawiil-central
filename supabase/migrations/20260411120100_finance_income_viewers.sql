@@ -14,7 +14,7 @@
 --   INSERT INTO public.finance_income_viewers (organization_id, user_id)
 --   VALUES ('a0000000-0000-0000-0000-000000000001', 'uuid-del-usuario');
 
-CREATE TABLE public.finance_income_viewers (
+CREATE TABLE IF NOT EXISTS public.finance_income_viewers (
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -26,6 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_finance_income_viewers_user ON public.finance_inc
 ALTER TABLE public.finance_income_viewers ENABLE ROW LEVEL SECURITY;
 
 -- Cada usuario solo ve su propia fila (depuración / transparencia).
+DROP POLICY IF EXISTS "Users see own finance income viewer row" ON public.finance_income_viewers;
 CREATE POLICY "Users see own finance income viewer row"
   ON public.finance_income_viewers
   FOR SELECT
@@ -52,6 +53,7 @@ GRANT EXECUTE ON FUNCTION public.can_view_savio_finance(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.can_view_savio_finance(uuid) TO service_role;
 
 DROP POLICY IF EXISTS "Finance access see savio events" ON public.savio_webhook_events;
+DROP POLICY IF EXISTS "Savio income viewers see webhook events" ON public.savio_webhook_events;
 
 CREATE POLICY "Savio income viewers see webhook events"
   ON public.savio_webhook_events

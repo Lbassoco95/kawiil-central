@@ -1,5 +1,5 @@
 -- Grupos personalizados en el sidebar de Comunicación (por usuario)
-CREATE TABLE public.slack_sidebar_groups (
+CREATE TABLE IF NOT EXISTS public.slack_sidebar_groups (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   organization_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -9,10 +9,11 @@ CREATE TABLE public.slack_sidebar_groups (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_slack_sidebar_groups_user ON public.slack_sidebar_groups (user_id);
+CREATE INDEX IF NOT EXISTS idx_slack_sidebar_groups_user ON public.slack_sidebar_groups (user_id);
 
 ALTER TABLE public.slack_sidebar_groups ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own slack sidebar groups" ON public.slack_sidebar_groups;
 CREATE POLICY "Users manage own slack sidebar groups"
   ON public.slack_sidebar_groups FOR ALL TO authenticated
   USING (user_id = auth.uid())
@@ -21,11 +22,12 @@ CREATE POLICY "Users manage own slack sidebar groups"
     AND organization_id = (SELECT p.organization_id FROM public.profiles p WHERE p.user_id = auth.uid() LIMIT 1)
   );
 
+DROP TRIGGER IF EXISTS update_slack_sidebar_groups_updated_at ON public.slack_sidebar_groups;
 CREATE TRIGGER update_slack_sidebar_groups_updated_at
   BEFORE UPDATE ON public.slack_sidebar_groups
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE TABLE public.slack_sidebar_group_channels (
+CREATE TABLE IF NOT EXISTS public.slack_sidebar_group_channels (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   group_id uuid NOT NULL REFERENCES public.slack_sidebar_groups(id) ON DELETE CASCADE,
   channel_id text NOT NULL,
@@ -33,10 +35,11 @@ CREATE TABLE public.slack_sidebar_group_channels (
   UNIQUE (group_id, channel_id)
 );
 
-CREATE INDEX idx_slack_sidebar_group_channels_group ON public.slack_sidebar_group_channels (group_id);
+CREATE INDEX IF NOT EXISTS idx_slack_sidebar_group_channels_group ON public.slack_sidebar_group_channels (group_id);
 
 ALTER TABLE public.slack_sidebar_group_channels ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage channels in own slack sidebar groups" ON public.slack_sidebar_group_channels;
 CREATE POLICY "Users manage channels in own slack sidebar groups"
   ON public.slack_sidebar_group_channels FOR ALL TO authenticated
   USING (

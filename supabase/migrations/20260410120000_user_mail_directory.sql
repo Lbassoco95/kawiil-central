@@ -1,7 +1,7 @@
 -- Directorio de sugerencias para redactar correo: direcciones vistas en el buzón Microsoft del usuario (sync vía microsoft-api + cliente).
 -- Deploy: supabase db push; supabase functions deploy microsoft-api --no-verify-jwt
 
-CREATE TABLE public.user_mail_directory (
+CREATE TABLE IF NOT EXISTS public.user_mail_directory (
   user_id uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
   email text NOT NULL,
   display_name text,
@@ -10,19 +10,22 @@ CREATE TABLE public.user_mail_directory (
   PRIMARY KEY (user_id, email)
 );
 
-CREATE INDEX idx_user_mail_directory_user_last_seen
+CREATE INDEX IF NOT EXISTS idx_user_mail_directory_user_last_seen
   ON public.user_mail_directory (user_id, last_seen_at DESC);
 
 ALTER TABLE public.user_mail_directory ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "user_mail_directory_select_own" ON public.user_mail_directory;
 CREATE POLICY "user_mail_directory_select_own"
   ON public.user_mail_directory FOR SELECT TO authenticated
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "user_mail_directory_insert_own" ON public.user_mail_directory;
 CREATE POLICY "user_mail_directory_insert_own"
   ON public.user_mail_directory FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "user_mail_directory_update_own" ON public.user_mail_directory;
 CREATE POLICY "user_mail_directory_update_own"
   ON public.user_mail_directory FOR UPDATE TO authenticated
   USING (auth.uid() = user_id)
