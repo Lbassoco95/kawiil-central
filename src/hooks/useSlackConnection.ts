@@ -1,7 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { FunctionsHttpError } from "@supabase/functions-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+
+/** Cuerpo JSON de error cuando la Edge Function devuelve 4xx/5xx (p. ej. Slack OAuth not configured). */
+async function edgeFunctionJsonError(error: unknown): Promise<string | null> {
+  if (!(error instanceof FunctionsHttpError)) return null;
+  const res = error.context;
+  if (!(res instanceof Response)) return null;
+  try {
+    const body = await res.clone().json();
+    if (body && typeof body.error === "string") return body.error;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 export function useSlackConnection() {
   const { user } = useAuth();
@@ -36,7 +51,11 @@ export function useSlackConnection() {
         headers: { Authorization: `Bearer ${token}` },
         body: {},
       });
-      if (error) throw error;
+      if (error) {
+        const apiMsg = await edgeFunctionJsonError(error);
+        if (apiMsg) throw new Error(apiMsg);
+        throw error;
+      }
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
         window.open(data.url, "slack-user-auth", "width=520,height=720");
@@ -66,7 +85,14 @@ export function useSlackConnection() {
     onError: (e: Error) => {
       if (e.message.includes("Tiempo de espera")) return;
       const msg = e.message || "";
-      if (msg.includes("Failed to send a request") || msg.includes("Edge Function")) {
+      if (msg.includes("Slack OAuth not configured")) {
+        toast.error(
+          "Slack no está configurado en Supabase: en el dashboard del proyecto ve a Project Settings → Edge Functions → Secrets y define SLACK_CLIENT_ID y SLACK_CLIENT_SECRET (de tu app en api.slack.com). Guarda y vuelve a conectar.",
+          { duration: 12_000 },
+        );
+        return;
+      }
+      if (msg.includes("Failed to send a request") || msg === "Edge Function returned a non-2xx status code") {
         toast.error(
           "No se alcanzó la función slack-user-auth en Supabase. Despliégala con la CLI (supabase functions deploy slack-user-auth) y confirma VITE_SUPABASE_URL / claves del mismo proyecto.",
           { duration: 8000 },
