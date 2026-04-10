@@ -2,7 +2,7 @@
  * GET /service_queries con withFileURL=true: enlaces de descarga para sat_rfc (OpenAPI Moffin).
  */
 
-import { isLikelyMoffinDownloadUrl } from "./moffinSatRfc.ts";
+import { isLikelyMoffinDownloadUrl, keyLooksLikePdfDownloadField } from "./moffinSatRfc.ts";
 
 function readServiceQueryRows(json: Record<string, unknown>): unknown[] {
   const sq = json.serviceQueries;
@@ -22,16 +22,39 @@ function parseServiceQueriesJson(text: string): Record<string, unknown> | null {
   }
 }
 
-const PDF_COLS = ["pdfURL", "pdfUrl", "fileURL", "fileUrl"] as const;
+function rowTopKeys(row: unknown): string[] {
+  if (!row || typeof row !== "object" || Array.isArray(row)) return [];
+  return Object.keys(row as Record<string, unknown>);
+}
 
-function readPdfUrlFromRow(row: unknown): string | null {
-  if (!row || typeof row !== "object" || Array.isArray(row)) return null;
-  const o = row as Record<string, unknown>;
-  for (const k of PDF_COLS) {
-    const v = o[k];
-    if (typeof v === "string" && isLikelyMoffinDownloadUrl(v)) return v.trim();
-  }
-  return null;
+/** URL en campos conocidos o anidados (pdfURL, fileURL, url https válida, etc.). */
+function readPdfUrlFromRowDeep(row: unknown): string | null {
+  const visit = (obj: unknown, depth: number): string | null => {
+    if (depth > 14 || obj == null) return null;
+    if (typeof obj !== "object") return null;
+    if (Array.isArray(obj)) {
+      for (const x of obj) {
+        const r = visit(x, depth + 1);
+        if (r) return r;
+      }
+      return null;
+    }
+    const o = obj as Record<string, unknown>;
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === "string" && isLikelyMoffinDownloadUrl(v)) {
+        const kn = k.replace(/_/g, "").toLowerCase();
+        if (keyLooksLikePdfDownloadField(k) || kn === "url" || kn === "href" || kn === "link") {
+          return v.trim();
+        }
+      }
+    }
+    for (const v of Object.values(o)) {
+      const r = visit(v, depth + 1);
+      if (r) return r;
+    }
+    return null;
+  };
+  return visit(row, 0);
 }
 
 function pickPdfFromRows(
@@ -52,30 +75,36 @@ function pickPdfFromRows(
 
   const hit = rows.find(matchRow);
   if (hit) {
-    const u = readPdfUrlFromRow(hit);
+    const u = readPdfUrlFromRowDeep(hit);
     if (u) return u;
   }
   for (const row of rows) {
-    const u = readPdfUrlFromRow(row);
+    const u = readPdfUrlFromRowDeep(row);
     if (u) return u;
   }
   return null;
 }
+
+function logDiag(ctx: string, info: Record<string, unknown>) {
+  console.log(JSON.stringify({ moffin_service_queries_diag: ctx, ...info }));
+}
+
+type FetchSqResult = { rows: unknown[]; json: Record<string, unknown> | null; ok: boolean; status: number };
 
 async function fetchServiceQueriesOnce(
   moffinBase: string,
   moffinKey: string,
   rfc: string,
   withExternalFilter: string | null,
-): Promise<unknown[] | null> {
+  phase: string,
+): Promise<FetchSqResult> {
   const base = moffinBase.replace(/\/$/, "");
   const params = new URLSearchParams();
-  params.set("limit", "40");
+  params.set("limit", "100");
   params.set("offset", "0");
   params.set("order", "DESC");
   params.set("withFileURL", "true");
   params.set("service", "sat_rfc");
-  params.set("status", "SUCCESS");
   if (rfc.trim()) params.set("search", rfc.trim());
   if (withExternalFilter) {
     params.set("filter", JSON.stringify({ externalId__eq: withExternalFilter }));
@@ -86,11 +115,53 @@ async function fetchServiceQueriesOnce(
   });
   const text = await res.text();
   const json = parseServiceQueriesJson(text);
-  if (!json || !res.ok) return null;
-  return readServiceQueryRows(json);
+  const rows = json && res.ok ? readServiceQueryRows(json) : [];
+
+  if (!res.ok) {
+    logDiag("http_error", {
+      phase,
+      httpStatus: res.status,
+      jsonTopKeys: json ? Object.keys(json) : [],
+      bodySample: text.slice(0, 200),
+    });
+    return { rows: [], json, ok: false, status: res.status };
+  }
+
+  if (!json) {
+    logDiag("parse_error", { phase, httpStatus: res.status });
+    return { rows: [], json: null, ok: false, status: res.status };
+  }
+
+  if (rows.length === 0) {
+    logDiag("empty_rows", {
+      phase,
+      httpStatus: res.status,
+      jsonTopKeys: Object.keys(json),
+    });
+  }
+
+  return { rows, json, ok: true, status: res.status };
 }
 
-/** Obtiene pdfURL de service_queries (withFileURL); prioriza fila por id o externalId. */
+function logNoPdfInRows(
+  phase: string,
+  rows: unknown[],
+  reportId: string,
+  externalId: string,
+) {
+  if (rows.length === 0) return;
+  const first = rows[0];
+  logDiag("rows_sin_pdf_url_reconocible", {
+    phase,
+    rowCount: rows.length,
+    firstRowKeys: rowTopKeys(first),
+    secondRowKeys: rows[1] ? rowTopKeys(rows[1]) : [],
+    targetReportId: reportId || null,
+    targetExternalIdSuffix: externalId ? externalId.slice(-24) : null,
+  });
+}
+
+/** Obtiene pdfURL de service_queries (withFileURL + withPDF); prioriza fila por id o externalId. */
 export async function fetchMoffinPdfUrlViaServiceQueries(
   moffinBase: string,
   moffinKey: string,
@@ -101,14 +172,18 @@ export async function fetchMoffinPdfUrlViaServiceQueries(
   const rfc = opts.rfc.trim();
 
   if (ext) {
-    const rowsF = await fetchServiceQueriesOnce(moffinBase, moffinKey, rfc, ext);
-    if (rowsF?.length) {
-      const u = pickPdfFromRows(rowsF, rid, ext);
+    const r1 = await fetchServiceQueriesOnce(moffinBase, moffinKey, rfc, ext, "filter_externalId");
+    if (r1.rows.length) {
+      const u = pickPdfFromRows(r1.rows, rid, ext);
       if (u) return u;
+      logNoPdfInRows("filter_externalId", r1.rows, rid, ext);
     }
   }
 
-  const rows = await fetchServiceQueriesOnce(moffinBase, moffinKey, rfc, null);
-  if (!rows?.length) return null;
-  return pickPdfFromRows(rows, rid, ext);
+  const r2 = await fetchServiceQueriesOnce(moffinBase, moffinKey, rfc, null, "search_rfc_only");
+  if (!r2.rows.length) return null;
+  const u2 = pickPdfFromRows(r2.rows, rid, ext);
+  if (u2) return u2;
+  logNoPdfInRows("search_rfc_only", r2.rows, rid, ext);
+  return null;
 }

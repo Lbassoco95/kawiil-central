@@ -15,6 +15,9 @@ import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
  *
  * Constancia / opinión (sat_rfc): suelen requerir e.firma. Se guardan .cer/.key cifrados (moffin-fiel);
  * la contraseña va en cada solicitud (fielPassword). Nombres de campos: MOFFIN_FIEL_FIELD_* en Supabase.
+ *
+ * Si no hay PDF pese a SUCCESS: revisar logs `moffin_service_queries_diag` / `moffin_sat_pdf` en Edge;
+ * si Moffin no expone enlace de archivo para sat_rfc en el producto contratado, confirmar con su soporte.
  */
 
 const corsHeaders: Record<string, string> = {
@@ -106,7 +109,8 @@ async function fetchMoffinReportById(
 ): Promise<
   { ok: true; json: Record<string, unknown> } | { ok: false; message: string; status: number }
 > {
-  const url = `${moffinBase}/report/${encodeURIComponent(queryId)}?withPDF=true`;
+  const url =
+    `${moffinBase}/report/${encodeURIComponent(queryId)}?withPDF=true&withFileURL=true`;
   const res = await fetch(url, {
     headers: { Authorization: `Token ${moffinKey}` },
   });

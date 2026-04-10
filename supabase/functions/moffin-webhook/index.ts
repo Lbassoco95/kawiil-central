@@ -75,7 +75,8 @@ async function fetchMoffinReportJson(
   key: string,
   queryId: string,
 ): Promise<Record<string, unknown> | null> {
-  const url = `${base.replace(/\/$/, "")}/report/${encodeURIComponent(queryId)}?withPDF=true`;
+  const url =
+    `${base.replace(/\/$/, "")}/report/${encodeURIComponent(queryId)}?withPDF=true&withFileURL=true`;
   const res = await fetch(url, { headers: { Authorization: `Token ${key.trim()}` } });
   const text = await res.text();
   if (!res.ok) return null;

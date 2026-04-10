@@ -22,6 +22,21 @@ export function isLikelyMoffinDownloadUrl(u: string): boolean {
   return true;
 }
 
+/** Convierte `path` de certificado Moffin (absoluto o relativo al host API) en URL descargable. */
+export function resolveMoffinPathToAbsolute(pathVal: string, moffinBase: string): string | null {
+  const p = pathVal.trim();
+  if (!p) return null;
+  if (/^https?:\/\//i.test(p)) {
+    return isLikelyMoffinDownloadUrl(p) ? p : null;
+  }
+  if (p.startsWith("/")) {
+    const base = moffinBase.replace(/\/$/, "");
+    const u = `${base}${p}`;
+    return isLikelyMoffinDownloadUrl(u) ? u : null;
+  }
+  return null;
+}
+
 /** No usar `url` genérico: en sat_rfc suele apuntar a un endpoint JSON (~2 KB), no al PDF. */
 function stringsFromCert(c: Record<string, unknown>): string[] {
   const keys = ["pdfURL", "pdfUrl", "fileURL", "fileUrl", "downloadUrl", "downloadURL"];
@@ -105,6 +120,67 @@ export function pickSatRfcPdfUrl(
   return allOrdered[1] ?? allOrdered[0] ?? null;
 }
 
+/** Misma prioridad de certificados que pickSatRfcPdfUrl pero usando `path` resuelto contra moffinBase. */
+function pickSatRfcCertificatePathPdfUrl(
+  consultType: MoffinSatRfcConsultType,
+  report: Record<string, unknown>,
+  moffinBase: string,
+): string | null {
+  const pathsFromCert = (c: Record<string, unknown>): string[] => {
+    const pathVal = c.path;
+    if (typeof pathVal !== "string") return [];
+    const u = resolveMoffinPathToAbsolute(pathVal, moffinBase);
+    return u ? [u] : [];
+  };
+
+  const certs = collectSatRfcCertificates(report);
+  if (!certs.length) return null;
+
+  const pred =
+    consultType === "constancia_situacion_fiscal"
+      ? certMatchesConstanciaKeyword
+      : certMatchesOpinionKeyword;
+
+  for (const c of certs) {
+    if (pred(String(c.type ?? ""))) {
+      const urls = pathsFromCert(c);
+      if (urls[0]) return urls[0];
+    }
+  }
+
+  const normType = (c: Record<string, unknown>) =>
+    String(c.type ?? "")
+      .trim()
+      .toUpperCase();
+
+  const byExactType = (label: string) => {
+    const hit = certs.find((c) => normType(c) === label);
+    const urls = hit ? pathsFromCert(hit) : [];
+    return urls[0] ?? null;
+  };
+
+  if (consultType === "constancia_situacion_fiscal") {
+    const a = byExactType("FIEL");
+    if (a) return a;
+    const b = byExactType("SELLO");
+    if (b) return b;
+  } else {
+    const a = byExactType("SELLO");
+    if (a) return a;
+    const b = byExactType("FIEL");
+    if (b) return b;
+  }
+
+  const allOrdered: string[] = [];
+  for (const c of certs) {
+    for (const u of pathsFromCert(c)) {
+      if (!allOrdered.includes(u)) allOrdered.push(u);
+    }
+  }
+  if (consultType === "constancia_situacion_fiscal") return allOrdered[0] ?? null;
+  return allOrdered[1] ?? allOrdered[0] ?? null;
+}
+
 export function keyLooksLikePdfDownloadField(k: string): boolean {
   const n = k.replace(/_/g, "").toLowerCase();
   return n === "pdfurl" || n === "fileurl" || n === "downloadurl";
@@ -127,13 +203,22 @@ function collectUrlsByPdfLikeKeys(obj: unknown, out: string[], depth: number): v
   }
 }
 
-/** Prioriza enlaces a nivel reporte; luego certificados con campos explícitos de archivo. */
+/**
+ * Prioriza enlaces a nivel reporte; luego `certificates[].path` resuelto;
+ * después campos explícitos pdfURL/fileURL en certificados.
+ */
 export function pickSatRfcPdfUrlForConsult(
   consultType: MoffinSatRfcConsultType,
   report: Record<string, unknown>,
+  moffinBase?: string | null,
 ): string | null {
   const top = extractReportLevelPdfUrl(report);
   if (top) return top;
+  const base = moffinBase?.trim();
+  if (base) {
+    const fromPath = pickSatRfcCertificatePathPdfUrl(consultType, report, base);
+    if (fromPath) return fromPath;
+  }
   return pickSatRfcPdfUrl(consultType, report);
 }
 

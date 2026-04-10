@@ -21,6 +21,10 @@ export type SatRfcUploadContext = {
   externalId?: string | null;
 };
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function decodeBase64ToBytes(b64: string): Uint8Array | null {
   const t = b64.replace(/\s/g, "");
   try {
@@ -50,7 +54,7 @@ export async function tryUploadSatRfcPdf(
   let sawPdfUrl = false;
   let lastFail: string | null = null;
 
-  const pdfUrl0 = pickSatRfcPdfUrlForConsult(consultType, report);
+  const pdfUrl0 = pickSatRfcPdfUrlForConsult(consultType, report, opts.moffinBase);
   if (pdfUrl0) sawPdfUrl = true;
 
   if (pdfUrl0) {
@@ -96,11 +100,22 @@ export async function tryUploadSatRfcPdf(
 
   const reportId = report.id != null ? String(report.id) : "";
   if (reportId) {
-    const sqUrl = await fetchMoffinPdfUrlViaServiceQueries(opts.moffinBase, opts.moffinApiKey, {
+    const sqOpts = {
       reportId,
       rfc: opts.rfc,
       externalId: opts.externalId,
-    });
+    };
+    let sqUrl: string | null = null;
+    const retryDelaysMs = [0, 2000, 5000];
+    for (let i = 0; i < retryDelaysMs.length; i++) {
+      if (retryDelaysMs[i] > 0) await delay(retryDelaysMs[i]);
+      sqUrl = await fetchMoffinPdfUrlViaServiceQueries(
+        opts.moffinBase,
+        opts.moffinApiKey,
+        sqOpts,
+      );
+      if (sqUrl) break;
+    }
     if (sqUrl) {
       sawPdfUrl = true;
       const up = await uploadMoffinPdfFromUrl({
