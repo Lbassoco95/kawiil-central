@@ -776,6 +776,12 @@ const anthropicTools = [
         description: { type: "string" },
         due_date: { type: "string", description: "YYYY-MM-DD" },
         due_time: { type: "string", description: "HH:MM" },
+        repeat_kind: {
+          type: "string",
+          enum: ["none", "hourly_digest", "daily_digest"],
+          description:
+            "none=solo lista; hourly_digest=aviso en resumen horario si el usuario lo activó; daily_digest=resumen diario por la mañana.",
+        },
       },
       required: ["title"],
     },
@@ -1102,7 +1108,7 @@ async function executeTool(
     }
     case "get_my_reminders": {
       let q = supabase.from("reminders")
-        .select("title, description, due_date, due_time, is_completed")
+        .select("title, description, due_date, due_time, repeat_kind, is_completed")
         .eq("user_id", userId);
       if (!args.include_completed) q = q.eq("is_completed", false);
       q = q.order("due_date", { ascending: true, nullsFirst: false });
@@ -1110,11 +1116,18 @@ async function executeTool(
       return error ? { error: error.message } : data;
     }
     case "create_reminder": {
+      const rk = ["none", "hourly_digest", "daily_digest"].includes(args.repeat_kind)
+        ? args.repeat_kind
+        : "hourly_digest";
       const { data, error } = await supabase.from("reminders").insert({
-        user_id: userId, organization_id: orgId,
-        title: args.title, description: args.description || null,
-        due_date: args.due_date || null, due_time: args.due_time || null,
-      }).select("id, title, due_date").single();
+        user_id: userId,
+        organization_id: orgId,
+        title: args.title,
+        description: args.description || null,
+        due_date: args.due_date || null,
+        due_time: args.due_time || null,
+        repeat_kind: rk,
+      }).select("id, title, due_date, repeat_kind").single();
       return error ? { error: error.message } : { success: true, reminder: data };
     }
     case "get_upcoming_deadlines": {

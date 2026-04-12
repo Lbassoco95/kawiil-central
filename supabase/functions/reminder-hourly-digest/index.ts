@@ -94,13 +94,15 @@ Deno.serve(async (req) => {
 
     const { data: pendingReminders, error: re } = await svc
       .from("reminders")
-      .select("user_id, title")
+      .select("user_id, title, repeat_kind")
       .eq("is_completed", false)
       .in("user_id", userIds);
     if (re) throw re;
 
     const byUser = new Map<string, string[]>();
     for (const r of pendingReminders ?? []) {
+      const rk = (r as { repeat_kind?: string }).repeat_kind ?? "hourly_digest";
+      if (rk === "none" || rk === "daily_digest") continue;
       const uid = r.user_id as string;
       const t = (r.title as string)?.trim() || "(sin título)";
       if (!byUser.has(uid)) byUser.set(uid, []);

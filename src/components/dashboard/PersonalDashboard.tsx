@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useReminders } from "@/hooks/useReminders";
+import { useReminders, type ReminderCreateInput } from "@/hooks/useReminders";
+import { ReminderCreateDialog } from "@/components/reminders/ReminderCreateDialog";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -417,15 +418,27 @@ export function PersonalDashboard() {
 
   // Reminders
   const { reminders, addReminder, toggleReminder, deleteReminder } = useReminders();
-  const [newReminder, setNewReminder] = useState("");
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
 
   const pendingReminders = reminders.filter((r) => !r.is_completed);
   const completedReminders = reminders.filter((r) => r.is_completed);
 
-  const handleAddReminder = () => {
-    if (!newReminder.trim()) return;
-    addReminder.mutate({ title: newReminder.trim() });
-    setNewReminder("");
+  const handleCreateReminder = (input: ReminderCreateInput) => {
+    addReminder.mutate(input, { onSuccess: () => setReminderDialogOpen(false) });
+  };
+
+  const repeatShortLabel = (rk: string | undefined) => {
+    const m: Record<string, string> = {
+      none: "Solo lista",
+      hourly_digest: "Cada hora",
+      daily_digest: "Diario",
+    };
+    return m[rk ?? "hourly_digest"] ?? "Cada hora";
+  };
+
+  const formatReminderDueTime = (t: string | null | undefined) => {
+    if (!t) return null;
+    return t.slice(0, 5);
   };
 
   const updateRemindersDigest = useMutation({
@@ -895,9 +908,9 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             <AlertTitle>Tus recordatorios se guardan en tu cuenta</AlertTitle>
             <AlertDescription className="space-y-3 text-muted-foreground">
               <p>
-                No se pierden al cerrar el navegador. Opcionalmente puedes recibir un aviso cada hora mientras tengas
-                pendientes. Para verlo en el sistema operativo hace falta permiso de notificaciones; si quieres el aviso
-                con la app cerrada, activa las notificaciones push en la página de Notificaciones.
+                No se pierden al cerrar el navegador. Al crear uno puedes poner fecha límite, hora y si quieres avisos
+                solo en lista, cada hora (resumen) o una vez al día. El aviso cada hora requiere el interruptor de abajo;
+                el diario va con el digest matutino del sistema. Para notificaciones del SO y push, revisa Notificaciones.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
@@ -923,41 +936,62 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
               </div>
             </AlertDescription>
           </Alert>
-          <div className="flex items-center gap-2 mb-4">
-            <Input
-              placeholder="Agregar recordatorio..."
-              value={newReminder}
-              onChange={(e) => setNewReminder(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddReminder()}
-              className="text-sm h-9"
-            />
-            {newReminder.trim() && (
-              <button onClick={handleAddReminder} className="text-muted-foreground hover:text-foreground transition-colors">
-                <Plus className="h-4 w-4" />
-              </button>
-            )}
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <Button type="button" size="sm" variant="secondary" className="gap-1.5" onClick={() => setReminderDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Nuevo recordatorio
+            </Button>
           </div>
+
+          <ReminderCreateDialog
+            open={reminderDialogOpen}
+            onOpenChange={setReminderDialogOpen}
+            onSubmit={handleCreateReminder}
+            isPending={addReminder.isPending}
+          />
 
           {pendingReminders.length === 0 && completedReminders.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">Sin recordatorios</p>
           ) : (
             <div className="space-y-0.5">
               {pendingReminders.map((r) => (
-                <div key={r.id} className="flex items-center gap-3 py-2 group row-hover px-2 rounded-lg">
-                  <Checkbox
-                    checked={false}
-                    onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm text-foreground flex-1 truncate">{r.title}</span>
-                  {r.due_date && (
-                    <span className={`text-xs ${new Date(r.due_date) < today ? "text-destructive" : "text-muted-foreground"}`}>
-                      {formatDateMX(r.due_date)}
-                    </span>
-                  )}
+                <div
+                  key={r.id}
+                  className="flex flex-col gap-2 py-3 group row-hover px-2 rounded-lg border-b border-border/40 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+                >
+                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <Checkbox
+                      checked={false}
+                      onCheckedChange={() => toggleReminder.mutate({ id: r.id, is_completed: true })}
+                      className="h-4 w-4 mt-0.5 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground leading-snug">{r.title}</p>
+                      {r.description?.trim() ? (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-3 whitespace-pre-wrap">{r.description.trim()}</p>
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal tabular-nums">
+                          {repeatShortLabel(r.repeat_kind)}
+                        </Badge>
+                        {r.due_date ? (
+                          <span
+                            className={`text-[10px] px-1.5 py-0 rounded-md border border-border/60 ${
+                              new Date(r.due_date) < today ? "text-destructive border-destructive/30" : "text-muted-foreground"
+                            }`}
+                          >
+                            {formatDateMX(r.due_date)}
+                            {formatReminderDueTime(r.due_time) ? ` · ${formatReminderDueTime(r.due_time)}` : ""}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
                   <button
+                    type="button"
                     onClick={() => deleteReminder.mutate(r.id)}
-                    className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
+                    className="self-end text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors sm:self-start shrink-0 p-1"
+                    aria-label="Eliminar recordatorio"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

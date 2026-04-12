@@ -110,6 +110,59 @@ Deno.serve(async (req) => {
       if (!error) inserted++;
     }
 
+    // Recordatorios personales con cadencia diaria (máx. 1 notificación / usuario / ~22 h)
+    const { data: dailyReminders, error: dre } = await svc
+      .from("reminders")
+      .select("user_id, organization_id, title, id")
+      .eq("is_completed", false)
+      .eq("repeat_kind", "daily_digest");
+    if (!dre && dailyReminders?.length) {
+      const sinceDailyIso = new Date(Date.now() - 22 * 60 * 60 * 1000).toISOString();
+      const { data: recentDailyDigests } = await svc
+        .from("notifications")
+        .select("user_id")
+        .eq("type", "reminders_daily_digest")
+        .gte("created_at", sinceDailyIso);
+      const usersWithRecentDaily = new Set(
+        (recentDailyDigests ?? []).map((n) => n.user_id as string),
+      );
+
+      const dailyByUser = new Map<string, { organization_id: string; titles: string[] }>();
+      for (const r of dailyReminders) {
+        const uid = r.user_id as string;
+        if (!dailyByUser.has(uid)) {
+          dailyByUser.set(uid, {
+            organization_id: r.organization_id as string,
+            titles: [],
+          });
+        }
+        const t = (r.title as string)?.trim() || "Recordatorio";
+        dailyByUser.get(uid)!.titles.push(t);
+      }
+
+      for (const [uid, bucket] of dailyByUser) {
+        if (usersWithRecentDaily.has(uid) || bucket.titles.length === 0) continue;
+        const n = bucket.titles.length;
+        const preview = bucket.titles.slice(0, 5).join(n > 1 ? "; " : "");
+        const body =
+          n === 1
+            ? preview
+            : `${n} pendientes: ${preview}${n > 5 ? `… (+${n - 5})` : ""}`;
+        const { error: dIns } = await svc.from("notifications").insert({
+          user_id: uid,
+          organization_id: bucket.organization_id,
+          type: "reminders_daily_digest",
+          title: n === 1 ? "Recordatorio (resumen diario)" : "Recordatorios (resumen diario)",
+          body,
+          is_read: false,
+        });
+        if (!dIns) {
+          inserted++;
+          usersWithRecentDaily.add(uid);
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,

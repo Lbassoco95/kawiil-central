@@ -2293,6 +2293,7 @@ export type Database = {
           id: string
           is_completed: boolean
           organization_id: string
+          repeat_kind: string
           title: string
           updated_at: string
           user_id: string
@@ -2306,6 +2307,7 @@ export type Database = {
           id?: string
           is_completed?: boolean
           organization_id: string
+          repeat_kind?: string
           title: string
           updated_at?: string
           user_id: string
@@ -2319,6 +2321,7 @@ export type Database = {
           id?: string
           is_completed?: boolean
           organization_id?: string
+          repeat_kind?: string
           title?: string
           updated_at?: string
           user_id?: string

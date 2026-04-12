@@ -31,6 +31,8 @@ function effectiveNotificationTitle(row: NotifRow): string {
       deadline_due_tomorrow_task: "Tarea vence mañana",
       improvement_suggestion: "Sugerencia de mejora",
       ai_proactive_tip: "Sugerencia de IA",
+      reminders_hourly_digest: "Recordatorios pendientes",
+      reminders_daily_digest: "Recordatorios (resumen diario)",
     };
     if (labels[row.type]) return labels[row.type];
     return `Nueva notificación (${row.type})`;

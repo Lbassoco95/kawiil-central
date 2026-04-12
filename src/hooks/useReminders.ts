@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
+export type ReminderRepeatKind = "none" | "hourly_digest" | "daily_digest";
+
 export interface Reminder {
   id: string;
   user_id: string;
@@ -11,11 +13,21 @@ export interface Reminder {
   description: string | null;
   due_date: string | null;
   due_time: string | null;
+  /** Tras migración siempre viene del API; opcional por compatibilidad con caches antiguas. */
+  repeat_kind?: ReminderRepeatKind;
   is_completed: boolean;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type ReminderCreateInput = {
+  title: string;
+  description?: string | null;
+  due_date?: string | null;
+  due_time?: string | null;
+  repeat_kind?: ReminderRepeatKind;
+};
 
 export function useReminders() {
   const { user } = useAuth();
@@ -37,12 +49,16 @@ export function useReminders() {
   });
 
   const addReminder = useMutation({
-    mutationFn: async (input: { title: string; description?: string; due_date?: string; due_time?: string }) => {
+    mutationFn: async (input: ReminderCreateInput) => {
       const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
       const { error } = await supabase.from("reminders" as any).insert({
         user_id: user!.id,
         organization_id: orgRes.data,
-        ...input,
+        title: input.title,
+        description: input.description ?? null,
+        due_date: input.due_date ?? null,
+        due_time: input.due_time ?? null,
+        repeat_kind: input.repeat_kind ?? "hourly_digest",
       } as any);
       if (error) throw error;
     },
