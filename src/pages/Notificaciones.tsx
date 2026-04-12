@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { registerWebPushSubscription } from "@/lib/registerWebPush";
+import { playNotificationBeep } from "@/lib/notificationBeep";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
@@ -79,6 +80,7 @@ function NotificationAiPreferences() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile-proactive-ai", user?.id] });
     },
+    onError: (e: Error) => toast.error(e.message || "No se pudo guardar"),
   });
 
   if (!user) return null;
@@ -112,13 +114,27 @@ function NotificationDeliveryPreferences() {
   const qc = useQueryClient();
   const vapid = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
 
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+  );
+
+  useEffect(() => {
+    const sync = () => {
+      if (typeof Notification === "undefined") setNotifPerm("unsupported");
+      else setNotifPerm(Notification.permission);
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, []);
+
   const { data: profile } = useQuery({
     queryKey: ["profile-notification-prefs", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "desktop_browser_notifications, desktop_push_notifications, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip, notify_slack_dm",
+          "desktop_browser_notifications, desktop_push_notifications, in_app_toast_notifications, notification_sound_enabled, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip, notify_slack_dm",
         )
         .eq("user_id", user!.id)
         .single();
@@ -126,6 +142,7 @@ function NotificationDeliveryPreferences() {
       return data;
     },
     enabled: !!user,
+    refetchOnWindowFocus: true,
   });
 
   const updateFields = useMutation({
@@ -137,6 +154,7 @@ function NotificationDeliveryPreferences() {
       qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
       qc.invalidateQueries({ queryKey: ["notification-delivery-prefs", user?.id] });
     },
+    onError: (e: Error) => toast.error(e.message || "No se pudo guardar la configuración"),
   });
 
   const requestBrowserPermission = useCallback(async () => {
@@ -145,6 +163,7 @@ function NotificationDeliveryPreferences() {
       return;
     }
     const r = await Notification.requestPermission();
+    setNotifPerm(Notification.permission);
     if (r === "granted") toast.success("Avisos del sistema activados");
     else
       toast.message("Permiso no concedido", {
@@ -198,10 +217,20 @@ function NotificationDeliveryPreferences() {
     onSuccess: (_, enabled) => {
       qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
       qc.invalidateQueries({ queryKey: ["comunicacion-push-setup", user?.id] });
+      if (typeof Notification !== "undefined") setNotifPerm(Notification.permission);
       if (enabled) toast.success("Push activado: recibirás avisos aunque cierres la pestaña");
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const notifPermLabel =
+    notifPerm === "unsupported"
+      ? "No disponible en este navegador"
+      : notifPerm === "granted"
+        ? "Concedido"
+        : notifPerm === "denied"
+          ? "Denegado (revisa candado del sitio)"
+          : "Pendiente — usa «Pedir permiso del navegador»";
 
   if (!user) return null;
 
@@ -216,20 +245,57 @@ function NotificationDeliveryPreferences() {
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label className="text-sm font-medium">Ventana emergente en la app (Sonner)</Label>
-            <p className="text-xs text-muted-foreground">Siempre activo al recibir notificaciones.</p>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Popup dentro de Kawiil al llegar una notificación nueva. Puedes desactivarlo si prefieres solo aviso del
+              sistema o silencio.
+            </p>
           </div>
+          <Switch
+            checked={profile?.in_app_toast_notifications !== false}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ in_app_toast_notifications: v })}
+          />
         </div>
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label className="text-sm font-medium">Aviso del navegador / escritorio</Label>
             <p className="text-xs text-muted-foreground max-w-md">
-              Notificación del sistema mientras Kawiil está abierto (requiere permiso del navegador).
+              Notificación del sistema mientras Kawiil está abierto (requiere permiso del navegador). El sonido del
+              sistema lo controla tu equipo (volumen, Focus en macOS, etc.).
             </p>
+            <p className="text-[11px] text-muted-foreground/90">Permiso actual: {notifPermLabel}</p>
           </div>
           <Switch
             checked={profile?.desktop_browser_notifications !== false}
             disabled={updateFields.isPending || !profile}
             onCheckedChange={(v) => updateFields.mutate({ desktop_browser_notifications: v })}
+          />
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-0.5 min-w-0">
+            <Label className="text-sm font-medium">Pitido breve al avisar</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Beep suave en esta pestaña cuando se muestra un aviso (toast o notificación del sistema). Algunos
+              navegadores bloquean audio hasta que hagas clic en la página; usa «Probar» tras interactuar.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 h-7 text-xs"
+              onClick={() => {
+                playNotificationBeep();
+                toast.success("Pitido de prueba");
+              }}
+            >
+              Probar pitido
+            </Button>
+          </div>
+          <Switch
+            checked={profile?.notification_sound_enabled === true}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ notification_sound_enabled: v })}
+            className="shrink-0"
           />
         </div>
         <div className="flex items-center justify-between gap-4">

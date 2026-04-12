@@ -58,7 +58,7 @@ const ARTIFACT_RE = /\[artifact:([a-f0-9-]{36})\|([^\]]+)\|([^\]]+)\]/gi;
 const PROJECT_LINK_RE = /\[project:([a-f0-9-]{36})\|([^\]|]+)(?:\|([^\]]*))?\]/gi;
 
 const AsistenteIA = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const {
     messages, isStreaming, streamProgressSteps, pdfIndexingStatus, conversations, activeConversationId, activeAiProjectId,
@@ -261,6 +261,33 @@ const AsistenteIA = () => {
       cancelled = true;
     };
   }, [slackGroupIdParam, user?.id]);
+
+  const promptPrefillApplied = useRef<string | null>(null);
+  const promptParam = searchParams.get("prompt");
+  useEffect(() => {
+    const raw = promptParam;
+    if (!raw) {
+      promptPrefillApplied.current = null;
+      return;
+    }
+    if (promptPrefillApplied.current === raw) return;
+    promptPrefillApplied.current = raw;
+    let text = raw;
+    try {
+      text = decodeURIComponent(raw);
+    } catch {
+      text = raw;
+    }
+    setInput(text);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.delete("prompt");
+        return p;
+      },
+      { replace: true },
+    );
+  }, [promptParam, setSearchParams]);
 
   useEffect(() => {
     if (activeProject) setShowKnowledge(true);

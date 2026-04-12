@@ -47,7 +47,7 @@ import {
   addDaysToYmd,
 } from "@/lib/dateUtils";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -79,10 +79,18 @@ function formatSectionLabel(raw: string): string {
   return SECTION_LABELS[k] || raw;
 }
 
+const DASHBOARD_TABS = ["resumen", "tareas", "clientes", "recordatorios", "mi-semana", "rendimiento"] as const;
+type DashboardTab = (typeof DASHBOARD_TABS)[number];
+
+function isDashboardTab(v: string | null): v is DashboardTab {
+  return !!v && (DASHBOARD_TABS as readonly string[]).includes(v);
+}
+
 export function PersonalDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
   const today = useMexicoToday();
   const { data: orgUsers } = useOrgUsers();
@@ -91,6 +99,36 @@ export function PersonalDashboard() {
     const profile = orgUsers.find((u) => u.user_id === user.id);
     return profile?.area ?? null;
   }, [orgUsers, user]);
+
+  const tabFromUrl = searchParams.get("tab");
+  const dashboardActiveTab: DashboardTab = isDashboardTab(tabFromUrl) ? tabFromUrl : "resumen";
+
+  useEffect(() => {
+    if (tabFromUrl && !isDashboardTab(tabFromUrl)) {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.delete("tab");
+          return p;
+        },
+        { replace: true },
+      );
+    }
+  }, [tabFromUrl, setSearchParams]);
+
+  const onDashboardTabChange = (value: string) => {
+    if (!isDashboardTab(value)) return;
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (value === "resumen") p.delete("tab");
+        else p.set("tab", value);
+        return p;
+      },
+      { replace: true },
+    );
+  };
+
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   
   const [personalPhrase, setPersonalPhrase] = useState<string | null>(null);
@@ -668,7 +706,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         )}
 
         {/* Tabs for sections */}
-      <Tabs defaultValue="resumen" className="w-full min-w-0 mt-1">
+      <Tabs value={dashboardActiveTab} onValueChange={onDashboardTabChange} className="w-full min-w-0 mt-1">
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
           <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
             <TabsTrigger

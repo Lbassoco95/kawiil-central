@@ -18,6 +18,7 @@ import { QuickTaskInput } from "@/components/tasks/QuickTaskInput";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEntryButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 
@@ -228,9 +229,12 @@ INSTRUCCIONES:
           title="Tareas"
           description="Gestión de tareas y actividades internas"
           actions={
-            <Button type="button" size="sm" onClick={() => openNewTaskModal()}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <RecordatoriosEntryButton />
+              <Button type="button" size="sm" onClick={() => openNewTaskModal()}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" /> Nueva tarea
+              </Button>
+            </div>
           }
         />
 

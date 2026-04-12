@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { PersonalDashboard } from "@/components/dashboard/PersonalDashboard";
 import { TeamDashboard } from "@/components/dashboard/TeamDashboard";
+import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEntryButton";
 
 const Dashboard = () => {
   const [view, setView] = useState<"personal" | "equipo">("personal");
@@ -10,34 +11,37 @@ const Dashboard = () => {
     <AppLayout>
       <div className="space-y-6">
         {/* Header with toggle */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-lg sm:text-xl font-semibold text-foreground">Dashboard</h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               {view === "personal" ? "Tu espacio personal" : "Vista colaborativa del equipo"}
             </p>
           </div>
-          <div className="flex items-center bg-secondary/50 rounded-full p-1">
-            <button
-              onClick={() => setView("personal")}
-              className={`px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                view === "personal"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Personal
-            </button>
-            <button
-              onClick={() => setView("equipo")}
-              className={`px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                view === "equipo"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Equipo
-            </button>
+          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+            {view === "personal" ? <RecordatoriosEntryButton /> : null}
+            <div className="flex items-center bg-secondary/50 rounded-full p-1">
+              <button
+                onClick={() => setView("personal")}
+                className={`px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  view === "personal"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Personal
+              </button>
+              <button
+                onClick={() => setView("equipo")}
+                className={`px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  view === "equipo"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Equipo
+              </button>
+            </div>
           </div>
         </div>
 
