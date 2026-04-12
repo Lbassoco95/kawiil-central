@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { format } from "date-fns";
-import { ExternalLink, FilePlus2, Landmark } from "lucide-react";
+import { ExternalLink, FilePlus2, Landmark, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +38,7 @@ export function SavioFinanceWriteActions({
 
   const [payOpen, setPayOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
+  const [custOpen, setCustOpen] = useState(false);
 
   const [invoiceId, setInvoiceId] = useState("");
   const [amountPaid, setAmountPaid] = useState("");
@@ -49,6 +50,11 @@ export function SavioFinanceWriteActions({
   const [amountTotal, setAmountTotal] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
+
+  const [custLegalName, setCustLegalName] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [custRfc, setCustRfc] = useState("");
 
   const canWrite = access?.canWrite === true;
   const rpcError = access?.rpcError;
@@ -66,6 +72,13 @@ export function SavioFinanceWriteActions({
     setAmountTotal("");
     setDescription("");
     setDueDate("");
+  }
+
+  function resetCustomerForm() {
+    setCustLegalName("");
+    setCustEmail("");
+    setCustPhone("");
+    setCustRfc("");
   }
 
   async function submitPayment() {
@@ -119,6 +132,30 @@ export function SavioFinanceWriteActions({
     }
   }
 
+  async function submitCustomer() {
+    const legal = custLegalName.trim();
+    if (!legal) {
+      toast.error("Indica al menos el nombre o razón social del cliente.");
+      return;
+    }
+    const payload: Record<string, unknown> = { legal_name: legal };
+    if (custEmail.trim()) payload.email = custEmail.trim();
+    if (custPhone.trim()) payload.phone = custPhone.trim();
+    if (custRfc.trim()) {
+      payload.rfc = custRfc.trim();
+      payload.tax_id = custRfc.trim();
+    }
+
+    try {
+      await writeMut.mutateAsync({ operation: "create_customer", payload });
+      toast.success("Cliente enviado. Comprueba en Savio que el alta se registró correctamente.");
+      setCustOpen(false);
+      resetCustomerForm();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al crear cliente");
+    }
+  }
+
   const permissionHint = (
     <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1 max-w-xl">
       {rpcError ? (
@@ -130,9 +167,10 @@ export function SavioFinanceWriteActions({
         </p>
       ) : (
         <p>
-          Las acciones <strong className="text-foreground">Registrar pago</strong> y{" "}
-          <strong className="text-foreground">Nuevo cargo</strong> requieren permiso de escritura Savio: un
-          administrador debe activarlas en tu usuario, además del acceso a ingresos facturados.
+          En <strong className="text-foreground">Kawiil</strong> el rol «admin» de la app Savio no aplica: hace falta
+          permiso en esta plataforma. Los usuarios con rol <strong className="text-foreground">Transformador</strong> y
+          acceso a ingresos Savio pueden escribir por política de organización; el resto necesita que un referente o
+          transformador active «Crear cargos y registrar pagos» en tu ficha de usuario.
         </p>
       )}
     </div>
@@ -163,6 +201,16 @@ export function SavioFinanceWriteActions({
           >
             <FilePlus2 className="h-3.5 w-3.5 mr-1" />
             Nuevo cargo
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setCustOpen(true)}
+          >
+            <UserPlus className="h-3.5 w-3.5 mr-1" />
+            Nuevo cliente
           </Button>
         </>
       ) : (
@@ -257,6 +305,54 @@ export function SavioFinanceWriteActions({
               Cancelar
             </Button>
             <Button type="button" onClick={() => void submitPayment()} disabled={writeMut.isPending}>
+              {writeMut.isPending ? "Enviando…" : "Enviar a Savio"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={custOpen} onOpenChange={(o) => !writeMut.isPending && setCustOpen(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo cliente en Savio</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Equivale a POST <code className="rounded bg-muted px-1">/customer</code>. Los nombres de campo deben
+            coincidir con la OpenAPI de tu cuenta; si Savio rechaza el cuerpo, ajusta en app.savio.mx/docs.
+          </p>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="sw-cust-name">Nombre o razón social</Label>
+              <Input
+                id="sw-cust-name"
+                value={custLegalName}
+                onChange={(e) => setCustLegalName(e.target.value)}
+                placeholder="Ej. Empresa Demo S.A. de C.V."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="sw-cust-email">Correo (opcional)</Label>
+              <Input
+                id="sw-cust-email"
+                type="email"
+                value={custEmail}
+                onChange={(e) => setCustEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="sw-cust-phone">Teléfono (opcional)</Label>
+              <Input id="sw-cust-phone" value={custPhone} onChange={(e) => setCustPhone(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="sw-cust-rfc">RFC / tax_id (opcional)</Label>
+              <Input id="sw-cust-rfc" value={custRfc} onChange={(e) => setCustRfc(e.target.value)} className="font-mono text-xs" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setCustOpen(false)} disabled={writeMut.isPending}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void submitCustomer()} disabled={writeMut.isPending}>
               {writeMut.isPending ? "Enviando…" : "Enviar a Savio"}
             </Button>
           </DialogFooter>

@@ -294,8 +294,9 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
         <div className="rounded-xl border border-border/60 bg-card/60 p-4 shadow-sm space-y-2">
           <p className="text-xs font-medium text-foreground">Acciones Savio</p>
           <p className="text-[11px] text-muted-foreground max-w-2xl">
-            Registrar pagos y crear cargos simples sin salir del resumen. Requiere permiso de escritura Savio; el formato
-            final lo valida la API de tu cuenta (documentación en app.savio.mx).
+            Registrar pagos, crear cargos y dar de alta clientes desde aquí. Los permisos son los de Kawiil (rol
+            Transformador o interruptor de escritura); el rol «admin» solo en Savio no habilita nada en este módulo. La
+            API de Savio valida el formato (app.savio.mx).
           </p>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
             <SavioFinanceWriteActions

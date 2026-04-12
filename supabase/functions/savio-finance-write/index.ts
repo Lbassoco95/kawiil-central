@@ -53,6 +53,23 @@ const OPERATIONS: Record<
       "concepts",
     ],
   },
+  create_customer: {
+    method: "POST",
+    path: "/customer",
+    requiredKeys: [],
+    allowedKeys: [
+      "name",
+      "legal_name",
+      "company_name",
+      "email",
+      "phone",
+      "tax_id",
+      "rfc",
+      "address",
+      "currency",
+      "metadata",
+    ],
+  },
 };
 
 function isAllowedSavioRelativePath(path: string): boolean {
@@ -84,7 +101,15 @@ function summarizeRequest(body: Record<string, unknown>): Record<string, unknown
       : typeof body.amount_total === "number"
         ? body.amount_total
         : null;
-  return { keys, invoice_id: body.invoice_id, customer_id: body.customer_id, amount };
+  const nameHint =
+    typeof body.name === "string"
+      ? body.name
+      : typeof body.legal_name === "string"
+        ? body.legal_name
+        : typeof body.company_name === "string"
+          ? body.company_name
+          : null;
+  return { keys, invoice_id: body.invoice_id, customer_id: body.customer_id, amount, name_hint: nameHint };
 }
 
 Deno.serve(async (req) => {
@@ -132,7 +157,7 @@ Deno.serve(async (req) => {
           ok: false,
           error: "forbidden",
           message:
-            "No tienes permiso para crear cargos o registrar pagos en Savio. Un administrador debe activar «escritura Savio» en tu usuario.",
+            "No tienes permiso de escritura Savio en Kawiil. Los transformadores con «Ver ingresos / Savio» lo tienen por defecto; otros roles necesitan que un referente o transformador active «Crear cargos y registrar pagos» en tu usuario (no depende del rol admin en app.savio.mx).",
         }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -162,7 +187,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           ok: false,
           error: "unknown_operation",
-          message: `Operación no permitida: ${operation || "(vacía)"}. Use create_payment o create_invoice.`,
+          message: `Operación no permitida: ${operation || "(vacía)"}. Use create_payment, create_invoice o create_customer.`,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
@@ -201,6 +226,28 @@ Deno.serve(async (req) => {
             ok: false,
             error: "validation_error",
             message: "invoice_id debe ser un identificador de cargo válido (texto).",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    if (operation === "create_customer") {
+      const n =
+        typeof filtered.name === "string" && filtered.name.trim()
+          ? filtered.name.trim()
+          : typeof filtered.legal_name === "string" && filtered.legal_name.trim()
+            ? filtered.legal_name.trim()
+            : typeof filtered.company_name === "string" && filtered.company_name.trim()
+              ? filtered.company_name.trim()
+              : "";
+      if (!n) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: "validation_error",
+            message:
+              "Para crear un cliente incluye al menos name, legal_name o company_name (texto no vacío), según OpenAPI Savio.",
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );

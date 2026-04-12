@@ -435,7 +435,10 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                   <p className="text-sm font-medium">Finanzas del usuario</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     El módulo &quot;Finanzas&quot; arriba controla el acceso al menú. Los atajos ajustan también
-                    si ve solo gastos o también ingresos Savio (CXC).
+                    si ve solo gastos o también ingresos Savio (CXC). El rol «admin» en la aplicación Savio no se
+                    sincroniza con Kawiil: quien sea <strong className="text-foreground">Transformador</strong> y tenga
+                    «Ver ingresos / Savio» puede usar escritura Savio sin activar el segundo interruptor; otros roles
+                    sí requieren «Crear cargos y registrar pagos».
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

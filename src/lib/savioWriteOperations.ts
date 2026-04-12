@@ -1,10 +1,10 @@
 /**
  * Contrato de escritura Savio (Kawiil → savio-finance-write).
- * Las rutas son POST /payment y POST /invoice (misma base que lectura).
+ * Las rutas son POST /payment, POST /invoice y POST /customer (misma base que lectura).
  * Ajustar nombres de campos si tu OpenAPI en app.savio.mx/docs difiere.
  */
 
-export type SavioWriteOperation = "create_payment" | "create_invoice";
+export type SavioWriteOperation = "create_payment" | "create_invoice" | "create_customer";
 
 export type CreateSavioPaymentPayload = {
   invoice_id: string;
@@ -26,4 +26,18 @@ export type CreateSavioInvoicePayload = {
   currency?: string;
   items?: unknown[];
   concepts?: unknown[];
+};
+
+/** POST /customer — campos según OpenAPI de tu entorno Savio. */
+export type CreateSavioCustomerPayload = {
+  name?: string;
+  legal_name?: string;
+  company_name?: string;
+  email?: string;
+  phone?: string;
+  tax_id?: string;
+  rfc?: string;
+  address?: string;
+  currency?: string;
+  metadata?: unknown;
 };
