@@ -26,8 +26,8 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { useCelulas } from "@/hooks/useCatalogs";
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -51,7 +51,10 @@ import {
   useFinanceIncomeViewerForUser,
   useSetFinanceIncomeViewer,
 } from "@/hooks/useFinanceIncomeViewer";
-
+import {
+  parseKawiilerPermissions,
+  taskPermissionDefaultsForRole,
+} from "@/lib/kawiilerPermissions";
 
 const editSchema = z.object({
   full_name: z.string().trim().min(1, "El nombre es requerido").max(200),
@@ -77,7 +80,12 @@ function useUpdateUser() {
       role,
     }: {
       userId: string;
-      profileData: { full_name: string; phone?: string | null; area?: string | null };
+      profileData: {
+        full_name: string;
+        phone?: string | null;
+        area?: string | null;
+        kawiiler_permissions?: Record<string, boolean>;
+      };
       role: string;
     }) => {
       const { error: profileError } = await supabase
@@ -86,6 +94,9 @@ function useUpdateUser() {
           full_name: profileData.full_name,
           phone: profileData.phone || null,
           area: (profileData.area || null) as any,
+          ...(profileData.kawiiler_permissions != null
+            ? { kawiiler_permissions: profileData.kawiiler_permissions as any }
+            : {}),
         })
         .eq("user_id", userId);
       if (profileError) throw profileError;
@@ -98,9 +109,11 @@ function useUpdateUser() {
         );
       if (roleError) throw roleError;
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["org-users"] });
       queryClient.invalidateQueries({ queryKey: ["org-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-kawiiler-permissions", vars.userId] });
+      queryClient.invalidateQueries({ queryKey: ["user-role", vars.userId] });
     },
   });
 }
@@ -108,7 +121,6 @@ function useUpdateUser() {
 export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps) {
   const { user: authUser } = useAuth();
   const { settings: orgSettings } = useOrgSettings();
-  const { areaOptions } = useAreaOptions();
   const { data: celulas = [] } = useCelulas();
   const activeCelulas = celulas.filter((c) => c.is_active);
   const updateUser = useUpdateUser();
@@ -125,6 +137,8 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
   const setSavioViewer = useSetFinanceIncomeViewer();
   const [savioIncomeEnabled, setSavioIncomeEnabled] = useState(false);
   const [savioWriteEnabled, setSavioWriteEnabled] = useState(false);
+  const [taskDeleteEnabled, setTaskDeleteEnabled] = useState(false);
+  const [taskDueDatesEnabled, setTaskDueDatesEnabled] = useState(false);
 
   const form = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
@@ -138,11 +152,12 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
 
   useEffect(() => {
     if (user && open) {
+      const grado = (user.role as AppGrado) || "ejecutor";
       form.reset({
         full_name: user.full_name,
         phone: user.phone || "",
         area: user.area || "",
-        role: (user.role as AppGrado) || "ejecutor",
+        role: grado,
       });
       setSelectedCelulaIds(userCelulas.map((uc) => uc.celula_id));
       const ms: Record<string, boolean> = {};
@@ -150,6 +165,10 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
       setModuleState(ms);
       setSavioIncomeEnabled(savioViewerRow?.enabled ?? false);
       setSavioWriteEnabled(savioViewerRow?.canWriteSavio ?? false);
+      const defs = taskPermissionDefaultsForRole(grado);
+      const stored = parseKawiilerPermissions(user.kawiiler_permissions);
+      setTaskDeleteEnabled(stored.can_delete_tasks ?? !!defs.can_delete_tasks);
+      setTaskDueDatesEnabled(stored.can_edit_task_due_dates ?? !!defs.can_edit_task_due_dates);
     }
   }, [user, open, form, userCelulas, userModules, savioViewerRow]);
 
@@ -166,6 +185,11 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
 
     const primaryCelula = activeCelulas.find((c) => selectedCelulaIds.includes(c.id));
     const primaryArea = primaryCelula?.slug || values.area || null;
+    const grado = values.role as AppGrado;
+    const kawiiler_permissions =
+      grado === "referente" || grado === "transformador"
+        ? { can_delete_tasks: taskDeleteEnabled, can_edit_task_due_dates: taskDueDatesEnabled }
+        : { can_delete_tasks: false, can_edit_task_due_dates: false };
 
     try {
       await updateUser.mutateAsync({
@@ -174,6 +198,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
           full_name: values.full_name,
           phone: values.phone || null,
           area: primaryArea,
+          kawiiler_permissions,
         },
         role: values.role,
       });
@@ -218,11 +243,14 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
     }
   };
 
+  const roleValue = form.watch("role");
+  const showTaskPerms = roleValue === "referente" || roleValue === "transformador";
+
   if (!user) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar usuario</DialogTitle>
         </DialogHeader>
@@ -262,7 +290,15 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Grado *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(v) => {
+                      field.onChange(v);
+                      const d = taskPermissionDefaultsForRole(v as AppGrado);
+                      setTaskDeleteEnabled(!!d.can_delete_tasks);
+                      setTaskDueDatesEnabled(!!d.can_edit_task_due_dates);
+                    }}
+                    value={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -311,8 +347,16 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
               )}
             />
 
+            <div className="space-y-1">
+              <p className="text-sm font-semibold">Permisos del Kawiiler</p>
+              <p className="text-xs text-muted-foreground">
+                Activa o quita accesos por persona. Los módulos controlan menús y rutas; las tareas y Finanzas aplican
+                según el grado y los interruptores siguientes.
+              </p>
+            </div>
+
             <div>
-              <label className="text-sm font-medium">Módulos habilitados</label>
+              <label className="text-sm font-medium">Módulos de la aplicación</label>
               {!canManageModulePermissions && (
                 <Alert className="mt-2">
                   <Info className="h-4 w-4" />
@@ -346,6 +390,45 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
               </div>
             </div>
 
+            {showTaskPerms && (
+              <div className="rounded-md border border-border/80 bg-muted/20 p-3 space-y-3">
+                <div>
+                  <p className="text-sm font-medium">Tareas y equipos</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Solo para grado Referente o Transformador. Define si puede eliminar tareas de otros o cambiar
+                    fechas de entrega en proyectos.
+                  </p>
+                </div>
+                {!isAdminOrManager && (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle className="text-sm">Solo lectura</AlertTitle>
+                    <AlertDescription className="text-xs">
+                      Solo un Referente o Transformador con acceso de gestión puede cambiar estos permisos.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <label className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">Eliminar tareas (equipos / proyectos)</span>
+                  <Switch
+                    checked={taskDeleteEnabled}
+                    disabled={!isAdminOrManager}
+                    onCheckedChange={setTaskDeleteEnabled}
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">Modificar fechas límite de tareas</span>
+                  <Switch
+                    checked={taskDueDatesEnabled}
+                    disabled={!isAdminOrManager}
+                    onCheckedChange={setTaskDueDatesEnabled}
+                  />
+                </label>
+              </div>
+            )}
+
+            {showTaskPerms && isAdminOrManager && <Separator />}
+
             {isAdminOrManager && (
               <div className="rounded-md border border-border/80 bg-muted/30 p-3 space-y-3">
                 <div>
@@ -361,6 +444,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                     variant="secondary"
                     size="sm"
                     className="text-xs h-8"
+                    disabled={!canManageModulePermissions}
                     onClick={() => {
                       setModuleState((prev) => ({ ...prev, finanzas: true }));
                       setSavioIncomeEnabled(false);
@@ -374,6 +458,7 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
                     variant="secondary"
                     size="sm"
                     className="text-xs h-8"
+                    disabled={!canManageModulePermissions}
                     onClick={() => {
                       setModuleState((prev) => ({ ...prev, finanzas: true }));
                       setSavioIncomeEnabled(true);

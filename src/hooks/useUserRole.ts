@@ -33,8 +33,8 @@ export function useUserRole() {
         .select("kawiiler_permissions")
         .eq("user_id", user!.id)
         .maybeSingle();
-      if (error) return {};
-      return parseKawiilerPermissions(data?.kawiiler_permissions);
+      if (error || !data) return {};
+      return parseKawiilerPermissions(data.kawiiler_permissions);
     },
     enabled: !!user,
     staleTime: 60 * 1000,

@@ -2077,6 +2077,7 @@ export type Database = {
           id?: string
           invitation_accepted?: boolean
           is_active?: boolean
+          kawiiler_permissions?: Json
           microsoft_email?: string | null
           microsoft_user_id?: string | null
           onboarding_status?: string

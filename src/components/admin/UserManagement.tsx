@@ -10,10 +10,16 @@ import { formatMX } from "@/lib/dateUtils";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
-import { useUserModulePermissions, MODULE_LABELS, MODULE_KEYS, type ModuleKey } from "@/hooks/useModulePermissions";
+import { useUserModulePermissions, MODULE_LABELS, MODULE_KEYS } from "@/hooks/useModulePermissions";
 import type { OrgUser, OnboardingStatus } from "@/hooks/useOrgUsers";
 import { useAreaOptions, formatCelulaLabel } from "@/hooks/useAreaOptions";
 import { gradoLabel, gradoBadgeClass } from "@/lib/gradoLabels";
+import type { AppGrado } from "@/lib/gradoLabels";
+import {
+  parseKawiilerPermissions,
+  effectiveCanDeleteTasks,
+  effectiveCanEditTaskDueDates,
+} from "@/lib/kawiilerPermissions";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -62,6 +68,26 @@ function UserCelulaBadges({ userId, fallbackArea, areaLabelMap }: { userId: stri
         </Badge>
       ))}
     </>
+  );
+}
+
+function UserTaskPermissionBadges({ user }: { user: OrgUser }) {
+  const r = (user.role || "ejecutor") as AppGrado;
+  if (r !== "referente" && r !== "transformador") {
+    return <span className="text-[10px] text-muted-foreground italic">No aplica a este grado</span>;
+  }
+  const p = parseKawiilerPermissions(user.kawiiler_permissions);
+  const del = effectiveCanDeleteTasks(r, p);
+  const due = effectiveCanEditTaskDueDates(r, p);
+  return (
+    <div className="flex flex-wrap gap-1">
+      <Badge variant={del ? "secondary" : "outline"} className="text-[9px] px-1.5 py-0">
+        Eliminar tareas: {del ? "sí" : "no"}
+      </Badge>
+      <Badge variant={due ? "secondary" : "outline"} className="text-[9px] px-1.5 py-0">
+        Fechas límite: {due ? "sí" : "no"}
+      </Badge>
+    </div>
   );
 }
 
@@ -310,6 +336,10 @@ export function UserManagement() {
                         <div className="sm:col-span-2">
                           <span className="text-xs text-muted-foreground block mb-1">Módulos</span>
                           <UserModuleBadges userId={user.user_id} />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="text-xs text-muted-foreground block mb-1">Permisos de tareas</span>
+                          <UserTaskPermissionBadges user={user} />
                         </div>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2 pt-1 border-t">

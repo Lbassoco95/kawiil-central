@@ -4,19 +4,8 @@ import { CelulaManagement } from "@/components/admin/CelulaManagement";
 import { CatalogManagement } from "@/components/admin/CatalogManagement";
 import { AdoptionAnalyticsTab } from "@/components/admin/AdoptionAnalyticsTab";
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import {
-  useOrgSettings,
-  useUpdateOrgSettings,
-  canActAsOrgPermissionsSteward,
-} from "@/hooks/useOrgSettings";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useAuth } from "@/contexts/AuthContext";
-import { Shield, Plug, Info } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Plug } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MoffinIntegrationCard } from "@/components/admin/MoffinIntegrationCard";
 
@@ -26,71 +15,7 @@ const tabs = [
   { key: "catalogos", label: "Catálogos" },
   { key: "adopcion", label: "Adopción" },
   { key: "integraciones", label: "Integraciones" },
-  { key: "permisos", label: "Permisos" },
 ] as const;
-
-function PermissionsTab() {
-  const { user } = useAuth();
-  const { settings } = useOrgSettings();
-  const updateSettings = useUpdateOrgSettings();
-  const canEdit = canActAsOrgPermissionsSteward(settings, user?.id);
-
-  return (
-    <div className="space-y-4">
-      {!canEdit && (
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertTitle>Solo lectura</AlertTitle>
-          <AlertDescription className="text-sm">
-            La organización tiene un administrador de permisos asignado. Solo esa persona puede
-            cambiar estos ajustes y los módulos por usuario.
-          </AlertDescription>
-        </Alert>
-      )}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            Permisos de Referentes (G3)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Eliminar tareas</Label>
-              <p className="text-xs text-muted-foreground">
-                Permite a los Kawiilers Referente eliminar tareas de cualquier miembro.
-              </p>
-            </div>
-            <Switch
-              checked={!!settings.referente_delete_tasks}
-              onCheckedChange={(checked) =>
-                updateSettings.mutate({ referente_delete_tasks: checked })
-              }
-              disabled={updateSettings.isPending || !canEdit}
-            />
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium">Modificar fechas límite</Label>
-              <p className="text-xs text-muted-foreground">
-                Permite a los Kawiilers Referente cambiar la fecha de entrega de cualquier tarea.
-              </p>
-            </div>
-            <Switch
-              checked={!!settings.referente_edit_due_dates}
-              onCheckedChange={(checked) =>
-                updateSettings.mutate({ referente_edit_due_dates: checked })
-              }
-              disabled={updateSettings.isPending || !canEdit}
-            />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 const Admin = () => {
   const [tab, setTab] = useState<string>("usuarios");
@@ -107,7 +32,6 @@ const Admin = () => {
         <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
           {tabs.map((t) => {
             if (t.key === "integraciones" && !isTransformador) return null;
-            if (t.key === "permisos" && !isTransformador) return null;
             return (
               <button
                 key={t.key}
@@ -134,7 +58,6 @@ const Admin = () => {
               <MoffinIntegrationCard />
             </div>
           )}
-          {tab === "permisos" && <PermissionsTab />}
         </div>
       </div>
     </AppLayout>
