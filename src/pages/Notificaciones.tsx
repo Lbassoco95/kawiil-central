@@ -23,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { registerWebPushSubscription } from "@/lib/registerWebPush";
+import { registerWebPushSubscription, formatPushRegistrationUserMessage } from "@/lib/registerWebPush";
 import { playNotificationBeep } from "@/lib/notificationBeep";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
@@ -167,12 +167,30 @@ function NotificationDeliveryPreferences() {
     if (r === "granted") toast.success("Avisos del sistema activados");
     else
       toast.message("Permiso no concedido", {
-        description: "Actívalo en la configuración del sitio (candado en la barra de direcciones).",
+        description:
+          "Chrome/Edge: candado → Notificaciones → Permitir. Safari (Mac/iPhone): ajustes del sitio o Ajustes → Safari → Notificaciones. Si la app está en un iframe o vista previa, abre Kawiil en una pestaña directa con HTTPS.",
       });
   }, []);
 
   const registerPush = useMutation({
     mutationFn: async () => {
+      if (!vapid?.trim()) {
+        throw new Error("VAPID no configurado (VITE_VAPID_PUBLIC_KEY). Configura la variable en el build.");
+      }
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        throw new Error(
+          "Push solo funciona en HTTPS. Abre Kawiil desde la URL publicada (no desde una vista previa insegura).",
+        );
+      }
+      if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+        const p = await Notification.requestPermission();
+        setNotifPerm(Notification.permission);
+        if (p !== "granted") {
+          throw new Error(
+            "Sin permiso de notificaciones no se puede registrar el push. Pulsa «Pedir permiso del navegador» y elige Permitir, o actívalo desde el candado del sitio.",
+          );
+        }
+      }
       await registerWebPushSubscription();
       const { error: uerr } = await supabase
         .from("profiles")
@@ -183,9 +201,10 @@ function NotificationDeliveryPreferences() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
       qc.invalidateQueries({ queryKey: ["comunicacion-push-setup", user?.id] });
+      qc.invalidateQueries({ queryKey: ["notification-delivery-prefs", user?.id] });
       toast.success("Avisos con la app cerrada activados");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(formatPushRegistrationUserMessage(e)),
   });
 
   const toggleDesktopPush = useMutation({
@@ -201,10 +220,18 @@ function NotificationDeliveryPreferences() {
       if (!vapid?.trim()) {
         throw new Error("VAPID no configurado (VITE_VAPID_PUBLIC_KEY). Configura la variable en el build.");
       }
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        throw new Error(
+          "Push solo funciona en HTTPS. Abre Kawiil desde la URL publicada (no desde una vista previa insegura).",
+        );
+      }
       if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
         const p = await Notification.requestPermission();
+        setNotifPerm(Notification.permission);
         if (p !== "granted") {
-          throw new Error("Permiso de notificaciones denegado. Actívalo en el candado del sitio.");
+          throw new Error(
+            "Permiso de notificaciones denegado. Actívalo en el candado del sitio o con «Pedir permiso del navegador».",
+          );
         }
       }
       await registerWebPushSubscription();
@@ -220,7 +247,7 @@ function NotificationDeliveryPreferences() {
       if (typeof Notification !== "undefined") setNotifPerm(Notification.permission);
       if (enabled) toast.success("Push activado: recibirás avisos aunque cierres la pestaña");
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(formatPushRegistrationUserMessage(e)),
   });
 
   const notifPermLabel =
