@@ -3,11 +3,22 @@ import { supabase } from "@/integrations/supabase/client";
 /** Carpeta raíz en Outlook donde se guardan los borradores de envíos programados (Graph move). */
 export const SCHEDULED_MAIL_FOLDER_DISPLAY_NAME = "Kawiil · Programados";
 
+/** Misma lógica que en microsoft-api: middots y espacios para encontrar «Kawiil · Programados». */
 function normDisplayName(s: string) {
-  return s.trim().toLowerCase();
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .replace(/[\u00b7\u2219\u2022\u30fb\u318d\ufe52]/g, "\u00b7");
 }
 
 const TARGET_NORM = normDisplayName(SCHEDULED_MAIL_FOLDER_DISPLAY_NAME);
+
+/** Sidebar / UI: detectar la carpeta aunque Graph use otro middot o espacios. */
+export function isScheduledMailFolderDisplayName(displayName: string): boolean {
+  return normDisplayName(displayName) === TARGET_NORM;
+}
 
 type GraphFolderRow = { id?: unknown; displayName?: unknown };
 

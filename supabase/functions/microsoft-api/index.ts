@@ -168,6 +168,57 @@ async function graphRequest(accessToken: string, path: string, init?: RequestIni
   return text ? JSON.parse(text) : { success: true };
 }
 
+/** Comparación robusta de nombres de carpeta (middots unicode, espacios). */
+function normalizeMailFolderDisplayName(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .replace(/[\u00b7\u2219\u2022\u30fb\u318d\ufe52]/g, "\u00b7");
+}
+
+async function listAllRootMailFolders(accessToken: string): Promise<unknown[]> {
+  const all: unknown[] = [];
+  let path = "/me/mailFolders?$top=100";
+  const maxPages = 25;
+  for (let page = 0; page < maxPages; page++) {
+    const data = (await graphRequest(accessToken, path)) as {
+      value?: unknown[];
+      "@odata.nextLink"?: string;
+    };
+    if (Array.isArray(data?.value)) {
+      for (const v of data.value) all.push(v);
+    }
+    const nl = data?.["@odata.nextLink"];
+    if (typeof nl !== "string" || !nl) break;
+    const m = nl.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
+    path = m?.[1] ?? "";
+    if (!path) break;
+  }
+  return all;
+}
+
+async function findRootMailFolderByDisplayName(
+  accessToken: string,
+  wanted: string,
+): Promise<Record<string, unknown> | null> {
+  const target = normalizeMailFolderDisplayName(wanted);
+  const all = await listAllRootMailFolders(accessToken);
+  for (const f of all) {
+    if (!f || typeof f !== "object") continue;
+    const row = f as { id?: string; displayName?: string };
+    if (typeof row.id !== "string" || typeof row.displayName !== "string") continue;
+    if (normalizeMailFolderDisplayName(row.displayName) === target) return f as Record<string, unknown>;
+  }
+  return null;
+}
+
+function graphErrorCodeFromThrownMessage(msg: string): string | undefined {
+  const m = msg.match(/"code"\s*:\s*"([^"]+)"/);
+  return m?.[1];
+}
+
 async function refreshTokenIfNeeded(supabaseAdmin: any, userId: string, tokenRow: any) {
   const expiresAt = new Date(tokenRow.expires_at);
   // Refresh 5 min before expiry
@@ -765,24 +816,7 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
-        const all: unknown[] = [];
-        let path = "/me/mailFolders?$top=100";
-        const maxPages = 25;
-        for (let page = 0; page < maxPages; page++) {
-          const data = (await graphRequest(accessToken, path)) as {
-            value?: unknown[];
-            "@odata.nextLink"?: string;
-          };
-          if (Array.isArray(data?.value)) {
-            for (const v of data.value) all.push(v);
-          }
-          const nl = data?.["@odata.nextLink"];
-          if (typeof nl !== "string" || !nl) break;
-          const m = nl.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
-          path = m?.[1] ?? "";
-          if (!path) break;
-        }
-        result = all;
+        result = await listAllRootMailFolders(accessToken);
         break;
       }
 
@@ -1184,12 +1218,30 @@ Deno.serve(async (req) => {
       case "create-mail-folder": {
         const displayName = params?.displayName;
         if (!displayName) throw new Error("displayName required");
-        const res = await graphMailFetchWithRetry(accessToken, `/me/mailFolders`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ displayName }),
-        });
-        result = await res.json();
+        const existing = await findRootMailFolderByDisplayName(accessToken, displayName);
+        if (existing) {
+          result = existing;
+          break;
+        }
+        try {
+          const res = await graphMailFetchWithRetry(accessToken, `/me/mailFolders`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ displayName }),
+          });
+          result = await res.json();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const code = graphErrorCodeFromThrownMessage(msg);
+          if (code === "ErrorFolderExists" || msg.includes("[409]")) {
+            const again = await findRootMailFolderByDisplayName(accessToken, displayName);
+            if (again) {
+              result = again;
+              break;
+            }
+          }
+          throw e;
+        }
         break;
       }
     }

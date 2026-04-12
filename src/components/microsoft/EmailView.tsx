@@ -96,6 +96,7 @@ import {
 import {
   SCHEDULED_MAIL_FOLDER_DISPLAY_NAME,
   ensureScheduledMailFolderId,
+  isScheduledMailFolderDisplayName,
   moveDraftToScheduledFolder,
   reconcilePendingScheduledDraftsToFolder,
 } from "@/lib/scheduledMailFolder";
@@ -139,7 +140,7 @@ function humanizeScheduleMailError(raw: string): string {
 
 function getFolderIcon(displayName: string) {
   const key = normFolderKey(displayName);
-  if (key === normFolderKey(SCHEDULED_MAIL_FOLDER_DISPLAY_NAME)) return CalendarClock;
+  if (isScheduledMailFolderDisplayName(displayName)) return CalendarClock;
   if (key.includes("inbox") || key.includes("bandeja")) return Inbox;
   if (key.includes("sent") || key.includes("enviado")) return SendHorizonal;
   if (key.includes("draft") || key.includes("borrador")) return FileText;
@@ -153,7 +154,7 @@ function getFolderLabel(displayName: string) {
   const key = normFolderKey(displayName);
   if (key.includes("inbox") || key.includes("bandejadeentrada")) return "Bandeja de entrada";
   if (key.includes("sentitems") || key.includes("elementosenviados")) return "Enviados";
-  if (key === normFolderKey(SCHEDULED_MAIL_FOLDER_DISPLAY_NAME)) return "Programados";
+  if (isScheduledMailFolderDisplayName(displayName)) return "Programados";
   if (key.includes("drafts") || key.includes("borradores")) return "Borradores";
   if (key.includes("deleteditems") || key.includes("elementoseliminados")) return "Eliminados";
   if (key.includes("junkemail") || key.includes("correonodeseado")) return "Spam";
