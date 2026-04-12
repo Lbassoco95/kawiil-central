@@ -64,7 +64,7 @@ import {
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List,
-  Eye, Download,
+  Eye, Download, CalendarClock,
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import {
@@ -93,8 +93,17 @@ import {
   validateRecipientGroups,
   type ComposerAttachment,
 } from "@/lib/emailComposer";
+import {
+  SCHEDULED_MAIL_FOLDER_DISPLAY_NAME,
+  ensureScheduledMailFolderId,
+  moveDraftToScheduledFolder,
+} from "@/lib/scheduledMailFolder";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
+
+function normFolderKey(displayName: string) {
+  return displayName.toLowerCase().replace(/\s/g, "");
+}
 
 function scheduleMailInsertErrorText(err: unknown): string {
   if (err instanceof Error && err.message?.trim()) {
@@ -128,7 +137,8 @@ function humanizeScheduleMailError(raw: string): string {
 }
 
 function getFolderIcon(displayName: string) {
-  const key = displayName.toLowerCase().replace(/\s/g, "");
+  const key = normFolderKey(displayName);
+  if (key === normFolderKey(SCHEDULED_MAIL_FOLDER_DISPLAY_NAME)) return CalendarClock;
   if (key.includes("inbox") || key.includes("bandeja")) return Inbox;
   if (key.includes("sent") || key.includes("enviado")) return SendHorizonal;
   if (key.includes("draft") || key.includes("borrador")) return FileText;
@@ -139,9 +149,10 @@ function getFolderIcon(displayName: string) {
 }
 
 function getFolderLabel(displayName: string) {
-  const key = displayName.toLowerCase().replace(/\s/g, "");
+  const key = normFolderKey(displayName);
   if (key.includes("inbox") || key.includes("bandejadeentrada")) return "Bandeja de entrada";
   if (key.includes("sentitems") || key.includes("elementosenviados")) return "Enviados";
+  if (key === normFolderKey(SCHEDULED_MAIL_FOLDER_DISPLAY_NAME)) return "Programados";
   if (key.includes("drafts") || key.includes("borradores")) return "Borradores";
   if (key.includes("deleteditems") || key.includes("elementoseliminados")) return "Eliminados";
   if (key.includes("junkemail") || key.includes("correonodeseado")) return "Spam";
@@ -532,7 +543,27 @@ export function EmailView() {
         },
       });
       if (error) throw error;
-      toast.success("Correo programado. Se enviará a la hora indicada.");
+
+      let movedToScheduledFolder = false;
+      try {
+        const folderId = await ensureScheduledMailFolderId();
+        await moveDraftToScheduledFolder(draftId, folderId);
+        movedToScheduledFolder = true;
+        await queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+        await queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      } catch (moveErr) {
+        console.warn("[schedule mail] move to scheduled folder failed", moveErr);
+      }
+
+      if (movedToScheduledFolder) {
+        toast.success(
+          `Correo programado. Lo encontrarás en «${SCHEDULED_MAIL_FOLDER_DISPLAY_NAME}» hasta el envío.`,
+        );
+      } else {
+        toast.success("Correo programado. Se enviará a la hora indicada.", {
+          description: `No se pudo mover a «${SCHEDULED_MAIL_FOLDER_DISPLAY_NAME}»; el borrador sigue en Borradores.`,
+        });
+      }
       await queryClient.invalidateQueries({ queryKey: [...SCHEDULED_MAIL_JOBS_QUERY_KEY, user.id] });
       resetAction();
     } catch (e) {

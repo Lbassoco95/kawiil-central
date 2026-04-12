@@ -765,8 +765,24 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
-        const data = await graphRequest(accessToken, "/me/mailFolders?$top=50");
-        result = data?.value || [];
+        const all: unknown[] = [];
+        let path = "/me/mailFolders?$top=100";
+        const maxPages = 25;
+        for (let page = 0; page < maxPages; page++) {
+          const data = (await graphRequest(accessToken, path)) as {
+            value?: unknown[];
+            "@odata.nextLink"?: string;
+          };
+          if (Array.isArray(data?.value)) {
+            for (const v of data.value) all.push(v);
+          }
+          const nl = data?.["@odata.nextLink"];
+          if (typeof nl !== "string" || !nl) break;
+          const m = nl.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
+          path = m?.[1] ?? "";
+          if (!path) break;
+        }
+        result = all;
         break;
       }
 
