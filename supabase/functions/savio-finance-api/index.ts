@@ -1,3 +1,12 @@
+/**
+ * savio-finance-api — lectura GET hacia Savio (/invoice, /payment, /customer).
+ *
+ * Requiere JWT de usuario y RPC `can_view_savio_finance`. Escritura: función `savio-finance-write` + RPC
+ * `can_write_savio_finance` (ver migración savio_finance_write).
+ *
+ * El resumen financiero en el front pagina en el cliente; topes y «cargar más» se configuran con variables Vite
+ * documentadas en `.env.example` (VITE_SAVIO_FINANCE_MAX_PAGES, etc.), no en secrets de Edge.
+ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { savioAuthorizationHeaderValue } from "../_shared/savioAuthHeaders.ts";
 import { normalizeSavioApiBase } from "../_shared/savioApiBase.ts";

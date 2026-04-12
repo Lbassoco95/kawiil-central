@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserRole } from "@/hooks/useUserRole";
 
 export const MODULE_KEYS = [
   "ai",
@@ -31,7 +30,6 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
 
 export function useModulePermissions() {
   const { user } = useAuth();
-  const { isTransformador } = useUserRole();
 
   const { data: permissions = {}, isLoading } = useQuery({
     queryKey: ["module-permissions", user?.id],
@@ -51,10 +49,7 @@ export function useModulePermissions() {
     staleTime: 3 * 60 * 1000,
   });
 
-  const hasModule = (key: string): boolean => {
-    if (isTransformador) return true;
-    return !!permissions[key];
-  };
+  const hasModule = (key: string): boolean => !!permissions[key];
 
   return { permissions, hasModule, isLoading };
 }

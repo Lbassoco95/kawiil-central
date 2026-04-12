@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type SavioFinanceApiAction = "invoices" | "payments";
+export type SavioFinanceApiAction = "invoices" | "payments" | "customers";
 
 export type SavioInvokeResult = {
   ok?: boolean;

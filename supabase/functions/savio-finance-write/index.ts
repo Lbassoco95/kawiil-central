@@ -15,6 +15,9 @@ const MAX_RESPONSE_LOG_CHARS = 4000;
  * Operaciones de escritura hacia Savio. Rutas alineadas con GET existente (/invoice, /payment).
  * Los nombres de campos en `payload` deben coincidir con la OpenAPI de tu entorno (app.savio.mx/docs);
  * si Savio devuelve 4xx, revisar documentación y ajustar whitelist en este archivo.
+ * Los IDs de factura/cliente suelen obtenerse con GET /invoice y GET /customer (vía savio-finance-api en Kawiil).
+ * Requiere RPC `can_write_savio_finance`. La paginación extra del resumen financiero se configura en el front (Vite),
+ * no en secrets de Edge; ver `.env.example` del repositorio.
  */
 const OPERATIONS: Record<
   string,

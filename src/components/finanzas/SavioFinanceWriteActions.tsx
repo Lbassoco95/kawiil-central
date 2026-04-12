@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { format } from "date-fns";
-import { FilePlus2, Landmark } from "lucide-react";
+import { ExternalLink, FilePlus2, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,9 +15,26 @@ import { Label } from "@/components/ui/label";
 import { useSavioFinanceWriteMutation } from "@/hooks/useSavioFinanceWrite";
 import { useSavioWriteAccess } from "@/hooks/useSavioWriteAccess";
 
-export function SavioFinanceWriteActions() {
-  const { data: canWrite = false, isLoading } = useSavioWriteAccess();
+export type SavioPickOption = { id: string; label: string };
+
+export interface SavioFinanceWriteActionsProps {
+  /** Cargos recientes (GET /invoice) para autocompletar `invoice_id` (OpenAPI). */
+  invoicePickOptions?: SavioPickOption[];
+  /** Clientes (GET /customer) para `customer_id`. */
+  customerPickOptions?: SavioPickOption[];
+  /** URL del panel Savio (`VITE_SAVIO_APP_URL`). */
+  savioAppUrl?: string | null;
+}
+
+export function SavioFinanceWriteActions({
+  invoicePickOptions,
+  customerPickOptions,
+  savioAppUrl,
+}: SavioFinanceWriteActionsProps) {
+  const { data: access, isLoading } = useSavioWriteAccess();
   const writeMut = useSavioFinanceWriteMutation();
+  const payListId = useId();
+  const custListId = useId();
 
   const [payOpen, setPayOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
@@ -32,6 +49,9 @@ export function SavioFinanceWriteActions() {
   const [amountTotal, setAmountTotal] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
+
+  const canWrite = access?.canWrite === true;
+  const rpcError = access?.rpcError;
 
   function resetPaymentForm() {
     setInvoiceId("");
@@ -64,7 +84,7 @@ export function SavioFinanceWriteActions() {
 
     try {
       await writeMut.mutateAsync({ operation: "create_payment", payload });
-      toast.success("Pago enviado a Savio. Si la API aceptó el formato, verás el cambio al actualizar.");
+      toast.success("Pago enviado. Si Savio aceptó el cuerpo, verás el movimiento al refrescar la vista.");
       setPayOpen(false);
       resetPaymentForm();
     } catch (e) {
@@ -91,7 +111,7 @@ export function SavioFinanceWriteActions() {
 
     try {
       await writeMut.mutateAsync({ operation: "create_invoice", payload });
-      toast.success("Cargo enviado a Savio. Revisa en Savio si el formato fue aceptado.");
+      toast.success("Cargo enviado. Comprueba en Savio que el importe y el cliente coincidan con lo esperado.");
       setInvOpen(false);
       resetInvoiceForm();
     } catch (e) {
@@ -99,30 +119,64 @@ export function SavioFinanceWriteActions() {
     }
   }
 
-  if (isLoading || !canWrite) return null;
+  const permissionHint = (
+    <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground space-y-1 max-w-xl">
+      {rpcError ? (
+        <p>
+          <span className="font-medium text-foreground">No pudimos comprobar el permiso de escritura.</span> Detalle:{" "}
+          {rpcError}. Suele deberse a que el RPC{" "}
+          <code className="rounded bg-muted px-1">can_write_savio_finance</code> no existe aún o falló la llamada;
+          revisa migraciones y el editor de usuario en administración.
+        </p>
+      ) : (
+        <p>
+          Las acciones <strong className="text-foreground">Registrar pago</strong> y{" "}
+          <strong className="text-foreground">Nuevo cargo</strong> requieren permiso de escritura Savio: un
+          administrador debe activarlas en tu usuario, además del acceso a ingresos facturados.
+        </p>
+      )}
+    </div>
+  );
 
   return (
-    <>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="h-8 text-xs"
-        onClick={() => setPayOpen(true)}
-      >
-        <Landmark className="h-3.5 w-3.5 mr-1" />
-        Registrar pago
-      </Button>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        className="h-8 text-xs"
-        onClick={() => setInvOpen(true)}
-      >
-        <FilePlus2 className="h-3.5 w-3.5 mr-1" />
-        Nuevo cargo
-      </Button>
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Consultando permiso de escritura en Savio…</p>
+      ) : canWrite ? (
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setPayOpen(true)}
+          >
+            <Landmark className="h-3.5 w-3.5 mr-1" />
+            Registrar pago
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setInvOpen(true)}
+          >
+            <FilePlus2 className="h-3.5 w-3.5 mr-1" />
+            Nuevo cargo
+          </Button>
+        </>
+      ) : (
+        permissionHint
+      )}
+
+      {savioAppUrl ? (
+        <Button type="button" variant="outline" size="sm" className="h-8 text-xs" asChild>
+          <a href={savioAppUrl} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="h-3.5 w-3.5 mr-1" />
+            Abrir en Savio
+          </a>
+        </Button>
+      ) : null}
 
       <Dialog open={payOpen} onOpenChange={(o) => !writeMut.isPending && setPayOpen(o)}>
         <DialogContent className="sm:max-w-md">
@@ -130,19 +184,44 @@ export function SavioFinanceWriteActions() {
             <DialogTitle>Registrar pago en Savio</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">
-            Usa el mismo identificador de cargo que muestra Savio (columna id en la tabla de cargos). Los nombres de
-            campo deben coincidir con tu API; si Savio rechaza la petición, revisa app.savio.mx/docs.
+            Equivale a POST <code className="rounded bg-muted px-1">/payment</code> en la OpenAPI de Savio. Kawiil
+            envía solo los campos permitidos por la función{" "}
+            <code className="rounded bg-muted px-1">savio-finance-write</code> (<code className="rounded bg-muted px-1">create_payment</code>).
           </p>
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="sw-invoice-id">ID del cargo (factura)</Label>
-              <Input
-                id="sw-invoice-id"
-                value={invoiceId}
-                onChange={(e) => setInvoiceId(e.target.value)}
-                placeholder="UUID o id Savio"
-                className="font-mono text-xs"
-              />
+              {invoicePickOptions && invoicePickOptions.length > 0 ? (
+                <>
+                  <Input
+                    id="sw-invoice-id"
+                    list={payListId}
+                    value={invoiceId}
+                    onChange={(e) => setInvoiceId(e.target.value)}
+                    placeholder="UUID o id Savio"
+                    className="font-mono text-xs"
+                    autoComplete="off"
+                  />
+                  <datalist id={payListId}>
+                    {invoicePickOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </datalist>
+                  <p className="text-[11px] text-muted-foreground">
+                    Lista de cargos recientes obtenida con GET /invoice; puedes pegar otro id si no aparece.
+                  </p>
+                </>
+              ) : (
+                <Input
+                  id="sw-invoice-id"
+                  value={invoiceId}
+                  onChange={(e) => setInvoiceId(e.target.value)}
+                  placeholder="UUID o id Savio"
+                  className="font-mono text-xs"
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sw-amount">Monto pagado</Label>
@@ -190,18 +269,42 @@ export function SavioFinanceWriteActions() {
             <DialogTitle>Nuevo cargo en Savio</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">
-            Flujo mínimo con importe total. Si tu cuenta exige líneas de concepto, crea el cargo en Savio o amplía el
-            formulario según OpenAPI.
+            Equivale a POST <code className="rounded bg-muted px-1">/invoice</code> con <code className="rounded bg-muted px-1">customer_id</code> y{" "}
+            <code className="rounded bg-muted px-1">amount_total</code>. Si tu cuenta exige partidas o conceptos
+            detallados, crea el cargo en Savio o amplía el payload según su documentación.
           </p>
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="sw-cust">ID cliente Savio</Label>
-              <Input
-                id="sw-cust"
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                className="font-mono text-xs"
-              />
+              {customerPickOptions && customerPickOptions.length > 0 ? (
+                <>
+                  <Input
+                    id="sw-cust"
+                    list={custListId}
+                    value={customerId}
+                    onChange={(e) => setCustomerId(e.target.value)}
+                    className="font-mono text-xs"
+                    autoComplete="off"
+                  />
+                  <datalist id={custListId}>
+                    {customerPickOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </datalist>
+                  <p className="text-[11px] text-muted-foreground">
+                    Clientes desde GET /customer vía Kawiil; si falta alguien, escribe su id a mano.
+                  </p>
+                </>
+              ) : (
+                <Input
+                  id="sw-cust"
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sw-total">Importe total</Label>
@@ -232,6 +335,6 @@ export function SavioFinanceWriteActions() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

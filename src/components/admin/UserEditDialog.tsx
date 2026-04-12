@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { useCelulas } from "@/hooks/useCatalogs";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,6 +36,7 @@ import type { OrgUser } from "@/hooks/useOrgUsers";
 import { GRADO_SELECT_OPTIONS } from "@/lib/gradoLabels";
 import type { AppGrado } from "@/lib/gradoLabels";
 import { useEffect, useState } from "react";
+import { Info } from "lucide-react";
 import { useUserCelulas, useSyncUserCelulas } from "@/hooks/useUserCelulas";
 import {
   MODULE_KEYS,
@@ -43,6 +45,8 @@ import {
   useSyncModulePermissions,
 } from "@/hooks/useModulePermissions";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOrgSettings, canActAsOrgPermissionsSteward } from "@/hooks/useOrgSettings";
 import {
   useFinanceIncomeViewerForUser,
   useSetFinanceIncomeViewer,
@@ -97,13 +101,13 @@ function useUpdateUser() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["org-users"] });
       queryClient.invalidateQueries({ queryKey: ["org-profiles"] });
-      toast.success("Usuario actualizado");
     },
-    onError: (e) => toast.error(e.message || "Error al actualizar usuario"),
   });
 }
 
 export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps) {
+  const { user: authUser } = useAuth();
+  const { settings: orgSettings } = useOrgSettings();
   const { areaOptions } = useAreaOptions();
   const { data: celulas = [] } = useCelulas();
   const activeCelulas = celulas.filter((c) => c.is_active);
@@ -114,7 +118,9 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
   const { data: userModules = {} } = useUserModulePermissions(user?.user_id);
   const syncModules = useSyncModulePermissions();
   const [moduleState, setModuleState] = useState<Record<string, boolean>>({});
-  const { isAdminOrManager } = useUserRole();
+  const { isAdminOrManager, isTransformador } = useUserRole();
+  const canManageModulePermissions =
+    isTransformador && canActAsOrgPermissionsSteward(orgSettings, authUser?.id);
   const { data: savioViewerRow } = useFinanceIncomeViewerForUser(user?.user_id);
   const setSavioViewer = useSetFinanceIncomeViewer();
   const [savioIncomeEnabled, setSavioIncomeEnabled] = useState(false);
@@ -158,52 +164,58 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
   const onSubmit = async (values: EditFormValues) => {
     if (!user) return;
 
-    // Determine primary area from selected células
     const primaryCelula = activeCelulas.find((c) => selectedCelulaIds.includes(c.id));
     const primaryArea = primaryCelula?.slug || values.area || null;
 
-    await updateUser.mutateAsync({
-      userId: user.user_id,
-      profileData: {
-        full_name: values.full_name,
-        phone: values.phone || null,
-        area: primaryArea,
-      },
-      role: values.role,
-    });
-
-    // Sync multi-célula assignments
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("organization_id")
-      .eq("user_id", user.user_id)
-      .single();
-
-    if (profile) {
-      await syncCelulas.mutateAsync({
+    try {
+      await updateUser.mutateAsync({
         userId: user.user_id,
-        celulaIds: selectedCelulaIds,
-        organizationId: profile.organization_id,
+        profileData: {
+          full_name: values.full_name,
+          phone: values.phone || null,
+          area: primaryArea,
+        },
+        role: values.role,
       });
 
-      await syncModules.mutateAsync({
-        userId: user.user_id,
-        organizationId: profile.organization_id,
-        modules: moduleState,
-      });
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user.user_id)
+        .single();
 
-      if (isAdminOrManager) {
-        const savioEffective = !!moduleState.finanzas && savioIncomeEnabled;
-        await setSavioViewer.mutateAsync({
+      if (profile) {
+        await syncCelulas.mutateAsync({
           userId: user.user_id,
+          celulaIds: selectedCelulaIds,
           organizationId: profile.organization_id,
-          enabled: savioEffective,
-          canWriteSavio: savioEffective && savioWriteEnabled,
         });
-      }
-    }
 
-    onOpenChange(false);
+        if (canManageModulePermissions) {
+          await syncModules.mutateAsync({
+            userId: user.user_id,
+            organizationId: profile.organization_id,
+            modules: moduleState,
+          });
+        }
+
+        if (isAdminOrManager) {
+          const savioEffective = !!moduleState.finanzas && savioIncomeEnabled;
+          await setSavioViewer.mutateAsync({
+            userId: user.user_id,
+            organizationId: profile.organization_id,
+            enabled: savioEffective,
+            canWriteSavio: savioEffective && savioWriteEnabled,
+          });
+        }
+      }
+
+      toast.success("Cambios guardados");
+      onOpenChange(false);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "No se pudieron guardar los cambios";
+      toast.error(message);
+    }
   };
 
   if (!user) return null;
@@ -301,12 +313,24 @@ export function UserEditDialog({ user, open, onOpenChange }: UserEditDialogProps
 
             <div>
               <label className="text-sm font-medium">Módulos habilitados</label>
+              {!canManageModulePermissions && (
+                <Alert className="mt-2">
+                  <Info className="h-4 w-4" />
+                  <AlertTitle className="text-sm">Solo lectura</AlertTitle>
+                  <AlertDescription className="text-xs">
+                    {isTransformador
+                      ? "Solo el administrador de permisos designado en la organización puede cambiar módulos aquí."
+                      : "Solo un transformador con permiso de administración de permisos puede activar o desactivar módulos."}
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-2 border rounded-md p-2 mt-1.5">
                 {MODULE_KEYS.map((key) => (
                   <label key={key} className="flex items-center justify-between gap-2 text-sm">
                     <span>{MODULE_LABELS[key]}</span>
                     <Switch
                       checked={!!moduleState[key]}
+                      disabled={!canManageModulePermissions}
                       onCheckedChange={(checked) =>
                         setModuleState((prev) => {
                           const next = { ...prev, [key]: checked };

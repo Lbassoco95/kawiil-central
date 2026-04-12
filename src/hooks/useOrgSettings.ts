@@ -7,6 +7,19 @@ export interface OrgSettings {
   referente_task_management?: boolean;
   referente_delete_tasks?: boolean;
   referente_edit_due_dates?: boolean;
+  /** Si está definido y no vacío, solo este usuario (transformador) puede editar permisos de módulos y settings de permisos de la org. */
+  permissions_steward_user_id?: string | null;
+}
+
+/** Transformador con permiso para mutar `user_module_permissions` y `organizations.settings` de permisos (RLS alineado). */
+export function canActAsOrgPermissionsSteward(
+  settings: OrgSettings,
+  currentUserId: string | undefined,
+): boolean {
+  if (!currentUserId) return false;
+  const raw = settings.permissions_steward_user_id;
+  if (raw == null || String(raw).trim() === "") return true;
+  return String(raw).trim() === currentUserId;
 }
 
 export function useOrgSettings() {

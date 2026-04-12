@@ -52,6 +52,7 @@ import {
   savioMissingSecretsUserMessage,
 } from "@/lib/savioFinanceApiHints";
 import { SavioFinanceWriteActions } from "@/components/finanzas/SavioFinanceWriteActions";
+import { getSavioAppPanelUrl } from "@/lib/savioAppUrl";
 
 const EVENT_FILTER_ALL = "todos";
 
@@ -69,6 +70,8 @@ export function SavioFinanceDashboard() {
     paymentAgg,
     invoicesMeta,
     paymentsMeta,
+    invoicePickOptions,
+    customerPickOptions,
     isLoading: apiLoading,
     isFetching: apiFetching,
     refetchAll,
@@ -212,7 +215,11 @@ export function SavioFinanceDashboard() {
             <RefreshCw className={cn("h-3.5 w-3.5 mr-1", busy && "animate-spin")} />
             Actualizar vista
           </Button>
-          <SavioFinanceWriteActions />
+          <SavioFinanceWriteActions
+            invoicePickOptions={invoicePickOptions}
+            customerPickOptions={customerPickOptions}
+            savioAppUrl={getSavioAppPanelUrl()}
+          />
         </div>
       </div>
 

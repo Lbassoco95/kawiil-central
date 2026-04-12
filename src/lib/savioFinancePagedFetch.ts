@@ -2,8 +2,41 @@ import { extractSavioList } from "@/lib/savioApiNormalize";
 import { extractSavioNextCursor } from "@/lib/financeMonthMetrics";
 import { fetchSavioResource, type SavioFinanceApiAction } from "@/lib/savioFinanceInvoke";
 
-const DEFAULT_MAX_PAGES = 10;
+/** Techo de seguridad para no saturar el navegador con demasiadas páginas Savio. */
+export const MAX_SAVIO_FINANCE_PAGED_CEILING = 50;
+
+/** Cuántas páginas extra (por ventana) suma cada clic en «Cargar más» en el resumen financiero. */
+export const SAVIO_FINANCE_PAGE_BOOST_STEP = 15;
+
+const FALLBACK_MAX_PAGES = 10;
 const PAGE_LIMIT = "100";
+
+function parseMaxPagesEnv(raw: string | undefined, fallback: number): number {
+  const n = Number.parseInt(String(raw ?? "").trim(), 10);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(Math.floor(n), MAX_SAVIO_FINANCE_PAGED_CEILING);
+}
+
+/** Páginas máx. por ventana de pagos/facturas en dashboard (env `VITE_SAVIO_FINANCE_MAX_PAGES`, default 10). */
+export function getSavioFinancePagedMaxPages(): number {
+  return parseMaxPagesEnv(
+    import.meta.env.VITE_SAVIO_FINANCE_MAX_PAGES as string | undefined,
+    FALLBACK_MAX_PAGES,
+  );
+}
+
+/**
+ * Páginas máx. para la query de cartera (facturas, ventana larga).
+ * `VITE_SAVIO_FINANCE_PORTFOLIO_MAX_PAGES` o, si no existe, el doble del tope general (sin superar el techo).
+ */
+export function getSavioFinancePortfolioPagedMaxPages(): number {
+  const raw = import.meta.env.VITE_SAVIO_FINANCE_PORTFOLIO_MAX_PAGES as string | undefined;
+  if (raw !== undefined && String(raw).trim() !== "") {
+    return parseMaxPagesEnv(raw, Math.min(getSavioFinancePagedMaxPages() * 2, MAX_SAVIO_FINANCE_PAGED_CEILING));
+  }
+  const base = getSavioFinancePagedMaxPages();
+  return Math.min(base * 2, MAX_SAVIO_FINANCE_PAGED_CEILING);
+}
 
 export type SavioPagedFetchResult = {
   rows: unknown[];
@@ -14,7 +47,7 @@ export type SavioPagedFetchResult = {
 async function fetchAllPages(
   action: SavioFinanceApiAction,
   baseQuery: Record<string, string>,
-  maxPages = DEFAULT_MAX_PAGES,
+  maxPages = FALLBACK_MAX_PAGES,
 ): Promise<SavioPagedFetchResult> {
   const rows: unknown[] = [];
   let cursor: string | undefined;

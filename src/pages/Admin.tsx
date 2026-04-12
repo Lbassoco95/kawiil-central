@@ -8,9 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { useOrgSettings, useUpdateOrgSettings } from "@/hooks/useOrgSettings";
+import {
+  useOrgSettings,
+  useUpdateOrgSettings,
+  canActAsOrgPermissionsSteward,
+} from "@/hooks/useOrgSettings";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Shield, Plug } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Shield, Plug, Info } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MoffinIntegrationCard } from "@/components/admin/MoffinIntegrationCard";
 
@@ -24,11 +30,23 @@ const tabs = [
 ] as const;
 
 function PermissionsTab() {
+  const { user } = useAuth();
   const { settings } = useOrgSettings();
   const updateSettings = useUpdateOrgSettings();
+  const canEdit = canActAsOrgPermissionsSteward(settings, user?.id);
 
   return (
     <div className="space-y-4">
+      {!canEdit && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle>Solo lectura</AlertTitle>
+          <AlertDescription className="text-sm">
+            La organización tiene un administrador de permisos asignado. Solo esa persona puede
+            cambiar estos ajustes y los módulos por usuario.
+          </AlertDescription>
+        </Alert>
+      )}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -49,7 +67,7 @@ function PermissionsTab() {
               onCheckedChange={(checked) =>
                 updateSettings.mutate({ referente_delete_tasks: checked })
               }
-              disabled={updateSettings.isPending}
+              disabled={updateSettings.isPending || !canEdit}
             />
           </div>
           <Separator />
@@ -65,7 +83,7 @@ function PermissionsTab() {
               onCheckedChange={(checked) =>
                 updateSettings.mutate({ referente_edit_due_dates: checked })
               }
-              disabled={updateSettings.isPending}
+              disabled={updateSettings.isPending || !canEdit}
             />
           </div>
         </CardContent>

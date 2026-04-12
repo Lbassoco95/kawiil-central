@@ -16,6 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { SavioFinanceWriteActions } from "@/components/finanzas/SavioFinanceWriteActions";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Expense } from "@/hooks/useExpenses";
@@ -28,6 +29,8 @@ import {
 } from "@/lib/financeMonthMetrics";
 import { computeSavioIncomeBuckets, toInvoiceRowView } from "@/lib/savioApiNormalize";
 import { savioFinanceApiFailureHint } from "@/lib/savioFinanceApiHints";
+import { getSavioAppPanelUrl } from "@/lib/savioAppUrl";
+import { SAVIO_FINANCE_PAGE_BOOST_STEP } from "@/lib/savioFinancePagedFetch";
 import { cn } from "@/lib/utils";
 
 const PIE_COLORS = {
@@ -118,9 +121,11 @@ function KpiTile({ title, subtitle, accentClass, icon, children, footer }: KpiTi
 interface Props {
   expenses: Expense[];
   savioEnabled?: boolean;
+  /** Cambia a la pestaña Ingresos facturados (listado Savio). */
+  onGoToSavioTab?: () => void;
 }
 
-export function FinanceExecutiveSummary({ expenses, savioEnabled = true }: Props) {
+export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToSavioTab }: Props) {
   const [selectedYm, setSelectedYm] = useState<YearMonth>(() => yearMonthFromDate(new Date()));
   const gradId = useId().replace(/:/g, "");
 
@@ -134,6 +139,8 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true }: Props
     savioError,
     reactQueryError,
     invoiceRows,
+    loadMoreSavioPages,
+    canLoadMoreSavioPages,
   } = useFinanceDashboardData(selectedYm, expenses, { enableSavio: savioEnabled });
 
   const savioHint = savioFinanceApiFailureHint(savioError ?? undefined);
@@ -167,6 +174,18 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true }: Props
   );
 
   const buckets = useMemo(() => computeSavioIncomeBuckets(invoiceViews), [invoiceViews]);
+
+  const invoicePickSummary = useMemo(
+    () =>
+      invoiceViews
+        .filter((v) => v.id && v.id !== "—")
+        .slice(0, 200)
+        .map((v) => ({
+          id: v.id,
+          label: `${v.folio} · ${v.cliente !== "—" ? v.cliente : "Cliente"}${v.monto != null ? ` · ${formatMoney(v.monto)}` : ""}`,
+        })),
+    [invoiceViews],
+  );
 
   const pieData = useMemo(() => {
     const rows = [
@@ -237,12 +256,60 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true }: Props
           </div>
         </div>
         {truncated && savioEnabled && (
-          <div className="rounded-xl border border-amber-500/35 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-amber-900 shadow-sm dark:text-amber-100/90">
-            <span className="font-medium">Vista parcial.</span> La conexión con facturación entregó un volumen alto de
-            datos; mostramos el máximo permitido. La cartera y algunos totales pueden ser aproximados.
+          <div className="rounded-xl border border-amber-500/35 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-amber-900 shadow-sm dark:text-amber-100/90 space-y-2">
+            <p>
+              <span className="font-medium">Vista parcial.</span> Savio devolvió más registros de los que estamos
+              trayendo por seguridad (paginación en el navegador). La cartera y algunos totales pueden quedar
+              aproximados. Savio filtra por ventana de actualización, no siempre por fecha de pago o de factura.
+            </p>
+            <p className="text-[11px] opacity-95">
+              Para subir el tope base configura{" "}
+              <code className="rounded bg-amber-500/15 px-1">VITE_SAVIO_FINANCE_MAX_PAGES</code> y, si aplica,{" "}
+              <code className="rounded bg-amber-500/15 px-1">VITE_SAVIO_FINANCE_PORTFOLIO_MAX_PAGES</code> (máximo
+              efectivo acotado en la app).
+            </p>
+            {canLoadMoreSavioPages ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 border-amber-600/40 text-xs"
+                disabled={isLoading}
+                onClick={() => loadMoreSavioPages()}
+                aria-label={`Aumentar hasta ${SAVIO_FINANCE_PAGE_BOOST_STEP} páginas extra por cada consulta a pagos y cartera`}
+              >
+                Cargar más (+{SAVIO_FINANCE_PAGE_BOOST_STEP} páginas por consulta)
+              </Button>
+            ) : (
+              <p className="text-[11px] text-amber-950/80 dark:text-amber-100/80">
+                Ya se alcanzó el límite de páginas en esta sesión. Revisa totales en Savio o eleva los topes en
+                variables de entorno del front.
+              </p>
+            )}
           </div>
         )}
       </div>
+
+      {savioEnabled && (
+        <div className="rounded-xl border border-border/60 bg-card/60 p-4 shadow-sm space-y-2">
+          <p className="text-xs font-medium text-foreground">Acciones Savio</p>
+          <p className="text-[11px] text-muted-foreground max-w-2xl">
+            Registrar pagos y crear cargos simples sin salir del resumen. Requiere permiso de escritura Savio; el formato
+            final lo valida la API de tu cuenta (documentación en app.savio.mx).
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
+            <SavioFinanceWriteActions
+              invoicePickOptions={invoicePickSummary}
+              savioAppUrl={getSavioAppPanelUrl()}
+            />
+            {onGoToSavioTab ? (
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs shrink-0" onClick={onGoToSavioTab}>
+                Ir a Ingresos facturados (tablas y detalle)
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {(reactQueryError || savioHint) && savioEnabled && (
         <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">

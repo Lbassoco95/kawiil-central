@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Expense } from "@/hooks/useExpenses";
@@ -15,7 +15,14 @@ import {
   type YearMonth,
 } from "@/lib/financeMonthMetrics";
 import { pickSavioString } from "@/lib/savioApiNormalize";
-import { fetchSavioInvoicesWindow, fetchSavioPaymentsWindow } from "@/lib/savioFinancePagedFetch";
+import {
+  fetchSavioInvoicesWindow,
+  fetchSavioPaymentsWindow,
+  getSavioFinancePagedMaxPages,
+  getSavioFinancePortfolioPagedMaxPages,
+  MAX_SAVIO_FINANCE_PAGED_CEILING,
+  SAVIO_FINANCE_PAGE_BOOST_STEP,
+} from "@/lib/savioFinancePagedFetch";
 
 function ymCompare(a: YearMonth, b: YearMonth): number {
   return a.year !== b.year ? a.year - b.year : a.month - b.month;
@@ -40,6 +47,23 @@ export function useFinanceDashboardData(
 ) {
   const { user } = useAuth();
   const enableSavio = options.enableSavio && !!user;
+
+  const basePaymentsMaxPages = getSavioFinancePagedMaxPages();
+  const basePortfolioMaxPages = getSavioFinancePortfolioPagedMaxPages();
+  const [pagedFetchBoost, setPagedFetchBoost] = useState(0);
+  const paymentsMaxPages = Math.min(basePaymentsMaxPages + pagedFetchBoost, MAX_SAVIO_FINANCE_PAGED_CEILING);
+  const portfolioMaxPages = Math.min(basePortfolioMaxPages + pagedFetchBoost, MAX_SAVIO_FINANCE_PAGED_CEILING);
+
+  const loadMoreSavioPages = useCallback(() => {
+    setPagedFetchBoost((b) => {
+      const next = b + SAVIO_FINANCE_PAGE_BOOST_STEP;
+      const cap = Math.max(
+        0,
+        MAX_SAVIO_FINANCE_PAGED_CEILING - Math.min(basePaymentsMaxPages, basePortfolioMaxPages),
+      );
+      return Math.min(next, cap);
+    });
+  }, [basePaymentsMaxPages, basePortfolioMaxPages]);
 
   const cy = new Date().getFullYear();
   const cm = new Date().getMonth() + 1;
@@ -68,8 +92,9 @@ export function useFinanceDashboardData(
       user?.id,
       trendRange.start.toISOString(),
       trendRange.end.toISOString(),
+      paymentsMaxPages,
     ],
-    queryFn: () => fetchSavioPaymentsWindow(trendRange.start, trendRange.end),
+    queryFn: () => fetchSavioPaymentsWindow(trendRange.start, trendRange.end, paymentsMaxPages),
     enabled: enableSavio,
     staleTime: 60_000,
   });
@@ -80,8 +105,9 @@ export function useFinanceDashboardData(
       "savio-payments-past",
       user?.id,
       yearMonthKey(selectedYm),
+      paymentsMaxPages,
     ],
-    queryFn: () => fetchSavioPaymentsWindow(pastRange.start, pastRange.end),
+    queryFn: () => fetchSavioPaymentsWindow(pastRange.start, pastRange.end, paymentsMaxPages),
     enabled: enableSavio && needsPastPayments,
     staleTime: 60_000,
   });
@@ -93,8 +119,9 @@ export function useFinanceDashboardData(
       user?.id,
       portfolioRange.start.toISOString(),
       portfolioRange.end.toISOString(),
+      portfolioMaxPages,
     ],
-    queryFn: () => fetchSavioInvoicesWindow(portfolioRange.start, portfolioRange.end),
+    queryFn: () => fetchSavioInvoicesWindow(portfolioRange.start, portfolioRange.end, portfolioMaxPages),
     enabled: enableSavio,
     staleTime: 60_000,
   });
@@ -159,6 +186,11 @@ export function useFinanceDashboardData(
   const reactQueryError =
     paymentsWideQuery.error ?? paymentsPastQuery.error ?? invoicesPortfolioQuery.error ?? null;
 
+  const canLoadMoreSavioPages =
+    truncated &&
+    (paymentsMaxPages < MAX_SAVIO_FINANCE_PAGED_CEILING ||
+      portfolioMaxPages < MAX_SAVIO_FINANCE_PAGED_CEILING);
+
   return {
     kpis,
     trendBars,
@@ -174,5 +206,8 @@ export function useFinanceDashboardData(
       void invoicesPortfolioQuery.refetch();
       if (needsPastPayments) void paymentsPastQuery.refetch();
     },
+    loadMoreSavioPages,
+    canLoadMoreSavioPages,
+    savioPagedCaps: { paymentsMaxPages, portfolioMaxPages },
   };
 }

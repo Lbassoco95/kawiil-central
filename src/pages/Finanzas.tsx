@@ -237,7 +237,11 @@ export default function Finanzas() {
               </TabsList>
 
               <TabsContent value="resumen" className="mt-0">
-                <FinanceExecutiveSummary expenses={expenses} savioEnabled />
+                <FinanceExecutiveSummary
+                  expenses={expenses}
+                  savioEnabled
+                  onGoToSavioTab={() => setFinanceTab("savio")}
+                />
               </TabsContent>
 
               <TabsContent value="gastos" className="mt-0">
