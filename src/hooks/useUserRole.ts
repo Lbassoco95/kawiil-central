@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrgSettings } from "@/hooks/useOrgSettings";
+import {
+  parseKawiilerPermissions,
+  effectiveCanDeleteTasks,
+  effectiveCanEditTaskDueDates,
+} from "@/lib/kawiilerPermissions";
 
 export function useUserRole() {
   const { user } = useAuth();
-  const { settings } = useOrgSettings();
 
   const { data: role } = useQuery({
     queryKey: ["user-role", user?.id],
@@ -22,14 +25,29 @@ export function useUserRole() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: kawiilerPermsRaw } = useQuery({
+    queryKey: ["profile-kawiiler-permissions", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("kawiiler_permissions")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) return {};
+      return parseKawiilerPermissions(data?.kawiiler_permissions);
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+
   const currentRole = role || "ejecutor";
   const isTransformador = currentRole === "transformador";
   const isReferente = currentRole === "referente";
   const isReferenteOrAbove = isTransformador || isReferente;
 
-  // Granular permissions
-  const canDeleteTasks = isTransformador || (isReferente && !!settings.referente_delete_tasks);
-  const canEditDueDates = isTransformador || (isReferente && !!settings.referente_edit_due_dates);
+  const kp = kawiilerPermsRaw || {};
+  const canDeleteTasks = effectiveCanDeleteTasks(currentRole, kp);
+  const canEditDueDates = effectiveCanEditTaskDueDates(currentRole, kp);
   const canManageTasks = canDeleteTasks || canEditDueDates;
 
   return {
