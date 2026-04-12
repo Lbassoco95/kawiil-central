@@ -88,7 +88,12 @@ export function useNotificationDelivery() {
 
           let surfaced = false;
           if (allowToast) {
-            toast.info(title, { description: row.body?.trim() || undefined });
+            toast.info(title, {
+              description: row.body?.trim() || undefined,
+              duration: 6500,
+              className:
+                "!min-w-[min(100vw-1.5rem,20rem)] sm:!min-w-[22rem] !max-w-[min(100vw-1.5rem,26rem)] !shadow-xl !border-border/80",
+            });
             surfaced = true;
           }
           if (
