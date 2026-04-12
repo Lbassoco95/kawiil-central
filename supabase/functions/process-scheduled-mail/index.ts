@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+const GRAPH_PREFER_IMMUTABLE = { Prefer: 'IdType="ImmutableId"' } as const;
 
 type Svc = ReturnType<typeof createClient>;
 
@@ -82,6 +83,7 @@ async function processSendDraftJob(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
+        ...GRAPH_PREFER_IMMUTABLE,
       },
       body: JSON.stringify(patch),
     });
@@ -103,6 +105,7 @@ async function processSendDraftJob(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
+        ...GRAPH_PREFER_IMMUTABLE,
       },
       body: JSON.stringify({
         "@odata.type": "#microsoft.graph.fileAttachment",
@@ -119,7 +122,7 @@ async function processSendDraftJob(
 
   const sres = await fetch(`${GRAPH_BASE}/me/messages/${encodeURIComponent(draftId)}/send`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { Authorization: `Bearer ${accessToken}`, ...GRAPH_PREFER_IMMUTABLE },
   });
   if (!sres.ok) {
     const errBody = await sres.text();

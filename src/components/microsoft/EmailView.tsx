@@ -97,6 +97,7 @@ import {
   SCHEDULED_MAIL_FOLDER_DISPLAY_NAME,
   ensureScheduledMailFolderId,
   moveDraftToScheduledFolder,
+  reconcilePendingScheduledDraftsToFolder,
 } from "@/lib/scheduledMailFolder";
 
 type EmailAction = "reply" | "reply-all" | "forward" | null;
@@ -362,6 +363,34 @@ export function EmailView() {
   }, [selectedEmailId]);
 
   const { data: folders = [] } = useMailFolders();
+  const draftsFolderId = useMemo(() => {
+    const f = (folders as { id?: string; displayName?: string; wellKnownName?: string }[]).find((x) => {
+      const wk = typeof x.wellKnownName === "string" ? x.wellKnownName.toLowerCase() : "";
+      if (wk === "drafts") return true;
+      const dn = normFolderKey(String(x.displayName || ""));
+      return dn.includes("draft") || dn.includes("borrador");
+    });
+    return typeof f?.id === "string" ? f.id : undefined;
+  }, [folders]);
+
+  /** Reubica borradores con envío `pending` que sigan en Borradores (trabajos viejos o si falló el move). */
+  useEffect(() => {
+    if (!user?.id) return;
+    const tid = window.setTimeout(() => {
+      void reconcilePendingScheduledDraftsToFolder(user.id, queryClient);
+    }, 2000);
+    return () => window.clearTimeout(tid);
+  }, [user?.id, queryClient]);
+
+  useEffect(() => {
+    if (!user?.id || !draftsFolderId) return;
+    if (selectedFolderId !== draftsFolderId) return;
+    const tid = window.setTimeout(() => {
+      void reconcilePendingScheduledDraftsToFolder(user.id, queryClient);
+    }, 500);
+    return () => window.clearTimeout(tid);
+  }, [user?.id, draftsFolderId, selectedFolderId, queryClient]);
+
   const { data: inboxUnread = 0 } = useUnreadEmailCount();
   const emailsQuery = useOutlookEmails(selectedFolderId, debouncedSearch || undefined);
   const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);

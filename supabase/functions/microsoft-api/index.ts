@@ -803,7 +803,8 @@ Deno.serve(async (req) => {
       }
 
       case "create-reply-draft": {
-        const messageId = params?.messageId;
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        if (!messageId) throw new Error("messageId required");
         const replyAll = params?.replyAll || false;
         const endpoint = replyAll ? "createReplyAll" : "createReply";
         try {
@@ -812,7 +813,7 @@ Deno.serve(async (req) => {
             `/me/messages/${messageId}/${endpoint}`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
               body: JSON.stringify({ comment: "" }),
             },
           );
@@ -849,11 +850,11 @@ Deno.serve(async (req) => {
 
       /** Borrador de reenvío (incluye plantilla y firma de Outlook como en el cliente). */
       case "create-forward-draft": {
-        const messageId = params?.messageId;
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
         if (!messageId) throw new Error("messageId required");
         const res = await graphMailFetchWithRetry(accessToken, `/me/messages/${messageId}/createForward`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
           body: JSON.stringify({ comment: "" }),
         });
         result = await res.json();
@@ -897,11 +898,12 @@ Deno.serve(async (req) => {
       }
 
       case "update-draft": {
-        const draftId = params?.draftId;
+        const draftId = normalizeGraphMessageOrAttachmentId(params?.draftId);
+        if (!draftId) throw new Error("draftId required");
         const payload = params?.payload;
         await graphRequest(accessToken, `/me/messages/${draftId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
           body: JSON.stringify(payload),
         });
         result = { success: true };
@@ -909,24 +911,25 @@ Deno.serve(async (req) => {
       }
 
       case "send-draft": {
-        const draftId = params?.draftId;
+        const draftId = normalizeGraphMessageOrAttachmentId(params?.draftId);
+        if (!draftId) throw new Error("draftId required");
         await graphMailFetchWithRetry(accessToken, `/me/messages/${draftId}/send`, {
           method: "POST",
-          headers: {},
+          headers: { ...GRAPH_MAIL_PREFER_IMMUTABLE },
         });
         result = { success: true };
         break;
       }
 
       case "add-draft-attachment": {
-        const draftId = params?.draftId;
+        const draftId = normalizeGraphMessageOrAttachmentId(params?.draftId);
         const attachment = params?.attachment;
         if (!draftId || !attachment?.name || !attachment?.contentBytes) {
           throw new Error("draftId y attachment son requeridos");
         }
         await graphRequest(accessToken, `/me/messages/${draftId}/attachments`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
           body: JSON.stringify({
             "@odata.type": "#microsoft.graph.fileAttachment",
             name: attachment.name,
@@ -939,12 +942,12 @@ Deno.serve(async (req) => {
       }
 
       case "move-email": {
-        const messageId = params?.messageId;
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
         const destinationId = params?.destinationId;
         if (!messageId || !destinationId) throw new Error("messageId and destinationId required");
         result = await graphRequest(accessToken, `/me/messages/${messageId}/move`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
           body: JSON.stringify({ destinationId }),
         });
         break;

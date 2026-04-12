@@ -72,3 +72,45 @@ export async function moveDraftToScheduledFolder(draftId: string, folderId: stri
     throw new Error(typeof e === "string" ? e : JSON.stringify(e));
   }
 }
+
+type InvalidateMailQueries = {
+  invalidateQueries: (opts: { queryKey: readonly unknown[] }) => Promise<unknown>;
+};
+
+/**
+ * Mueve a la carpeta de programados todos los borradores con job `pending` (p. ej. creados antes del move automático o si falló el traslado).
+ */
+export async function reconcilePendingScheduledDraftsToFolder(
+  userId: string,
+  queryClient: InvalidateMailQueries,
+): Promise<void> {
+  const { data: jobs, error } = await supabase
+    .from("scheduled_mail_jobs")
+    .select("draft_id")
+    .eq("user_id", userId)
+    .eq("status", "pending");
+  if (error || !jobs?.length) return;
+
+  let folderId: string;
+  try {
+    folderId = await ensureScheduledMailFolderId();
+  } catch {
+    return;
+  }
+
+  const ids = [...new Set(jobs.map((j) => j.draft_id).filter((id): id is string => typeof id === "string" && !!id))];
+  let moved = 0;
+  for (const id of ids) {
+    try {
+      await moveDraftToScheduledFolder(id, folderId);
+      moved++;
+    } catch {
+      /* ya en carpeta, id obsoleto o permisos */
+    }
+  }
+
+  if (moved > 0) {
+    await queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+    await queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+  }
+}
