@@ -9,8 +9,8 @@ import {
   moffinLegacyApiKey,
   moffinLegacyBaseUrl,
   moffinSolutionsBaseUrl,
-  moffinSolutionsBearerToken,
 } from "../_shared/moffinApiFlavor.ts";
+import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
 import {
   extractMoffinProfileId,
   extractSolutionsQueryId,
@@ -357,26 +357,42 @@ Deno.serve(async (req) => {
     });
   }
 
-  const moffinKey = Deno.env.get("MOFFIN_API_KEY");
+  const flavor = getMoffinApiFlavor();
+  const solutionsOAuthConfigured =
+    !!(Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID")?.trim() && Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET")?.trim());
+  const moffinKey = Deno.env.get("MOFFIN_API_KEY")?.trim() ?? "";
   const moffinBase =
     (Deno.env.get("MOFFIN_BASE_URL") ?? "https://app.moffin.mx/api/v1").replace(/\/$/, "");
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  if (!moffinKey) {
+  if (!moffinKey && !(flavor === "solutions" && solutionsOAuthConfigured)) {
     return new Response(
       JSON.stringify({
         error: "moffin_not_configured",
-        message: "Configura el secreto MOFFIN_API_KEY en Edge Functions (Supabase).",
+        message:
+          "Configura MOFFIN_API_KEY (API legacy app.moffin / lista 69-B) o, para Solutions sin esa clave, MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth en solutions-api, ver documentación Moffin).",
       }),
       { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 
-  const flavor = getMoffinApiFlavor();
   const solutionsBase = moffinSolutionsBaseUrl();
-  const solutionsBearer = moffinSolutionsBearerToken();
+  let solutionsBearer = "";
+  if (flavor === "solutions") {
+    const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
+    if (!solAuth.ok) {
+      return new Response(
+        JSON.stringify({
+          error: "moffin_solutions_auth",
+          message: solAuth.message,
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    solutionsBearer = solAuth.bearer;
+  }
   const legacyBase = flavor === "solutions" ? moffinLegacyBaseUrl() : moffinBase;
   const legacyToken = (flavor === "solutions" ? moffinLegacyApiKey() : moffinKey).trim();
 
@@ -703,7 +719,7 @@ Deno.serve(async (req) => {
       if (!profRes.ok) {
         const hint401 =
           profRes.status === 401
-            ? "Moffin Solutions rechazó el Bearer (401). En Supabase → Edge → Secrets usa el token de API del producto Solutions (solutions-api.moffin.mx), no la clave solo-legacy de app.moffin salvo que Moffin te indique que es la misma. Si 69-B usa otra clave, define MOFFIN_LEGACY_API_KEY para lista 69-B y MOFFIN_SOLUTIONS_BEARER (o un MOFFIN_API_KEY válido para Bearer) para CSF/32D. Revisa que el secreto no incluya el prefijo «Bearer » duplicado."
+            ? "Moffin Solutions rechazó el Bearer (401). La API Solutions usa OAuth: POST /oauth/token con MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (te los da Moffin; no es el token corto de «Configuración → API» de app.moffin). Opcional: guardar el accessToken JWT en MOFFIN_SOLUTIONS_BEARER si Moffin te indica flujo manual. Lista 69-B: MOFFIN_LEGACY_API_KEY + app.moffin."
             : undefined;
         return new Response(
           JSON.stringify({
@@ -756,7 +772,7 @@ Deno.serve(async (req) => {
         .single();
       const hint401Sat =
         satRes.status === 401
-          ? "Token Bearer inválido para Moffin Solutions (misma causa que perfil SAT). Configura MOFFIN_SOLUTIONS_BEARER o un MOFFIN_API_KEY aceptado por solutions-api.moffin.mx."
+          ? "401 en Solutions: usa OAuth MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (o JWT en MOFFIN_SOLUTIONS_BEARER). El token del panel app.moffin no sirve como Bearer en solutions-api."
           : undefined;
       return new Response(
         JSON.stringify({

@@ -99,26 +99,39 @@ export function MoffinIntegrationCard() {
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
           <p className="font-medium text-foreground">Moffin Solutions API (CSF y 32D)</p>
           <p>
-            Por defecto Kawiil usa <strong className="text-foreground">Solutions</strong> en Edge (constancia/opinión):{" "}
-            <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL=https://solutions-api.moffin.mx/api</code> (o el que
-            indique Moffin) y el token en <code className="text-foreground">MOFFIN_API_KEY</code> (o{" "}
-            <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code>) como{" "}
-            <code className="text-foreground">Authorization: Bearer</code>. Solo con{" "}
+            Por defecto Kawiil usa <strong className="text-foreground">Solutions</strong> en Edge (constancia/opinión). La
+            API en <code className="text-foreground">solutions-api.moffin.mx</code> usa{" "}
+            <strong className="text-foreground">OAuth</strong>{" "}
+            <code className="text-foreground">POST /oauth/token</code> con{" "}
+            <code className="text-foreground">MOFFIN_SOLUTIONS_CLIENT_ID</code> y{" "}
+            <code className="text-foreground">MOFFIN_SOLUTIONS_CLIENT_SECRET</code> (credenciales que entrega Moffin para
+            Solutions; no son el token corto de «Configuración → API» de app.moffin). Alternativa:{" "}
+            <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code> con el JWT devuelto por ese OAuth. Solo con{" "}
             <code className="text-foreground">MOFFIN_API_FLAVOR=legacy</code> vuelve el modo FIEL + <code className="text-foreground">sat_rfc</code>. Perfil SAT con RFC+CIEC (
             <code className="text-foreground">moffin-sat-ciec</code>
             ); opcional <code className="text-foreground">MOFFIN_SAT_CIEC_SECRET</code> o reutiliza{" "}
             <code className="text-foreground">MOFFIN_FIEL_SECRET</code> para cifrar la CIEC. Lista 69-B usa{" "}
-            <code className="text-foreground">MOFFIN_LEGACY_BASE_URL</code> + <code className="text-foreground">Token</code>.
+            <code className="text-foreground">MOFFIN_LEGACY_BASE_URL</code> + <code className="text-foreground">Token</code> (
+            <code className="text-foreground">MOFFIN_LEGACY_API_KEY</code> o <code className="text-foreground">MOFFIN_API_KEY</code>).
           </p>
           <p>
             Documentación:{" "}
+            <a
+              href="https://solutions-docs.moffin.mx/apis/authentication"
+              className="text-primary underline-offset-2 hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Authentication (OAuth)
+            </a>
+            ,{" "}
             <a
               href="https://solutions-docs.moffin.mx/apis/consultas-al-sat"
               className="text-primary underline-offset-2 hover:underline"
               target="_blank"
               rel="noreferrer"
             >
-              Consultas al SAT (Moffin)
+              Consultas al SAT
             </a>
             . En el front, Solutions es el predeterminado; FIEL solo con{" "}
             <code className="text-foreground">VITE_MOFFIN_API_FLAVOR=legacy</code> en el build.
@@ -172,11 +185,17 @@ export function MoffinIntegrationCard() {
                 No fijar <code className="text-foreground">MOFFIN_API_FLAVOR=legacy</code> (defecto = Solutions)
               </li>
               <li>
-                <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL</code> o base con{" "}
-                <code className="text-foreground">solutions-api.moffin.mx</code>
+                <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL</code> (opcional; hay default)
               </li>
               <li>
-                <code className="text-foreground">MOFFIN_API_KEY</code> o <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code> (Bearer)
+                <code className="text-foreground">MOFFIN_SOLUTIONS_CLIENT_ID</code> +{" "}
+                <code className="text-foreground">MOFFIN_SOLUTIONS_CLIENT_SECRET</code> (OAuth; recomendado)
+              </li>
+              <li>
+                O <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code> = JWT de <code className="text-foreground">/oauth/token</code>
+              </li>
+              <li>
+                <code className="text-foreground">MOFFIN_API_KEY</code> / <code className="text-foreground">MOFFIN_LEGACY_API_KEY</code> para lista 69-B (Token legacy)
               </li>
               <li>
                 <code className="text-foreground">MOFFIN_LEGACY_BASE_URL</code> + token legacy para lista 69-B

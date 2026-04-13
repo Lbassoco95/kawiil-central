@@ -18,8 +18,8 @@ import {
   moffinLegacyApiKey,
   moffinLegacyBaseUrl,
   moffinSolutionsBaseUrl,
-  moffinSolutionsBearerToken,
 } from "../_shared/moffinApiFlavor.ts";
+import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
 import { extractSolutionsQueryId, moffinSolutionsGetJson } from "../_shared/moffinSolutionsClient.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
@@ -128,13 +128,11 @@ async function fetchMoffinReportJson(
   base: string,
   key: string,
   queryId: string,
+  solutionsBearer: string,
 ): Promise<Record<string, unknown> | null> {
   if (webhookRowUsesSolutions(row)) {
-    const r = await moffinSolutionsGetJson(
-      moffinSolutionsBaseUrl(),
-      moffinSolutionsBearerToken(),
-      queryId,
-    );
+    if (!solutionsBearer.trim()) return null;
+    const r = await moffinSolutionsGetJson(moffinSolutionsBaseUrl(), solutionsBearer, queryId);
     return r.ok ? r.json : null;
   }
   const legacyBase = getMoffinApiFlavor() === "solutions" ? moffinLegacyBaseUrl() : base.replace(/\/$/, "");
@@ -275,6 +273,14 @@ Deno.serve(async (req) => {
   const moffinBase =
     (Deno.env.get("MOFFIN_BASE_URL") ?? "https://app.moffin.mx/api/v1").replace(/\/$/, "");
 
+  const solutionsBaseUrl = moffinSolutionsBaseUrl();
+  let solutionsBearerForWebhook = "";
+  if (getMoffinApiFlavor() === "solutions") {
+    const solAuth = await resolveMoffinSolutionsBearer(solutionsBaseUrl);
+    if (solAuth.ok) solutionsBearerForWebhook = solAuth.bearer;
+    else console.error("moffin-webhook: auth Solutions omitida:", solAuth.message);
+  }
+
   const moffinReport = extractMoffinReport(data) ?? extractMoffinReport(verified);
   const queryId = moffinReport
     ? extractMoffinQueryIdFromPayload(moffinReport)
@@ -393,8 +399,8 @@ Deno.serve(async (req) => {
       projectId: row.project_id,
       clientId: row.client_id,
       uploadedBy: row.requested_by,
-      moffinBase: useSol ? moffinSolutionsBaseUrl() : moffinBase,
-      moffinApiKey: useSol ? moffinSolutionsBearerToken() : moffinApiKey,
+      moffinBase: useSol ? solutionsBaseUrl : moffinBase,
+      moffinApiKey: useSol ? solutionsBearerForWebhook : moffinApiKey,
       moffinPdfAuthMode: useSol ? ("bearer" as const) : ("token" as const),
       skipServiceQueries: useSol,
       rfc: row.rfc,
@@ -406,7 +412,13 @@ Deno.serve(async (req) => {
     };
     let up = await tryUploadSatRfcPdf({ ...uploadOpts, report: mr });
     if (!up.documentId && queryId && (useSol || moffinApiKey.trim())) {
-      const refreshed = await fetchMoffinReportJson(row, moffinBase, moffinApiKey, queryId);
+      const refreshed = await fetchMoffinReportJson(
+        row,
+        moffinBase,
+        moffinApiKey,
+        queryId,
+        solutionsBearerForWebhook,
+      );
       if (refreshed) {
         up = await tryUploadSatRfcPdf({ ...uploadOpts, report: refreshed });
       }
