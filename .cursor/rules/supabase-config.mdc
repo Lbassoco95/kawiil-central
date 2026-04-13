@@ -42,6 +42,8 @@ Si el cliente muestra "Failed to send a request to the Edge Function", suele ser
 
 **Moffin CIEC (`moffin-sat-ciec`, guardar CIEC cifrada para Solutions):** mismo patrón que FIEL; usa **`MOFFIN_SAT_CIEC_SECRET`** (≥32) si quieres secreto dedicado, o cae en **`MOFFIN_FIEL_SECRET`**. Sin secreto válido: **503** `ciec_not_configured`. El front debe tener **`VITE_MOFFIN_API_FLAVOR=solutions`** para mostrar el flujo CIEC en Contabilidad.
 
+**Checklist operativo Solutions (CSF/32D):** secretos anteriores alineados; migración aplicada con tabla **`moffin_client_sat_ciec`**; desplegar **`moffin-query`**, **`moffin-webhook`** (`--no-verify-jwt`), **`moffin-sat-ciec`**. Resumen de variables: [`.env.example`](../../.env.example).
+
 OAuth Slack por usuario (`slack-user-auth` / `slack-user-callback`): en **Project Settings → Edge Functions → Secrets** del proyecto Supabase deben existir al menos `SLACK_CLIENT_ID` y `SLACK_CLIENT_SECRET` (de la app en [api.slack.com/apps](https://api.slack.com/apps)). Sin `SLACK_CLIENT_ID`, la función responde 500 con `Slack OAuth not configured`. Opcional: `SLACK_USER_SCOPES` (si no, usa los del código).
 
 La Edge `slack-api` expone acciones entre otras: `conversations.list`, `conversations.history`, `conversations.members`, `conversations.members.batch`, `conversations.replies`, `conversations.info`, `chat.postMessage`, `users.info.batch` (JWT en gateway según `supabase/config.toml`).

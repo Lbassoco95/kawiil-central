@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -25,6 +26,7 @@ import {
   ChevronRight,
   Layers,
   ShieldAlert,
+  AlertTriangle,
   FileBadge,
   FileCheck2,
   Loader2,
@@ -661,6 +663,26 @@ export function AccountingDashboard({
       <Card className="border-border/80">
         <CardContent className="p-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Consultas SAT (Moffin)</h3>
+          {!MOFFIN_USE_SOLUTIONS ? (
+            <Alert variant="default" className="border-amber-500/40 bg-amber-500/5 py-3 [&>svg]:top-3.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertTitle className="text-xs font-semibold">Modo legacy: consultas con certificados RFC (FIEL)</AlertTitle>
+              <AlertDescription className="text-[11px] leading-snug text-muted-foreground space-y-1.5">
+                <p>
+                  En este build, constancia (CSF) y opinión 32D pasan por Moffin con e.firma (.cer/.key), no por la API
+                  Moffin Solutions (perfil SAT con CIEC y PDF oficial).
+                </p>
+                <p>
+                  Para activar Solutions en la aplicación: define{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">VITE_MOFFIN_API_FLAVOR=solutions</code> en el
+                  entorno de <strong className="font-medium text-foreground">build</strong> de Vite y vuelve a generar el
+                  bundle; en Supabase, <code className="rounded bg-muted px-1 py-0.5 text-[10px]">MOFFIN_API_FLAVOR=solutions</code>{" "}
+                  y los secretos de Solutions (ver <code className="rounded bg-muted px-1 py-0.5 text-[10px]">.env.example</code> y{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">moffin-query</code>).
+                </p>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
               {MOFFIN_USE_SOLUTIONS ? (
@@ -671,9 +693,7 @@ export function AccountingDashboard({
                 </>
               ) : (
                 <>
-                  «CSF» y «32D» en modo legacy usan certificados RFC (FIEL) vía Moffin. Para PDF oficiales del SAT con
-                  Solutions API, configura el flavor en el front y los secretos descritos en{" "}
-                  <code className="text-[9px]">moffin-query</code>.
+                  «CSF» y «32D» aquí usan FIEL; lista 69-B puede seguir en la API legacy según secretos en Supabase.
                 </>
               )}
             </p>
