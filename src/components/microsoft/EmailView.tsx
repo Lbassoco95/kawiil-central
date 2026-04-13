@@ -394,7 +394,13 @@ export function EmailView() {
 
   const { data: inboxUnread = 0 } = useUnreadEmailCount();
   const emailsQuery = useOutlookEmails(selectedFolderId, debouncedSearch || undefined);
-  const { data: emailDetail, isLoading: detailLoading } = useEmailDetail(selectedEmailId);
+  const {
+    data: emailDetail,
+    isLoading: detailLoading,
+    isError: detailQueryFailed,
+    error: detailQueryError,
+    refetch: refetchEmailDetail,
+  } = useEmailDetail(selectedEmailId);
   const { data: threadEmails = [] } = useEmailConversation(emailDetail?.conversationId || null);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
@@ -1460,6 +1466,36 @@ export function EmailView() {
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
+        ) : detailQueryFailed ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-8 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted/50">
+              <AlertCircle className="h-8 w-8 text-muted-foreground" aria-hidden />
+            </div>
+            <div className="max-w-md space-y-2">
+              <p className="text-sm font-medium text-foreground">No se pudo cargar este correo</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {detailQueryError instanceof Error && detailQueryError.message
+                  ? detailQueryError.message
+                  : "El mensaje pudo haberse eliminado o moverse en Outlook. Actualiza la lista e inténtalo de nuevo."}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  setSelectedEmailId(null);
+                  void queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+                }}
+              >
+                Volver a la lista
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={() => void refetchEmailDetail()}>
+                Reintentar
+              </Button>
+            </div>
+          </div>
         ) : emailDetail ? (
           <div
             className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-muted/25 via-background to-background"
@@ -1820,7 +1856,14 @@ export function EmailView() {
             </ScrollArea>
 
           </div>
-        ) : null}
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <p className="text-sm text-muted-foreground">No hay datos para este mensaje.</p>
+            <Button variant="outline" size="sm" onClick={() => setSelectedEmailId(null)}>
+              Volver a la lista
+            </Button>
+          </div>
+        )}
       </div>
       </div>
     </div>

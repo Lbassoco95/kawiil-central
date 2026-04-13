@@ -548,6 +548,26 @@ async function readSupabaseFunctionErrorBody(error: unknown): Promise<string> {
   return "";
 }
 
+/** Graph / microsoft-api: mensaje, carpeta o adjunto ya no existe (404 / ErrorItemNotFound). */
+function payloadIndicatesItemNotFound(data: unknown, error: unknown, errBody: string): boolean {
+  const codeFromData =
+    data && typeof data === "object" && data !== null && "code" in data
+      ? String((data as { code?: unknown }).code)
+      : "";
+  if (codeFromData === "ITEM_NOT_FOUND") return true;
+  const merged = [
+    errBody,
+    (error as Error)?.message ?? "",
+    data !== null && data !== undefined && typeof data === "object" ? JSON.stringify(data) : String(data ?? ""),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return merged.includes("item_not_found") || merged.includes("erroritemnotfound");
+}
+
+const EMAIL_DETAIL_NOT_FOUND_MSG =
+  "Este mensaje ya no está disponible en Microsoft (puede haberse eliminado o movido). Vuelve a la lista y abre otro correo.";
+
 function serializeUnknownError(err: unknown): string {
   if (err == null) return "";
   if (err instanceof Error) {
@@ -708,11 +728,20 @@ export function useEmailDetail(messageId: string | null) {
         body: { action: "email-detail", params: { messageId } },
       });
       if (isNotConnectedError(data, error)) return null;
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) {
+        throw new Error(EMAIL_DETAIL_NOT_FOUND_MSG);
+      }
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
     },
     enabled: !!user && !!messageId,
+    retry: (count, err) => {
+      const m = String((err as Error)?.message ?? "");
+      if (m === EMAIL_DETAIL_NOT_FOUND_MSG) return false;
+      return count < 2;
+    },
   });
 }
 
@@ -1005,6 +1034,8 @@ export function useEmailAttachments(messageId: string | undefined) {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "email-attachments", params: { messageId } },
       });
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) return [];
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return (data?.value || []) as Array<{
