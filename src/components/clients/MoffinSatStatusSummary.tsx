@@ -19,6 +19,7 @@ import {
   invokeFunctionWithSession,
 } from "@/lib/supabaseInvoke";
 import { useCallback, useMemo, useState } from "react";
+import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 
 const toneClass: Record<string, string> = {
   ok: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-200",
@@ -26,8 +27,6 @@ const toneClass: Record<string, string> = {
   muted: "bg-muted text-muted-foreground",
   bad: "bg-destructive/15 text-destructive",
 };
-
-const MOFFIN_USE_SOLUTIONS = import.meta.env.VITE_MOFFIN_API_FLAVOR === "solutions";
 
 const MOFFIN_TYPE_LABEL: Record<string, string> = MOFFIN_USE_SOLUTIONS
   ? {

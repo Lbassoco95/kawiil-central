@@ -1,14 +1,16 @@
 /**
  * Modo API Moffin: legacy (app.moffin.mx + Token + sat_rfc/FIEL) vs solutions (solutions-api + Bearer + CIEC).
+ * Por defecto es `solutions`; solo `MOFFIN_API_FLAVOR=legacy` fuerza legacy (alinear con VITE_MOFFIN_API_FLAVOR en front).
  */
 export type MoffinApiFlavor = "legacy" | "solutions";
 
 export function getMoffinApiFlavor(): MoffinApiFlavor {
   const raw = Deno.env.get("MOFFIN_API_FLAVOR")?.trim().toLowerCase() ?? "";
+  if (raw === "legacy") return "legacy";
   if (raw === "solutions") return "solutions";
   const base = (Deno.env.get("MOFFIN_BASE_URL") ?? "").toLowerCase();
   if (base.includes("solutions-api.moffin.mx")) return "solutions";
-  return "legacy";
+  return "solutions";
 }
 
 export function moffinSolutionsBaseUrl(): string {

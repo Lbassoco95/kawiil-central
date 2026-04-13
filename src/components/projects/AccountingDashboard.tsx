@@ -69,10 +69,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MoffinFielCredentialsSection } from "./MoffinFielCredentialsSection";
 import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
+import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 
 type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
-
-const MOFFIN_USE_SOLUTIONS = import.meta.env.VITE_MOFFIN_API_FLAVOR === "solutions";
 
 function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
   if (consultType === "lista_69b") return false;
@@ -666,19 +665,19 @@ export function AccountingDashboard({
           {!MOFFIN_USE_SOLUTIONS ? (
             <Alert variant="default" className="border-amber-500/40 bg-amber-500/5 py-3 [&>svg]:top-3.5">
               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <AlertTitle className="text-xs font-semibold">Modo legacy: consultas con certificados RFC (FIEL)</AlertTitle>
+              <AlertTitle className="text-xs font-semibold">Modo legacy explícito (FIEL)</AlertTitle>
               <AlertDescription className="text-[11px] leading-snug text-muted-foreground space-y-1.5">
                 <p>
-                  En este build, constancia (CSF) y opinión 32D pasan por Moffin con e.firma (.cer/.key), no por la API
-                  Moffin Solutions (perfil SAT con CIEC y PDF oficial).
+                  Este build tiene <code className="rounded bg-muted px-1 py-0.5 text-[10px]">VITE_MOFFIN_API_FLAVOR=legacy</code>
+                  : CSF y 32D usan e.firma (.cer/.key) y <code className="rounded bg-muted px-1 py-0.5 text-[10px]">sat_rfc</code>, no
+                  la API Moffin Solutions con CIEC.
                 </p>
                 <p>
-                  Para activar Solutions en la aplicación: define{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">VITE_MOFFIN_API_FLAVOR=solutions</code> en el
-                  entorno de <strong className="font-medium text-foreground">build</strong> de Vite y vuelve a generar el
-                  bundle; en Supabase, <code className="rounded bg-muted px-1 py-0.5 text-[10px]">MOFFIN_API_FLAVOR=solutions</code>{" "}
-                  y los secretos de Solutions (ver <code className="rounded bg-muted px-1 py-0.5 text-[10px]">.env.example</code> y{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">moffin-query</code>).
+                  Para volver al flujo predeterminado (CIEC + Solutions): quita{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">VITE_MOFFIN_API_FLAVOR=legacy</code> del entorno de
+                  build (por defecto la app ya usa Solutions). En Supabase elimina{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">MOFFIN_API_FLAVOR=legacy</code> y configura los
+                  secretos de Solutions (ver <code className="rounded bg-muted px-1 py-0.5 text-[10px]">.env.example</code>).
                 </p>
               </AlertDescription>
             </Alert>
@@ -687,13 +686,12 @@ export function AccountingDashboard({
             <p className="text-[10px] text-muted-foreground leading-snug">
               {MOFFIN_USE_SOLUTIONS ? (
                 <>
-                  Con <code className="text-[9px]">VITE_MOFFIN_API_FLAVOR=solutions</code> las consultas CSF y 32D usan la
-                  API Moffin Solutions (perfil SAT con CIEC). Lista 69-B sigue usando la API legacy en{" "}
-                  <code className="text-[9px]">MOFFIN_LEGACY_BASE_URL</code> si aplica.
+                  Por defecto, CSF y 32D usan la API Moffin Solutions (perfil SAT con CIEC). Lista 69-B sigue en la API legacy
+                  en <code className="text-[9px]">MOFFIN_LEGACY_BASE_URL</code> si aplica.
                 </>
               ) : (
                 <>
-                  «CSF» y «32D» aquí usan FIEL; lista 69-B puede seguir en la API legacy según secretos en Supabase.
+                  «CSF» y «32D» aquí usan FIEL (build con <code className="text-[9px]">VITE_MOFFIN_API_FLAVOR=legacy</code>).
                 </>
               )}
             </p>

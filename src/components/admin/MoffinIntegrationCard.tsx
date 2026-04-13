@@ -99,10 +99,12 @@ export function MoffinIntegrationCard() {
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
           <p className="font-medium text-foreground">Moffin Solutions API (CSF y 32D)</p>
           <p>
-            En Edge Functions define <code className="text-foreground">MOFFIN_API_FLAVOR=solutions</code>,{" "}
-            <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL=https://solutions-api.moffin.mx/api</code> y el token
-            en <code className="text-foreground">MOFFIN_API_KEY</code> (o <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code>) como{" "}
-            <code className="text-foreground">Authorization: Bearer</code>. Las consultas crean perfil SAT con RFC+CIEC (
+            Por defecto Kawiil usa <strong className="text-foreground">Solutions</strong> en Edge (constancia/opinión):{" "}
+            <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL=https://solutions-api.moffin.mx/api</code> (o el que
+            indique Moffin) y el token en <code className="text-foreground">MOFFIN_API_KEY</code> (o{" "}
+            <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code>) como{" "}
+            <code className="text-foreground">Authorization: Bearer</code>. Solo con{" "}
+            <code className="text-foreground">MOFFIN_API_FLAVOR=legacy</code> vuelve el modo FIEL + <code className="text-foreground">sat_rfc</code>. Perfil SAT con RFC+CIEC (
             <code className="text-foreground">moffin-sat-ciec</code>
             ); opcional <code className="text-foreground">MOFFIN_SAT_CIEC_SECRET</code> o reutiliza{" "}
             <code className="text-foreground">MOFFIN_FIEL_SECRET</code> para cifrar la CIEC. Lista 69-B usa{" "}
@@ -118,7 +120,8 @@ export function MoffinIntegrationCard() {
             >
               Consultas al SAT (Moffin)
             </a>
-            . En el front: <code className="text-foreground">VITE_MOFFIN_API_FLAVOR=solutions</code>.
+            . En el front, Solutions es el predeterminado; FIEL solo con{" "}
+            <code className="text-foreground">VITE_MOFFIN_API_FLAVOR=legacy</code> en el build.
           </p>
           <div className="pt-1 border-t border-border/50 space-y-1.5">
             <p className="font-medium text-foreground flex items-center gap-1.5">
@@ -166,7 +169,7 @@ export function MoffinIntegrationCard() {
             <p className="font-medium text-foreground">Checklist secretos (Solutions)</p>
             <ul className="list-disc pl-4 space-y-0.5">
               <li>
-                <code className="text-foreground">MOFFIN_API_FLAVOR</code>=<code className="text-foreground">solutions</code>
+                No fijar <code className="text-foreground">MOFFIN_API_FLAVOR=legacy</code> (defecto = Solutions)
               </li>
               <li>
                 <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL</code> o base con{" "}
@@ -191,7 +194,8 @@ export function MoffinIntegrationCard() {
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
           <p className="font-medium text-foreground">FIEL (modo legacy)</p>
           <p>
-            Con <code className="text-foreground">MOFFIN_API_FLAVOR=legacy</code> (o sin definir), constancia/opinión usan{" "}
+            Con <code className="text-foreground">MOFFIN_API_FLAVOR=legacy</code> (y en el front{" "}
+            <code className="text-foreground">VITE_MOFFIN_API_FLAVOR=legacy</code>), constancia/opinión usan{" "}
             <code className="text-foreground">/query/sat_rfc</code> con <code className="text-foreground">MOFFIN_FIEL_SECRET</code>{" "}
             y archivos <code className="text-foreground">.cer</code> / <code className="text-foreground">.key</code>. Campos opcionales:{" "}
             <code className="text-foreground">MOFFIN_FIEL_FIELD_*</code>, <code className="text-foreground">MOFFIN_QUERY_EXTRA_BODY_*</code>,{" "}
