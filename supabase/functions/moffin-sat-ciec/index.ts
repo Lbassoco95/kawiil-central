@@ -9,6 +9,14 @@ const corsHeaders: Record<string, string> = {
 
 type Action = "status" | "save" | "delete";
 
+function isMissingCiecTableError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("moffin_client_sat_ciec") &&
+    (m.includes("schema cache") || m.includes("does not exist") || m.includes("could not find"))
+  );
+}
+
 function ciecSecret(): string {
   const dedicated = Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() ?? "";
   if (dedicated.length >= 32) return dedicated;
@@ -105,11 +113,28 @@ Deno.serve(async (req) => {
   const admin = createClient(supabaseUrl, serviceKey);
 
   if (action === "status") {
-    const { data: row } = await admin
+    const { data: row, error: statusErr } = await admin
       .from("moffin_client_sat_ciec")
       .select("moffin_profile_id, updated_at")
       .eq("client_id", clientId)
       .maybeSingle();
+    if (statusErr) {
+      if (isMissingCiecTableError(statusErr.message)) {
+        return new Response(
+          JSON.stringify({
+            error: "migration_required",
+            message:
+              "Falta la tabla public.moffin_client_sat_ciec. En Supabase Dashboard → SQL Editor, ejecuta el contenido de supabase/migrations/20260413120000_moffin_client_sat_ciec.sql (o supabase db push). Luego reintenta.",
+          }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      console.error("moffin_client_sat_ciec status:", statusErr.message);
+      return new Response(JSON.stringify({ error: statusErr.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(
       JSON.stringify({
         configured: !!row,
@@ -121,7 +146,17 @@ Deno.serve(async (req) => {
   }
 
   if (action === "delete") {
-    await admin.from("moffin_client_sat_ciec").delete().eq("client_id", clientId);
+    const { error: delErr } = await admin.from("moffin_client_sat_ciec").delete().eq("client_id", clientId);
+    if (delErr && isMissingCiecTableError(delErr.message)) {
+      return new Response(
+        JSON.stringify({
+          error: "migration_required",
+          message:
+            "Falta la tabla public.moffin_client_sat_ciec. Aplica las migraciones del repo en Supabase (SQL Editor o supabase db push) y reintenta.",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -165,6 +200,16 @@ Deno.serve(async (req) => {
     );
     if (upErr) {
       console.error("moffin_client_sat_ciec upsert:", upErr.message);
+      if (isMissingCiecTableError(upErr.message)) {
+        return new Response(
+          JSON.stringify({
+            error: "migration_required",
+            message:
+              "Falta la tabla public.moffin_client_sat_ciec. En Supabase Dashboard → SQL Editor, ejecuta las migraciones del repo (archivos en supabase/migrations que crean moffin_client_sat_ciec) o corre supabase db push. Luego reintenta guardar CIEC.",
+          }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
       return new Response(JSON.stringify({ error: upErr.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
