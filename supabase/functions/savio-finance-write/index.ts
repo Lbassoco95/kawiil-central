@@ -79,7 +79,7 @@ const OPERATIONS: Record<
 function isAllowedSavioRelativePath(path: string): boolean {
   const pathOnly = path.split("?")[0].trim();
   if (!pathOnly.startsWith("/") || pathOnly.includes("..")) return false;
-  return /^\/[a-zA-Z0-9/_{}\-]+$/.test(pathOnly);
+  return /^\/[a-zA-Z0-9/_{}-]+$/.test(pathOnly);
 }
 
 function pickBody(

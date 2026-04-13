@@ -51,7 +51,7 @@ const MAX_RESPONSE_CHARS = 1_500_000;
 function isAllowedSavioRelativePath(path: string): boolean {
   const pathOnly = path.split("?")[0].trim();
   if (!pathOnly.startsWith("/") || pathOnly.includes("..")) return false;
-  return /^\/[a-zA-Z0-9/_{}\-]+$/.test(pathOnly);
+  return /^\/[a-zA-Z0-9/_{}-]+$/.test(pathOnly);
 }
 
 /** Segmento de id para GET /recurso/{id} (evita path traversal). */
@@ -59,7 +59,7 @@ function safeSavioResourceId(id: unknown): string | null {
   if (typeof id !== "string") return null;
   const t = id.trim();
   if (t.length < 4 || t.length > 128) return null;
-  if (!/^[a-zA-Z0-9\-_.]+$/.test(t)) return null;
+  if (!/^[-a-zA-Z0-9_.]+$/.test(t)) return null;
   return t;
 }
 
