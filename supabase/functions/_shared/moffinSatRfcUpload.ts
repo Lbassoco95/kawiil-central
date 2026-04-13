@@ -6,6 +6,7 @@ import {
   type MoffinSatRfcConsultType,
 } from "./moffinSatRfc.ts";
 import { fetchMoffinPdfUrlViaServiceQueries } from "./moffinServiceQueries.ts";
+import type { MoffinPdfAuthMode } from "./moffinPdfDownload.ts";
 
 type Admin = ReturnType<typeof createClient>;
 
@@ -19,6 +20,10 @@ export type SatRfcUploadContext = {
   moffinApiKey: string;
   rfc: string;
   externalId?: string | null;
+  /** Moffin Solutions API: usar Bearer al descargar PDF. */
+  moffinPdfAuthMode?: MoffinPdfAuthMode;
+  /** Moffin Solutions: no llamar GET /service_queries (legacy). */
+  skipServiceQueries?: boolean;
 };
 
 function delay(ms: number): Promise<void> {
@@ -69,6 +74,7 @@ export async function tryUploadSatRfcPdf(
       documentDisplayName: opts.documentDisplayName,
       documentType: opts.documentType,
       moffinApiKey: opts.moffinApiKey,
+      moffinPdfAuthMode: opts.moffinPdfAuthMode ?? "token",
     });
     if (up.documentId) {
       return { documentId: up.documentId, pdfFailure: null, sawPdfUrl };
@@ -98,8 +104,9 @@ export async function tryUploadSatRfcPdf(
     }
   }
 
-  const reportId = report.id != null ? String(report.id) : "";
-  if (reportId) {
+  const rid = report.id ?? (report as { _id?: unknown })._id;
+  const reportId = rid != null ? String(rid) : "";
+  if (reportId && !opts.skipServiceQueries) {
     const sqOpts = {
       reportId,
       rfc: opts.rfc,
@@ -129,6 +136,7 @@ export async function tryUploadSatRfcPdf(
         documentDisplayName: opts.documentDisplayName,
         documentType: opts.documentType,
         moffinApiKey: opts.moffinApiKey,
+        moffinPdfAuthMode: opts.moffinPdfAuthMode ?? "token",
       });
       if (up.documentId) {
         return { documentId: up.documentId, pdfFailure: null, sawPdfUrl };

@@ -38,3 +38,26 @@ export function moffinQueryPathForConsult(consultType: MoffinQueryConsultType): 
   if (raw) return ensureLeadingSlash(raw, "/query/sat_rfc");
   return "/query/sat_rfc";
 }
+
+/** Rutas POST Moffin Solutions API (Bearer): CSF y opinión 32D. */
+export function moffinSolutionsQueryPathForConsult(
+  consultType: "constancia_situacion_fiscal" | "opinion_cumplimiento",
+): string {
+  if (consultType === "constancia_situacion_fiscal") {
+    return ensureLeadingSlash(
+      Deno.env.get("MOFFIN_SOLUTIONS_PATH_CSF") ?? "/query/sat/csf",
+      "/query/sat/csf",
+    );
+  }
+  return ensureLeadingSlash(
+    Deno.env.get("MOFFIN_SOLUTIONS_PATH_32D") ?? "/query/sat/compliance-opinion",
+    "/query/sat/compliance-opinion",
+  );
+}
+
+export function moffinSolutionsProfilePath(): string {
+  return ensureLeadingSlash(
+    Deno.env.get("MOFFIN_SOLUTIONS_PATH_PROFILE") ?? "/query/sat/profile",
+    "/query/sat/profile",
+  );
+}

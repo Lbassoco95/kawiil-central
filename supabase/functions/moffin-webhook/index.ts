@@ -13,6 +13,14 @@
  * Deploy: verify_jwt = false (supabase/config.toml)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  getMoffinApiFlavor,
+  moffinLegacyApiKey,
+  moffinLegacyBaseUrl,
+  moffinSolutionsBaseUrl,
+  moffinSolutionsBearerToken,
+} from "../_shared/moffinApiFlavor.ts";
+import { extractSolutionsQueryId, moffinSolutionsGetJson } from "../_shared/moffinSolutionsClient.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
 import { Webhook } from "npm:svix";
@@ -109,14 +117,31 @@ function logMoffinWebhookSatPayloadShape(
   );
 }
 
+function webhookRowUsesSolutions(row: { moffin_service?: string | null }): boolean {
+  if (getMoffinApiFlavor() !== "solutions") return false;
+  const s = String(row.moffin_service ?? "");
+  return s === "csf" || s === "compliance-opinion";
+}
+
 async function fetchMoffinReportJson(
+  row: { moffin_service?: string | null },
   base: string,
   key: string,
   queryId: string,
 ): Promise<Record<string, unknown> | null> {
+  if (webhookRowUsesSolutions(row)) {
+    const r = await moffinSolutionsGetJson(
+      moffinSolutionsBaseUrl(),
+      moffinSolutionsBearerToken(),
+      queryId,
+    );
+    return r.ok ? r.json : null;
+  }
+  const legacyBase = getMoffinApiFlavor() === "solutions" ? moffinLegacyBaseUrl() : base.replace(/\/$/, "");
+  const legacyKey = getMoffinApiFlavor() === "solutions" ? moffinLegacyApiKey() : key.trim();
   const url =
-    `${base.replace(/\/$/, "")}/report/${encodeURIComponent(queryId)}?withPDF=true&withFileURL=true`;
-  const res = await fetch(url, { headers: { Authorization: `Token ${key.trim()}` } });
+    `${legacyBase}/report/${encodeURIComponent(queryId)}?withPDF=true&withFileURL=true`;
+  const res = await fetch(url, { headers: { Authorization: `Token ${legacyKey}` } });
   const text = await res.text();
   if (!res.ok) return null;
   try {
@@ -168,9 +193,11 @@ function extractMoffinReport(obj: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function firstNumericId(obj: unknown): string | null {
+function extractMoffinQueryIdFromPayload(obj: unknown): string | null {
   const report = extractMoffinReport(obj);
   if (!report) return null;
+  const sid = extractSolutionsQueryId(report);
+  if (sid) return sid;
   const id = report.id;
   if (typeof id === "number" || typeof id === "string") return String(id);
   return null;
@@ -249,7 +276,9 @@ Deno.serve(async (req) => {
     (Deno.env.get("MOFFIN_BASE_URL") ?? "https://app.moffin.mx/api/v1").replace(/\/$/, "");
 
   const moffinReport = extractMoffinReport(data) ?? extractMoffinReport(verified);
-  const queryId = moffinReport ? firstNumericId(moffinReport) : firstNumericId(data);
+  const queryId = moffinReport
+    ? extractMoffinQueryIdFromPayload(moffinReport)
+    : extractMoffinQueryIdFromPayload(data);
   const extId = findKawiilExternalId(data) ?? findKawiilExternalId(verified);
 
   let row:
@@ -261,6 +290,7 @@ Deno.serve(async (req) => {
         organization_id: string;
         requested_by: string | null;
         document_id: string | null;
+        moffin_service: string | null;
         rfc: string;
       }
     | null = null;
@@ -269,7 +299,7 @@ Deno.serve(async (req) => {
     const { data: rows } = await admin
       .from("moffin_consults")
       .select(
-        "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, rfc",
+        "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, moffin_service, rfc",
       )
       .eq("moffin_query_id", queryId)
       .order("created_at", { ascending: false })
@@ -285,7 +315,7 @@ Deno.serve(async (req) => {
       const { data: rows } = await admin
         .from("moffin_consults")
         .select(
-          "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, rfc",
+          "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, moffin_service, rfc",
         )
         .eq("project_id", projectId)
         .eq("consult_type", consultType)
@@ -356,14 +386,17 @@ Deno.serve(async (req) => {
     const extForPdf =
       typeof mr.externalId === "string" ? mr.externalId : extId ?? null;
     const displayName = `${consultType}_${String(row.id).slice(0, 8)}_${Date.now()}`;
+    const useSol = webhookRowUsesSolutions(row);
     const uploadOpts = {
       admin,
       orgId: row.organization_id,
       projectId: row.project_id,
       clientId: row.client_id,
       uploadedBy: row.requested_by,
-      moffinBase,
-      moffinApiKey,
+      moffinBase: useSol ? moffinSolutionsBaseUrl() : moffinBase,
+      moffinApiKey: useSol ? moffinSolutionsBearerToken() : moffinApiKey,
+      moffinPdfAuthMode: useSol ? ("bearer" as const) : ("token" as const),
+      skipServiceQueries: useSol,
       rfc: row.rfc,
       externalId: extForPdf,
       consultType,
@@ -372,8 +405,8 @@ Deno.serve(async (req) => {
       documentType: docType,
     };
     let up = await tryUploadSatRfcPdf({ ...uploadOpts, report: mr });
-    if (!up.documentId && queryId && moffinApiKey.trim()) {
-      const refreshed = await fetchMoffinReportJson(moffinBase, moffinApiKey, queryId);
+    if (!up.documentId && queryId && (useSol || moffinApiKey.trim())) {
+      const refreshed = await fetchMoffinReportJson(row, moffinBase, moffinApiKey, queryId);
       if (refreshed) {
         up = await tryUploadSatRfcPdf({ ...uploadOpts, report: refreshed });
       }

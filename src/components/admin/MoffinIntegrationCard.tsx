@@ -97,23 +97,39 @@ export function MoffinIntegrationCard() {
         )}
 
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
-          <p className="font-medium text-foreground">FIEL en Kawiil (consultas RFC Moffin)</p>
+          <p className="font-medium text-foreground">Moffin Solutions API (CSF y 32D)</p>
           <p>
-            En Secrets de Edge Functions agrega <code className="text-foreground">MOFFIN_FIEL_SECRET</code> (≥32
-            caracteres) para cifrar los archivos <code className="text-foreground">.cer</code> y{" "}
-            <code className="text-foreground">.key</code> por cliente. La contraseña de la llave no se guarda: se pide en
-            cada consulta. Si Moffin espera otros nombres de campo en <code className="text-foreground">/query/sat_rfc</code>, ajusta{" "}
-            <code className="text-foreground">MOFFIN_FIEL_FIELD_CERT</code>,{" "}
-            <code className="text-foreground">MOFFIN_FIEL_FIELD_KEY</code>,{" "}
-            <code className="text-foreground">MOFFIN_FIEL_FIELD_PASSWORD</code> (y opcional{" "}
-            <code className="text-foreground">MOFFIN_FIEL_KEY_FORMAT=utf8</code> para llave PEM).
+            En Edge Functions define <code className="text-foreground">MOFFIN_API_FLAVOR=solutions</code>,{" "}
+            <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL=https://solutions-api.moffin.mx/api</code> y el token
+            en <code className="text-foreground">MOFFIN_API_KEY</code> (o <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code>) como{" "}
+            <code className="text-foreground">Authorization: Bearer</code>. Las consultas crean perfil SAT con RFC+CIEC (
+            <code className="text-foreground">moffin-sat-ciec</code>
+            ); opcional <code className="text-foreground">MOFFIN_SAT_CIEC_SECRET</code> o reutiliza{" "}
+            <code className="text-foreground">MOFFIN_FIEL_SECRET</code> para cifrar la CIEC. Lista 69-B usa{" "}
+            <code className="text-foreground">MOFFIN_LEGACY_BASE_URL</code> + <code className="text-foreground">Token</code>.
           </p>
           <p>
-            Si necesitáis constancia u opinión en PDF del SAT y Moffin solo devuelve certificados{" "}
-            <code className="text-foreground">.cer</code>, hay que cerrar el alcance con su soporte; en paralelo se pueden
-            definir secretos <code className="text-foreground">MOFFIN_QUERY_EXTRA_BODY_*</code> y{" "}
-            <code className="text-foreground">MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES</code> cuando den la especificación
-            (ver comentarios en <code className="text-foreground">moffin-query</code>).
+            Documentación:{" "}
+            <a
+              href="https://solutions-docs.moffin.mx/apis/consultas-al-sat"
+              className="text-primary underline-offset-2 hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Consultas al SAT (Moffin)
+            </a>
+            . En el front: <code className="text-foreground">VITE_MOFFIN_API_FLAVOR=solutions</code>.
+          </p>
+        </div>
+
+        <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
+          <p className="font-medium text-foreground">FIEL (modo legacy)</p>
+          <p>
+            Con <code className="text-foreground">MOFFIN_API_FLAVOR=legacy</code> (o sin definir), constancia/opinión usan{" "}
+            <code className="text-foreground">/query/sat_rfc</code> con <code className="text-foreground">MOFFIN_FIEL_SECRET</code>{" "}
+            y archivos <code className="text-foreground">.cer</code> / <code className="text-foreground">.key</code>. Campos opcionales:{" "}
+            <code className="text-foreground">MOFFIN_FIEL_FIELD_*</code>, <code className="text-foreground">MOFFIN_QUERY_EXTRA_BODY_*</code>,{" "}
+            <code className="text-foreground">MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES</code>.
           </p>
         </div>
 
@@ -126,8 +142,8 @@ export function MoffinIntegrationCard() {
             </li>
             <li>Proyecto con área contabilidad vinculado a ese cliente.</li>
             <li>
-              Tab <strong className="text-foreground">Contabilidad</strong>: carga FIEL (.cer/.key), luego 69-B y RFC ·
-              constancia / opinión (misma API de certificados salvo que Moffin indique otro path).
+              Tab <strong className="text-foreground">Contabilidad</strong>: con Solutions, guarda CIEC y ejecuta CSF/32D;
+              en legacy, carga FIEL (.cer/.key) y contraseña por consulta.
             </li>
             <li>
               Webhook Svix debe apuntar a <code className="break-all text-foreground">{webhookUrl || "…/moffin-webhook"}</code>

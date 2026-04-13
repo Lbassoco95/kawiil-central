@@ -32,13 +32,15 @@ Las siguientes funciones DEBEN desplegarse con `--no-verify-jwt`:
 - slack-user-auth, slack-api, push-subscribe (verify_jwt false en config; validan sesión con getUser + Authorization en código, igual que microsoft-api)
 
 Otras con JWT en gateway (por defecto):
-- savio-api-health, savio-finance-api, moffin-query, moffin-fiel, moffin-health, index-chat-attachment, etc. según `supabase/config.toml`
+- savio-api-health, savio-finance-api, moffin-query, moffin-fiel, moffin-sat-ciec, moffin-health, index-chat-attachment, etc. según `supabase/config.toml`
 
 Si el cliente muestra "Failed to send a request to the Edge Function", suele ser función no desplegada en ese proyecto o `VITE_SUPABASE_URL` apuntando a otro Supabase que no tiene esa función.
 
-**Moffin API (`moffin-query`, consultas SAT):** en **Edge Functions → Secrets** debe existir **`MOFFIN_API_KEY`** (token de la API según tu panel Moffin; producción `https://app.moffin.mx` o sandbox). Sin él, la función responde **503** `moffin_not_configured`. Opcional: `MOFFIN_BASE_URL` si no usas el default.
+**Moffin API (`moffin-query`, consultas SAT):** en **Edge Functions → Secrets** debe existir **`MOFFIN_API_KEY`**. Modo **legacy** (default): `MOFFIN_BASE_URL` tipo `https://app.moffin.mx/api/v1` y cabecera `Authorization: Token`. Modo **Solutions** (`MOFFIN_API_FLAVOR=solutions`): constancia/opinión usan `https://solutions-api.moffin.mx/api` (o `MOFFIN_SOLUTIONS_BASE_URL`) con **`Authorization: Bearer`** (mismo valor en `MOFFIN_API_KEY` salvo que definas `MOFFIN_SOLUTIONS_BEARER`). Lista 69-B en modo solutions usa **`MOFFIN_LEGACY_BASE_URL`** + `Token` (`MOFFIN_LEGACY_API_KEY` opcional). Sin clave, **503** `moffin_not_configured`. Referencia: [Consultas al SAT (Moffin)](https://solutions-docs.moffin.mx/apis/consultas-al-sat).
 
 **Moffin FIEL (`moffin-fiel`, guardar .cer/.key cifrados):** en **Edge Functions → Secrets** debe existir `MOFFIN_FIEL_SECRET` con **mínimo 32 caracteres** (cadena aleatoria fuerte; no es la contraseña del SAT). Sin él, al guardar FIEL la función responde **503** `fiel_not_configured`. CLI: `openssl rand -base64 48 | tr -d '\n'` y `supabase secrets set MOFFIN_FIEL_SECRET="..."`.
+
+**Moffin CIEC (`moffin-sat-ciec`, guardar CIEC cifrada para Solutions):** mismo patrón que FIEL; usa **`MOFFIN_SAT_CIEC_SECRET`** (≥32) si quieres secreto dedicado, o cae en **`MOFFIN_FIEL_SECRET`**. Sin secreto válido: **503** `ciec_not_configured`. El front debe tener **`VITE_MOFFIN_API_FLAVOR=solutions`** para mostrar el flujo CIEC en Contabilidad.
 
 OAuth Slack por usuario (`slack-user-auth` / `slack-user-callback`): en **Project Settings → Edge Functions → Secrets** del proyecto Supabase deben existir al menos `SLACK_CLIENT_ID` y `SLACK_CLIENT_SECRET` (de la app en [api.slack.com/apps](https://api.slack.com/apps)). Sin `SLACK_CLIENT_ID`, la función responde 500 con `Slack OAuth not configured`. Opcional: `SLACK_USER_SCOPES` (si no, usa los del código).
 

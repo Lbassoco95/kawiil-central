@@ -27,11 +27,19 @@ const toneClass: Record<string, string> = {
   bad: "bg-destructive/15 text-destructive",
 };
 
-const MOFFIN_TYPE_LABEL: Record<string, string> = {
-  lista_69b: "Lista 69-B",
-  constancia_situacion_fiscal: "RFC · constancia",
-  opinion_cumplimiento: "RFC · opinión",
-};
+const MOFFIN_USE_SOLUTIONS = import.meta.env.VITE_MOFFIN_API_FLAVOR === "solutions";
+
+const MOFFIN_TYPE_LABEL: Record<string, string> = MOFFIN_USE_SOLUTIONS
+  ? {
+      lista_69b: "Lista 69-B",
+      constancia_situacion_fiscal: "CSF (SAT)",
+      opinion_cumplimiento: "32D (SAT)",
+    }
+  : {
+      lista_69b: "Lista 69-B",
+      constancia_situacion_fiscal: "RFC · constancia",
+      opinion_cumplimiento: "RFC · opinión",
+    };
 
 interface Props {
   clientId: string;

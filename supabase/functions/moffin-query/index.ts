@@ -5,8 +5,23 @@ import {
 } from "../_shared/moffinFielCrypto.ts";
 import { mergeMoffinQueryPayloadExtras } from "../_shared/moffinQueryPayloadExtras.ts";
 import {
+  getMoffinApiFlavor,
+  moffinLegacyApiKey,
+  moffinLegacyBaseUrl,
+  moffinSolutionsBaseUrl,
+  moffinSolutionsBearerToken,
+} from "../_shared/moffinApiFlavor.ts";
+import {
+  extractMoffinProfileId,
+  extractSolutionsQueryId,
+  moffinSolutionsGetJson,
+  moffinSolutionsPostJson,
+} from "../_shared/moffinSolutionsClient.ts";
+import {
   moffinQueryPathForConsult,
   moffinQueryServiceSegment,
+  moffinSolutionsProfilePath,
+  moffinSolutionsQueryPathForConsult,
 } from "../_shared/moffinQueryPaths.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
@@ -140,10 +155,71 @@ type MoffinConsultDbRow = {
   consult_type: string;
   rfc: string;
   moffin_query_id: string | null;
+  moffin_service?: string | null;
   document_id: string | null;
   requested_by: string | null;
   raw_response: unknown;
 };
+
+type MoffinPersistUploadOpts = {
+  moffinBase: string;
+  moffinApiKey: string;
+  pdfAuthMode?: "token" | "bearer";
+  skipServiceQueries?: boolean;
+};
+
+function rowUsesSolutionsSnapshot(row: {
+  consult_type: string;
+  moffin_service?: string | null;
+}): boolean {
+  if (getMoffinApiFlavor() !== "solutions") return false;
+  const s = String(row.moffin_service ?? "");
+  return s === "csf" || s === "compliance-opinion";
+}
+
+function persistUploadForRow(
+  row: MoffinConsultDbRow,
+  solutionsBase: string,
+  solutionsBearer: string,
+  legacyBase: string,
+  legacyToken: string,
+): MoffinPersistUploadOpts {
+  if (rowUsesSolutionsSnapshot(row)) {
+    return {
+      moffinBase: solutionsBase,
+      moffinApiKey: solutionsBearer,
+      pdfAuthMode: "bearer",
+      skipServiceQueries: true,
+    };
+  }
+  return {
+    moffinBase: legacyBase,
+    moffinApiKey: legacyToken,
+    pdfAuthMode: "token",
+    skipServiceQueries: false,
+  };
+}
+
+async function fetchMoffinReportSnapshotForRow(
+  row: MoffinConsultDbRow,
+  legacyBase: string,
+  legacyToken: string,
+  solutionsBase: string,
+  solutionsBearer: string,
+): Promise<
+  { ok: true; json: Record<string, unknown> } | { ok: false; message: string; status: number }
+> {
+  const qid = row.moffin_query_id?.trim();
+  if (!qid) {
+    return { ok: false, message: "sin moffin_query_id", status: 400 };
+  }
+  if (rowUsesSolutionsSnapshot(row)) {
+    const r = await moffinSolutionsGetJson(solutionsBase, solutionsBearer, qid);
+    if (!r.ok) return { ok: false, message: r.message, status: r.status };
+    return { ok: true, json: r.json };
+  }
+  return fetchMoffinReportById(legacyBase, legacyToken, qid);
+}
 
 async function fetchMoffinReportById(
   moffinBase: string,
@@ -179,8 +255,7 @@ async function persistMoffinReportToConsult(
   row: MoffinConsultDbRow,
   report: Record<string, unknown>,
   fallbackUserId: string,
-  moffinApiKey: string,
-  moffinBase: string,
+  upload: MoffinPersistUploadOpts,
 ): Promise<{ error?: string }> {
   const allowed: ConsultType[] = ["lista_69b", "constancia_situacion_fiscal", "opinion_cumplimiento"];
   if (!allowed.includes(row.consult_type as ConsultType)) {
@@ -220,8 +295,10 @@ async function persistMoffinReportToConsult(
       projectId: row.project_id,
       clientId: row.client_id,
       uploadedBy: uploadUid,
-      moffinBase,
-      moffinApiKey,
+      moffinBase: upload.moffinBase,
+      moffinApiKey: upload.moffinApiKey,
+      moffinPdfAuthMode: upload.pdfAuthMode ?? "token",
+      skipServiceQueries: upload.skipServiceQueries ?? false,
       rfc: row.rfc,
       externalId: ext,
       consultType: ct,
@@ -243,7 +320,10 @@ async function persistMoffinReportToConsult(
     _refreshedAt: new Date().toISOString(),
   };
 
-  const reportId = report.id != null ? String(report.id) : row.moffin_query_id;
+  const reportId =
+    extractSolutionsQueryId(report) ??
+    (report.id != null ? String(report.id) : null) ??
+    row.moffin_query_id;
 
   const patch: Record<string, unknown> = {
     status: st,
@@ -293,6 +373,12 @@ Deno.serve(async (req) => {
       { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
+
+  const flavor = getMoffinApiFlavor();
+  const solutionsBase = moffinSolutionsBaseUrl();
+  const solutionsBearer = moffinSolutionsBearerToken();
+  const legacyBase = flavor === "solutions" ? moffinLegacyBaseUrl() : moffinBase;
+  const legacyToken = (flavor === "solutions" ? moffinLegacyApiKey() : moffinKey).trim();
 
   const rawAuth =
     req.headers.get("Authorization") ??
@@ -362,7 +448,7 @@ Deno.serve(async (req) => {
       : "";
 
   const consultSelect =
-    "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, document_id, requested_by, raw_response";
+    "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, moffin_service, document_id, requested_by, raw_response";
 
   if (refreshProjectId) {
     const { data: projCheck, error: pce } = await userClient
@@ -393,19 +479,24 @@ Deno.serve(async (req) => {
     }
     const results: Array<{ id: string; ok: boolean; error?: string; newStatus?: string }> = [];
     for (const row of pendingRows ?? []) {
-      const qid = row.moffin_query_id as string;
-      const fr = await fetchMoffinReportById(moffinBase, moffinKey, qid);
+      const rowTyped = row as MoffinConsultDbRow;
+      const fr = await fetchMoffinReportSnapshotForRow(
+        rowTyped,
+        legacyBase,
+        legacyToken,
+        solutionsBase,
+        solutionsBearer,
+      );
       if (!fr.ok) {
         results.push({ id: row.id, ok: false, error: fr.message });
         continue;
       }
       const pe = await persistMoffinReportToConsult(
         admin,
-        row as MoffinConsultDbRow,
+        rowTyped,
         fr.json,
         user.id,
-        moffinKey,
-        moffinBase,
+        persistUploadForRow(rowTyped, solutionsBase, solutionsBearer, legacyBase, legacyToken),
       );
       if (pe.error) {
         results.push({ id: row.id, ok: false, error: pe.error });
@@ -457,19 +548,24 @@ Deno.serve(async (req) => {
     }
     const results: Array<{ id: string; ok: boolean; error?: string; newStatus?: string }> = [];
     for (const row of pendingRows ?? []) {
-      const qid = row.moffin_query_id as string;
-      const fr = await fetchMoffinReportById(moffinBase, moffinKey, qid);
+      const rowTyped = row as MoffinConsultDbRow;
+      const fr = await fetchMoffinReportSnapshotForRow(
+        rowTyped,
+        legacyBase,
+        legacyToken,
+        solutionsBase,
+        solutionsBearer,
+      );
       if (!fr.ok) {
         results.push({ id: row.id, ok: false, error: fr.message });
         continue;
       }
       const pe = await persistMoffinReportToConsult(
         admin,
-        row as MoffinConsultDbRow,
+        rowTyped,
         fr.json,
         user.id,
-        moffinKey,
-        moffinBase,
+        persistUploadForRow(rowTyped, solutionsBase, solutionsBearer, legacyBase, legacyToken),
       );
       if (pe.error) {
         results.push({ id: row.id, ok: false, error: pe.error });
@@ -542,12 +638,230 @@ Deno.serve(async (req) => {
     );
   }
 
+  if (
+    flavor === "solutions" &&
+    (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
+  ) {
+    const ciecSecret =
+      Deno.env.get("MOFFIN_SAT_CIEC_SECRET")?.trim() ||
+      Deno.env.get("MOFFIN_FIEL_SECRET")?.trim() ||
+      "";
+    if (ciecSecret.length < 32) {
+      return new Response(
+        JSON.stringify({
+          error: "ciec_not_configured",
+          message:
+            "Configura MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (≥32 caracteres) para CIEC cifrada y perfil SAT Solutions.",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (!project.client_id) {
+      return new Response(
+        JSON.stringify({
+          error: "client_required",
+          message: "El proyecto debe tener un cliente asociado.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    const { data: ciecRow } = await admin
+      .from("moffin_client_sat_ciec")
+      .select("ciec_ciphertext, moffin_profile_id")
+      .eq("client_id", project.client_id)
+      .maybeSingle();
+    if (!ciecRow?.ciec_ciphertext) {
+      return new Response(
+        JSON.stringify({
+          error: "ciec_required",
+          message:
+            "Guarda la CIEC del cliente en Contabilidad (Moffin Solutions) antes de constancia u opinión SAT.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    let ciecPlain: string;
+    try {
+      ciecPlain = await decryptFielSecret(ciecRow.ciec_ciphertext, ciecSecret);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(
+        JSON.stringify({ error: "ciec_decrypt_failed", message: msg }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    let profileId: number | null =
+      typeof ciecRow.moffin_profile_id === "number" ? ciecRow.moffin_profile_id : null;
+    if (profileId == null) {
+      const profRes = await moffinSolutionsPostJson(
+        solutionsBase,
+        solutionsBearer,
+        moffinSolutionsProfilePath(),
+        { rfc: rfcRaw, ciec: ciecPlain },
+      );
+      if (!profRes.ok) {
+        return new Response(
+          JSON.stringify({
+            error: "moffin_profile_failed",
+            message: profRes.message,
+            statusCode: profRes.status,
+          }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      profileId = extractMoffinProfileId(profRes.json);
+      if (profileId != null) {
+        await admin
+          .from("moffin_client_sat_ciec")
+          .update({ moffin_profile_id: profileId, updated_at: new Date().toISOString() })
+          .eq("client_id", project.client_id);
+      } else {
+        return new Response(
+          JSON.stringify({
+            error: "moffin_profile_invalid",
+            message: "Moffin no devolvió profileId al crear el perfil SAT.",
+          }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    const satPath = moffinSolutionsQueryPathForConsult(consultType);
+    const moffinServiceName = moffinQueryServiceSegment(satPath);
+    const satRes = await moffinSolutionsPostJson(solutionsBase, solutionsBearer, satPath, {
+      rfc: rfcRaw,
+    });
+    if (!satRes.ok) {
+      const { data: rowErr } = await admin
+        .from("moffin_consults")
+        .insert({
+          organization_id: project.organization_id,
+          project_id: projectId,
+          client_id: project.client_id,
+          rfc: rfcRaw,
+          consult_type: consultType,
+          moffin_service: moffinServiceName,
+          status: "error",
+          error_message: satRes.message,
+          raw_response: { _error: satRes.message, _status: satRes.status },
+          requested_by: user.id,
+        })
+        .select("id")
+        .single();
+      return new Response(
+        JSON.stringify({
+          error: "moffin_api_error",
+          message: satRes.message,
+          statusCode: satRes.status,
+          consultId: rowErr?.id,
+        }),
+        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const json = satRes.json;
+    let moffinStatus = mapMoffinStatus(String(json.status ?? ""));
+    if (
+      satRes.ok &&
+      (json.status === undefined || String(json.status ?? "").trim() === "") &&
+      consultType === "opinion_cumplimiento" &&
+      extractSolutionsQueryId(json)
+    ) {
+      moffinStatus = "pending";
+    }
+    const summary = summarizeSatRfc(consultType, json);
+    const moffinQueryIdStr = extractSolutionsQueryId(json);
+    let documentId: string | null = null;
+    let pdfSidecarError: string | null = null;
+    const solUpload = {
+      moffinBase: solutionsBase,
+      moffinApiKey: solutionsBearer,
+      pdfAuthMode: "bearer" as const,
+      skipServiceQueries: true,
+    };
+    const runSolUpload = async (report: Record<string, unknown>) => {
+      const r = await tryUploadSatRfcPdf({
+        admin,
+        orgId: project.organization_id,
+        projectId,
+        clientId: project.client_id,
+        uploadedBy: user.id,
+        ...solUpload,
+        rfc: rfcRaw,
+        externalId: null,
+        consultType,
+        report,
+        fileBase: consultType,
+        documentDisplayName: `${consultType}_${Date.now()}`,
+        documentType:
+          consultType === "constancia_situacion_fiscal"
+            ? "constancia_situacion_fiscal"
+            : "opinion_cumplimiento",
+      });
+      if (r.documentId) {
+        documentId = r.documentId;
+        pdfSidecarError = null;
+      } else {
+        pdfSidecarError = r.pdfFailure;
+      }
+    };
+    if (moffinStatus === "success") {
+      await runSolUpload(json);
+    }
+    if (!documentId && moffinQueryIdStr) {
+      const fr = await moffinSolutionsGetJson(solutionsBase, solutionsBearer, moffinQueryIdStr);
+      if (fr.ok) await runSolUpload(fr.json);
+    }
+
+    const insertErrorMessage =
+      moffinStatus === "fail" || moffinStatus === "error"
+        ? String(json.message ?? json.error ?? "Consulta Moffin fallida").slice(0, 500)
+        : pdfSidecarError
+          ? `Sin PDF adjunto: ${pdfSidecarError}`.slice(0, 500)
+          : null;
+
+    const { data: inserted, error: insErr } = await admin
+      .from("moffin_consults")
+      .insert({
+        organization_id: project.organization_id,
+        project_id: projectId,
+        client_id: project.client_id,
+        rfc: rfcRaw,
+        consult_type: consultType,
+        moffin_service: moffinServiceName,
+        status: moffinStatus,
+        error_message: insertErrorMessage,
+        summary,
+        raw_response: json,
+        moffin_query_id: moffinQueryIdStr,
+        moffin_uuid: typeof json.uuid === "string" ? json.uuid : null,
+        document_id: documentId,
+        requested_by: user.id,
+      })
+      .select("id, status, summary, document_id, created_at")
+      .single();
+
+    if (insErr) {
+      console.error("moffin_consults insert:", insErr.message);
+      return new Response(JSON.stringify({ error: insErr.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ consult: inserted }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   const accountType = moffinAccountType(clientRow?.client_type, rfcRaw);
   const externalId = `kawiil-${projectId}-${consultType}-${Date.now()}`;
 
   const path = moffinQueryPathForConsult(consultType);
   const moffinServiceName = moffinQueryServiceSegment(path);
-  const moffinUrl = `${moffinBase}${path}`;
+  const moffinUrl = `${legacyBase}${path}`;
 
   const payload: Record<string, unknown> = {
     rfc: rfcRaw,
@@ -644,7 +958,7 @@ Deno.serve(async (req) => {
     moffinRes = await fetch(moffinUrl, {
       method: "POST",
       headers: {
-        Authorization: `Token ${moffinKey}`,
+        Authorization: `Token ${legacyToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -699,7 +1013,8 @@ Deno.serve(async (req) => {
 
   let documentId: string | null = null;
   let pdfSidecarError: string | null = null;
-  const moffinQueryIdStr = json.id != null ? String(json.id) : null;
+  const moffinQueryIdStr =
+    extractSolutionsQueryId(json) ?? (json.id != null ? String(json.id) : null);
 
   if (
     moffinStatus === "success" &&
@@ -718,8 +1033,8 @@ Deno.serve(async (req) => {
         projectId,
         clientId: project.client_id,
         uploadedBy: user.id,
-        moffinBase,
-        moffinApiKey: moffinKey,
+        moffinBase: legacyBase,
+        moffinApiKey: legacyToken,
         rfc: rfcRaw,
         externalId,
         consultType,
@@ -738,7 +1053,7 @@ Deno.serve(async (req) => {
 
     await runSatUpload(json);
     if (!documentId && moffinQueryIdStr) {
-      const fr = await fetchMoffinReportById(moffinBase, moffinKey, moffinQueryIdStr);
+      const fr = await fetchMoffinReportById(legacyBase, legacyToken, moffinQueryIdStr);
       if (fr.ok) await runSatUpload(fr.json);
     }
   }
@@ -763,7 +1078,8 @@ Deno.serve(async (req) => {
       error_message: insertErrorMessage,
       summary,
       raw_response: json,
-      moffin_query_id: json.id != null ? String(json.id) : null,
+      moffin_query_id:
+        extractSolutionsQueryId(json) ?? (json.id != null ? String(json.id) : null),
       moffin_uuid: typeof json.uuid === "string" ? json.uuid : null,
       document_id: documentId,
       requested_by: user.id,

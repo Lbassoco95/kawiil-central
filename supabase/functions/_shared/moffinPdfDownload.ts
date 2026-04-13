@@ -86,20 +86,27 @@ function tryExtractPdfUrlFromJsonBody(buf: Uint8Array, currentUrl: string): stri
   }
 }
 
+export type MoffinPdfAuthMode = "token" | "bearer";
+
 export async function fetchMoffinPdfBytes(
   url: string,
   moffinApiKey?: string | null,
   depth = 0,
+  authMode: MoffinPdfAuthMode = "token",
 ): Promise<{ ok: true; buf: Uint8Array } | { ok: false; reason: string }> {
   if (depth > 3) {
     return { ok: false, reason: "demasiadas redirecciones JSON→URL" };
   }
   const attempts: { label: string; headers?: HeadersInit }[] = [];
   if (moffinApiKey?.trim()) {
+    const authHeader =
+      authMode === "bearer"
+        ? `Bearer ${moffinApiKey.trim()}`
+        : `Token ${moffinApiKey.trim()}`;
     attempts.push({
-      label: "Token Moffin",
+      label: authMode === "bearer" ? "Bearer Moffin" : "Token Moffin",
       headers: {
-        Authorization: `Token ${moffinApiKey.trim()}`,
+        Authorization: authHeader,
         Accept: "application/pdf,application/json;q=0.5,*/*;q=0.3",
       },
     });
@@ -129,7 +136,7 @@ export async function fetchMoffinPdfBytes(
       }
       const nested = tryExtractPdfUrlFromJsonBody(buf, url);
       if (nested && nested !== url) {
-        const inner = await fetchMoffinPdfBytes(nested, moffinApiKey, depth + 1);
+        const inner = await fetchMoffinPdfBytes(nested, moffinApiKey, depth + 1, authMode);
         if (inner.ok) return inner;
         last = inner.ok ? last : `${inner.reason} (tras JSON en ${label})`;
         continue;
@@ -217,6 +224,7 @@ export async function uploadMoffinPdfFromUrl(opts: {
   documentDisplayName: string;
   documentType: string;
   moffinApiKey?: string | null;
+  moffinPdfAuthMode?: MoffinPdfAuthMode;
 }): Promise<{ documentId: string | null; failureReason: string | null }> {
   if (urlLooksLikeMoffinCertificateFile(opts.url)) {
     return {
@@ -225,7 +233,12 @@ export async function uploadMoffinPdfFromUrl(opts: {
         "La URL apunta a un certificado .cer (FIEL/SELLO), no a un PDF de constancia u opinión del SAT. Confirma con Moffin si tu plan incluye esos PDF.",
     };
   }
-  const dl = await fetchMoffinPdfBytes(opts.url, opts.moffinApiKey);
+  const dl = await fetchMoffinPdfBytes(
+    opts.url,
+    opts.moffinApiKey,
+    0,
+    opts.moffinPdfAuthMode ?? "token",
+  );
   if (!dl.ok) {
     return { documentId: null, failureReason: dl.reason };
   }

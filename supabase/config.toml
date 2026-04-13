@@ -61,6 +61,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.moffin-fiel]
     verify_jwt = true
+  [functions.moffin-sat-ciec]
+    verify_jwt = true
   [functions.moffin-webhook]
     verify_jwt = false
   [functions.moffin-health]

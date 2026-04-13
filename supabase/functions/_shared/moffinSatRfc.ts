@@ -343,10 +343,12 @@ export function extractReportLevelPdfUrl(report: Record<string, unknown>): strin
     report.fileUrl,
     resp?.pdfURL,
     resp?.pdfUrl,
+    resp?.pdf,
     resp?.fileURL,
     resp?.fileUrl,
     data?.pdfURL,
     data?.pdfUrl,
+    data?.pdf,
     data?.fileURL,
     data?.fileUrl,
     (report.state as Record<string, unknown> | undefined)?.pdfURL,
@@ -369,7 +371,26 @@ export function summarizeSatRfcCertificates(
   consultType: MoffinSatRfcConsultType,
   resp: Record<string, unknown>,
 ): string {
+  const svc = String(resp?.service ?? "").toUpperCase();
   const st = String(resp?.status ?? "").toUpperCase();
+  if (svc === "CSF" || svc === "CONSTANCIA" || /situaci[oó]n\s*fiscal/i.test(String(resp?.service ?? ""))) {
+    const r = resp?.response as Record<string, unknown> | undefined;
+    const pdf = typeof r?.pdf === "string" ? "PDF disponible" : null;
+    const cm = r?.claveMensaje;
+    const parts = [
+      "Constancia de situación fiscal (SAT)",
+      cm != null ? `claveMensaje: ${cm}` : null,
+      pdf,
+    ].filter(Boolean);
+    return parts.length ? parts.join(" · ") : st === "PENDING" ? "CSF: en proceso" : "CSF consultada";
+  }
+  if (svc === "32D" || /cumplimiento|opini[oó]n/i.test(String(resp?.service ?? ""))) {
+    const r = resp?.response as Record<string, unknown> | undefined;
+    const op = r?.opinion != null ? `Opinión: ${r.opinion}` : null;
+    const pdf = typeof r?.pdf === "string" ? "PDF disponible" : null;
+    const parts = [op, pdf].filter(Boolean);
+    return parts.length ? parts.join(" · ") : st === "PENDING" ? "32D: en proceso" : "Opinión de cumplimiento";
+  }
   const r = resp?.response as Record<string, unknown> | null | undefined;
   if (!r || typeof r !== "object") {
     return st === "PENDING" ? "Certificados SAT: consulta en proceso" : "Sin respuesta de certificados";

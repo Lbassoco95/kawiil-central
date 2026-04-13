@@ -65,12 +65,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MoffinFielCredentialsSection } from "./MoffinFielCredentialsSection";
+import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 
 type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
 
+const MOFFIN_USE_SOLUTIONS = import.meta.env.VITE_MOFFIN_API_FLAVOR === "solutions";
+
 function moffinNeedsFiel(consultType: MoffinConsultType): boolean {
-  return consultType !== "lista_69b";
+  if (consultType === "lista_69b") return false;
+  if (MOFFIN_USE_SOLUTIONS) return false;
+  return true;
+}
+
+function moffinNeedsCiec(consultType: MoffinConsultType): boolean {
+  return MOFFIN_USE_SOLUTIONS && consultType !== "lista_69b";
 }
 
 const MOFFIN_CONSULT_META: Record<
@@ -83,13 +92,13 @@ const MOFFIN_CONSULT_META: Record<
     icon: ShieldAlert,
   },
   constancia_situacion_fiscal: {
-    label: "Verificación RFC (constancia · Moffin)",
-    short: "RFC · constancia",
+    label: "Constancia de situación fiscal (SAT · Moffin)",
+    short: "CSF",
     icon: FileBadge,
   },
   opinion_cumplimiento: {
-    label: "Verificación RFC (opinión · Moffin)",
-    short: "RFC · opinión",
+    label: "Opinión de cumplimiento 32D (SAT · Moffin)",
+    short: "32D",
     icon: FileCheck2,
   },
 };
@@ -378,11 +387,38 @@ export function AccountingDashboard({
         updatedAt: payload.updatedAt ?? null,
       };
     },
-    enabled: !!user && !!session?.access_token && !!clientId,
+    enabled: !!user && !!session?.access_token && !!clientId && !MOFFIN_USE_SOLUTIONS,
+  });
+
+  const { data: moffinCiecStatus } = useQuery({
+    queryKey: ["moffin-sat-ciec-status", clientId],
+    queryFn: async () => {
+      const { data, error } = await invokeFunctionWithSession("moffin-sat-ciec", {
+        action: "status",
+        clientId: clientId!,
+      });
+      if (error) throw new Error(error.message);
+      const payload = (data ?? {}) as {
+        configured?: boolean;
+        profileId?: number | null;
+        updatedAt?: string | null;
+        error?: string;
+        message?: string;
+      };
+      if (payload.error) {
+        throw new Error(typeof payload.message === "string" ? payload.message : payload.error);
+      }
+      return {
+        configured: !!payload.configured,
+        profileId: payload.profileId ?? null,
+        updatedAt: payload.updatedAt ?? null,
+      };
+    },
+    enabled: !!user && !!session?.access_token && !!clientId && MOFFIN_USE_SOLUTIONS,
   });
 
   useEffect(() => {
-    if (!clientId) {
+    if (!clientId || MOFFIN_USE_SOLUTIONS) {
       setFielPassword("");
       setRememberFielPwSession(false);
       return;
@@ -403,7 +439,7 @@ export function AccountingDashboard({
   }, [clientId]);
 
   useEffect(() => {
-    if (!clientId || !rememberFielPwSession) return;
+    if (!clientId || !rememberFielPwSession || MOFFIN_USE_SOLUTIONS) return;
     try {
       if (fielPassword) sessionStorage.setItem(moffinFielPwSessionKey(clientId), fielPassword);
       else sessionStorage.removeItem(moffinFielPwSessionKey(clientId));
@@ -502,6 +538,12 @@ export function AccountingDashboard({
 
   const runMoffinConsult = useCallback(
     async (consultType: MoffinConsultType) => {
+      if (moffinNeedsCiec(consultType)) {
+        if (!moffinCiecStatus?.configured) {
+          toast.error("Primero guarda la CIEC del cliente (Moffin Solutions) en el bloque de credenciales SAT.");
+          return;
+        }
+      }
       if (moffinNeedsFiel(consultType)) {
         if (!moffinFielStatus?.configured) {
           toast.error("Primero carga el .cer y el .key del cliente en el bloque de e.firma.");
@@ -558,7 +600,7 @@ export function AccountingDashboard({
         setMoffinBusy(null);
       }
     },
-    [projectId, clientId, queryClient, moffinFielStatus?.configured, fielPassword]
+    [projectId, clientId, queryClient, moffinFielStatus?.configured, moffinCiecStatus?.configured, fielPassword]
   );
 
   useEffect(() => {
@@ -607,10 +649,19 @@ export function AccountingDashboard({
           <h3 className="text-sm font-semibold text-foreground">Consultas SAT (Moffin)</h3>
           {clientId ? (
             <p className="text-[10px] text-muted-foreground leading-snug">
-              «RFC · constancia» y «RFC · opinión» usan la misma consulta de certificados RFC de Moffin (no son por sí
-              solas el PDF oficial del SAT). Si tu plan no entrega PDF, confirma con Moffin o usa otro canal (SAT,
-              otro proveedor) para los documentos oficiales; la plantilla de correo y secretos opcionales están
-              documentados en el código de la función Edge <code className="text-[9px]">moffin-query</code>.
+              {MOFFIN_USE_SOLUTIONS ? (
+                <>
+                  Con <code className="text-[9px]">VITE_MOFFIN_API_FLAVOR=solutions</code> las consultas CSF y 32D usan la
+                  API Moffin Solutions (perfil SAT con CIEC). Lista 69-B sigue usando la API legacy en{" "}
+                  <code className="text-[9px]">MOFFIN_LEGACY_BASE_URL</code> si aplica.
+                </>
+              ) : (
+                <>
+                  «CSF» y «32D» en modo legacy usan certificados RFC (FIEL) vía Moffin. Para PDF oficiales del SAT con
+                  Solutions API, configura el flavor en el front y los secretos descritos en{" "}
+                  <code className="text-[9px]">moffin-query</code>.
+                </>
+              )}
             </p>
           ) : null}
           {clientId ? (
@@ -624,8 +675,12 @@ export function AccountingDashboard({
           ) : null}
           {clientId ? (
             <div className="space-y-3">
-              <MoffinFielCredentialsSection clientId={clientId} />
-              {moffinFielStatus?.configured ? (
+              {MOFFIN_USE_SOLUTIONS ? (
+                <MoffinSatCiecSection clientId={clientId} />
+              ) : (
+                <MoffinFielCredentialsSection clientId={clientId} />
+              )}
+              {!MOFFIN_USE_SOLUTIONS && moffinFielStatus?.configured ? (
                 <div className="space-y-2 max-w-sm">
                   <Label htmlFor="moffin-fiel-password" className="text-[10px] text-muted-foreground">
                     Contraseña de la llave (.key) para esta consulta
@@ -678,6 +733,7 @@ export function AccountingDashboard({
                 const meta = MOFFIN_CONSULT_META[key];
                 const Icon = meta.icon;
                 const needsCert = moffinNeedsFiel(key);
+                const needsCiecSat = moffinNeedsCiec(key);
                 return (
                   <Button
                     key={key}
@@ -685,11 +741,17 @@ export function AccountingDashboard({
                     variant="outline"
                     size="sm"
                     className="gap-1.5"
-                    disabled={!!moffinBusy || (needsCert && !moffinFielStatus?.configured)}
+                    disabled={
+                      !!moffinBusy ||
+                      (needsCert && !moffinFielStatus?.configured) ||
+                      (needsCiecSat && !moffinCiecStatus?.configured)
+                    }
                     title={
-                      needsCert && !moffinFielStatus?.configured
-                        ? "Carga .cer y .key antes de consultar"
-                        : undefined
+                      needsCiecSat && !moffinCiecStatus?.configured
+                        ? "Guarda la CIEC del cliente antes de consultar"
+                        : needsCert && !moffinFielStatus?.configured
+                          ? "Carga .cer y .key antes de consultar"
+                          : undefined
                     }
                     onClick={() => runMoffinConsult(key)}
                   >

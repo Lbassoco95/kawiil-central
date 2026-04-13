@@ -21,6 +21,17 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
         "(69-B, constancia, opinión)."
       );
     }
+    if (payload.error === "ciec_not_configured") {
+      return (
+        "Falta MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (≥32 caracteres) en Edge Functions para cifrar la CIEC " +
+        "del cliente (Moffin Solutions)."
+      );
+    }
+    if (payload.error === "ciec_required") {
+      return typeof payload.message === "string" && payload.message.trim()
+        ? payload.message
+        : "Guarda la CIEC del cliente antes de ejecutar consultas CSF u opinión (Moffin Solutions).";
+    }
     if (typeof payload.message === "string" && payload.message.trim()) {
       return payload.message;
     }
