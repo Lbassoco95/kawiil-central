@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, MessageSquareText, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { SlackMessage } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { slackUserDisplayName } from "./slackGrouping";
@@ -40,8 +41,15 @@ type Props = {
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
   onOpenThread?: (threadTs: string) => void;
+  /** Mensaje raíz cuyo hilo está abierto en el panel (resalta en el canal). */
+  activeThreadRootTs?: string | null;
   selectedChannelId: string;
 };
+
+/** Timestamp raíz del hilo para API y UI (mensaje padre o broadcast en canal). */
+function slackThreadRootTs(m: SlackMessage): string {
+  return m.thread_ts && m.thread_ts !== m.ts ? m.thread_ts : m.thread_ts || m.ts;
+}
 
 function initials(name: string): string {
   const p = name.trim().split(/\s+/).filter(Boolean);
@@ -95,6 +103,7 @@ export function SlackMessageList({
   isFetchingMore,
   onLoadMore,
   onOpenThread,
+  activeThreadRootTs = null,
   selectedChannelId,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -234,6 +243,10 @@ export function SlackMessageList({
     const bodyText = m.text?.trim();
     const hasFiles = (m.files?.length ?? 0) > 0;
 
+    const rootTs = slackThreadRootTs(m);
+    const threadActiveHere = !!activeThreadRootTs && activeThreadRootTs === rootTs;
+    const hasThreadActivity = (m.reply_count ?? 0) > 0 || threadActiveHere;
+
     rows.push(
       <div
         key={m.ts}
@@ -242,6 +255,8 @@ export function SlackMessageList({
           "group flex gap-3 rounded-lg px-2 py-0.5 -mx-2 transition-colors",
           showHeader ? "pt-1.5" : "pt-0",
           highlight ? "bg-primary/[0.08] ring-1 ring-primary/20" : "hover:bg-muted/40",
+          hasThreadActivity && "border-l-2 border-[#611f69]/45 pl-2 -ml-0.5 rounded-l-md bg-muted/20",
+          threadActiveHere && "ring-1 ring-[#611f69]/30",
         )}
       >
         {showHeader ? (
@@ -305,20 +320,23 @@ export function SlackMessageList({
             </div>
           )}
           {onOpenThread && (
-            <button
+            <Button
               type="button"
-              onClick={() => {
-                /** Raíz del hilo: padre si es respuesta en canal; si no, el propio ts. */
-                const rootTs = m.thread_ts && m.thread_ts !== m.ts ? m.thread_ts : m.thread_ts || m.ts;
-                onOpenThread(rootTs);
-              }}
-              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              variant={threadActiveHere ? "default" : "secondary"}
+              size="sm"
+              className={cn(
+                "mt-1.5 h-7 gap-1.5 text-xs font-medium shrink-0",
+                threadActiveHere && "bg-[#611f69] hover:bg-[#4a154b]",
+              )}
+              onClick={() => onOpenThread(rootTs)}
             >
-              <MessageSquareText className="h-3.5 w-3.5" />
+              <MessageSquareText className="h-3.5 w-3.5 shrink-0" />
               {(m.reply_count ?? 0) > 0
-                ? `${m.reply_count} respuesta${m.reply_count !== 1 ? "s" : ""}`
-                : "Responder en hilo"}
-            </button>
+                ? `${m.reply_count} en el hilo`
+                : threadActiveHere
+                  ? "Hilo abierto"
+                  : "Responder en hilo"}
+            </Button>
           )}
         </div>
       </div>,

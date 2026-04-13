@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +51,27 @@ type HistoryPage = {
   messages: SlackMessage[];
   nextCursor?: string;
 };
+
+function bumpParentReplyInSlackHistory(
+  old: InfiniteData<HistoryPage> | undefined,
+  parentTs: string,
+): InfiniteData<HistoryPage> | undefined {
+  if (!old?.pages) return old;
+  return {
+    ...old,
+    pages: old.pages.map((page) => ({
+      ...page,
+      messages: page.messages.map((m) => {
+        if (m.ts !== parentTs) return m;
+        return {
+          ...m,
+          reply_count: (m.reply_count ?? 0) + 1,
+          thread_ts: m.thread_ts ?? parentTs,
+        };
+      }),
+    })),
+  };
+}
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MPIM_MEMBERS_BATCH = 40;
@@ -655,6 +682,12 @@ export default function Comunicacion() {
         setDraft("");
         if (user?.id && selectedChannel) clearSlackDraft(user.id, selectedChannel);
       }
+      if (vars.thread_ts && selectedChannel) {
+        qc.setQueriesData<InfiniteData<HistoryPage>>(
+          { queryKey: ["slack-history", selectedChannel] },
+          (old) => bumpParentReplyInSlackHistory(old, vars.thread_ts!),
+        );
+      }
       qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
       if (vars.thread_ts) {
         qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, vars.thread_ts] });
@@ -974,6 +1007,7 @@ export default function Comunicacion() {
               isFetchingMore={historyInfinite.isFetchingNextPage}
               onLoadMore={() => historyInfinite.fetchNextPage()}
               onOpenThread={(ts) => setThreadRootTs(ts)}
+              activeThreadRootTs={threadRootTs}
               selectedChannelId={selectedChannel}
             />
             <SlackComposer

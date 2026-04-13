@@ -30,6 +30,7 @@ export function SlackThreadPanel({
 
   const threadQuery = useQuery({
     queryKey: ["slack-thread", channelId, threadTs],
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const data = await invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; error?: string }>({
         action: "conversations.replies",
