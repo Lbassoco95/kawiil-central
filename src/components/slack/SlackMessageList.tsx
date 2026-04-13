@@ -304,14 +304,20 @@ export function SlackMessageList({
               ))}
             </div>
           )}
-          {(m.reply_count ?? 0) > 0 && onOpenThread && (
+          {onOpenThread && (
             <button
               type="button"
-              onClick={() => onOpenThread(m.thread_ts || m.ts)}
+              onClick={() => {
+                /** Raíz del hilo: padre si es respuesta en canal; si no, el propio ts. */
+                const rootTs = m.thread_ts && m.thread_ts !== m.ts ? m.thread_ts : m.thread_ts || m.ts;
+                onOpenThread(rootTs);
+              }}
               className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
             >
               <MessageSquareText className="h-3.5 w-3.5" />
-              {m.reply_count} respuesta{m.reply_count !== 1 ? "s" : ""}
+              {(m.reply_count ?? 0) > 0
+                ? `${m.reply_count} respuesta${m.reply_count !== 1 ? "s" : ""}`
+                : "Responder en hilo"}
             </button>
           )}
         </div>

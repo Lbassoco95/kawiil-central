@@ -2064,6 +2064,7 @@ export type Database = {
           reminders_hourly_digest: boolean
           in_app_toast_notifications: boolean
           notification_sound_enabled: boolean
+          slack_message_sound_enabled: boolean
           desktop_browser_notifications: boolean
           desktop_push_notifications: boolean
           notify_slack_mentions: boolean
@@ -2093,6 +2094,7 @@ export type Database = {
           reminders_hourly_digest?: boolean
           in_app_toast_notifications?: boolean
           notification_sound_enabled?: boolean
+          slack_message_sound_enabled?: boolean
           desktop_browser_notifications?: boolean
           desktop_push_notifications?: boolean
           notify_slack_mentions?: boolean
@@ -2122,6 +2124,7 @@ export type Database = {
           reminders_hourly_digest?: boolean
           in_app_toast_notifications?: boolean
           notification_sound_enabled?: boolean
+          slack_message_sound_enabled?: boolean
           desktop_browser_notifications?: boolean
           desktop_push_notifications?: boolean
           notify_slack_mentions?: boolean

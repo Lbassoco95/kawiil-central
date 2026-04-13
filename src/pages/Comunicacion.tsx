@@ -812,13 +812,23 @@ export default function Comunicacion() {
               </AlertTitle>
               <AlertDescription className="text-[11px] text-amber-100/90 leading-snug space-y-1.5">
                 {vapidConfigured ? (
-                  <p>
-                    Para recibir mensajes de Slack con la pestaña cerrada, activa push en{" "}
-                    <Link to="/notificaciones" className="underline font-medium text-amber-200">
-                      Notificaciones
-                    </Link>
-                    .
-                  </p>
+                  <>
+                    <p>
+                      Con la app abierta verás avisos emergentes en Kawiil; el historial del canal se actualiza al
+                      llegar un mensaje que te notifique. El sonido y el aviso del sistema los configuras en{" "}
+                      <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                        Notificaciones
+                      </Link>{" "}
+                      (permiso del navegador + sonido Slack).
+                    </p>
+                    <p>
+                      Para recibir Slack con la pestaña cerrada, activa también push en{" "}
+                      <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                        Notificaciones
+                      </Link>
+                      .
+                    </p>
+                  </>
                 ) : isTransformador ? (
                   <>
                     <p>

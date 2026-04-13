@@ -135,7 +135,7 @@ function NotificationDeliveryPreferences() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "desktop_browser_notifications, desktop_push_notifications, in_app_toast_notifications, notification_sound_enabled, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip, notify_slack_dm",
+          "desktop_browser_notifications, desktop_push_notifications, in_app_toast_notifications, notification_sound_enabled, slack_message_sound_enabled, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip, notify_slack_dm",
         )
         .eq("user_id", user!.id)
         .single();
@@ -299,6 +299,17 @@ function NotificationDeliveryPreferences() {
             onCheckedChange={(v) => updateFields.mutate({ desktop_browser_notifications: v })}
           />
         </div>
+        {notifPerm === "default" && profile?.desktop_browser_notifications !== false && (
+          <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2.5 space-y-2">
+            <p className="text-xs text-foreground/90">
+              El navegador aún no ha concedido permiso para notificaciones del escritorio. Sin él solo verás el
+              popup dentro de Kawiil, no el aviso del sistema junto al reloj.
+            </p>
+            <Button type="button" size="sm" variant="secondary" onClick={requestBrowserPermission}>
+              Conceder permiso ahora
+            </Button>
+          </div>
+        )}
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-0.5 min-w-0">
             <Label className="text-sm font-medium">Pitido breve al avisar</Label>
@@ -323,6 +334,21 @@ function NotificationDeliveryPreferences() {
             checked={profile?.notification_sound_enabled === true}
             disabled={updateFields.isPending || !profile}
             onCheckedChange={(v) => updateFields.mutate({ notification_sound_enabled: v })}
+            className="shrink-0"
+          />
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-0.5 min-w-0">
+            <Label className="text-sm font-medium">Sonido al avisar mensajes de Slack</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Pitido en esta pestaña cuando llega un mensaje o mención de Slack (si se muestra toast o notificación del
+              sistema). Independiente del pitido global de arriba.
+            </p>
+          </div>
+          <Switch
+            checked={profile?.slack_message_sound_enabled !== false}
+            disabled={updateFields.isPending || !profile}
+            onCheckedChange={(v) => updateFields.mutate({ slack_message_sound_enabled: v })}
             className="shrink-0"
           />
         </div>
