@@ -13,8 +13,8 @@ const Dashboard = () => {
         {/* Header with toggle */}
         <div className="surface-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4">
           <div>
-            <h1 className="text-lg sm:text-xl font-semibold text-foreground tracking-tight">Dashboard</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight gradient-text">Dashboard</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1">
               {view === "personal" ? "Tu espacio personal" : "Vista colaborativa del equipo"}
             </p>
           </div>

@@ -32,8 +32,8 @@ const Microsoft365 = () => {
       <ErrorBoundary>
         <div className="space-y-8">
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Microsoft 365</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight gradient-text">Microsoft 365</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1">
               Calendario y correo de Outlook · {profile?.displayName || profile?.mail || ""}
             </p>
           </div>
@@ -41,7 +41,7 @@ const Microsoft365 = () => {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <Calendar className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Calendario</h2>
+              <h2 className="text-sm font-bold tracking-tight gradient-text">Calendario</h2>
             </div>
             <CalendarView />
           </section>
@@ -51,7 +51,7 @@ const Microsoft365 = () => {
           <section>
             <div className="flex items-center gap-2 mb-4">
               <Mail className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Correo</h2>
+              <h2 className="text-sm font-bold tracking-tight gradient-text">Correo</h2>
             </div>
             <EmailView />
           </section>

@@ -24,10 +24,11 @@ Dashboard, Clientes, Proyectos, Tareas, Pipeline; además **Calendario** (`Micro
 | `.surface-glass-subtle` | Contenedor secundario con blur ligero. |
 | `Card variant="glass"`  | Bloques destacados; preferir opacidad alta en modo claro. |
 | `.page-list-card`       | Filas/tarjetas de lista con hover suave. |
+| `.gradient-text`        | Títulos de módulo: degradado horizontal `primary` → `accent` (`bg-clip-text`). |
 
 ## Componentes
 
-- **PageHeader** `variant="minimal"`: título sin gradiente; peso semibold, tracking tight.
+- **PageHeader**: título `text-2xl sm:text-3xl font-bold` + clase **`.gradient-text`** (gradiente horizontal `--primary` → `--accent`); icono `text-primary`. Prop `variant` se mantiene por compatibilidad; el estilo del título es el mismo.
 - **TabsList**: fondo semitransparente + borde alineado con toolbar.
 - **Progress**: altura 6px (`h-1.5`), indicador con transición suave.
 
@@ -40,7 +41,7 @@ Dashboard, Clientes, Proyectos, Tareas, Pipeline; además **Calendario** (`Micro
 
 - Glass en cascada en >3 niveles anidados.
 - `translate-y` fuerte en listas largas (fatiga visual).
-- Gradientes llamativos en títulos de listas operativas (usar `minimal`).
+- Usar `.gradient-text` en **microcopy** o celdas densas (reservar para títulos de módulo y cabeceras principales).
 
 ## Checklist antes de cerrar un PR de UI
 

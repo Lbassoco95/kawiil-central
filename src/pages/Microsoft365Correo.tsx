@@ -46,7 +46,7 @@ const Microsoft365Correo = () => {
           )}
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <h1 className="text-sm font-medium text-foreground">Correo</h1>
+              <h1 className="text-base sm:text-lg font-bold tracking-tight gradient-text">Correo</h1>
               {profile && (
                 <span className="truncate text-xs text-muted-foreground">
                   · {profile.displayName || profile.mail || ""}

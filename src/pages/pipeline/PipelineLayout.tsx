@@ -33,8 +33,8 @@ export default function PipelineLayout() {
     <AppLayout>
       <div className="flex flex-col gap-4 p-4 md:p-6 max-w-[1600px] mx-auto w-full">
         <div className="surface-toolbar p-4 md:p-5">
-          <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-foreground">Pipeline y leads</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Pipeline y leads</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
             Embudo comercial, seguimiento y correos automatizados.
           </p>
         </div>

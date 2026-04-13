@@ -212,10 +212,10 @@ div[id*="lovable" i] {
     @apply shadow-md;
   }
 
-  /* ── Gradient text utility ── */
+  /* ── Gradient text utility (títulos de módulo: azul → esmeralda, alineado con tokens primary/accent) ── */
   .gradient-text {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    background-image: linear-gradient(to right, hsl(var(--primary)), hsl(var(--accent)));
   }
 
   /* ── Animated gradient bar ── */

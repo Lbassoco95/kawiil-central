@@ -14,7 +14,7 @@ export function SlackConnectHero({ onConnect, isConnecting }: Props) {
           <MessageSquare className="h-10 w-10 text-primary" />
         </div>
         <div className="space-y-2">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Slack en Kawiil</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight gradient-text">Slack en Kawiil</h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Conecta tu cuenta del workspace para ver canales, mensajes directos y grupos desde aquí. Misma conversación
             que en Slack, con la experiencia de Kawiil OS.

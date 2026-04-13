@@ -586,7 +586,7 @@ const AsistenteIA = () => {
               {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
             </Button>
             <Sparkles className="h-4 w-4 text-primary" />
-            <h1 className="text-sm font-semibold text-foreground">Kawiil AI</h1>
+            <h1 className="text-sm font-bold tracking-tight gradient-text">Kawiil AI</h1>
             {activeProject ? (
               <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <BrainCircuit className="h-2.5 w-2.5" /> {activeProject.name}

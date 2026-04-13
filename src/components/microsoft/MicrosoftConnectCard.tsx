@@ -20,7 +20,7 @@ export function MicrosoftConnectCard({ onConnect, isConnecting }: MicrosoftConne
               <path fill="#ffba08" d="M12 12h10v10H12z" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-foreground">Conectar Microsoft 365</h2>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight gradient-text">Conectar Microsoft 365</h2>
           <p className="text-sm text-muted-foreground">
             Vincula tu cuenta de Microsoft para ver tu calendario de Outlook, correos y bloquear horarios desde tus tareas.
           </p>

@@ -15,7 +15,7 @@ function NotFoundContent() {
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
       <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-16 w-16 mb-6 opacity-90" />
       <p className="text-sm font-medium text-muted-foreground mb-2">Error 404</p>
-      <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Página no encontrada</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight gradient-text mb-2">Página no encontrada</h1>
       <p className="text-muted-foreground max-w-md mb-8">
         La página que buscas no existe o fue movida.
       </p>
