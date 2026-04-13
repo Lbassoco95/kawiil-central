@@ -579,35 +579,44 @@ const AsistenteIA = () => {
         )}
 
         {/* Main chat area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/30">
-            <Button size="sm" variant="ghost" onClick={() => setShowSidebar(!showSidebar)} className="h-7 w-7 p-0">
-              {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
-            </Button>
-            <Sparkles className="h-4 w-4 text-primary" />
-            <h1 className="text-sm font-bold tracking-tight gradient-text">Kawiil AI</h1>
-            {activeProject ? (
-              <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <BrainCircuit className="h-2.5 w-2.5" /> {activeProject.name}
-              </span>
-            ) : (
-              <span className="text-[10px] text-muted-foreground bg-primary/10 px-2 py-0.5 rounded-full">
-                Asistente interno
-              </span>
-            )}
-            <div className="flex-1" />
-            {activeProject && (
-              <Button
-                size="sm"
-                variant={showKnowledge ? "secondary" : "ghost"}
-                onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
-                className="h-7 text-xs gap-1.5"
-              >
-                {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                <span className="hidden sm:inline">Conocimiento</span>
-              </Button>
-            )}
+        <div className="flex-1 flex flex-col min-w-0 border-l border-border/40">
+          <div className="surface-toolbar shrink-0 border-b border-border/50 px-3 py-2.5 sm:px-4 sm:py-3">
+            <div className="flex flex-col gap-2 min-w-0">
+              <div className="flex items-start gap-2 min-w-0">
+                <Button size="sm" variant="ghost" onClick={() => setShowSidebar(!showSidebar)} className="h-8 w-8 shrink-0 p-0 mt-0.5">
+                  {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+                </Button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Sparkles className="h-5 w-5 shrink-0 text-primary" />
+                    <h1 className="text-lg sm:text-2xl font-bold tracking-tight gradient-text">Kawiil AI</h1>
+                    {activeProject ? (
+                      <span className="text-[10px] sm:text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full flex items-center gap-1 max-w-[min(100%,14rem)] truncate">
+                        <BrainCircuit className="h-3 w-3 shrink-0" /> <span className="truncate">{activeProject.name}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] sm:text-xs text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
+                        Asistente interno
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 leading-snug max-w-2xl">
+                    Chat con contexto de proyectos, documentos y memorias del equipo.
+                  </p>
+                </div>
+                {activeProject && (
+                  <Button
+                    size="sm"
+                    variant={showKnowledge ? "secondary" : "ghost"}
+                    onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
+                    className="h-8 shrink-0 text-xs gap-1.5 self-start"
+                  >
+                    {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
+                    <span className="hidden sm:inline">Conocimiento</span>
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Messages */}
@@ -623,7 +632,7 @@ const AsistenteIA = () => {
                 </div>
                 {activeProject ? (
                   <>
-                    <h2 className="text-lg font-semibold text-foreground mb-1">{activeProject.name}</h2>
+                    <h2 className="text-lg font-bold tracking-tight gradient-text mb-1 text-center">{activeProject.name}</h2>
                     {activeProject.description && (
                       <p className="text-sm text-muted-foreground text-center mb-2">{activeProject.description}</p>
                     )}
@@ -641,7 +650,7 @@ const AsistenteIA = () => {
                   </>
                 ) : (
                   <>
-                    <h2 className="text-lg font-semibold text-foreground mb-1">¿En qué te puedo ayudar?</h2>
+                    <h2 className="text-lg font-bold tracking-tight gradient-text mb-1 text-center">¿En qué te puedo ayudar?</h2>
                     <p className="text-sm text-muted-foreground text-center mb-6">
                       Puedo ayudarte con redacción de correos, documentos, consultas fiscales y priorización de tareas.
                     </p>

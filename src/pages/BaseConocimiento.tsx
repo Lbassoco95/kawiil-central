@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   BookOpen, Building2, FolderKanban, Bot, BarChart3, Users, Lightbulb,
 } from "lucide-react";
@@ -41,30 +42,33 @@ const BaseConocimiento = () => {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
-        <PageHeader
-          title="Conocimiento"
-          description="Dashboard de inteligencia: monitorea qué está aprendiendo el sistema, por cliente, proyecto y célula"
-          icon={<BookOpen className="h-6 w-6" />}
-        />
-
-        {/* Tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            return (
-              <Button
-                key={t.key}
-                variant="ghost"
-                size="sm"
-                className={`tab-pill gap-1.5 shrink-0 ${activeTab === t.key ? "tab-pill-active" : "tab-pill-inactive"}`}
-                onClick={() => setActiveTab(t.key)}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline sm:inline">{t.label}</span>
-                <span className="xs:hidden sm:hidden">{t.label.split(" ").pop()}</span>
-              </Button>
-            );
-          })}
+        <div className="surface-toolbar space-y-4 p-4 md:p-5 rounded-xl border border-border/50">
+          <PageHeader
+            title="Conocimiento"
+            description="Dashboard de inteligencia: monitorea qué está aprendiendo el sistema, por cliente, proyecto y célula"
+            icon={<BookOpen className="h-6 w-6" />}
+          />
+          <div className="flex gap-1 overflow-x-auto rounded-lg border border-border/40 bg-background/40 p-1 backdrop-blur-sm">
+            {tabs.map((t) => {
+              const Icon = t.icon;
+              return (
+                <Button
+                  key={t.key}
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "tab-pill gap-1.5 shrink-0",
+                    activeTab === t.key ? "tab-pill-active" : "tab-pill-inactive",
+                  )}
+                  onClick={() => setActiveTab(t.key)}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="hidden xs:inline sm:inline">{t.label}</span>
+                  <span className="xs:hidden sm:hidden">{t.label.split(" ").pop()}</span>
+                </Button>
+              );
+            })}
+          </div>
         </div>
 
         <div key={activeTab} className="animate-fade-in">

@@ -9,6 +9,7 @@ import {
   Database, FileText, MessageSquare, BookOpen, BrainCircuit,
   Sparkles, BarChart3, Building2, FolderKanban, Layers, ThumbsDown,
 } from "lucide-react";
+import { getSourceTypeCopy, TOTAL_CHUNKS_KPI, METRIC_LABELS, RELATIVE_VOLUME_BAR_LABEL } from "@/lib/knowledgeLabels";
 
 export function StatsTab() {
   const { user } = useAuth();
@@ -56,19 +57,6 @@ export function StatsTab() {
     return <Icon className="h-4 w-4 text-primary" />;
   };
 
-  const sourceLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      document: "Documentos",
-      extracted_data: "Datos extraídos",
-      chat_message: "Conversaciones",
-      procedure: "Procedimientos",
-      comunicado: "Comunicados",
-      memory: "Memorias IA",
-      artifact: "Artifacts",
-    };
-    return labels[type] || type;
-  };
-
   // Client coverage
   const clientCoverage = (() => {
     if (!clientStats?.length) return [];
@@ -108,27 +96,33 @@ export function StatsTab() {
               <CardContent className="pt-4 pb-3 px-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Database className="h-4 w-4 text-primary" />
-                  <span className="text-xs text-muted-foreground">Total chunks</span>
+                  <span className="text-xs font-medium text-foreground">{TOTAL_CHUNKS_KPI.title}</span>
                 </div>
                 <p className="text-2xl font-bold">{totalChunks.toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground mt-1.5 leading-snug">{TOTAL_CHUNKS_KPI.definition}</p>
+                <p className="text-[9px] text-muted-foreground/70 mt-1 font-mono leading-tight">{TOTAL_CHUNKS_KPI.technical}</p>
               </CardContent>
             </Card>
-            {embeddingStats?.map((s) => (
-              <Card key={s.source_type} className="stat-card">
-                <CardContent className="pt-4 pb-3 px-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    {sourceIcon(s.source_type)}
-                    <span className="text-xs text-muted-foreground">{sourceLabel(s.source_type)}</span>
-                  </div>
-                  <p className="text-2xl font-bold">{s.chunk_count.toLocaleString()}</p>
-                  {s.latest && (
-                    <p className="text-[10px] text-muted-foreground">
-                      Último: {new Date(s.latest).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+            {embeddingStats?.map((s) => {
+              const copy = getSourceTypeCopy(s.source_type);
+              return (
+                <Card key={s.source_type} className="stat-card">
+                  <CardContent className="pt-4 pb-3 px-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      {sourceIcon(s.source_type)}
+                      <span className="text-xs font-medium text-foreground">{copy.label}</span>
+                    </div>
+                    <p className="text-2xl font-bold">{s.chunk_count.toLocaleString()}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1.5 leading-snug">{copy.definition}</p>
+                    {s.latest && (
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Último: {new Date(s.latest).toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </>
         )}
       </div>
@@ -140,6 +134,9 @@ export function StatsTab() {
             <CardTitle className="text-sm flex items-center gap-2">
               <ThumbsDown className="h-4 w-4 text-muted-foreground" /> Feedback negativo por categoría
             </CardTitle>
+            <p className="text-[11px] text-muted-foreground font-normal">
+              Pulgares abajo en respuestas de la IA, agrupados por motivo. Sirve para detectar temas a mejorar en plantillas o conocimiento.
+            </p>
           </CardHeader>
           <CardContent>
             {learningLoading ? (
@@ -163,6 +160,9 @@ export function StatsTab() {
             <CardTitle className="text-sm flex items-center gap-2">
               <BrainCircuit className="h-4 w-4" /> Memorias automáticas por tipo
             </CardTitle>
+            <p className="text-[11px] text-muted-foreground font-normal">
+              Hechos o preferencias que el sistema extrajo de conversaciones y guardó para personalizar respuestas futuras.
+            </p>
           </CardHeader>
           <CardContent>
             {learningLoading ? (
@@ -189,6 +189,9 @@ export function StatsTab() {
           <CardTitle className="text-sm flex items-center gap-2">
             <Building2 className="h-4 w-4" /> Cobertura por cliente
           </CardTitle>
+          <p className="text-[11px] text-muted-foreground font-normal">
+            {RELATIVE_VOLUME_BAR_LABEL}: cada barra compara el cliente con el que tiene más {METRIC_LABELS.chunk_count.short} en la organización.
+          </p>
         </CardHeader>
         <CardContent>
           {clientLoading ? (
@@ -205,7 +208,7 @@ export function StatsTab() {
                 <div key={c.client_id || i} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium truncate max-w-[120px] sm:max-w-[200px]">{c.name}</span>
-                    <span className="text-muted-foreground">{c.chunks.toLocaleString()} chunks</span>
+                    <span className="text-muted-foreground">{c.chunks.toLocaleString()} frag.</span>
                   </div>
                   <Progress value={Math.round((c.chunks / maxClientChunks) * 100)} className="h-1.5" />
                 </div>
@@ -221,6 +224,9 @@ export function StatsTab() {
           <CardTitle className="text-sm flex items-center gap-2">
             <Layers className="h-4 w-4" /> Cobertura por área
           </CardTitle>
+          <p className="text-[11px] text-muted-foreground font-normal">
+            Volumen de {METRIC_LABELS.chunk_count.label.toLowerCase()} agrupado por área de proyecto (misma lógica de barras relativas).
+          </p>
         </CardHeader>
         <CardContent>
           {projectLoading ? (
@@ -237,7 +243,7 @@ export function StatsTab() {
                 <div key={a.area} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium capitalize">{a.area}</span>
-                    <span className="text-muted-foreground">{a.chunks.toLocaleString()} chunks</span>
+                    <span className="text-muted-foreground">{a.chunks.toLocaleString()} frag.</span>
                   </div>
                   <Progress value={Math.round((a.chunks / maxAreaChunks) * 100)} className="h-1.5" />
                 </div>
@@ -275,7 +281,7 @@ export function StatsTab() {
                 <p className="text-2xl font-bold">
                   {projectStats.reduce((s, p) => s + p.chunk_count, 0).toLocaleString()}
                 </p>
-                <p className="text-xs text-muted-foreground">Chunks de proyectos</p>
+                <p className="text-xs text-muted-foreground">{METRIC_LABELS.chunk_count.label} (proyectos)</p>
               </div>
             </div>
           )}

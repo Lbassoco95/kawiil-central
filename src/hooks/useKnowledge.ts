@@ -294,6 +294,120 @@ export interface LearningProgress {
   lastSyncAt: string | null;
 }
 
+export interface DocumentChunkPreview {
+  id: string;
+  content: string;
+  source_type: string;
+  metadata: Record<string, unknown>;
+  document_id: string | null;
+  project_id: string | null;
+  created_at: string;
+}
+
+const MAX_SOURCE_CHUNK_IDS = 24;
+
+/** Fragmentos citados por un insight (solo cuando hay IDs en source_chunks). */
+export function useInsightSourceChunks(chunkIds: string[] | null | undefined) {
+  const orgId = useOrgId();
+  const ids = useMemo(() => {
+    if (!chunkIds?.length) return [] as string[];
+    return [...new Set(chunkIds)].slice(0, MAX_SOURCE_CHUNK_IDS).sort();
+  }, [chunkIds]);
+
+  return useQuery({
+    queryKey: ["insight-source-chunks", orgId, ids],
+    enabled: !!orgId && ids.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("document_chunks")
+        .select("id, content, source_type, metadata, document_id, project_id, created_at")
+        .in("id", ids);
+      if (error) throw error;
+      return (data || []) as DocumentChunkPreview[];
+    },
+  });
+}
+
+/** Últimos fragmentos indexados para un cliente (transparencia de indexación). */
+export function useRecentChunksForClient(clientId: string | null | undefined, limit = 10) {
+  const orgId = useOrgId();
+
+  return useQuery({
+    queryKey: ["recent-chunks-client", orgId, clientId, limit],
+    enabled: !!orgId && !!clientId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("document_chunks")
+        .select("id, content, source_type, metadata, document_id, project_id, created_at")
+        .eq("client_id", clientId!)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data || []) as DocumentChunkPreview[];
+    },
+  });
+}
+
+/** Actividad del feed de conocimiento filtrada por cliente. */
+export function useKnowledgeFeedForClient(clientId: string | null | undefined, limit = 8) {
+  const orgId = useOrgId();
+
+  return useQuery({
+    queryKey: ["knowledge-feed-client", orgId, clientId, limit],
+    enabled: !!orgId && !!clientId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("knowledge_feed")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("related_client_id", clientId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data || []) as KnowledgeFeedItem[];
+    },
+  });
+}
+
+export function useKnowledgeFeedForProject(projectId: string | null | undefined, limit = 8) {
+  const orgId = useOrgId();
+
+  return useQuery({
+    queryKey: ["knowledge-feed-project", orgId, projectId, limit],
+    enabled: !!orgId && !!projectId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("knowledge_feed")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("related_project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data || []) as KnowledgeFeedItem[];
+    },
+  });
+}
+
+export function useRecentChunksForProject(projectId: string | null | undefined, limit = 10) {
+  const orgId = useOrgId();
+
+  return useQuery({
+    queryKey: ["recent-chunks-project", orgId, projectId, limit],
+    enabled: !!orgId && !!projectId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("document_chunks")
+        .select("id, content, source_type, metadata, document_id, project_id, created_at")
+        .eq("project_id", projectId!)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data || []) as DocumentChunkPreview[];
+    },
+  });
+}
+
 export function useLearningProgress() {
   const orgId = useOrgId();
 
