@@ -15,6 +15,9 @@ type Props = {
   userMap: Record<string, SlackUserProfile | undefined>;
   onReply: (text: string) => void;
   sending: boolean;
+  slackSelfUserId?: string | null;
+  reactionPending?: { messageTs: string; name: string } | null;
+  onToggleReaction?: (messageTs: string, emojiName: string, add: boolean) => void;
 };
 
 export function SlackThreadPanel({
@@ -25,6 +28,9 @@ export function SlackThreadPanel({
   userMap,
   onReply,
   sending,
+  slackSelfUserId = null,
+  reactionPending = null,
+  onToggleReaction,
 }: Props) {
   const [draft, setDraft] = useState("");
 
@@ -72,6 +78,10 @@ export function SlackThreadPanel({
                 error={threadQuery.error as Error | null}
                 selectedChannelId={`${channelId}-thread`}
                 hasMore={false}
+                slackReactionChannelId={channelId}
+                slackSelfUserId={slackSelfUserId}
+                reactionPending={reactionPending}
+                onToggleReaction={onToggleReaction}
               />
             </div>
           )}

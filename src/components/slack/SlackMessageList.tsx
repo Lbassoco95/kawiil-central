@@ -10,7 +10,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, MessageSquareText, UserPlus } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Loader2, MessageSquareText, Smile, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { SlackMessage } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
@@ -43,8 +44,35 @@ type Props = {
   onOpenThread?: (threadTs: string) => void;
   /** Mensaje raíz cuyo hilo está abierto en el panel (resalta en el canal). */
   activeThreadRootTs?: string | null;
+  /** Canal real de Slack para reactions.add/remove (p. ej. mismo que la conversación). */
+  slackReactionChannelId?: string | null;
+  slackSelfUserId?: string | null;
+  reactionPending?: { messageTs: string; name: string } | null;
+  onToggleReaction?: (messageTs: string, emojiName: string, add: boolean) => void;
   selectedChannelId: string;
 };
+
+const REACTION_PICKER_KEYS = [
+  "thumbsup",
+  "heart",
+  "joy",
+  "clap",
+  "fire",
+  "eyes",
+  "thinking_face",
+  "white_check_mark",
+  "rocket",
+  "pray",
+  "raised_hands",
+  "tada",
+  "memo",
+  "warning",
+  "hugging_face",
+  "smile",
+  "clipboard",
+  "ok_hand",
+  "wave",
+].filter((k) => k in SLACK_EMOJI);
 
 /** Timestamp raíz del hilo para API y UI (mensaje padre o broadcast en canal). */
 function slackThreadRootTs(m: SlackMessage): string {
@@ -61,6 +89,14 @@ function initials(name: string): string {
 function reactionLabel(name: string): string {
   const k = name.replace(/^::|::$/g, "").toLowerCase();
   return SLACK_EMOJI[k] || `:${name}:`;
+}
+
+function slackReactionNamesMatch(a: string, b: string): boolean {
+  const na = a.replace(/^:|:$/g, "").toLowerCase();
+  const nb = b.replace(/^:|:$/g, "").toLowerCase();
+  if (na === nb) return true;
+  if ((na === "thumbsup" && nb === "+1") || (na === "+1" && nb === "thumbsup")) return true;
+  return false;
 }
 
 function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[number] }) {
@@ -104,10 +140,15 @@ export function SlackMessageList({
   onLoadMore,
   onOpenThread,
   activeThreadRootTs = null,
+  slackReactionChannelId = null,
+  slackSelfUserId = null,
+  reactionPending = null,
+  onToggleReaction,
   selectedChannelId,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [mentionUserId, setMentionUserId] = useState<string | null>(null);
+  const [reactionPickerTs, setReactionPickerTs] = useState<string | null>(null);
   const prevLenRef = useRef(0);
   const stickBottomRef = useRef(true);
 
@@ -305,19 +346,94 @@ export function SlackMessageList({
               <span className="text-muted-foreground italic text-xs">Sin texto ni adjuntos</span>
             )}
           </div>
-          {m.reactions && m.reactions.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1">
-              {m.reactions.map((r) => (
-                <span
-                  key={r.name}
-                  className="inline-flex items-center gap-0.5 rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[11px]"
-                  title={r.users?.join(", ")}
-                >
-                  <span>{reactionLabel(r.name)}</span>
-                  <span className="text-muted-foreground">{r.count}</span>
-                </span>
-              ))}
+          {slackReactionChannelId && slackSelfUserId && onToggleReaction ? (
+            <div className="flex flex-wrap items-center gap-1 mt-1">
+              {(m.reactions || []).map((r) => {
+                const userReacted = !!(slackSelfUserId && r.users?.includes(slackSelfUserId));
+                const rowPending =
+                  reactionPending?.messageTs === m.ts &&
+                  slackReactionNamesMatch(reactionPending.name, r.name);
+                return (
+                  <button
+                    key={r.name}
+                    type="button"
+                    disabled={!!reactionPending && reactionPending.messageTs === m.ts}
+                    title={
+                      userReacted
+                        ? "Quitar tu reacción"
+                        : `Añadir :${r.name}: · ${r.users?.map((id) => slackUserDisplayName(id, userMap)).join(", ") || "Slack"}`
+                    }
+                    onClick={() => onToggleReaction(m.ts, r.name, !userReacted)}
+                    className={cn(
+                      "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] transition-colors disabled:opacity-50",
+                      userReacted
+                        ? "border-[#611f69]/55 bg-[#611f69]/12 hover:bg-[#611f69]/20"
+                        : "border-border/60 bg-muted/40 hover:bg-muted/65",
+                      rowPending && "ring-1 ring-primary/40",
+                    )}
+                  >
+                    <span>{reactionLabel(r.name)}</span>
+                    <span className="text-muted-foreground tabular-nums">{r.count}</span>
+                  </button>
+                );
+              })}
+              <Popover
+                open={reactionPickerTs === m.ts}
+                onOpenChange={(open) => setReactionPickerTs(open ? m.ts : null)}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                    disabled={!!reactionPending && reactionPending.messageTs === m.ts}
+                    title="Añadir reacción"
+                  >
+                    <Smile className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-2" align="start" side="top">
+                  <p className="text-[10px] text-muted-foreground px-1 pb-1">Reaccionar como en Slack</p>
+                  <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto">
+                    {REACTION_PICKER_KEYS.map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className="text-lg p-1.5 rounded-md hover:bg-muted"
+                        title={`:${key}:`}
+                        onClick={() => {
+                          const existing = m.reactions?.find((r) => slackReactionNamesMatch(r.name, key));
+                          const userHas =
+                            !!slackSelfUserId && !!(existing?.users?.includes(slackSelfUserId));
+                          const apiName = existing?.name ?? key;
+                          onToggleReaction(m.ts, apiName, !userHas);
+                          setReactionPickerTs(null);
+                        }}
+                      >
+                        {SLACK_EMOJI[key]}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
+          ) : (
+            m.reactions &&
+            m.reactions.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {m.reactions.map((r) => (
+                  <span
+                    key={r.name}
+                    className="inline-flex items-center gap-0.5 rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[11px]"
+                    title={r.users?.join(", ")}
+                  >
+                    <span>{reactionLabel(r.name)}</span>
+                    <span className="text-muted-foreground">{r.count}</span>
+                  </span>
+                ))}
+              </div>
+            )
           )}
           {onOpenThread && (
             <Button

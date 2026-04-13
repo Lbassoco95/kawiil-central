@@ -58,6 +58,8 @@ type SlackMethod =
   | "conversations.info"
   | "chat.postMessage"
   | "chat.scheduleMessage"
+  | "reactions.add"
+  | "reactions.remove"
   | "users.info"
   | "users.list";
 
@@ -444,6 +446,23 @@ Deno.serve(async (req) => {
         text: text.trim(),
         post_at: postAt,
         thread_ts: json.thread_ts as string | undefined,
+      });
+      return jsonOk(data);
+    }
+
+    if (action === "reactions.add" || action === "reactions.remove") {
+      const channel = json.channel as string;
+      const ts = json.ts as string;
+      let name = String(json.name || "").trim();
+      name = name.replace(/^:|:$/g, "");
+      if (!channel || !ts || !name) {
+        return jsonOk({ ok: false, error: "channel, ts and name required" });
+      }
+      const method = action === "reactions.add" ? "reactions.add" : "reactions.remove";
+      const data = await slackCall(conn.access_token, method, {
+        channel,
+        timestamp: ts,
+        name,
       });
       return jsonOk(data);
     }

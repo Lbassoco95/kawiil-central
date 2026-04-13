@@ -23,6 +23,9 @@ export const SLACK_FILE_UPLOAD_PERMISSION_HINT =
 export const SLACK_CHAT_API_PERMISSION_HINT =
   "Slack rechazó el envío o la programación del mensaje. Revisa en api.slack.com → tu app → OAuth & Permissions → User Token Scopes: al menos chat:write (y chat:write.public si escribes en canales donde no eres miembro). Para archivos y notas de voz hacen falta además files:write y files:read; para abrir DMs, im:write y mpim:write. Si en Supabase existe SLACK_USER_SCOPES, alinéalo o elimínalo. Luego pulsa «Actualizar permisos Slack» en Comunicación y acepta de nuevo en Slack.";
 
+export const SLACK_REACTIONS_PERMISSION_HINT =
+  "Slack no pudo añadir o quitar la reacción. En api.slack.com → tu app → OAuth & Permissions → User Token Scopes añade reactions:write (y reactions:read si Slack lo pide). Si existe SLACK_USER_SCOPES en Supabase, inclúyelos ahí o elimina el secret. Después usa «Actualizar permisos Slack» en Comunicación.";
+
 async function readInvokeFailureMessage(error: unknown): Promise<string | null> {
   const ctx = error instanceof FunctionsHttpError
     ? error.context

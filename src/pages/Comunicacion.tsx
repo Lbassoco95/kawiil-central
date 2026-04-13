@@ -19,6 +19,7 @@ import {
   invokeSlackFileUpload,
   isSlackPermissionDeniedMessage,
   SLACK_CHAT_API_PERMISSION_HINT,
+  SLACK_REACTIONS_PERMISSION_HINT,
   SLACK_FILE_UPLOAD_PERMISSION_HINT,
   SLACK_PERMISSION_TOAST_MS,
   type SlackConversation,
@@ -667,6 +668,31 @@ export default function Comunicacion() {
   const onSlackFileUploadError = (e: Error) =>
     toastSlackPermissionDenied(e, SLACK_FILE_UPLOAD_PERMISSION_HINT);
 
+  const onSlackReactionMutationError = (e: Error) =>
+    toastSlackPermissionDenied(e, SLACK_REACTIONS_PERMISSION_HINT);
+
+  const reactionMutation = useMutation({
+    mutationFn: async (vars: { ts: string; name: string; add: boolean }) => {
+      const name = vars.name.replace(/^:|:$/g, "").trim();
+      if (!selectedChannel || !name) throw new Error("Datos incompletos");
+      const action = vars.add ? "reactions.add" : "reactions.remove";
+      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+        action,
+        channel: selectedChannel,
+        ts: vars.ts,
+        name,
+      });
+      if (!data.ok) throw new Error(data.error || "No se pudo actualizar la reacción");
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+      if (threadRootTs) {
+        qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, threadRootTs] });
+      }
+    },
+    onError: onSlackReactionMutationError,
+  });
+
   const postMutation = useMutation({
     mutationFn: async (payload: { text: string; thread_ts?: string }) => {
       const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
@@ -1008,6 +1034,14 @@ export default function Comunicacion() {
               onLoadMore={() => historyInfinite.fetchNextPage()}
               onOpenThread={(ts) => setThreadRootTs(ts)}
               activeThreadRootTs={threadRootTs}
+              slackReactionChannelId={selectedChannel}
+              slackSelfUserId={connection?.slack_user_id}
+              reactionPending={
+                reactionMutation.isPending && reactionMutation.variables
+                  ? { messageTs: reactionMutation.variables.ts, name: reactionMutation.variables.name }
+                  : null
+              }
+              onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
               selectedChannelId={selectedChannel}
             />
             <SlackComposer
@@ -1042,6 +1076,13 @@ export default function Comunicacion() {
               postMutation.mutate({ text, thread_ts: threadRootTs });
             }}
             sending={postMutation.isPending}
+            slackSelfUserId={connection?.slack_user_id}
+            reactionPending={
+              reactionMutation.isPending && reactionMutation.variables
+                ? { messageTs: reactionMutation.variables.ts, name: reactionMutation.variables.name }
+                : null
+            }
+            onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
           />
         </div>
       ) : (
