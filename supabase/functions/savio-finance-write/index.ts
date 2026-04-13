@@ -12,6 +12,10 @@ const MAX_BODY_CHARS = 120_000;
 const MAX_RESPONSE_LOG_CHARS = 4000;
 
 /**
+ * Cobros recurrentes / suscripciones: no hay operación genérica hasta alinear con OpenAPI (app.savio.mx/docs).
+ * Cuando exista ruta estable (p. ej. POST /subscription o flags en /invoice), añadir aquí p. ej.
+ * `create_recurring_invoice` → path + requiredKeys documentados en comentario y en savioWriteOperations.ts.
+ *
  * Operaciones de escritura hacia Savio. Rutas alineadas con GET existente (/invoice, /payment).
  * Los nombres de campos en `payload` deben coincidir con la OpenAPI de tu entorno (app.savio.mx/docs);
  * si Savio devuelve 4xx, revisar documentación y ajustar whitelist en este archivo.
@@ -187,7 +191,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           ok: false,
           error: "unknown_operation",
-          message: `Operación no permitida: ${operation || "(vacía)"}. Use create_payment, create_invoice o create_customer.`,
+          message: `Operación no permitida: ${operation || "(vacía)"}. Use create_payment, create_invoice o create_customer. Recurrentes: gestionar en Savio hasta nueva ruta confirmada en docs.`,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );

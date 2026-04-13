@@ -155,6 +155,7 @@ const Clientes = () => {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="minimal"
           title="Clientes"
           description="Gestión de clientes y empresas"
           actions={
@@ -165,13 +166,13 @@ const Clientes = () => {
           }
         />
 
-        <div className="space-y-3">
+        <div className="surface-toolbar space-y-3 p-4">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar clientes..."
-                className="pl-9 h-9 text-sm bg-secondary/30 border-0 focus-visible:ring-1"
+                className="pl-9 h-9 text-sm bg-background/60 border border-border/50 focus-visible:ring-1"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -272,7 +273,7 @@ const Clientes = () => {
                       {group.clients.map((client, i) => (
                         <div
                           key={client.id}
-                          className="glass-card-hover p-4 cursor-pointer animate-fade-in group/card"
+                          className="page-list-card p-4 cursor-pointer animate-fade-in group/card"
                           style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}
                           onClick={() => navigate(`/clientes/${client.id}`)}
                         >

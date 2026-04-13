@@ -79,7 +79,7 @@ export default function PipelineList() {
           Búsqueda activa (barra superior): <strong>{filtered.length}</strong> fila(s) tras filtros de esta vista.
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2 items-end">
+      <div className="surface-toolbar flex flex-wrap gap-2 items-end rounded-xl p-4">
         <div className="w-[140px]">
           <label className="text-xs text-muted-foreground">Prioridad</label>
           <Select value={priority} onValueChange={setPriority}>

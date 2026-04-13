@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Mail, Phone, MapPin, User, FileText,
-  CheckSquare, FolderOpen, Pencil, Shield, Building2, ChevronRight,
+  CheckSquare, FolderOpen, Pencil, Shield, Building2, ChevronRight, Landmark,
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
@@ -38,6 +38,12 @@ import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 import { useProfiles } from "@/hooks/useTasks";
+import { useAuth } from "@/contexts/AuthContext";
+import { useFinanceAccess } from "@/hooks/useFinanceAccess";
+import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
+import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
+import { ClientSavioFinanceSection } from "@/components/clients/ClientSavioFinanceSection";
+import { clientSavioLinkStatus } from "@/lib/clientSavioLink";
 
 const STATUS_STYLES: Record<ClientStatus, string> = Object.fromEntries(
   Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -55,7 +61,7 @@ const TASK_PRIORITY_STYLES: Record<TaskPriority, string> = Object.fromEntries(
   Object.entries(PRIORITY_CONFIG).map(([k, v]) => [k, v.color])
 ) as Record<TaskPriority, string>;
 
-const tabs: { key: string; label: string; icon?: typeof Shield }[] = [
+const baseTabs: { key: string; label: string; icon?: typeof Shield }[] = [
   { key: "general", label: "General" },
   { key: "cumplimiento", label: "Cumplimiento", icon: Shield },
   { key: "proyectos", label: "Proyectos" },
@@ -64,6 +70,7 @@ const tabs: { key: string; label: string; icon?: typeof Shield }[] = [
 ];
 
 const ClienteDetalle = () => {
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { client, isLoadingClient, projects, tasks, documents } = useClientDetail(id);
@@ -71,6 +78,14 @@ const ClienteDetalle = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [tab, setTab] = useState<string>("general");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const { hasFinanceAccess, isLoading: financeAccessLoading } = useFinanceAccess();
+  const { data: canViewSavioIncome = false, isLoading: savioIncomeLoading } = useSavioIncomeAccess();
+  const showSavioTab =
+    !!user && hasFinanceAccess && canViewSavioIncome && !financeAccessLoading && !savioIncomeLoading;
+
+  const savioHintsQuery = useSavioFinanceApiData({
+    fetchEnabled: showSavioTab && tab === "cobranza",
+  });
 
   const activeTasks = useMemo(
     () => tasks.filter((t) => !isTaskClosedStatus(t.status)),
@@ -147,6 +162,20 @@ const ClienteDetalle = () => {
     );
   }
 
+  const tabsToShow = showSavioTab
+    ? [...baseTabs, { key: "cobranza", label: "Cobranza (Savio)", icon: Landmark }]
+    : baseTabs;
+
+  const savioBanner = clientSavioLinkStatus(
+    {
+      id: client.id,
+      name: client.name,
+      rfc: client.rfc,
+      savio_customer_id: client.savio_customer_id,
+    },
+    savioHintsQuery.customerRows,
+  );
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
@@ -168,6 +197,19 @@ const ClienteDetalle = () => {
                 {client.client_type === "persona_moral" ? "Persona Moral" : "Persona Física"}
                 {client.rfc && ` · RFC: ${client.rfc}`}
               </p>
+              {showSavioTab && savioBanner.status === "no_link" && (
+                <p className="text-[11px] text-amber-800 dark:text-amber-200 mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+                  Sin enlace Savio. {savioBanner.suggestedSavioIds.length > 0
+                    ? "Hay coincidencia por RFC en la lista de clientes Savio: enlaza en Editar cliente."
+                    : "Configura el id de cliente Savio en Editar cliente."}
+                </p>
+              )}
+              {showSavioTab && savioBanner.status === "rfc_suggest" && (
+                <p className="text-[11px] text-amber-800 dark:text-amber-200 mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+                  Hay cliente(s) Savio con el mismo RFC. Abre <strong className="font-medium">Editar</strong> y elige el
+                  vínculo correcto.
+                </p>
+              )}
             </div>
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="mr-1.5 h-3.5 w-3.5" />
@@ -189,7 +231,7 @@ const ClienteDetalle = () => {
 
         {/* Tab pills */}
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 flex-nowrap">
-          {tabs.map((t) => {
+          {tabsToShow.map((t) => {
             const count = t.key === "proyectos" ? projects.length
               : t.key === "tareas" ? activeTasks.length
               : t.key === "documentos" ? documents.length : null;
@@ -304,6 +346,12 @@ const ClienteDetalle = () => {
         )}
 
         {tab === "cumplimiento" && <ComplianceClientSection clientId={client.id} />}
+        {tab === "cobranza" && showSavioTab && (
+          <div className="glass-card p-5 animate-fade-in">
+            <h2 className="text-sm font-medium text-muted-foreground mb-4">Cobranza Savio</h2>
+            <ClientSavioFinanceSection client={client} savioCustomerRowsForHints={savioHintsQuery.customerRows} />
+          </div>
+        )}
         {tab === "proyectos" && <ClientProjectsTab client={client} projects={projects} />}
 
         {/* Tasks */}

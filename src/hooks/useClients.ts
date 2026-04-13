@@ -5,12 +5,16 @@ import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
 import { logActivity } from "@/lib/activityLog";
+import { invokeSavioFinanceWrite } from "@/lib/savioFinanceWriteInvoke";
+import { extractSavioIdFromWriteData } from "@/lib/clientSavioLink";
 
 export type Client = Tables<"clients">;
 export type ClientInsert = TablesInsert<"clients">;
 
 export type ClientCreateInput = Omit<ClientInsert, "organization_id" | "created_by"> & {
   collaborator_user_ids?: string[];
+  /** Si true y no hay savio_customer_id, intenta POST /customer en Savio tras crear en Kawiil. */
+  create_in_savio?: boolean;
 };
 
 async function syncClientCollaborators(
@@ -54,7 +58,7 @@ export function useCreateClient() {
 
   return useMutation({
     mutationFn: async (client: ClientCreateInput) => {
-      const { collaborator_user_ids = [], ...clientRow } = client;
+      const { collaborator_user_ids = [], create_in_savio = false, ...clientRow } = client;
       const { data: orgId } = await supabase.rpc("get_user_org_id", {
         _user_id: user!.id,
       });
@@ -71,6 +75,46 @@ export function useCreateClient() {
         .single();
 
       if (error) throw error;
+
+      let latest = data as Client;
+      if (
+        create_in_savio &&
+        data &&
+        !(data.savio_customer_id && String(data.savio_customer_id).trim())
+      ) {
+        const payload: Record<string, unknown> = {
+          legal_name: data.name,
+        };
+        if (data.email?.trim()) payload.email = data.email.trim();
+        if (data.phone?.trim()) payload.phone = data.phone.trim();
+        if (data.rfc?.trim()) {
+          payload.rfc = data.rfc.trim();
+          payload.tax_id = data.rfc.trim();
+        }
+        const res = await invokeSavioFinanceWrite("create_customer", payload);
+        if (res.ok === true) {
+          const sid = extractSavioIdFromWriteData(res.data);
+          if (sid) {
+            const linkedAt = new Date().toISOString();
+            const { data: upd, error: upErr } = await supabase
+              .from("clients")
+              .update({ savio_customer_id: sid, savio_customer_linked_at: linkedAt })
+              .eq("id", data.id)
+              .select()
+              .single();
+            if (!upErr && upd) latest = upd as Client;
+          } else {
+            toast.warning(
+              "Cliente creado en Kawiil. Savio respondió pero no se pudo leer el id del cliente; enlázalo manualmente en Editar cliente.",
+            );
+          }
+        } else {
+          toast.warning(
+            res.message ||
+              "Cliente creado en Kawiil. No se pudo crear en Savio (permiso o error de API); enlázalo o reintenta desde Editar cliente.",
+          );
+        }
+      }
 
       // Auto-create projects based on contracted services
       const services = clientRow.services || [];
@@ -199,9 +243,9 @@ export function useCreateClient() {
         }
       }
 
-      if (data) {
+      if (latest) {
         try {
-          await syncClientCollaborators(data.id, collaborator_user_ids, data.responsible_user_id);
+          await syncClientCollaborators(latest.id, collaborator_user_ids, latest.responsible_user_id);
         } catch (e) {
           console.error(e);
           toast.error(
@@ -210,11 +254,12 @@ export function useCreateClient() {
         }
       }
 
-      return data;
+      return latest;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["savio-finance-api"] });
       if (data) {
         queryClient.invalidateQueries({ queryKey: ["client-collaborators", data.id] });
       }
@@ -524,6 +569,7 @@ export function useUpdateClient() {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       queryClient.invalidateQueries({ queryKey: ["client", data.id] });
       queryClient.invalidateQueries({ queryKey: ["client-collaborators", data.id] });
+      queryClient.invalidateQueries({ queryKey: ["savio-finance-api"] });
       logActivity({ entityType: "client", entityId: data.id, action: "updated", details: { name: data.name } });
       toast.success("Cliente actualizado exitosamente");
     },

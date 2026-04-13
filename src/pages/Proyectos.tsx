@@ -178,6 +178,7 @@ const Proyectos = () => {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="minimal"
           title="Proyectos"
           description="Proyectos por cliente o internos"
           actions={
@@ -197,6 +198,7 @@ const Proyectos = () => {
         <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
         <MeetingMinutesDialog open={minutesOpen} onOpenChange={setMinutesOpen} />
 
+        <div className="surface-toolbar space-y-4 p-4">
         <div className="flex flex-wrap gap-2 items-center">
           {(
             [
@@ -249,10 +251,11 @@ const Proyectos = () => {
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar proyectos..."
-            className="pl-9 h-9 text-sm bg-secondary/30 border-0 focus-visible:ring-1"
+            className="pl-9 h-9 text-sm bg-background/60 border border-border/50 focus-visible:ring-1"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+        </div>
         </div>
 
         {isLoading ? (

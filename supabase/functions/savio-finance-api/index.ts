@@ -1,6 +1,9 @@
 /**
  * savio-finance-api — lectura GET hacia Savio (/invoice, /payment, /customer).
  *
+ * Detalle por id (si tu OpenAPI lo expone): mismo `action` (`invoices` | `payments` | `customers`) y en el cuerpo
+ * `resourceId` con el id del recurso → GET `/invoice/{id}` (o `/payment/{id}`, `/customer/{id}`). Ver app.savio.mx/docs.
+ *
  * Requiere JWT de usuario y RPC `can_view_savio_finance`. Escritura: función `savio-finance-write` + RPC
  * `can_write_savio_finance` (ver migración savio_finance_write).
  *
@@ -40,6 +43,7 @@ const ALLOWED_QUERY_KEYS = new Set([
   "order",
   "search",
   "q",
+  "customer_id",
 ]);
 
 const MAX_RESPONSE_CHARS = 1_500_000;
@@ -49,6 +53,21 @@ function isAllowedSavioRelativePath(path: string): boolean {
   if (!pathOnly.startsWith("/") || pathOnly.includes("..")) return false;
   return /^\/[a-zA-Z0-9/_{}\-]+$/.test(pathOnly);
 }
+
+/** Segmento de id para GET /recurso/{id} (evita path traversal). */
+function safeSavioResourceId(id: unknown): string | null {
+  if (typeof id !== "string") return null;
+  const t = id.trim();
+  if (t.length < 4 || t.length > 128) return null;
+  if (!/^[a-zA-Z0-9\-_.]+$/.test(t)) return null;
+  return t;
+}
+
+const ACTIONS_WITH_DETAIL: Record<string, true> = {
+  invoices: true,
+  payments: true,
+  customers: true,
+};
 
 function pathForAction(action: string): string | null {
   const envKey = `SAVIO_API_PATH_${action.toUpperCase()}`;
@@ -120,7 +139,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    let body: { action?: string; query?: Record<string, unknown> };
+    let body: { action?: string; query?: Record<string, unknown>; resourceId?: string };
     try {
       body = await req.json();
     } catch {
@@ -131,7 +150,7 @@ Deno.serve(async (req) => {
     }
 
     const action = typeof body.action === "string" ? body.action.trim() : "";
-    const relPath = pathForAction(action);
+    let relPath = pathForAction(action);
     if (!relPath) {
       return new Response(
         JSON.stringify({
@@ -141,6 +160,28 @@ Deno.serve(async (req) => {
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    const rid = safeSavioResourceId(body.resourceId);
+    if (body.resourceId !== undefined && body.resourceId !== null && String(body.resourceId).trim() !== "") {
+      if (!rid || !ACTIONS_WITH_DETAIL[action]) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: "invalid_resource_id",
+            message:
+              "resourceId inválido o acción sin detalle por id. Use solo letras, números, guiones y puntos (4–128 caracteres) con action invoices, payments o customers.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      relPath = `${relPath}/${encodeURIComponent(rid)}`;
+      if (!isAllowedSavioRelativePath(relPath)) {
+        return new Response(JSON.stringify({ ok: false, error: "invalid_path" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const base = normalizeSavioApiBase(Deno.env.get("SAVIO_API_BASE_URL") || "");

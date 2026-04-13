@@ -226,6 +226,7 @@ INSTRUCCIONES:
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="minimal"
           title="Tareas"
           description="Gestión de tareas y actividades internas"
           actions={
@@ -238,7 +239,7 @@ INSTRUCCIONES:
           }
         />
 
-        <div className="space-y-1.5">
+        <div className="surface-toolbar space-y-1.5 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <div className="min-w-0 flex-1">
               <QuickTaskInput
@@ -270,7 +271,7 @@ INSTRUCCIONES:
           userId={user?.id}
         />
 
-        <section className="animate-fade-in rounded-xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-transparent p-4 shadow-sm">
+        <section className="animate-fade-in surface-glass-subtle p-4 ring-1 ring-primary/10">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between mb-3">
             <div className="flex items-start gap-2 min-w-0">
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
@@ -403,7 +404,7 @@ INSTRUCCIONES:
         </section>
 
         {assignedSteps.length > 0 && (
-          <section className="animate-fade-in glass-card p-4">
+          <section className="animate-fade-in surface-toolbar p-4">
             <div className="flex items-center gap-2 mb-3">
               <ClipboardList className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Mis pasos de proyecto asignados</h2>
@@ -465,6 +466,7 @@ INSTRUCCIONES:
           </section>
         )}
 
+        <div className="surface-toolbar space-y-3 p-4">
         <ScrollableFilterTabs
           options={[{ value: "todas", label: "Todas" }, ...areaOptions]}
           value={area}
@@ -475,7 +477,7 @@ INSTRUCCIONES:
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar tareas..."
-            className="pl-9 h-9 text-sm bg-secondary/30 border-0 focus-visible:ring-1"
+            className="pl-9 h-9 text-sm bg-background/60 border border-border/50 focus-visible:ring-1"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -503,6 +505,7 @@ INSTRUCCIONES:
             Historial
             <span className="ml-1.5 tabular-nums opacity-80">({closedTasks.length})</span>
           </Button>
+        </div>
         </div>
 
         {isLoading ? (

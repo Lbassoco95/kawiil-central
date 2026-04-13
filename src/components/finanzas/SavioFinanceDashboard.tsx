@@ -1,19 +1,30 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Activity,
   Banknote,
+  ExternalLink,
   FileText,
   LayoutDashboard,
   Loader2,
   Plug,
   Radio,
   RefreshCw,
+  Repeat,
   Search,
+  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -45,6 +56,7 @@ import {
   extractSavioSummary,
   SAVIO_EVENT_LABELS,
 } from "@/lib/savioPayload";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import {
@@ -53,6 +65,8 @@ import {
 } from "@/lib/savioFinanceApiHints";
 import { SavioFinanceWriteActions } from "@/components/finanzas/SavioFinanceWriteActions";
 import { getSavioAppPanelUrl } from "@/lib/savioAppUrl";
+import { rollupSavioInvoicesByCustomer } from "@/lib/savioCustomerRollup";
+import { fetchSavioResource, type SavioFinanceApiAction } from "@/lib/savioFinanceInvoke";
 
 const EVENT_FILTER_ALL = "todos";
 
@@ -60,12 +74,36 @@ function formatMoney(n: number) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
 
+/** Evita GET con ids sintéticos de la lista local (`row-0`, `pay-1`). */
+function looksLikeRealSavioResourceId(id: string): boolean {
+  const t = id.trim();
+  if (t.length < 4 || t.length > 128) return false;
+  if (/^(row|pay)-\d+$/i.test(t)) return false;
+  return /^[a-zA-Z0-9\-_.]+$/.test(t);
+}
+
+type SavioApiDetailState = {
+  title: string;
+  raw: unknown;
+  detailAction: SavioFinanceApiAction | null;
+  detailResourceId: string | null;
+};
+
+function savioDetailPathLabel(action: SavioFinanceApiAction, resourceId: string): string {
+  const base = action === "invoices" ? "invoice" : action === "payments" ? "payment" : "customer";
+  return `/${base}/${resourceId}`;
+}
+
 export function SavioFinanceDashboard() {
-  const [section, setSection] = useState<"resumen" | "webhooks">("resumen");
+  const savioPanelUrl = getSavioAppPanelUrl();
+  const [section, setSection] = useState<"resumen" | "clientes" | "webhooks">("resumen");
+  const [invoiceCustomerFilter, setInvoiceCustomerFilter] = useState<string | null>(null);
+  const [recurringOpen, setRecurringOpen] = useState(false);
 
   const {
     invoiceRows,
     paymentRows,
+    customerRows,
     invoiceAgg,
     paymentAgg,
     invoicesMeta,
@@ -76,7 +114,10 @@ export function SavioFinanceDashboard() {
     isFetching: apiFetching,
     refetchAll,
     reactQueryError,
-  } = useSavioFinanceApiData();
+    invoiceQueryActive,
+  } = useSavioFinanceApiData({ invoiceCustomerId: invoiceCustomerFilter });
+
+  const customerRollup = useMemo(() => rollupSavioInvoicesByCustomer(invoiceRows), [invoiceRows]);
 
   const { data: events = [], isLoading: whLoading, isError: whError, refetch: refetchWh, isFetching: whFetching } =
     useSavioWebhookEvents();
@@ -84,7 +125,16 @@ export function SavioFinanceDashboard() {
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState(EVENT_FILTER_ALL);
   const [detail, setDetail] = useState<SavioFinanceEvent | null>(null);
-  const [apiDetail, setApiDetail] = useState<{ title: string; raw: unknown } | null>(null);
+  const [apiDetail, setApiDetail] = useState<SavioApiDetailState | null>(null);
+  const [liveDetailData, setLiveDetailData] = useState<unknown | null>(null);
+  const [liveDetailLoading, setLiveDetailLoading] = useState(false);
+  const [liveDetailErr, setLiveDetailErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLiveDetailData(null);
+    setLiveDetailErr(null);
+    setLiveDetailLoading(false);
+  }, [apiDetail]);
 
   const [apiCheck, setApiCheck] = useState<"idle" | "loading" | "ok" | "fail">("idle");
   const [apiMessage, setApiMessage] = useState<string | null>(null);
@@ -174,19 +224,45 @@ export function SavioFinanceDashboard() {
   const paymentFail = savioFinanceApiFailureHint(paymentsMeta);
 
   function refreshCurrent() {
-    if (section === "resumen") void refetchAll();
+    if (section === "resumen" || section === "clientes") void refetchAll();
     else void refetchWh();
   }
 
-  const busy = section === "resumen" ? apiFetching : whFetching;
+  const busy = section === "webhooks" ? whFetching : apiFetching;
+
+  async function fetchLiveSavioDetail() {
+    if (!apiDetail?.detailAction || !apiDetail.detailResourceId) return;
+    setLiveDetailLoading(true);
+    setLiveDetailErr(null);
+    try {
+      const res = await fetchSavioResource(apiDetail.detailAction, {}, apiDetail.detailResourceId);
+      setLiveDetailData(res.data ?? null);
+      if (res.ok !== true) {
+        const msg =
+          (typeof res.message === "string" && res.message.trim()) ||
+          (typeof res.error === "string" && res.error.trim()) ||
+          "La API no devolvió el detalle esperado.";
+        setLiveDetailErr(msg);
+        toast.error(msg);
+        return;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error inesperado al consultar Savio.";
+      setLiveDetailErr(msg);
+      setLiveDetailData(null);
+      toast.error(msg);
+    } finally {
+      setLiveDetailLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground max-w-3xl">
-          <strong className="text-foreground">Resumen</strong> obtiene cargos y pagos directamente de la API de Savio
-          (datos vivos del despacho). <strong className="text-foreground">Notificaciones</strong> muestra el historial
-          de webhooks recibidos en Kawiil (útil para auditoría y automatizaciones).
+          <strong className="text-foreground">Facturas y pagos</strong> se leen en vivo desde la API Savio (misma
+          clave que usa el despacho). <strong className="text-foreground">Clientes</strong> lista altas recientes.{" "}
+          <strong className="text-foreground">Notificaciones</strong> son webhooks guardados en Kawiil para auditoría.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -215,10 +291,20 @@ export function SavioFinanceDashboard() {
             <RefreshCw className={cn("h-3.5 w-3.5 mr-1", busy && "animate-spin")} />
             Actualizar vista
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            onClick={() => setRecurringOpen(true)}
+          >
+            <Repeat className="h-3.5 w-3.5 mr-1" />
+            Cobro recurrente
+          </Button>
           <SavioFinanceWriteActions
             invoicePickOptions={invoicePickOptions}
             customerPickOptions={customerPickOptions}
-            savioAppUrl={getSavioAppPanelUrl()}
+            savioAppUrl={savioPanelUrl}
           />
         </div>
       </div>
@@ -236,10 +322,40 @@ export function SavioFinanceDashboard() {
         </p>
       )}
 
-      <Tabs value={section} onValueChange={(v) => setSection(v as "resumen" | "webhooks")} className="space-y-4">
-        <TabsList className="h-9 w-full max-w-md justify-start">
+      <Dialog open={recurringOpen} onOpenChange={setRecurringOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cobros recurrentes</DialogTitle>
+            <DialogDescription className="text-left text-sm leading-relaxed">
+              Los planes y rutas de Savio para suscripciones o cobros automáticos dependen de tu contrato y de la
+              OpenAPI publicada. En Kawiil aún no hay una operación genérica desplegada para todos los entornos; hasta
+              alinearla con <span className="font-medium">app.savio.mx/docs</span>, gestiona recurrentes en el panel
+              Savio.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-start">
+            {savioPanelUrl ? (
+              <Button type="button" size="sm" asChild>
+                <a href={savioPanelUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                  Abrir Savio
+                </a>
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" size="sm" onClick={() => setRecurringOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Tabs value={section} onValueChange={(v) => setSection(v as "resumen" | "clientes" | "webhooks")} className="space-y-4">
+        <TabsList className="h-9 w-full max-w-2xl flex-wrap justify-start gap-1">
           <TabsTrigger value="resumen" className="text-xs gap-1.5">
-            <LayoutDashboard className="h-3.5 w-3.5" /> Resumen Savio
+            <LayoutDashboard className="h-3.5 w-3.5" /> Facturas y pagos
+          </TabsTrigger>
+          <TabsTrigger value="clientes" className="text-xs gap-1.5">
+            <Users className="h-3.5 w-3.5" /> Clientes
           </TabsTrigger>
           <TabsTrigger value="webhooks" className="text-xs gap-1.5">
             <Radio className="h-3.5 w-3.5" /> Notificaciones
@@ -274,6 +390,17 @@ export function SavioFinanceDashboard() {
             </div>
           )}
 
+          {invoiceQueryActive ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs">
+              <span>
+                Mostrando solo facturas del cliente seleccionado (filtro <code className="rounded bg-background px-1">customer_id</code> en la API).
+              </span>
+              <Button type="button" variant="secondary" size="sm" className="h-7 text-xs" onClick={() => setInvoiceCustomerFilter(null)}>
+                Quitar filtro
+              </Button>
+            </div>
+          ) : null}
+
           {apiLoading ? (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[1, 2, 3, 4].map((i) => (
@@ -284,44 +411,119 @@ export function SavioFinanceDashboard() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="stat-card">
                 <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                  <FileText className="h-3.5 w-3.5" /> Cargos en lista
+                  <FileText className="h-3.5 w-3.5" /> Facturas en esta vista
                 </div>
                 <p className="text-lg font-semibold">{invoiceRows.length}</p>
                 <p className="text-xs text-muted-foreground">
                   {invoiceAgg.withAmount > 0
-                    ? `Suma mostrada: ${formatMoney(invoiceAgg.sum)}`
+                    ? `Suma importes: ${formatMoney(invoiceAgg.sum)}`
                     : "Montos si Savio los envía en cada ítem"}
                 </p>
               </div>
               <div className="stat-card">
                 <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                  <Banknote className="h-3.5 w-3.5" /> Pagos en lista
+                  <Banknote className="h-3.5 w-3.5" /> Pagos en esta vista
                 </div>
                 <p className="text-lg font-semibold text-green-600">
                   {paymentAgg.withAmount > 0 ? formatMoney(paymentAgg.sum) : paymentRows.length > 0 ? "—" : "0"}
                 </p>
-                <p className="text-xs text-muted-foreground">{paymentRows.length} registros</p>
+                <p className="text-xs text-muted-foreground">{paymentRows.length} movimientos (hasta 100)</p>
               </div>
               <div className="stat-card">
                 <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
                   <Activity className="h-3.5 w-3.5" /> Webhooks (30 días)
                 </div>
                 <p className="text-lg font-semibold">{stats.recentTotal}</p>
-                <p className="text-xs text-muted-foreground">Cambia a Notificaciones para detalle</p>
+                <p className="text-xs text-muted-foreground">Pestaña Notificaciones</p>
               </div>
               <div className="stat-card">
                 <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                  <LayoutDashboard className="h-3.5 w-3.5" /> Origen
+                  <LayoutDashboard className="h-3.5 w-3.5" /> Límite de lista
                 </div>
-                <p className="text-lg font-semibold">API + DB</p>
-                <p className="text-xs text-muted-foreground">Hasta 100 ítems por recurso</p>
+                <p className="text-lg font-semibold">100</p>
+                <p className="text-xs text-muted-foreground">Registros por consulta GET</p>
               </div>
             </div>
           )}
 
+          {!apiLoading && customerRollup.length > 0 ? (
+            <div className="glass-card overflow-hidden p-0 border-border/50 rounded-xl">
+              <div className="px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium">Resumen por cliente</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Calculado con los cargos de la lista actual{invoiceQueryActive ? " (filtrada)" : ""}. Requiere{" "}
+                    <code className="text-[10px]">customer_id</code> en el payload cuando Savio lo envía.
+                  </p>
+                </div>
+                {savioPanelUrl ? (
+                  <a
+                    href={savioPanelUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-primary underline inline-flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Savio
+                  </a>
+                ) : null}
+              </div>
+              <div className="overflow-x-auto max-h-[220px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Cliente</TableHead>
+                      <TableHead className="text-right text-xs">Pendiente / por cobrar</TableHead>
+                      <TableHead className="text-right text-xs">Al día / cobrado</TableHead>
+                      <TableHead className="text-right text-xs">Cargos</TableHead>
+                      <TableHead className="text-xs w-[120px]">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {customerRollup.slice(0, 40).map((r) => (
+                      <TableRow key={r.key}>
+                        <TableCell className="text-xs max-w-[200px]">
+                          <span className="font-medium">{r.displayName}</span>
+                          {r.customerId ? (
+                            <p className="text-[10px] font-mono text-muted-foreground truncate">{r.customerId}</p>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums text-amber-700 dark:text-amber-400">
+                          {formatMoney(r.totalPendiente)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs tabular-nums text-emerald-700 dark:text-emerald-400">
+                          {formatMoney(r.totalAlDia)}
+                        </TableCell>
+                        <TableCell className="text-right text-xs">{r.invoiceCount}</TableCell>
+                        <TableCell className="text-xs">
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="h-auto p-0 text-xs"
+                            disabled={!r.customerId}
+                            title={!r.customerId ? "Sin id de cliente en la API para filtrar" : undefined}
+                            onClick={() => r.customerId && setInvoiceCustomerFilter(r.customerId)}
+                          >
+                            Ver facturas
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="glass-card overflow-hidden p-0 border-border/50 rounded-xl">
-              <div className="px-3 py-2 border-b text-xs font-medium">Cargos / facturas (Savio)</div>
+              <div className="px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
+                <span>Facturas y cargos</span>
+                {savioPanelUrl ? (
+                  <a href={savioPanelUrl} target="_blank" rel="noopener noreferrer" className="font-normal text-primary underline text-[11px]">
+                    Abrir en Savio
+                  </a>
+                ) : null}
+              </div>
               {apiLoading ? (
                 <Skeleton className="h-48 m-3 rounded-lg" />
               ) : invoiceRows.length === 0 ? (
@@ -333,8 +535,9 @@ export function SavioFinanceDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-xs">Folio / ID</TableHead>
+                        <TableHead className="text-xs">Folio</TableHead>
                         <TableHead className="text-xs">Cliente</TableHead>
+                        <TableHead className="text-xs">Vencimiento</TableHead>
                         <TableHead className="text-xs">Estado</TableHead>
                         <TableHead className="text-right text-xs">Monto</TableHead>
                       </TableRow>
@@ -344,10 +547,24 @@ export function SavioFinanceDashboard() {
                         <TableRow
                           key={row.key}
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setApiDetail({ title: "Cargo / factura", raw: row.raw })}
+                          onClick={() =>
+                            setApiDetail({
+                              title: "Factura / cargo",
+                              raw: row.raw,
+                              detailAction: looksLikeRealSavioResourceId(row.id) ? "invoices" : null,
+                              detailResourceId: looksLikeRealSavioResourceId(row.id) ? row.id : null,
+                            })
+                          }
                         >
                           <TableCell className="text-xs font-mono max-w-[100px] truncate">{row.folio}</TableCell>
-                          <TableCell className="text-xs max-w-[140px] truncate">{row.cliente}</TableCell>
+                          <TableCell className="text-xs max-w-[120px] truncate">{row.cliente}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">
+                            {row.dueDate
+                              ? Number.isNaN(Date.parse(row.dueDate))
+                                ? row.dueDate
+                                : format(new Date(row.dueDate), "dd MMM yy", { locale: es })
+                              : "—"}
+                          </TableCell>
                           <TableCell className="text-xs">
                             <Badge variant="outline" className="font-normal text-[10px]">
                               {row.estado}
@@ -365,7 +582,14 @@ export function SavioFinanceDashboard() {
             </div>
 
             <div className="glass-card overflow-hidden p-0 border-border/50 rounded-xl">
-              <div className="px-3 py-2 border-b text-xs font-medium">Pagos (Savio)</div>
+              <div className="px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2 text-xs font-medium">
+                <span>Pagos registrados</span>
+                {savioPanelUrl ? (
+                  <a href={savioPanelUrl} target="_blank" rel="noopener noreferrer" className="font-normal text-primary underline text-[11px]">
+                    Abrir en Savio
+                  </a>
+                ) : null}
+              </div>
               {apiLoading ? (
                 <Skeleton className="h-48 m-3 rounded-lg" />
               ) : paymentRows.length === 0 ? (
@@ -378,7 +602,8 @@ export function SavioFinanceDashboard() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="text-xs">Referencia</TableHead>
-                        <TableHead className="text-xs">Fecha</TableHead>
+                        <TableHead className="text-xs">Factura</TableHead>
+                        <TableHead className="text-xs">Fecha pago</TableHead>
                         <TableHead className="text-right text-xs">Monto</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -387,9 +612,19 @@ export function SavioFinanceDashboard() {
                         <TableRow
                           key={row.key}
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setApiDetail({ title: "Pago", raw: row.raw })}
+                          onClick={() =>
+                            setApiDetail({
+                              title: "Pago",
+                              raw: row.raw,
+                              detailAction: looksLikeRealSavioResourceId(row.id) ? "payments" : null,
+                              detailResourceId: looksLikeRealSavioResourceId(row.id) ? row.id : null,
+                            })
+                          }
                         >
-                          <TableCell className="text-xs max-w-[180px] truncate">{row.referencia}</TableCell>
+                          <TableCell className="text-xs max-w-[140px] truncate">{row.referencia}</TableCell>
+                          <TableCell className="text-xs font-mono max-w-[100px] truncate">
+                            {row.invoiceId ?? "—"}
+                          </TableCell>
                           <TableCell className="text-xs whitespace-nowrap">
                             {row.fecha
                               ? Number.isNaN(Date.parse(row.fecha))
@@ -407,6 +642,68 @@ export function SavioFinanceDashboard() {
                 </div>
               )}
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="clientes" className="mt-0 space-y-4">
+          {reactQueryError && (
+            <p className="text-xs text-destructive border border-destructive/30 rounded-lg px-3 py-2">
+              Error al cargar clientes: {reactQueryError.message}
+            </p>
+          )}
+          <div className="glass-card overflow-hidden p-0 border-border/50 rounded-xl">
+            <div className="px-3 py-2 border-b flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium">Clientes dados de alta</p>
+                <p className="text-[11px] text-muted-foreground">Hasta 100 registros por consulta a GET /customer.</p>
+              </div>
+              {savioPanelUrl ? (
+                <a href={savioPanelUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary underline inline-flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3" /> Savio
+                </a>
+              ) : null}
+            </div>
+            {apiLoading ? (
+              <Skeleton className="h-48 m-3 rounded-lg" />
+            ) : customerRows.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground text-xs px-3">
+                Sin clientes en la respuesta o lista vacía.
+              </div>
+            ) : (
+              <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Nombre</TableHead>
+                      <TableHead className="text-xs">Correo</TableHead>
+                      <TableHead className="text-xs">Teléfono</TableHead>
+                      <TableHead className="text-xs">Id Savio</TableHead>
+                      <TableHead className="text-xs w-[100px]">Acción</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {customerRows.map((c) => (
+                      <TableRow key={c.key}>
+                        <TableCell className="text-xs font-medium max-w-[180px] truncate">{c.displayName}</TableCell>
+                        <TableCell className="text-xs max-w-[160px] truncate">{c.email ?? "—"}</TableCell>
+                        <TableCell className="text-xs">{c.phone ?? "—"}</TableCell>
+                        <TableCell className="text-xs font-mono truncate max-w-[120px]">{c.id}</TableCell>
+                        <TableCell className="text-xs">
+                          <Button
+                            type="button"
+                            variant="link"
+                            className="h-auto p-0 text-xs"
+                            onClick={() => setInvoiceCustomerFilter(c.id)}
+                          >
+                            Ver facturas
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         </TabsContent>
 
@@ -575,9 +872,53 @@ export function SavioFinanceDashboard() {
             <SheetTitle>{apiDetail?.title || "Detalle"}</SheetTitle>
           </SheetHeader>
           {apiDetail && (
-            <pre className="mt-4 p-3 rounded-lg bg-muted text-[11px] overflow-x-auto whitespace-pre-wrap break-all">
-              {JSON.stringify(apiDetail.raw, null, 2)}
-            </pre>
+            <div className="mt-4 space-y-3 text-xs">
+              {apiDetail.detailAction && apiDetail.detailResourceId ? (
+                <div className="space-y-2">
+                  <p className="text-muted-foreground break-all">
+                    GET{" "}
+                    <span className="font-mono text-[10px]">
+                      {savioDetailPathLabel(apiDetail.detailAction, apiDetail.detailResourceId)}
+                    </span>{" "}
+                    (vía Edge). Si Savio no expone esta ruta en tu plan, revisa el cuerpo JSON y{" "}
+                    <code className="text-[10px]">savio_http_status</code>.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={liveDetailLoading}
+                    onClick={() => void fetchLiveSavioDetail()}
+                  >
+                    {liveDetailLoading ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        Consultando…
+                      </>
+                    ) : (
+                      "Actualizar detalle desde API"
+                    )}
+                  </Button>
+                  {liveDetailErr ? (
+                    <p className="text-destructive text-[11px]">{liveDetailErr}</p>
+                  ) : null}
+                  {liveDetailData !== null ? (
+                    <pre className="p-3 rounded-lg bg-muted text-[11px] overflow-x-auto whitespace-pre-wrap break-all max-h-[240px] overflow-y-auto">
+                      {JSON.stringify(liveDetailData, null, 2)}
+                    </pre>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-[11px]">
+                  Este registro no tiene un id reconocido para consultar detalle por GET; revisa el JSON de la lista o
+                  abre el cargo en Savio.
+                </p>
+              )}
+              <p className="text-muted-foreground font-medium">Lista (normalizado en cliente)</p>
+              <pre className="p-3 rounded-lg bg-muted text-[11px] overflow-x-auto whitespace-pre-wrap break-all max-h-[280px] overflow-y-auto">
+                {JSON.stringify(apiDetail.raw, null, 2)}
+              </pre>
+            </div>
           )}
         </SheetContent>
       </Sheet>

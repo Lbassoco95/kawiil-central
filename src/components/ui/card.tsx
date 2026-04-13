@@ -12,7 +12,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(({ className, variant =
     className={cn(
       variant === "glass"
         ? "glass-card text-card-foreground"
-        : "rounded-xl border border-border/60 bg-card text-card-foreground",
+        : "rounded-xl border border-border/50 bg-card text-card-foreground shadow-sm",
       className
     )}
     {...props}

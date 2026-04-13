@@ -556,6 +556,8 @@ export type Database = {
           primary_area: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id: string | null
           rfc: string | null
+          savio_customer_id: string | null
+          savio_customer_linked_at: string | null
           sat_fiel_location_hint: string | null
           sat_fiel_managed_by_firm: boolean
           services: Database["public"]["Enums"]["service_area"][]
@@ -580,6 +582,8 @@ export type Database = {
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
           rfc?: string | null
+          savio_customer_id?: string | null
+          savio_customer_linked_at?: string | null
           sat_fiel_location_hint?: string | null
           sat_fiel_managed_by_firm?: boolean
           services?: Database["public"]["Enums"]["service_area"][]
@@ -604,6 +608,8 @@ export type Database = {
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
           rfc?: string | null
+          savio_customer_id?: string | null
+          savio_customer_linked_at?: string | null
           sat_fiel_location_hint?: string | null
           sat_fiel_managed_by_firm?: boolean
           services?: Database["public"]["Enums"]["service_area"][]

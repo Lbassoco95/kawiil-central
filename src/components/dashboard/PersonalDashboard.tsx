@@ -692,8 +692,9 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           <div className="animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Siguiente acción</h3>
             <button
+              type="button"
               onClick={() => navigate(nextAction.project_id ? `/proyectos/${nextAction.project_id}?tab=tareas&taskId=${nextAction.id}` : `/tareas?taskId=${nextAction.id}`)}
-              className="w-full text-left glass-card-hover p-4 group border-2 border-primary/15"
+              className="w-full text-left page-list-card border-2 border-primary/20 p-4 group"
             >
               <div className="flex items-start gap-3">
                 <span className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${priorityDot(nextAction.priority)} animate-glow-pulse`} />
@@ -721,7 +722,8 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         {/* Tabs for sections */}
       <Tabs value={dashboardActiveTab} onValueChange={onDashboardTabChange} className="w-full min-w-0 mt-1">
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-          <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
+          <div className="surface-toolbar px-1 py-1 sm:px-2 sm:py-1.5">
+          <TabsList className="w-max sm:w-full justify-start border-0 border-b border-border/60 bg-transparent rounded-none h-auto p-0 gap-0">
             <TabsTrigger
               value="resumen"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 sm:px-4 py-2.5 text-xs sm:text-sm whitespace-nowrap transition-colors"
@@ -759,6 +761,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
               Rendimiento
             </TabsTrigger>
           </TabsList>
+          </div>
         </div>
 
         {/* Resumen */}

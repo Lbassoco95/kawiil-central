@@ -69,7 +69,8 @@ function LeadCard({ lead, stageColor, taskSummary }: { lead: Lead; stageColor: s
 
   return (
     <Card
-      className="shadow-sm overflow-hidden"
+      variant="glass"
+      className="overflow-hidden border-border/50 shadow-sm"
       style={{ borderLeftWidth: 4, borderLeftColor: stageColor }}
     >
       <div
@@ -104,7 +105,7 @@ function LeadCard({ lead, stageColor, taskSummary }: { lead: Lead; stageColor: s
           )}
         </CardContent>
       </div>
-      <div className="border-t border-border/40 px-3 py-1.5 bg-muted/15">
+      <div className="border-t border-border/40 bg-muted/20 px-3 py-1.5 backdrop-blur-sm">
         <Link
           to={`/pipeline/leads/${lead.id}`}
           className="text-xs font-medium text-primary hover:underline"
@@ -131,7 +132,7 @@ function StageColumn({ stage, leads, tasksByLead }: { stage: PipelineStage; lead
       </div>
       <div
         ref={setNodeRef}
-        className={`flex-1 rounded-b-lg border border-t-0 bg-muted/30 p-2 min-h-[200px] ${
+        className={`flex-1 rounded-b-lg border border-t-0 border-border/50 bg-card/70 p-2 min-h-[200px] backdrop-blur-[2px] ${
           isOver ? "ring-2 ring-primary ring-offset-2" : ""
         }`}
       >

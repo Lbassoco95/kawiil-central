@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ExternalLink, FilePlus2, Landmark, UserPlus } from "lucide-react";
 import { toast } from "sonner";
@@ -10,12 +10,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { SavioSearchablePick } from "@/components/finanzas/SavioSearchablePick";
 import { useSavioFinanceWriteMutation } from "@/hooks/useSavioFinanceWrite";
 import { useSavioWriteAccess } from "@/hooks/useSavioWriteAccess";
 
-export type SavioPickOption = { id: string; label: string };
+export type SavioPickOption = { id: string; label: string; subtitle?: string };
 
 export interface SavioFinanceWriteActionsProps {
   /** Cargos recientes (GET /invoice) para autocompletar `invoice_id` (OpenAPI). */
@@ -24,17 +27,38 @@ export interface SavioFinanceWriteActionsProps {
   customerPickOptions?: SavioPickOption[];
   /** URL del panel Savio (`VITE_SAVIO_APP_URL`). */
   savioAppUrl?: string | null;
+  /** Prellenar cliente Savio en «Nuevo cargo» (p. ej. desde ficha cliente). */
+  initialCustomerId?: string | null;
 }
 
 export function SavioFinanceWriteActions({
   invoicePickOptions,
   customerPickOptions,
   savioAppUrl,
+  initialCustomerId,
 }: SavioFinanceWriteActionsProps) {
   const { data: access, isLoading } = useSavioWriteAccess();
   const writeMut = useSavioFinanceWriteMutation();
-  const payListId = useId();
-  const custListId = useId();
+
+  const invoiceComboOptions = useMemo(
+    () =>
+      (invoicePickOptions ?? []).map((o) => ({
+        id: o.id,
+        label: o.label,
+        subtitle: o.subtitle,
+      })),
+    [invoicePickOptions],
+  );
+
+  const customerComboOptions = useMemo(
+    () =>
+      (customerPickOptions ?? []).map((o) => ({
+        id: o.id,
+        label: o.label,
+        subtitle: o.subtitle,
+      })),
+    [customerPickOptions],
+  );
 
   const [payOpen, setPayOpen] = useState(false);
   const [invOpen, setInvOpen] = useState(false);
@@ -50,6 +74,12 @@ export function SavioFinanceWriteActions({
   const [amountTotal, setAmountTotal] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [invoiceItemsJson, setInvoiceItemsJson] = useState("");
+
+  useEffect(() => {
+    const v = initialCustomerId?.trim();
+    if (v) setCustomerId(v);
+  }, [initialCustomerId]);
 
   const [custLegalName, setCustLegalName] = useState("");
   const [custEmail, setCustEmail] = useState("");
@@ -72,6 +102,7 @@ export function SavioFinanceWriteActions({
     setAmountTotal("");
     setDescription("");
     setDueDate("");
+    setInvoiceItemsJson("");
   }
 
   function resetCustomerForm() {
@@ -121,6 +152,30 @@ export function SavioFinanceWriteActions({
     };
     if (description.trim()) payload.description = description.trim();
     if (dueDate.trim()) payload.due_date = dueDate.trim();
+
+    if (invoiceItemsJson.trim()) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(invoiceItemsJson.trim());
+      } catch {
+        toast.error("El JSON de conceptos no es válido.");
+        return;
+      }
+      if (Array.isArray(parsed)) {
+        payload.items = parsed;
+      } else if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const o = parsed as Record<string, unknown>;
+        if (Array.isArray(o.items)) payload.items = o.items;
+        else if (Array.isArray(o.concepts)) payload.concepts = o.concepts;
+        else {
+          toast.error('Usa un arreglo de líneas o un objeto { "items": [...] } / { "concepts": [...] }.');
+          return;
+        }
+      } else {
+        toast.error("Formato de conceptos no reconocido.");
+        return;
+      }
+    }
 
     try {
       await writeMut.mutateAsync({ operation: "create_invoice", payload });
@@ -229,47 +284,47 @@ export function SavioFinanceWriteActions({
       <Dialog open={payOpen} onOpenChange={(o) => !writeMut.isPending && setPayOpen(o)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Registrar pago en Savio</DialogTitle>
+            <DialogTitle>Registrar pago</DialogTitle>
+            <p className="text-sm text-muted-foreground font-normal pt-1">
+              Aplica un pago a un cargo ya existente. Elige el cargo en la lista o pega el identificador que ves en
+              Savio.
+            </p>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            Equivale a POST <code className="rounded bg-muted px-1">/payment</code> en la OpenAPI de Savio. Kawiil
-            envía solo los campos permitidos por la función{" "}
-            <code className="rounded bg-muted px-1">savio-finance-write</code> (<code className="rounded bg-muted px-1">create_payment</code>).
-          </p>
+          <Collapsible className="rounded-md border border-border/60 bg-muted/20 px-2 py-1.5">
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-left text-[11px] text-muted-foreground hover:text-foreground">
+              Detalle técnico (integración)
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2 text-[11px] text-muted-foreground space-y-1">
+              <p>
+                Petición equivalente a POST <code className="rounded bg-background px-1">/payment</code> en Savio;
+                Kawiil envía solo campos permitidos por <code className="rounded bg-background px-1">create_payment</code>.
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="sw-invoice-id">ID del cargo (factura)</Label>
-              {invoicePickOptions && invoicePickOptions.length > 0 ? (
-                <>
-                  <Input
-                    id="sw-invoice-id"
-                    list={payListId}
-                    value={invoiceId}
-                    onChange={(e) => setInvoiceId(e.target.value)}
-                    placeholder="UUID o id Savio"
-                    className="font-mono text-xs"
-                    autoComplete="off"
-                  />
-                  <datalist id={payListId}>
-                    {invoicePickOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </datalist>
-                  <p className="text-[11px] text-muted-foreground">
-                    Lista de cargos recientes obtenida con GET /invoice; puedes pegar otro id si no aparece.
-                  </p>
-                </>
-              ) : (
-                <Input
-                  id="sw-invoice-id"
+              <Label>Factura o cargo a pagar</Label>
+              {invoiceComboOptions.length > 0 ? (
+                <SavioSearchablePick
+                  options={invoiceComboOptions}
                   value={invoiceId}
-                  onChange={(e) => setInvoiceId(e.target.value)}
-                  placeholder="UUID o id Savio"
-                  className="font-mono text-xs"
+                  onChange={setInvoiceId}
+                  placeholder="Buscar por folio, cliente o id…"
+                  searchPlaceholder="Buscar cargo…"
+                  disabled={writeMut.isPending}
                 />
-              )}
+              ) : null}
+              <Label htmlFor="sw-invoice-id" className="text-[11px] text-muted-foreground">
+                Identificador (editable)
+              </Label>
+              <Input
+                id="sw-invoice-id"
+                value={invoiceId}
+                onChange={(e) => setInvoiceId(e.target.value)}
+                placeholder="UUID o id del cargo en Savio"
+                className="font-mono text-xs"
+                autoComplete="off"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sw-amount">Monto pagado</Label>
@@ -314,12 +369,20 @@ export function SavioFinanceWriteActions({
       <Dialog open={custOpen} onOpenChange={(o) => !writeMut.isPending && setCustOpen(o)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Nuevo cliente en Savio</DialogTitle>
+            <DialogTitle>Alta de cliente</DialogTitle>
+            <p className="text-sm text-muted-foreground font-normal pt-1">
+              Registra un cliente en Savio para poder emitirle cargos. Si tu cuenta exige campos extra, complétalos en
+              Savio.
+            </p>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            Equivale a POST <code className="rounded bg-muted px-1">/customer</code>. Los nombres de campo deben
-            coincidir con la OpenAPI de tu cuenta; si Savio rechaza el cuerpo, ajusta en app.savio.mx/docs.
-          </p>
+          <Collapsible className="rounded-md border border-border/60 bg-muted/20 px-2 py-1.5">
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-left text-[11px] text-muted-foreground hover:text-foreground">
+              Detalle técnico (integración)
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2 text-[11px] text-muted-foreground">
+              POST <code className="rounded bg-background px-1">/customer</code>. Campos según OpenAPI de tu entorno.
+            </CollapsibleContent>
+          </Collapsible>
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="sw-cust-name">Nombre o razón social</Label>
@@ -362,45 +425,44 @@ export function SavioFinanceWriteActions({
       <Dialog open={invOpen} onOpenChange={(o) => !writeMut.isPending && setInvOpen(o)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Nuevo cargo en Savio</DialogTitle>
+            <DialogTitle>Nuevo cargo (factura simple)</DialogTitle>
+            <p className="text-sm text-muted-foreground font-normal pt-1">
+              Crea un cargo con importe total para un cliente. Si tu cuenta Savio exige conceptos detallados o
+              impuestos, usa el panel Savio o amplía la integración.
+            </p>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            Equivale a POST <code className="rounded bg-muted px-1">/invoice</code> con <code className="rounded bg-muted px-1">customer_id</code> y{" "}
-            <code className="rounded bg-muted px-1">amount_total</code>. Si tu cuenta exige partidas o conceptos
-            detallados, crea el cargo en Savio o amplía el payload según su documentación.
-          </p>
+          <Collapsible className="rounded-md border border-border/60 bg-muted/20 px-2 py-1.5">
+            <CollapsibleTrigger className="flex w-full items-center justify-between text-left text-[11px] text-muted-foreground hover:text-foreground">
+              Detalle técnico (integración)
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2 text-[11px] text-muted-foreground">
+              POST <code className="rounded bg-background px-1">/invoice</code> con <code className="rounded bg-background px-1">customer_id</code> y{" "}
+              <code className="rounded bg-background px-1">amount_total</code>.
+            </CollapsibleContent>
+          </Collapsible>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="sw-cust">ID cliente Savio</Label>
-              {customerPickOptions && customerPickOptions.length > 0 ? (
-                <>
-                  <Input
-                    id="sw-cust"
-                    list={custListId}
-                    value={customerId}
-                    onChange={(e) => setCustomerId(e.target.value)}
-                    className="font-mono text-xs"
-                    autoComplete="off"
-                  />
-                  <datalist id={custListId}>
-                    {customerPickOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </datalist>
-                  <p className="text-[11px] text-muted-foreground">
-                    Clientes desde GET /customer vía Kawiil; si falta alguien, escribe su id a mano.
-                  </p>
-                </>
-              ) : (
-                <Input
-                  id="sw-cust"
+              <Label>Cliente</Label>
+              {customerComboOptions.length > 0 ? (
+                <SavioSearchablePick
+                  options={customerComboOptions}
                   value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  className="font-mono text-xs"
+                  onChange={setCustomerId}
+                  placeholder="Buscar cliente por nombre…"
+                  searchPlaceholder="Buscar cliente…"
+                  disabled={writeMut.isPending}
                 />
-              )}
+              ) : null}
+              <Label htmlFor="sw-cust" className="text-[11px] text-muted-foreground">
+                Identificador de cliente en Savio (editable)
+              </Label>
+              <Input
+                id="sw-cust"
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                className="font-mono text-xs"
+                autoComplete="off"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sw-total">Importe total</Label>
@@ -420,6 +482,25 @@ export function SavioFinanceWriteActions({
               <Label htmlFor="sw-due">Vencimiento (opcional)</Label>
               <Input id="sw-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
+            <Collapsible className="rounded-md border border-border/60 bg-muted/20 px-2 py-1.5">
+              <CollapsibleTrigger className="flex w-full items-center justify-between text-left text-[11px] text-muted-foreground hover:text-foreground">
+                Conceptos avanzados (JSON opcional)
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-1.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Si tu cuenta Savio exige líneas de detalle, pega un arreglo JSON o{" "}
+                  <code className="rounded bg-background px-0.5">{"{ \"items\": [...] }"}</code> según OpenAPI.
+                </p>
+                <Textarea
+                  id="sw-inv-items"
+                  value={invoiceItemsJson}
+                  onChange={(e) => setInvoiceItemsJson(e.target.value)}
+                  placeholder='[{"description":"Servicio","quantity":1,"unit_price":1000}]'
+                  className="font-mono text-[11px] min-h-[88px]"
+                  disabled={writeMut.isPending}
+                />
+              </CollapsibleContent>
+            </Collapsible>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => setInvOpen(false)} disabled={writeMut.isPending}>

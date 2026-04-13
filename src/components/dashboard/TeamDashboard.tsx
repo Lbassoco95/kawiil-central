@@ -390,7 +390,8 @@ INSTRUCCIONES:
       {/* Tabs */}
       <Tabs defaultValue="resumen" className="w-full min-w-0">
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-          <TabsList className="w-max sm:w-full justify-start border-b border-border bg-transparent rounded-none h-auto p-0 gap-0">
+          <div className="surface-toolbar px-1 py-1 sm:px-2 sm:py-1.5">
+          <TabsList className="w-max sm:w-full justify-start border-0 border-b border-border/60 bg-transparent rounded-none h-auto p-0 gap-0">
             <TabsTrigger value="resumen" className={tabClass}>Resumen</TabsTrigger>
             <TabsTrigger value="celulas" className={tabClass}>Células</TabsTrigger>
             {isAdminOrManager && (
@@ -403,6 +404,7 @@ INSTRUCCIONES:
               <TabsTrigger value="rendimiento" className={tabClass}>Rendimiento</TabsTrigger>
             )}
           </TabsList>
+          </div>
         </div>
 
         {/* Resumen */}

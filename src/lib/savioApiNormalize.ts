@@ -52,9 +52,13 @@ export type SavioInvoiceRowView = {
   id: string;
   folio: string;
   cliente: string;
+  /** Identificador de cliente en Savio si viene en el payload (para agrupar y filtros). */
+  customerId: string | null;
   monto: number | null;
   estado: string;
   fecha: string | null;
+  /** Vencimiento del cargo si Savio lo envía (distinto de fecha de emisión). */
+  dueDate: string | null;
   raw: unknown;
 };
 
@@ -62,6 +66,8 @@ export type SavioPaymentRowView = {
   key: string;
   id: string;
   referencia: string;
+  /** Cargo/factura asociado si Savio lo envía. */
+  invoiceId: string | null;
   monto: number | null;
   fecha: string | null;
   raw: unknown;
@@ -107,16 +113,26 @@ export function toInvoiceRowView(row: unknown, index: number): SavioInvoiceRowVi
     "date",
     "fecha",
     "issued_at",
-    "due_date",
   ]);
+  const dueDate = pickSavioDate(row, ["due_date", "fecha_vencimiento", "expires_at", "payment_due_date"]);
+  const cid = pickSavioString(row, [
+    "customer_id",
+    "customer_uuid",
+    "client_id",
+    "customerId",
+    "id_customer",
+  ]);
+  const customerId = cid === "—" ? null : cid;
   return {
     key: id,
     id,
     folio: folio === "—" ? id.slice(0, 12) : folio,
     cliente,
+    customerId,
     monto,
     estado,
     fecha,
+    dueDate,
     raw: row,
   };
 }
@@ -141,10 +157,13 @@ export function toPaymentRowView(row: unknown, index: number): SavioPaymentRowVi
     "importe",
   ]);
   const fecha = pickSavioDate(row, ["payment_date", "created_at", "date", "fecha", "paid_at"]);
+  const inv = pickSavioString(row, ["invoice_id", "charge_id", "invoice_uuid", "document_id"]);
+  const invoiceId = inv === "—" ? null : inv;
   return {
     key: id,
     id,
     referencia: referencia === "—" ? id.slice(0, 12) : referencia,
+    invoiceId,
     monto,
     fecha,
     raw: row,

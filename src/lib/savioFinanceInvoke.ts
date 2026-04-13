@@ -13,7 +13,7 @@ export type SavioInvokeResult = {
   message?: string;
 };
 
-async function invokeErrorBody(error: unknown): Promise<SavioInvokeResult | null> {
+export async function invokeSavioFunctionErrorBody(error: unknown): Promise<SavioInvokeResult | null> {
   if (!error || typeof error !== "object") return null;
   const ctx = (error as { context?: unknown }).context;
   if (
@@ -37,12 +37,18 @@ async function invokeErrorBody(error: unknown): Promise<SavioInvokeResult | null
 export async function fetchSavioResource(
   action: SavioFinanceApiAction,
   query: Record<string, string>,
+  /** Si se indica, GET al detalle `/invoice/{id}` (o payment/customer) según action. */
+  resourceId?: string | null,
 ): Promise<SavioInvokeResult> {
+  const body: Record<string, unknown> = { action, query };
+  const rid = resourceId?.trim();
+  if (rid) body.resourceId = rid;
+
   const { data, error } = await supabase.functions.invoke("savio-finance-api", {
-    body: { action, query },
+    body,
   });
   if (error) {
-    const fromHttp = await invokeErrorBody(error);
+    const fromHttp = await invokeSavioFunctionErrorBody(error);
     if (fromHttp) return fromHttp;
     return { ok: false, error: error.message || "invoke_error" };
   }
