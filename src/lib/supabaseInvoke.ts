@@ -32,6 +32,28 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
         ? payload.message
         : "Guarda la CIEC del cliente antes de ejecutar consultas CSF u opinión (Moffin Solutions).";
     }
+    if (payload.error === "moffin_profile_failed") {
+      const detail =
+        typeof payload.message === "string" && payload.message.trim()
+          ? ` Detalle de Moffin: ${payload.message.trim()}`
+          : "";
+      return (
+        "No se pudo crear el perfil SAT en Moffin (RFC + CIEC). Revisa que la CIEC sea la del portal del SAT; " +
+        "luego actualízala en Contabilidad y vuelve a intentar." + detail
+      );
+    }
+    if (payload.error === "moffin_profile_invalid") {
+      return (
+        "Moffin no devolvió profileId al crear el perfil SAT. Contacta a soporte Moffin o verifica RFC y CIEC; " +
+        "puedes actualizar la CIEC en Contabilidad y reintentar."
+      );
+    }
+    if (payload.error === "ciec_decrypt_failed") {
+      return (
+        "No se pudo leer la CIEC guardada (cifrado). Vuelve a guardar la CIEC en Contabilidad o revisa en Supabase " +
+        "que MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET coincidan con el valor usado al guardarla."
+      );
+    }
     if (typeof payload.message === "string" && payload.message.trim()) {
       return payload.message;
     }

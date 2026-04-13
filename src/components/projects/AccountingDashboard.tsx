@@ -578,6 +578,20 @@ export function AccountingDashboard({
         };
         if (payload.error || error) {
           toast.error(functionInvokeUserMessage(data, error));
+          const errCode = String((payload as { error?: string }).error ?? "");
+          const scrollCiec =
+            MOFFIN_USE_SOLUTIONS &&
+            clientId &&
+            ["moffin_profile_failed", "moffin_profile_invalid", "ciec_decrypt_failed"].includes(errCode);
+          if (scrollCiec) {
+            queryClient.invalidateQueries({ queryKey: ["moffin-sat-ciec-status", clientId] });
+            requestAnimationFrame(() => {
+              document.getElementById("moffin-sat-ciec-section")?.scrollIntoView({
+                behavior: "smooth",
+                block: "nearest",
+              });
+            });
+          }
           if (payload.consult) {
             queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
             if (clientId) {

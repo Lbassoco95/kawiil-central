@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
-import { Loader2, Landmark, ExternalLink } from "lucide-react";
+import { Loader2, Landmark, ExternalLink, ListChecks } from "lucide-react";
 
 type HealthPayload = {
   ok?: boolean;
@@ -120,6 +120,72 @@ export function MoffinIntegrationCard() {
             </a>
             . En el front: <code className="text-foreground">VITE_MOFFIN_API_FLAVOR=solutions</code>.
           </p>
+          <div className="pt-1 border-t border-border/50 space-y-1.5">
+            <p className="font-medium text-foreground flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5 shrink-0" />
+              Flujo API (orden obligatorio)
+            </p>
+            <ol className="list-decimal pl-4 space-y-1">
+              <li>
+                <a
+                  href="https://solutions-docs.moffin.mx/apis/consultas-al-sat/createprofilesat"
+                  className="text-primary underline-offset-2 hover:underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Creación de perfil SAT
+                </a>{" "}
+                — <code className="text-foreground">POST /query/sat/profile</code> (RFC + CIEC).
+              </li>
+              <li>
+                <a
+                  href="https://solutions-docs.moffin.mx/apis/consultas-al-sat/requestprofilecsf"
+                  className="text-primary underline-offset-2 hover:underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Constancia (CSF)
+                </a>{" "}
+                — <code className="text-foreground">POST /query/sat/csf</code> (solo RFC).
+              </li>
+              <li>
+                <a
+                  href="https://solutions-docs.moffin.mx/apis/consultas-al-sat/requestprofile32d"
+                  className="text-primary underline-offset-2 hover:underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Opinión 32D
+                </a>{" "}
+                — <code className="text-foreground">POST /query/sat/compliance-opinion</code>; resultado puede llegar por
+                webhook.
+              </li>
+            </ol>
+          </div>
+          <div className="pt-1 border-t border-border/50 space-y-1">
+            <p className="font-medium text-foreground">Checklist secretos (Solutions)</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>
+                <code className="text-foreground">MOFFIN_API_FLAVOR</code>=<code className="text-foreground">solutions</code>
+              </li>
+              <li>
+                <code className="text-foreground">MOFFIN_SOLUTIONS_BASE_URL</code> o base con{" "}
+                <code className="text-foreground">solutions-api.moffin.mx</code>
+              </li>
+              <li>
+                <code className="text-foreground">MOFFIN_API_KEY</code> o <code className="text-foreground">MOFFIN_SOLUTIONS_BEARER</code> (Bearer)
+              </li>
+              <li>
+                <code className="text-foreground">MOFFIN_LEGACY_BASE_URL</code> + token legacy para lista 69-B
+              </li>
+              <li>
+                <code className="text-foreground">MOFFIN_SAT_CIEC_SECRET</code> o <code className="text-foreground">MOFFIN_FIEL_SECRET</code> (≥32) para CIEC cifrada
+              </li>
+              <li>
+                <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> para <code className="text-foreground">moffin-webhook</code>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
