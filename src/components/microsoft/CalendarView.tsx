@@ -455,7 +455,7 @@ export function CalendarView() {
           </div>
         )}
         {/* Toolbar */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="surface-toolbar flex flex-wrap items-center justify-between gap-2 p-3 md:p-4">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" className="h-8 w-8" onClick={goPrev}>
               <ChevronLeft className="h-4 w-4" />
@@ -472,7 +472,7 @@ export function CalendarView() {
               <Switch checked={showKawiilTasks} onCheckedChange={setShowKawiilTasks} className="scale-75" />
               <span className="text-muted-foreground">Tareas Kawiil</span>
             </label>
-            <div className="flex gap-0.5 bg-secondary/30 rounded-full p-0.5">
+            <div className="flex gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 backdrop-blur-sm">
               {(["day", "3days", "week", "month"] as const).map((v) => (
                 <button key={v} className={`tab-pill ${viewMode === v ? "tab-pill-active" : "tab-pill-inactive"}`} onClick={() => setViewMode(v)}>
                   {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}

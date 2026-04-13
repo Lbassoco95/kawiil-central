@@ -10,7 +10,7 @@ interface MicrosoftConnectCardProps {
 export function MicrosoftConnectCard({ onConnect, isConnecting }: MicrosoftConnectCardProps) {
   return (
     <div className="flex items-center justify-center py-20">
-      <Card className="max-w-md w-full">
+      <Card variant="glass" className="w-full max-w-md shadow-md">
         <CardContent className="p-8 text-center space-y-4">
           <div className="mx-auto w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
             <svg viewBox="0 0 23 23" className="w-8 h-8">

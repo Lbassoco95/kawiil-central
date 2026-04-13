@@ -39,11 +39,14 @@ const Microsoft365Calendario = () => {
     <AppLayout>
       <ErrorBoundary>
         <div className="space-y-4 animate-fade-in">
-          <PageHeader
-            title="Calendario"
-            description={`Outlook · ${profile?.displayName || profile?.mail || ""} — con tareas de Kawiil`}
-            icon={<Calendar className="h-6 w-6" />}
-          />
+          <div className="surface-toolbar p-4 md:p-5">
+            <PageHeader
+              variant="minimal"
+              title="Calendario"
+              description={`Outlook · ${profile?.displayName || profile?.mail || ""} — con tareas de Kawiil`}
+              icon={<Calendar className="h-6 w-6" />}
+            />
+          </div>
           <CalendarView />
         </div>
       </ErrorBoundary>

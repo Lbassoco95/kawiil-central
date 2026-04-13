@@ -60,7 +60,7 @@ export function SlackChannelHeader({
   };
 
   return (
-    <header className="shrink-0 flex flex-col gap-2 px-4 py-3 border-b border-border/80 bg-card/40 backdrop-blur-sm z-10">
+    <header className="shrink-0 z-10 flex flex-col gap-2 border-b border-border/70 bg-card px-4 py-3 shadow-sm backdrop-blur-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           {showSidebarTrigger && onOpenSidebar && (

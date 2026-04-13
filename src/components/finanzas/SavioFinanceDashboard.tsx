@@ -277,7 +277,7 @@ export function SavioFinanceDashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3">
+      <div className="surface-toolbar flex flex-col gap-3 p-4 md:p-5">
         <p className="text-sm text-muted-foreground max-w-3xl">
           <strong className="text-foreground">Facturas y pagos</strong> se leen en vivo desde la API Savio (misma
           clave que usa el despacho). <strong className="text-foreground">Clientes</strong> lista altas recientes.{" "}
@@ -442,7 +442,8 @@ export function SavioFinanceDashboard() {
       </Dialog>
 
       <Tabs value={section} onValueChange={(v) => setSection(v as "resumen" | "clientes" | "webhooks")} className="space-y-4">
-        <TabsList className="h-9 w-full max-w-2xl flex-wrap justify-start gap-1">
+        <div className="surface-toolbar inline-flex w-full max-w-full p-2 md:max-w-2xl">
+        <TabsList className="h-9 w-full max-w-2xl flex-wrap justify-start gap-1 bg-transparent">
           <TabsTrigger value="resumen" className="text-xs gap-1.5">
             <LayoutDashboard className="h-3.5 w-3.5" /> Facturas y pagos
           </TabsTrigger>
@@ -453,6 +454,7 @@ export function SavioFinanceDashboard() {
             <Radio className="h-3.5 w-3.5" /> Notificaciones
           </TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="resumen" className="mt-0 space-y-4">
           {reactQueryError && (

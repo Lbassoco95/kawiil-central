@@ -10,6 +10,7 @@ import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { nowMX } from "@/lib/dateUtils";
 import { Clock } from "lucide-react";
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 const Microsoft365Correo = () => {
   const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
@@ -32,7 +33,12 @@ const Microsoft365Correo = () => {
       <AppSidebar />
       <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden w-full h-screen">
         {/* Cabecera: búsqueda en bloque aparte para alinear con el área de correo */}
-        <div className={`shrink-0 bg-background/80 backdrop-blur-sm border-b border-border/50 ${isMobile ? "px-4 pt-12 pb-2" : "px-4 py-2"}`}>
+        <div
+          className={cn(
+            "shrink-0 border-b border-border/70 bg-card shadow-sm backdrop-blur-md",
+            isMobile ? "px-4 pt-12 pb-2" : "px-4 py-3",
+          )}
+        >
           {!isMobile && (
             <div className="mb-2 w-full max-w-2xl">
               <GlobalAISearch className="w-full max-w-full shrink-0 flex-none" />

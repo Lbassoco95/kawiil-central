@@ -9,7 +9,7 @@ type Props = {
 export function SlackConnectHero({ onConnect, isConnecting }: Props) {
   return (
     <div className="flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center px-6 py-16">
-      <div className="max-w-md w-full text-center space-y-8 animate-fade-in">
+      <div className="surface-toolbar w-full max-w-md space-y-8 p-8 text-center animate-fade-in">
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 shadow-lg shadow-primary/5">
           <MessageSquare className="h-10 w-10 text-primary" />
         </div>

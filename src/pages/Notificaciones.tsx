@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { registerWebPushSubscription, formatPushRegistrationUserMessage } from "@/lib/registerWebPush";
 import { playNotificationBeep } from "@/lib/notificationBeep";
+import { cn } from "@/lib/utils";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
@@ -503,6 +504,7 @@ export default function Notificaciones() {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="minimal"
           title="Notificaciones"
           description="Menciones, actividad del equipo y alertas de vencimiento"
         />
@@ -516,7 +518,7 @@ export default function Notificaciones() {
         ) : (
           <>
             {/* Tab pills */}
-            <div className="flex gap-1.5 overflow-x-auto flex-nowrap pb-1 -mx-1 px-1 scrollbar-hide">
+            <div className="surface-toolbar -mx-1 flex flex-nowrap gap-1.5 overflow-x-auto px-3 py-2 scrollbar-hide sm:mx-0 sm:px-4">
               {tabs.map((t) => (
                 <button
                   key={t.key}
@@ -582,11 +584,12 @@ export default function Notificaciones() {
                     {currentList.map((m, i) => (
                       <div
                         key={m.id}
-                        className={`flex items-start gap-3 py-3 px-3 rounded-2xl cursor-pointer transition-all duration-300 border border-border/40 backdrop-blur-sm animate-fade-in hover:shadow-md hover:-translate-y-0.5 ${
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 shadow-sm transition-shadow duration-200 animate-fade-in hover:shadow-md",
                           m.is_read
-                            ? "bg-card/60 hover:bg-card/80"
-                            : "bg-primary/[0.04] border-primary/15 hover:bg-primary/[0.07]"
-                        }`}
+                            ? "border-border/60 bg-card hover:border-border/80"
+                            : "border-primary/25 bg-primary/[0.05] hover:border-primary/35",
+                        )}
                         style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
                         onClick={() => handleNotificationClick(m)}
                       >

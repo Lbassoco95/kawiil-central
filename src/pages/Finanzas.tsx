@@ -149,12 +149,12 @@ export default function Finanzas() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 items-center">
+      <div className="surface-toolbar flex flex-wrap items-center gap-2 p-3 md:p-4">
         <Input
           placeholder="Buscar..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-48 h-8 text-xs"
+          className="h-8 w-48 border-border/50 bg-background/60 text-xs"
         />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-36 h-8 text-xs">
@@ -192,6 +192,7 @@ export default function Finanzas() {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="minimal"
           title="Finanzas"
           description={pageDescription}
           icon={<Wallet className="h-6 w-6" />}
@@ -224,7 +225,8 @@ export default function Finanzas() {
             </div>
           ) : canViewSavioIncome ? (
             <Tabs value={financeTab} onValueChange={(v) => setFinanceTab(v as FinanceTab)} className="space-y-4">
-              <TabsList className="h-9 flex-wrap">
+              <div className="surface-toolbar inline-flex w-full max-w-full p-2 md:w-fit">
+              <TabsList className="h-9 flex-wrap bg-transparent">
                 <TabsTrigger value="resumen" className="text-xs gap-1.5">
                   <LayoutDashboard className="h-3.5 w-3.5" /> Resumen
                 </TabsTrigger>
@@ -235,6 +237,7 @@ export default function Finanzas() {
                   <Landmark className="h-3.5 w-3.5" /> Ingresos facturados
                 </TabsTrigger>
               </TabsList>
+              </div>
 
               <TabsContent value="resumen" className="mt-0">
                 <FinanceExecutiveSummary
@@ -254,7 +257,8 @@ export default function Finanzas() {
             </Tabs>
           ) : (
             <Tabs value={financeTab} onValueChange={(v) => setFinanceTab(v as FinanceTab)} className="space-y-4">
-              <TabsList className="h-9 flex-wrap">
+              <div className="surface-toolbar inline-flex w-full max-w-full p-2 md:w-fit">
+              <TabsList className="h-9 flex-wrap bg-transparent">
                 <TabsTrigger value="resumen" className="text-xs gap-1.5">
                   <LayoutDashboard className="h-3.5 w-3.5" /> Resumen
                 </TabsTrigger>
@@ -262,6 +266,7 @@ export default function Finanzas() {
                   <Wallet className="h-3.5 w-3.5" /> Gastos internos
                 </TabsTrigger>
               </TabsList>
+              </div>
 
               <TabsContent value="resumen" className="mt-0">
                 <FinanceExecutiveSummary expenses={expenses} savioEnabled={false} />
