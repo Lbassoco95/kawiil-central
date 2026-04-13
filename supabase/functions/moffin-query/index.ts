@@ -701,11 +701,16 @@ Deno.serve(async (req) => {
         { rfc: rfcRaw, ciec: ciecPlain },
       );
       if (!profRes.ok) {
+        const hint401 =
+          profRes.status === 401
+            ? "Moffin Solutions rechazó el Bearer (401). En Supabase → Edge → Secrets usa el token de API del producto Solutions (solutions-api.moffin.mx), no la clave solo-legacy de app.moffin salvo que Moffin te indique que es la misma. Si 69-B usa otra clave, define MOFFIN_LEGACY_API_KEY para lista 69-B y MOFFIN_SOLUTIONS_BEARER (o un MOFFIN_API_KEY válido para Bearer) para CSF/32D. Revisa que el secreto no incluya el prefijo «Bearer » duplicado."
+            : undefined;
         return new Response(
           JSON.stringify({
             error: "moffin_profile_failed",
             message: profRes.message,
             statusCode: profRes.status,
+            ...(hint401 ? { hint: hint401 } : {}),
           }),
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
@@ -749,12 +754,17 @@ Deno.serve(async (req) => {
         })
         .select("id")
         .single();
+      const hint401Sat =
+        satRes.status === 401
+          ? "Token Bearer inválido para Moffin Solutions (misma causa que perfil SAT). Configura MOFFIN_SOLUTIONS_BEARER o un MOFFIN_API_KEY aceptado por solutions-api.moffin.mx."
+          : undefined;
       return new Response(
         JSON.stringify({
           error: "moffin_api_error",
           message: satRes.message,
           statusCode: satRes.status,
           consultId: rowErr?.id,
+          ...(hint401Sat ? { hint: hint401Sat } : {}),
         }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );

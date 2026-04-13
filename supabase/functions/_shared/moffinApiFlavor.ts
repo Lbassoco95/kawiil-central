@@ -4,6 +4,13 @@
  */
 export type MoffinApiFlavor = "legacy" | "solutions";
 
+/** Evita Bearer duplicado o saltos de línea al pegar el secreto en Supabase. */
+function normalizeSolutionsBearer(value: string): string {
+  let v = value.trim().replace(/\r?\n/g, "").replace(/\s+/g, " ");
+  if (/^bearer\s+/i.test(v)) v = v.replace(/^bearer\s+/i, "").trim();
+  return v;
+}
+
 export function getMoffinApiFlavor(): MoffinApiFlavor {
   const raw = Deno.env.get("MOFFIN_API_FLAVOR")?.trim().toLowerCase() ?? "";
   if (raw === "legacy") return "legacy";
@@ -30,12 +37,14 @@ export function moffinLegacyBaseUrl(): string {
 
 export function moffinLegacyApiKey(): string {
   const legacy = Deno.env.get("MOFFIN_LEGACY_API_KEY")?.trim();
-  if (legacy) return legacy;
-  return Deno.env.get("MOFFIN_API_KEY")?.trim() ?? "";
+  const raw = (legacy || Deno.env.get("MOFFIN_API_KEY") || "").trim().replace(/\r?\n/g, "");
+  if (/^token\s+/i.test(raw)) return raw.replace(/^token\s+/i, "").trim();
+  if (/^bearer\s+/i.test(raw)) return raw.replace(/^bearer\s+/i, "").trim();
+  return raw;
 }
 
 export function moffinSolutionsBearerToken(): string {
-  const explicit = Deno.env.get("MOFFIN_SOLUTIONS_BEARER")?.trim();
-  if (explicit) return explicit;
-  return Deno.env.get("MOFFIN_API_KEY")?.trim() ?? "";
+  const explicit = Deno.env.get("MOFFIN_SOLUTIONS_BEARER")?.trim() ?? "";
+  if (explicit) return normalizeSolutionsBearer(explicit);
+  return normalizeSolutionsBearer(Deno.env.get("MOFFIN_API_KEY")?.trim() ?? "");
 }
