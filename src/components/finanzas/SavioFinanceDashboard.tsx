@@ -67,6 +67,13 @@ import { SavioFinanceWriteActions } from "@/components/finanzas/SavioFinanceWrit
 import { getSavioAppPanelUrl } from "@/lib/savioAppUrl";
 import { rollupSavioInvoicesByCustomer } from "@/lib/savioCustomerRollup";
 import { fetchSavioResource, type SavioFinanceApiAction } from "@/lib/savioFinanceInvoke";
+import { Link } from "react-router-dom";
+import { useClients } from "@/hooks/useClients";
+import { savioCustomersMissingInKawiil } from "@/lib/clientSavioLink";
+import {
+  ClientFormDialog,
+  type ClientFormSavioPrefill,
+} from "@/components/clients/ClientFormDialog";
 
 const EVENT_FILTER_ALL = "todos";
 
@@ -99,6 +106,8 @@ export function SavioFinanceDashboard() {
   const [section, setSection] = useState<"resumen" | "clientes" | "webhooks">("resumen");
   const [invoiceCustomerFilter, setInvoiceCustomerFilter] = useState<string | null>(null);
   const [recurringOpen, setRecurringOpen] = useState(false);
+  const [kawiilClientFormOpen, setKawiilClientFormOpen] = useState(false);
+  const [savioClientPrefill, setSavioClientPrefill] = useState<ClientFormSavioPrefill | null>(null);
 
   const {
     invoiceRows,
@@ -116,6 +125,16 @@ export function SavioFinanceDashboard() {
     reactQueryError,
     invoiceQueryActive,
   } = useSavioFinanceApiData({ invoiceCustomerId: invoiceCustomerFilter });
+
+  const { data: kawiilClients = [] } = useClients();
+  const savioOnlyRows = useMemo(
+    () => savioCustomersMissingInKawiil(customerRows, kawiilClients),
+    [customerRows, kawiilClients],
+  );
+  const kawiilWithoutSavioCount = useMemo(
+    () => kawiilClients.filter((c) => !c.savio_customer_id?.trim()).length,
+    [kawiilClients],
+  );
 
   const customerRollup = useMemo(() => rollupSavioInvoicesByCustomer(invoiceRows), [invoiceRows]);
 
@@ -321,6 +340,79 @@ export function SavioFinanceDashboard() {
           {apiMessage}
         </p>
       )}
+
+      <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              Alineación Kawiil ↔ Savio
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+              {kawiilWithoutSavioCount} cliente{kawiilWithoutSavioCount !== 1 ? "s" : ""} en Kawiil sin id Savio ·{" "}
+              {savioOnlyRows.length} en la lista de Savio sin ficha enlazada en Kawiil (según ids guardados).
+            </p>
+          </div>
+          <Button type="button" variant="outline" size="sm" className="h-8 text-xs shrink-0" asChild>
+            <Link to="/clientes">Abrir Clientes</Link>
+          </Button>
+        </div>
+        {apiLoading && customerRows.length === 0 ? (
+          <Skeleton className="h-20 w-full rounded-lg" />
+        ) : savioOnlyRows.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No hay clientes Savio huérfanos respecto a Kawiil en esta vista.</p>
+        ) : (
+          <div className="rounded-lg border border-border/50 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs h-9">Cliente (Savio)</TableHead>
+                  <TableHead className="text-xs h-9 w-[100px]">RFC</TableHead>
+                  <TableHead className="text-xs h-9 w-[120px] text-right">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {savioOnlyRows.slice(0, 12).map((row) => (
+                  <TableRow key={row.key} className="text-xs">
+                    <TableCell className="py-2">
+                      <span className="font-medium text-foreground">{row.displayName}</span>
+                      <span className="block text-[10px] text-muted-foreground font-mono truncate max-w-[220px]">
+                        {row.id}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-2 text-muted-foreground">{row.rfc ?? "—"}</TableCell>
+                    <TableCell className="py-2 text-right">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={() => {
+                          setSavioClientPrefill({
+                            savio_customer_id: row.id,
+                            name: row.displayName,
+                            rfc: row.rfc ?? undefined,
+                            email: row.email ?? undefined,
+                            phone: row.phone ?? undefined,
+                          });
+                          setKawiilClientFormOpen(true);
+                        }}
+                      >
+                        Alta en Kawiil
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {savioOnlyRows.length > 12 ? (
+              <p className="text-[10px] text-muted-foreground px-3 py-2 border-t border-border/50">
+                Mostrando 12 de {savioOnlyRows.length}. Ajusta enlaces desde la ficha del cliente o Clientes.
+              </p>
+            ) : null}
+          </div>
+        )}
+      </div>
 
       <Dialog open={recurringOpen} onOpenChange={setRecurringOpen}>
         <DialogContent className="sm:max-w-md">
@@ -922,6 +1014,15 @@ export function SavioFinanceDashboard() {
           )}
         </SheetContent>
       </Sheet>
+
+      <ClientFormDialog
+        open={kawiilClientFormOpen}
+        onOpenChange={(open) => {
+          setKawiilClientFormOpen(open);
+          if (!open) setSavioClientPrefill(null);
+        }}
+        savioPrefill={savioClientPrefill}
+      />
     </div>
   );
 }

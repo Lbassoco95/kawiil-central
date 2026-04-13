@@ -32,7 +32,12 @@ import {
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useUpdateClient, useOrgProfiles } from "@/hooks/useClients";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
+import { useFinanceAccess } from "@/hooks/useFinanceAccess";
+import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
+import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
+import { SavioSearchablePick } from "@/components/finanzas/SavioSearchablePick";
 import { DropboxFolderPicker } from "@/components/clients/DropboxFolderPicker";
+import { findSavioCustomerIdsByRfc, normalizeRfcForCompare } from "@/lib/clientSavioLink";
 import type { Database } from "@/integrations/supabase/types";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -110,6 +115,7 @@ const clientSchema = z.object({
   collaborator_user_ids: z.array(z.string().uuid()).default([]),
   sat_fiel_managed_by_firm: z.boolean(),
   sat_fiel_location_hint: z.string().trim().max(500).optional().or(z.literal("")),
+  savio_customer_id: z.string().trim().max(128).optional().or(z.literal("")),
 });
 
 type ClientFormValues = z.infer<typeof clientSchema>;
@@ -143,6 +149,13 @@ interface ClientEditDialogProps {
 export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialogProps) {
   const updateClient = useUpdateClient();
   const { data: profiles } = useOrgProfiles();
+  const { hasFinanceAccess, isLoading: financeAccessLoading } = useFinanceAccess();
+  const { data: canViewSavioIncome = false, isLoading: savioIncomeLoading } = useSavioIncomeAccess();
+  const showSavioBlock =
+    hasFinanceAccess && canViewSavioIncome && !financeAccessLoading && !savioIncomeLoading;
+  const { customerRows, customerPickOptions } = useSavioFinanceApiData({
+    fetchEnabled: open && showSavioBlock,
+  });
   const [dropboxPickerOpen, setDropboxPickerOpen] = useState(false);
   const { data: loadedCollaboratorIds = [], isFetched: collabFetched } = useClientCollaboratorIds(
     client.id,
@@ -179,6 +192,7 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       collaborator_user_ids: [],
       sat_fiel_managed_by_firm: client.sat_fiel_managed_by_firm !== false,
       sat_fiel_location_hint: client.sat_fiel_location_hint || "",
+      savio_customer_id: client.savio_customer_id || "",
     },
   });
 
@@ -221,10 +235,16 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       collaborator_user_ids: collaboratorIdsFromServer,
       sat_fiel_managed_by_firm: client.sat_fiel_managed_by_firm !== false,
       sat_fiel_location_hint: client.sat_fiel_location_hint || "",
+      savio_customer_id: client.savio_customer_id || "",
     });
   }, [open, collabFetched, client, collabKey, form]);
 
   const servicePackage = form.watch("service_package");
+  const rfcWatch = form.watch("rfc");
+  const suggestedSavioByRfc = useMemo(
+    () => findSavioCustomerIdsByRfc(normalizeRfcForCompare(rfcWatch), customerRows),
+    [rfcWatch, customerRows],
+  );
   const allServices = computeServices(form.getValues());
   const includedServices = PACKAGE_INCLUDED_SERVICES[servicePackage] || [];
 
@@ -234,6 +254,12 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
       form.setError("individual_services", { message: "Selecciona al menos un servicio" });
       return;
     }
+    const newSid = values.savio_customer_id?.trim() || null;
+    const prevSid = client.savio_customer_id?.trim() || null;
+    let savio_linked_at: string | null = client.savio_customer_linked_at ?? null;
+    if (!newSid) savio_linked_at = null;
+    else if (newSid !== prevSid) savio_linked_at = new Date().toISOString();
+
     await updateClient.mutateAsync({
       id: client.id,
       previousServices: client.services || [],
@@ -255,6 +281,8 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
         payroll_type: values.payroll_type === "none" ? null : values.payroll_type,
         sat_fiel_managed_by_firm: values.sat_fiel_managed_by_firm,
         sat_fiel_location_hint: values.sat_fiel_location_hint || null,
+        savio_customer_id: newSid,
+        savio_customer_linked_at: savio_linked_at,
       },
       collaborator_user_ids: values.collaborator_user_ids,
     });
@@ -367,6 +395,58 @@ export function ClientEditDialog({ open, onOpenChange, client }: ClientEditDialo
                   </FormItem>
                 )}
               />
+
+              {showSavioBlock ? (
+                <div className="md:col-span-2 rounded-md border border-primary/20 bg-primary/5 p-4 space-y-3">
+                  <p className="text-xs font-medium text-foreground">Vínculo Savio (cobranza)</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    El id debe coincidir con un cliente en Savio. Lista hasta 100 registros de la API.
+                  </p>
+                  {suggestedSavioByRfc.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-amber-800 dark:text-amber-200">
+                        Coincidencia por RFC en Savio ({suggestedSavioByRfc.length})
+                      </span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => form.setValue("savio_customer_id", suggestedSavioByRfc[0])}
+                      >
+                        Usar primer id sugerido
+                      </Button>
+                    </div>
+                  ) : null}
+                  <FormField
+                    control={form.control}
+                    name="savio_customer_id"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Id cliente Savio</FormLabel>
+                        {customerPickOptions.length > 0 ? (
+                          <SavioSearchablePick
+                            options={customerPickOptions}
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="Buscar en lista Savio…"
+                            searchPlaceholder="Cliente Savio…"
+                            disabled={updateClient.isPending}
+                          />
+                        ) : null}
+                        <FormControl>
+                          <Input
+                            className="font-mono text-xs mt-1"
+                            placeholder="UUID o id (editable)"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ) : null}
 
               <div className="md:col-span-2 rounded-md border border-border/60 p-4 space-y-4 bg-muted/10">
                 <p className="text-sm font-medium text-foreground">SAT — 69-B y RFC (Moffin)</p>

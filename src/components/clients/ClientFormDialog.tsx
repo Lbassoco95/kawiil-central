@@ -32,6 +32,7 @@ import {
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useCreateClient } from "@/hooks/useClients";
 import { useOrgProfiles } from "@/hooks/useClients";
+import { useSavioWriteAccess } from "@/hooks/useSavioWriteAccess";
 import { useClientGroups, useCreateClientGroup, useAddClientToGroup } from "@/hooks/useClientGroups";
 import { DropboxFolderPicker } from "@/components/clients/DropboxFolderPicker";
 import type { Database } from "@/integrations/supabase/types";
@@ -123,9 +124,19 @@ const clientSchema = z.object({
 
 type ClientFormValues = z.infer<typeof clientSchema>;
 
+export type ClientFormSavioPrefill = {
+  savio_customer_id?: string;
+  name?: string;
+  rfc?: string;
+  email?: string;
+  phone?: string;
+};
+
 interface ClientFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Precarga desde panel «Savio sin Kawiil»; se limpia al cerrar desde el padre. */
+  savioPrefill?: ClientFormSavioPrefill | null;
 }
 
 function computeServices(values: ClientFormValues): ServiceArea[] {
@@ -136,7 +147,7 @@ function computeServices(values: ClientFormValues): ServiceArea[] {
   return Array.from(combined);
 }
 
-export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) {
+export function ClientFormDialog({ open, onOpenChange, savioPrefill = null }: ClientFormDialogProps) {
   const createClient = useCreateClient();
   const { data: profiles } = useOrgProfiles();
   const { data: clientGroups } = useClientGroups();
@@ -145,6 +156,9 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
   const [dropboxPickerOpen, setDropboxPickerOpen] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
   const [newGroupName, setNewGroupName] = useState("");
+  const [createInSavio, setCreateInSavio] = useState(false);
+  const { data: savioWriteAccess } = useSavioWriteAccess();
+  const canSavioWrite = savioWriteAccess?.canWrite === true;
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
@@ -195,12 +209,22 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
     form.setValue("primary_area", null);
   }, [servicePackage, form]);
 
+  useEffect(() => {
+    if (!open || !savioPrefill) return;
+    if (savioPrefill.name) form.setValue("name", savioPrefill.name);
+    if (savioPrefill.rfc) form.setValue("rfc", savioPrefill.rfc);
+    if (savioPrefill.email) form.setValue("email", savioPrefill.email);
+    if (savioPrefill.phone) form.setValue("phone", savioPrefill.phone);
+    setCreateInSavio(false);
+  }, [open, savioPrefill, form]);
+
   const onSubmit = async (values: ClientFormValues) => {
     const services = computeServices(values);
     if (services.length === 0) {
       form.setError("individual_services", { message: "Selecciona al menos un servicio" });
       return;
     }
+    const sid = savioPrefill?.savio_customer_id?.trim();
     const newClient = await createClient.mutateAsync({
       name: values.name,
       client_type: values.client_type,
@@ -218,6 +242,9 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
       dropbox_folder_path: values.dropbox_folder_path || null,
       payroll_type: values.payroll_type === "none" ? null : values.payroll_type,
       collaborator_user_ids: values.collaborator_user_ids,
+      savio_customer_id: sid || undefined,
+      savio_customer_linked_at: sid ? new Date().toISOString() : undefined,
+      create_in_savio: createInSavio && !sid,
     });
 
     if (newClient) {
@@ -234,6 +261,7 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
     form.reset();
     setSelectedGroupId("");
     setNewGroupName("");
+    setCreateInSavio(false);
     onOpenChange(false);
   };
 
@@ -745,6 +773,29 @@ export function ClientFormDialog({ open, onOpenChange }: ClientFormDialogProps) 
                 </FormItem>
               )}
             />
+
+            {savioPrefill?.savio_customer_id ? (
+              <p className="text-[11px] text-muted-foreground rounded-md border border-primary/20 bg-primary/5 px-3 py-2">
+                Se guardará el vínculo con Savio (<span className="font-mono">{savioPrefill.savio_customer_id}</span>)
+                al crear el cliente en Kawiil.
+              </p>
+            ) : canSavioWrite ? (
+              <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/10 p-3">
+                <Checkbox
+                  id="cf-create-savio"
+                  checked={createInSavio}
+                  onCheckedChange={(c) => setCreateInSavio(c === true)}
+                  disabled={createClient.isPending}
+                />
+                <label htmlFor="cf-create-savio" className="text-xs leading-relaxed cursor-pointer">
+                  <span className="font-medium text-foreground">Crear también en Savio</span>
+                  <span className="block text-muted-foreground mt-0.5">
+                    Requiere permiso de escritura Finanzas. Si Savio falla, el cliente queda en Kawiil y podrás enlazar
+                    después.
+                  </span>
+                </label>
+              </div>
+            ) : null}
 
             <div className="flex justify-end gap-3 pt-2">
               <Button

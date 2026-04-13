@@ -84,7 +84,7 @@ const ClienteDetalle = () => {
     !!user && hasFinanceAccess && canViewSavioIncome && !financeAccessLoading && !savioIncomeLoading;
 
   const savioHintsQuery = useSavioFinanceApiData({
-    fetchEnabled: showSavioTab && tab === "cobranza",
+    fetchEnabled: showSavioTab && (tab === "cobranza" || !client?.savio_customer_id?.trim()),
   });
 
   const activeTasks = useMemo(

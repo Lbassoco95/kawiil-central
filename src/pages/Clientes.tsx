@@ -18,6 +18,11 @@ import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/contexts/AuthContext";
+import { useFinanceAccess } from "@/hooks/useFinanceAccess";
+import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
+import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
+import { clientSavioLinkStatus } from "@/lib/clientSavioLink";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
@@ -47,6 +52,14 @@ type GroupMode = "area" | "grupo";
 
 const Clientes = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { hasFinanceAccess, isLoading: financeAccessLoading } = useFinanceAccess();
+  const { data: canViewSavioIncome = false, isLoading: savioIncomeLoading } = useSavioIncomeAccess();
+  const showSavioListHints =
+    !!user && hasFinanceAccess && canViewSavioIncome && !financeAccessLoading && !savioIncomeLoading;
+  const { customerRows, isLoading: savioCustomersLoading } = useSavioFinanceApiData({
+    fetchEnabled: showSavioListHints,
+  });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -113,6 +126,42 @@ const Clientes = () => {
 
     return result;
   }, [filtered]);
+
+  function savioBadgeForClient(c: (typeof filtered)[number]) {
+    if (c.savio_customer_id?.trim()) {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] border-emerald-500/40 text-emerald-800 dark:text-emerald-200 shrink-0"
+        >
+          Savio
+        </Badge>
+      );
+    }
+    if (!showSavioListHints || savioCustomersLoading) return null;
+    const { status } = clientSavioLinkStatus(c, customerRows);
+    if (status === "rfc_suggest") {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] border-amber-500/45 text-amber-900 dark:text-amber-200 shrink-0"
+        >
+          RFC Savio
+        </Badge>
+      );
+    }
+    if (status === "no_link") {
+      return (
+        <Badge
+          variant="outline"
+          className="text-[10px] text-muted-foreground border-border bg-muted/30 shrink-0"
+        >
+          Sin Savio
+        </Badge>
+      );
+    }
+    return null;
+  }
 
   const groupedByEmpresa = useMemo(() => {
     if (!clientGroups || !allGroupMembers) return groupedByArea;
@@ -281,9 +330,12 @@ const Clientes = () => {
                             <h3 className="text-sm font-medium text-foreground truncate group-hover/card:text-primary transition-colors">
                               {client.name}
                             </h3>
-                            <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 shrink-0 ${STATUS_STYLES[client.status]}`}>
-                              {STATUS_LABELS[client.status]}
-                            </Badge>
+                            <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[min(100%,11rem)]">
+                              {savioBadgeForClient(client)}
+                              <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 shrink-0 ${STATUS_STYLES[client.status]}`}>
+                                {STATUS_LABELS[client.status]}
+                              </Badge>
+                            </div>
                           </div>
                           <div className="space-y-1">
                             <p className="text-xs text-muted-foreground">
