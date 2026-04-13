@@ -35,6 +35,18 @@ function parseAnthropicErrorBody(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, 400);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 429, 529 (Anthropic overloaded) u overload en cuerpo. */
+function isTransientAnthropicFailure(status: number, detail: string): boolean {
+  if (status === 429 || status === 529) return true;
+  if (/overload/i.test(detail)) return true;
+  if (status === 503 && /overload/i.test(detail)) return true;
+  return false;
+}
+
 const FALLBACK_QUOTES = [
   "La disciplina tarde o temprano vencerá a la inteligencia.\n— Yukio Mishima, Sol y acero",
   "No cuentes los días, haz que los días cuenten.\n— Muhammad Ali, Entrevistas",
@@ -260,64 +272,93 @@ FRASE: [la cita textual]
     }
 
     async function requestAiPhrase(prompt: string) {
-      const aiResp = await fetch(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: phraseAnthropicModel(),
-          max_tokens: 512,
-          system:
-            "Eres un curador cultural experto. Solo compartes citas auténticas, verificables y con atribución completa. Nunca inventas frases y no repites citas recientes del historial.",
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
+      const maxFetchAttempts = 5;
+      for (let fetchAttempt = 0; fetchAttempt < maxFetchAttempts; fetchAttempt += 1) {
+        const aiResp = await fetch(ANTHROPIC_API_URL, {
+          method: "POST",
+          headers: {
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: phraseAnthropicModel(),
+            max_tokens: 512,
+            system:
+              "Eres un curador cultural experto. Solo compartes citas auténticas, verificables y con atribución completa. Nunca inventas frases y no repites citas recientes del historial.",
+            messages: [{ role: "user", content: prompt }],
+          }),
+        });
 
-      if (!aiResp.ok) {
-        if (aiResp.status === 429) {
-          throw new Error("RATE_LIMIT");
+        if (aiResp.ok) {
+          const aiData = await aiResp.json();
+          const raw =
+            aiData.content?.find?.((b: { type?: string; text?: string }) => b.type === "text")?.text?.trim() ||
+            "";
+          return (
+            raw ||
+            "FRASE: Hazlo o no lo hagas, pero no lo intentes.\n— Yoda, Star Wars: El Imperio Contraataca"
+          );
         }
+
         const text = await aiResp.text();
         const detail = parseAnthropicErrorBody(text);
         console.error("Anthropic error:", aiResp.status, detail);
+
         if (aiResp.status === 401 || aiResp.status === 403) {
           throw new Error("AI_AUTH_ERROR");
         }
+
+        const transient = isTransientAnthropicFailure(aiResp.status, detail);
+        if (transient && fetchAttempt < maxFetchAttempts - 1) {
+          const delay = Math.min(8000, 500 * 2 ** fetchAttempt) + Math.floor(Math.random() * 300);
+          await sleep(delay);
+          continue;
+        }
+
+        if (aiResp.status === 429) {
+          throw new Error("RATE_LIMIT");
+        }
         throw new Error(`AI_PROVIDER_ERROR|${detail}`);
       }
-
-      const aiData = await aiResp.json();
-      const raw =
-        aiData.content?.find?.((b: { type?: string; text?: string }) => b.type === "text")?.text?.trim() ||
-        "";
-      return (
-        raw ||
-        "FRASE: Hazlo o no lo hagas, pero no lo intentes.\n— Yoda, Star Wars: El Imperio Contraataca"
-      );
+      throw new Error("AI_PROVIDER_ERROR|Overloaded");
     }
 
     let phrase = "";
     let generated = false;
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const attemptPrompt =
-        attempt === 0
-          ? basePrompt
-          : `${basePrompt}\n\nIMPORTANTE: En tu intento anterior repetiste una cita del historial. Elige otra diferente.`;
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const attemptPrompt =
+          attempt === 0
+            ? basePrompt
+            : `${basePrompt}\n\nIMPORTANTE: En tu intento anterior repetiste una cita del historial. Elige otra diferente.`;
 
-      const rawPhrase = await requestAiPhrase(attemptPrompt);
-      const parsedPhrase = parsePhrase(rawPhrase);
+        const rawPhrase = await requestAiPhrase(attemptPrompt);
+        const parsedPhrase = parsePhrase(rawPhrase);
 
-      if (!recentPhraseSet.has(normalizePhrase(parsedPhrase))) {
+        if (!recentPhraseSet.has(normalizePhrase(parsedPhrase))) {
+          phrase = parsedPhrase;
+          generated = true;
+          break;
+        }
+
         phrase = parsedPhrase;
-        generated = true;
-        break;
       }
-
-      phrase = parsedPhrase;
+    } catch (phraseLoopErr) {
+      const msg = phraseLoopErr instanceof Error ? phraseLoopErr.message : "";
+      const overload =
+        msg.startsWith("AI_PROVIDER_ERROR|") &&
+        /overload/i.test(msg.slice("AI_PROVIDER_ERROR|".length));
+      if (overload) {
+        const nonRepeatedFallback = FALLBACK_QUOTES.find(
+          (candidate) => !recentPhraseSet.has(normalizePhrase(candidate))
+        );
+        phrase = nonRepeatedFallback ?? FALLBACK_QUOTES[0] ?? phrase;
+        generated = true;
+      } else {
+        throw phraseLoopErr;
+      }
     }
 
     if (!generated) {
