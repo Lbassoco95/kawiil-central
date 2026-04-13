@@ -8,7 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard } from "lucide-react";
+import { Plus, Wallet, DollarSign, Clock, CheckCircle, XCircle, Landmark, LayoutDashboard, BarChart3 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useExpenses, Expense } from "@/hooks/useExpenses";
 import { useFinanceAccess } from "@/hooks/useFinanceAccess";
@@ -18,7 +18,9 @@ import { ExpenseTable } from "@/components/finanzas/ExpenseTable";
 import { ExpenseReviewDialog } from "@/components/finanzas/ExpenseReviewDialog";
 import { SavioFinanceDashboard } from "@/components/finanzas/SavioFinanceDashboard";
 import { FinanceExecutiveSummary } from "@/components/finanzas/FinanceExecutiveSummary";
+import { FinanceIntelligenceBoards } from "@/components/finanzas/FinanceIntelligenceBoards";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { useClients } from "@/hooks/useClients";
 
 const STATUS_FILTERS = [
   { value: "todos", label: "Todos" },
@@ -37,11 +39,12 @@ const CATEGORY_FILTERS = [
   { value: "contratacion_externa", label: "Contratación ext." },
 ];
 
-type FinanceTab = "resumen" | "gastos" | "savio";
+type FinanceTab = "resumen" | "gastos" | "savio" | "tableros";
 
 export default function Finanzas() {
   const { user } = useAuth();
   const { data: expenses = [], isLoading } = useExpenses();
+  const { data: clients = [] } = useClients();
   const { hasFinanceAccess } = useFinanceAccess();
   const { data: canViewSavioIncome = false, isLoading: savioIncomeLoading } = useSavioIncomeAccess();
   const [showForm, setShowForm] = useState(false);
@@ -64,7 +67,12 @@ export default function Finanzas() {
   }, [hasFinanceAccess, canViewSavioIncome]);
 
   useEffect(() => {
-    if (hasFinanceAccess && !savioIncomeLoading && !canViewSavioIncome && financeTab === "savio") {
+    if (
+      hasFinanceAccess &&
+      !savioIncomeLoading &&
+      !canViewSavioIncome &&
+      (financeTab === "savio" || financeTab === "tableros")
+    ) {
       setFinanceTab("gastos");
     }
   }, [hasFinanceAccess, savioIncomeLoading, canViewSavioIncome, financeTab]);
@@ -236,6 +244,9 @@ export default function Finanzas() {
                 <TabsTrigger value="savio" className="text-xs gap-1.5">
                   <Landmark className="h-3.5 w-3.5" /> Ingresos facturados
                 </TabsTrigger>
+                <TabsTrigger value="tableros" className="text-xs gap-1.5">
+                  <BarChart3 className="h-3.5 w-3.5" /> Tableros
+                </TabsTrigger>
               </TabsList>
               </div>
 
@@ -253,6 +264,10 @@ export default function Finanzas() {
 
               <TabsContent value="savio" className="mt-0">
                 <SavioFinanceDashboard />
+              </TabsContent>
+
+              <TabsContent value="tableros" className="mt-0">
+                <FinanceIntelligenceBoards expenses={expenses} clients={clients} savioEnabled />
               </TabsContent>
             </Tabs>
           ) : (

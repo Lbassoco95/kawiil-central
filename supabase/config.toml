@@ -67,6 +67,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.analyze-improvement-suggestions]
     verify_jwt = true
+  [functions.ai-finance-insights]
+    verify_jwt = true
   [functions.extract-ai-memories]
     verify_jwt = true
   [functions.ai-proactive-notifications]
