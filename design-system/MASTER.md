@@ -8,6 +8,10 @@ Fuente de verdad para UI en Dashboard, Clientes, Proyectos, Tareas y Pipeline (s
 - **Glass moderado**: `backdrop-blur` y bordes suaves en **cabeceras de página**, **barras de filtros**, **tabs** y **contenedores de herramientas**. Listas densas y tarjetas Kanban mantienen fondo más opaco para legibilidad.
 - **No glass**: celdas de tabla muy compactas, texto largo sobre fondo muy variable.
 
+## Lienzo (modo claro)
+
+`--background` es un gris muy suave (`220 14% 96%`); las tarjetas y `.surface-toolbar` usan `--card` (blanco) para que el diseño se perciba frente a Lovable/preview y no “desaparezca” el glass.
+
 ## Tokens CSS (ver `src/index.css`)
 
 | Utilidad / token        | Uso |
