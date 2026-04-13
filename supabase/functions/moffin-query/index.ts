@@ -380,6 +380,8 @@ Deno.serve(async (req) => {
 
   const solutionsBase = moffinSolutionsBaseUrl();
   let solutionsBearer = "";
+  /** oauth = JWT vía /oauth/token; static = MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY (suele fallar 401 en profile). */
+  let solutionsAuthVia: "oauth" | "static" | null = null;
   if (flavor === "solutions") {
     const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
     if (!solAuth.ok) {
@@ -392,6 +394,7 @@ Deno.serve(async (req) => {
       );
     }
     solutionsBearer = solAuth.bearer;
+    solutionsAuthVia = solAuth.via;
   }
   const legacyBase = flavor === "solutions" ? moffinLegacyBaseUrl() : moffinBase;
   const legacyToken = (flavor === "solutions" ? moffinLegacyApiKey() : moffinKey).trim();
@@ -719,13 +722,16 @@ Deno.serve(async (req) => {
       if (!profRes.ok) {
         const hint401 =
           profRes.status === 401
-            ? "Moffin Solutions rechazó el Bearer (401). La API Solutions usa OAuth: POST /oauth/token con MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (te los da Moffin; no es el token corto de «Configuración → API» de app.moffin). Opcional: guardar el accessToken JWT en MOFFIN_SOLUTIONS_BEARER si Moffin te indica flujo manual. Lista 69-B: MOFFIN_LEGACY_API_KEY + app.moffin."
+            ? solutionsAuthVia === "oauth"
+              ? "401 con JWT de OAuth: revisa que Moffin haya habilitado consultas SAT (Solutions) para este clientId; prueba el mismo Bearer con curl a /query/sat/profile. Si Moffin usa otro host o credenciales, confírmalo con ellos."
+              : "401: la app usó Bearer estático (authUsed=static). Debes definir MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET en Supabase (credenciales OAuth de Solutions que entrega Moffin; no el token de Configuración → API de app.moffin). Opcional: MOFFIN_SOLUTIONS_BEARER = accessToken JWT devuelto por POST .../oauth/token."
             : undefined;
         return new Response(
           JSON.stringify({
             error: "moffin_profile_failed",
             message: profRes.message,
             statusCode: profRes.status,
+            authUsed: solutionsAuthVia,
             ...(hint401 ? { hint: hint401 } : {}),
           }),
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
