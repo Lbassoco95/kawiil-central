@@ -20,6 +20,7 @@ import {
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -129,7 +130,7 @@ function NotificationDeliveryPreferences() {
     return () => document.removeEventListener("visibilitychange", sync);
   }, []);
 
-  const { data: profile } = useQuery({
+  const profileQuery = useQuery({
     queryKey: ["profile-notification-prefs", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -144,7 +145,10 @@ function NotificationDeliveryPreferences() {
     },
     enabled: !!user,
     refetchOnWindowFocus: true,
+    retry: 2,
   });
+  const profile = profileQuery.data;
+  const profilePrefsLoading = profileQuery.isPending && !profileQuery.data;
 
   const updateFields = useMutation({
     mutationFn: async (patch: Record<string, boolean>) => {
@@ -260,6 +264,15 @@ function NotificationDeliveryPreferences() {
           ? "Denegado (revisa candado del sitio)"
           : "Pendiente — usa «Pedir permiso del navegador»";
 
+  const prefsLocked = profilePrefsLoading || !profile;
+  const prefsSaving = updateFields.isPending;
+  const vapidReady = !!vapid?.trim();
+  /** Sin VAPID solo se puede apagar push si ya estaba activo; encender siempre requiere clave pública en el build. */
+  const pushSwitchDisabled =
+    prefsLocked ||
+    toggleDesktopPush.isPending ||
+    (!vapidReady && profile?.desktop_push_notifications !== true);
+
   if (!user) return null;
 
   return (
@@ -270,6 +283,36 @@ function NotificationDeliveryPreferences() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {profileQuery.isError && (
+          <Alert variant="destructive" className="py-3">
+            <AlertTitle className="text-sm">No se pudo cargar la configuración de avisos</AlertTitle>
+            <AlertDescription className="text-xs mt-1 space-y-2">
+              <p>{(profileQuery.error as Error)?.message || "Error desconocido"}</p>
+              <p className="text-muted-foreground">
+                Si el mensaje menciona una columna o esquema, ejecuta las migraciones recientes de{" "}
+                <code className="rounded bg-background/80 px-1">profiles</code> en Supabase (p. ej.{" "}
+                <code className="rounded bg-background/80 px-1">notification_sound_enabled</code>, push).
+              </p>
+              <Button type="button" size="sm" variant="secondary" onClick={() => profileQuery.refetch()}>
+                Reintentar
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+        {profilePrefsLoading && (
+          <p className="text-xs text-muted-foreground">Cargando preferencias…</p>
+        )}
+        {!vapidReady && (
+          <Alert className="border-amber-600/50 bg-amber-950/25 py-3">
+            <AlertTitle className="text-sm text-amber-100">Push con la pestaña cerrada no disponible en este entorno</AlertTitle>
+            <AlertDescription className="text-xs text-amber-50/90 mt-1">
+              Falta la variable{" "}
+              <code className="rounded bg-black/30 px-1">VITE_VAPID_PUBLIC_KEY</code> en el build (p. ej. Lovable →
+              Variables de entorno) y los secretos VAPID en Supabase Edge. Mientras tanto puedes usar avisos en la app,
+              notificación del navegador y pitido en esta pestaña.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label className="text-sm font-medium">Ventana emergente en la app (Sonner)</Label>
@@ -280,7 +323,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.in_app_toast_notifications !== false}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ in_app_toast_notifications: v })}
           />
         </div>
@@ -295,7 +338,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.desktop_browser_notifications !== false}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ desktop_browser_notifications: v })}
           />
         </div>
@@ -332,7 +375,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.notification_sound_enabled === true}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ notification_sound_enabled: v })}
             className="shrink-0"
           />
@@ -347,7 +390,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.slack_message_sound_enabled !== false}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ slack_message_sound_enabled: v })}
             className="shrink-0"
           />
@@ -361,7 +404,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.desktop_push_notifications === true}
-            disabled={toggleDesktopPush.isPending || updateFields.isPending || !profile}
+            disabled={pushSwitchDisabled}
             onCheckedChange={(v) => toggleDesktopPush.mutate(v)}
           />
         </div>
@@ -374,7 +417,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.notify_slack_vip !== false}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ notify_slack_vip: v })}
           />
         </div>
@@ -384,7 +427,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.notify_slack_mentions !== false}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ notify_slack_mentions: v })}
           />
         </div>
@@ -394,7 +437,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.notify_slack_channel_watch !== false}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ notify_slack_channel_watch: v })}
           />
         </div>
@@ -407,7 +450,7 @@ function NotificationDeliveryPreferences() {
           </div>
           <Switch
             checked={profile?.notify_slack_dm !== false}
-            disabled={updateFields.isPending || !profile}
+            disabled={prefsLocked || prefsSaving}
             onCheckedChange={(v) => updateFields.mutate({ notify_slack_dm: v })}
           />
         </div>
@@ -534,6 +577,9 @@ export default function Notificaciones() {
           title="Notificaciones"
           description="Menciones, actividad del equipo y alertas de vencimiento"
         />
+
+        <NotificationDeliveryPreferences />
+        <NotificationAiPreferences />
 
         {isLoading ? (
           <div className="space-y-2">
@@ -761,8 +807,6 @@ export default function Notificaciones() {
               </div>
             )}
 
-            <NotificationDeliveryPreferences />
-            <NotificationAiPreferences />
           </>
         )}
       </div>
