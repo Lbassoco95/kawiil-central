@@ -95,6 +95,8 @@ export function MoffinSatStatusSummary({
         return;
       }
       const failed = payload.results?.filter((r) => !r.ok) ?? [];
+      const okRows = payload.results?.filter((r) => r.ok) ?? [];
+      const stillPending = okRows.filter((r) => r.newStatus === "pending").length;
       if (failed.length) {
         toast.warning(
           `Sincronización parcial: ${failed.length} consulta(s). ${failed[0]?.error ?? ""}`.trim(),
@@ -103,7 +105,9 @@ export function MoffinSatStatusSummary({
         toast.success(
           payload.pendingFound === 0
             ? "No había consultas pendientes con ID en Moffin."
-            : "Estado actualizado desde Moffin.",
+            : stillPending > 0
+              ? `Listo: Moffin aún procesa ${stillPending} en cola (puede tardar).`
+              : "Estado actualizado desde Moffin.",
         );
       }
       void queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });

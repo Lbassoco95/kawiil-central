@@ -350,6 +350,48 @@ async function persistMoffinReportToConsult(
   return {};
 }
 
+async function refreshPendingConsultRows(
+  admin: ReturnType<typeof createClient>,
+  rows: MoffinConsultDbRow[] | null | undefined,
+  legacyBase: string,
+  legacyToken: string,
+  solutionsBase: string,
+  solutionsBearer: string,
+  userId: string,
+): Promise<Array<{ id: string; ok: boolean; error?: string; newStatus?: string }>> {
+  const list = rows ?? [];
+  return Promise.all(
+    list.map(async (row) => {
+      const rowTyped = row as MoffinConsultDbRow;
+      const fr = await fetchMoffinReportSnapshotForRow(
+        rowTyped,
+        legacyBase,
+        legacyToken,
+        solutionsBase,
+        solutionsBearer,
+      );
+      if (!fr.ok) {
+        return { id: row.id, ok: false, error: fr.message };
+      }
+      const pe = await persistMoffinReportToConsult(
+        admin,
+        rowTyped,
+        fr.json,
+        userId,
+        persistUploadForRow(rowTyped, solutionsBase, solutionsBearer, legacyBase, legacyToken),
+      );
+      if (pe.error) {
+        return { id: row.id, ok: false, error: pe.error };
+      }
+      return {
+        id: row.id,
+        ok: true,
+        newStatus: mapMoffinStatus(String(fr.json.status ?? "")),
+      };
+    }),
+  );
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -513,37 +555,15 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const results: Array<{ id: string; ok: boolean; error?: string; newStatus?: string }> = [];
-    for (const row of pendingRows ?? []) {
-      const rowTyped = row as MoffinConsultDbRow;
-      const fr = await fetchMoffinReportSnapshotForRow(
-        rowTyped,
-        legacyBase,
-        legacyToken,
-        solutionsBase,
-        solutionsBearer,
-      );
-      if (!fr.ok) {
-        results.push({ id: row.id, ok: false, error: fr.message });
-        continue;
-      }
-      const pe = await persistMoffinReportToConsult(
-        admin,
-        rowTyped,
-        fr.json,
-        user.id,
-        persistUploadForRow(rowTyped, solutionsBase, solutionsBearer, legacyBase, legacyToken),
-      );
-      if (pe.error) {
-        results.push({ id: row.id, ok: false, error: pe.error });
-      } else {
-        results.push({
-          id: row.id,
-          ok: true,
-          newStatus: mapMoffinStatus(String(fr.json.status ?? "")),
-        });
-      }
-    }
+    const results = await refreshPendingConsultRows(
+      admin,
+      pendingRows as MoffinConsultDbRow[] | undefined,
+      legacyBase,
+      legacyToken,
+      solutionsBase,
+      solutionsBearer,
+      user.id,
+    );
     return new Response(
       JSON.stringify({
         refresh: true,
@@ -582,37 +602,15 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const results: Array<{ id: string; ok: boolean; error?: string; newStatus?: string }> = [];
-    for (const row of pendingRows ?? []) {
-      const rowTyped = row as MoffinConsultDbRow;
-      const fr = await fetchMoffinReportSnapshotForRow(
-        rowTyped,
-        legacyBase,
-        legacyToken,
-        solutionsBase,
-        solutionsBearer,
-      );
-      if (!fr.ok) {
-        results.push({ id: row.id, ok: false, error: fr.message });
-        continue;
-      }
-      const pe = await persistMoffinReportToConsult(
-        admin,
-        rowTyped,
-        fr.json,
-        user.id,
-        persistUploadForRow(rowTyped, solutionsBase, solutionsBearer, legacyBase, legacyToken),
-      );
-      if (pe.error) {
-        results.push({ id: row.id, ok: false, error: pe.error });
-      } else {
-        results.push({
-          id: row.id,
-          ok: true,
-          newStatus: mapMoffinStatus(String(fr.json.status ?? "")),
-        });
-      }
-    }
+    const results = await refreshPendingConsultRows(
+      admin,
+      pendingRows as MoffinConsultDbRow[] | undefined,
+      legacyBase,
+      legacyToken,
+      solutionsBase,
+      solutionsBearer,
+      user.id,
+    );
     return new Response(
       JSON.stringify({
         refresh: true,

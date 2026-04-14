@@ -54,6 +54,11 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
         "que MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET coincidan con el valor usado al guardarla."
       );
     }
+    if (payload.error === "moffin_solutions_auth") {
+      return typeof payload.message === "string" && payload.message.trim()
+        ? `Autenticación Moffin Solutions: ${payload.message.trim()}`
+        : "No se pudo obtener token OAuth de Moffin Solutions. Revisa CLIENT_ID, CLIENT_SECRET y URL base en Supabase.";
+    }
     if (typeof payload.message === "string" && payload.message.trim()) {
       return payload.message;
     }

@@ -3,6 +3,7 @@
  * @see https://solutions-docs.moffin.mx/apis/authentication
  */
 import { moffinSolutionsBearerToken } from "./moffinApiFlavor.ts";
+import { moffinSolutionsFetchSignal } from "./moffinSolutionsClient.ts";
 
 export type SolutionsStaticBearerSource = "solutions_bearer_env" | "api_key_env";
 
@@ -62,7 +63,7 @@ async function tryOAuthTokenRequest(
 ): Promise<{ ok: true; json: Record<string, unknown> } | { ok: false; status: number; message: string }> {
   let res: Response;
   try {
-    res = await fetch(url, { method: "POST", headers, body });
+    res = await fetch(url, { method: "POST", headers, body, signal: moffinSolutionsFetchSignal() });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, status: 0, message: `${label} red: ${msg}` };

@@ -7,6 +7,24 @@ export type MoffinSolutionsJson =
   | { ok: true; json: Record<string, unknown>; status: number }
   | { ok: false; message: string; status: number; bodySample?: string };
 
+/** Evita que la Edge se quede colgada si Moffin no responde (sync manual / refresh). */
+function moffinSolutionsFetchTimeoutMs(): number {
+  const raw = Deno.env.get("MOFFIN_SOLUTIONS_FETCH_TIMEOUT_MS")?.trim();
+  const n = raw ? parseInt(raw, 10) : NaN;
+  if (Number.isFinite(n) && n >= 5_000 && n <= 120_000) return n;
+  return 25_000;
+}
+
+export function moffinSolutionsFetchSignal(): AbortSignal {
+  const ms = moffinSolutionsFetchTimeoutMs();
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
+
 function bearerHeaders(token: string): HeadersInit {
   return {
     Authorization: `Bearer ${token.trim()}`,
@@ -30,10 +48,18 @@ export async function moffinSolutionsPostJson(
       method: "POST",
       headers: bearerHeaders(bearerToken),
       body: JSON.stringify(body),
+      signal: moffinSolutionsFetchSignal(),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, message: msg, status: 0 };
+    const timedOut = /abort|timeout/i.test(msg);
+    return {
+      ok: false,
+      message: timedOut
+        ? `Tiempo de espera agotado (${moffinSolutionsFetchTimeoutMs() / 1000}s) al llamar a Moffin Solutions. Reintenta o define MOFFIN_SOLUTIONS_FETCH_TIMEOUT_MS.`
+        : msg,
+      status: 0,
+    };
   }
   const text = await res.text();
   let json: Record<string, unknown> = {};
@@ -73,10 +99,18 @@ export async function moffinSolutionsGetJson(
         Authorization: `Bearer ${bearerToken.trim()}`,
         Accept: "application/json",
       },
+      signal: moffinSolutionsFetchSignal(),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, message: msg, status: 0 };
+    const timedOut = /abort|timeout/i.test(msg);
+    return {
+      ok: false,
+      message: timedOut
+        ? `Tiempo de espera agotado (${moffinSolutionsFetchTimeoutMs() / 1000}s) al consultar estado en Moffin. Reintenta la sincronización.`
+        : msg,
+      status: 0,
+    };
   }
   const text = await res.text();
   let json: Record<string, unknown> = {};

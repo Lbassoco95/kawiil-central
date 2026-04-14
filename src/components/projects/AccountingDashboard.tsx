@@ -520,13 +520,17 @@ export function AccountingDashboard({
         return;
       }
       const failed = payload.results?.filter((r) => !r.ok) ?? [];
+      const okRows = payload.results?.filter((r) => r.ok) ?? [];
+      const stillPending = okRows.filter((r) => r.newStatus === "pending").length;
       if (failed.length) {
         toast.warning(`Sincronización parcial: ${failed[0]?.error ?? "revisa respuesta de Moffin"}`);
       } else {
         toast.success(
           payload.pendingFound === 0
             ? "No había filas que requieran sincronizar con Moffin."
-            : "Consultas actualizadas desde Moffin.",
+            : stillPending > 0
+              ? `Sincronización lista: Moffin sigue procesando ${stillPending} consulta(s) en cola (CSF/32D pueden tardar varios minutos).`
+              : "Consultas actualizadas desde Moffin.",
         );
       }
       queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
