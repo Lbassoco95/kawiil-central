@@ -146,6 +146,51 @@ async function slackConversationDisplayName(
   return undefined;
 }
 
+const SLACK_DM_PROBE_MAX = 100;
+
+/**
+ * MD 1:1 cuando el bot no está en la conversación y el remitente no tiene token Kawiil (o falló):
+ * con `conversations.info` + token de cada conexión del workspace, el canal `is_im` expone `user` = el otro
+ * participante; si coincide con `senderSlackId`, ese usuario es el destinatario.
+ */
+async function slackDmRecipientViaConnectionProbe(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  teamId: string,
+  channelId: string,
+  senderSlackId: string,
+): Promise<{ user_id: string; organization_id: string } | null> {
+  if (!channelId.startsWith("D")) return null;
+  const { data: conns } = await supabase
+    .from("user_slack_connections")
+    .select("user_id, organization_id, slack_user_id, access_token")
+    .eq("slack_team_id", teamId)
+    .neq("slack_user_id", senderSlackId);
+
+  let n = 0;
+  for (const c of conns || []) {
+    if (++n > SLACK_DM_PROBE_MAX) {
+      console.warn("slack-events: DM probe cap", SLACK_DM_PROBE_MAX);
+      break;
+    }
+    const tok = typeof c.access_token === "string" ? c.access_token.trim() : "";
+    if (!tok) continue;
+    const u = new URL("https://slack.com/api/conversations.info");
+    u.searchParams.set("channel", channelId);
+    const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${tok}` } });
+    const j = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      channel?: { is_im?: boolean; user?: string };
+    };
+    if (!j.ok || !j.channel?.is_im) continue;
+    const other = typeof j.channel.user === "string" ? j.channel.user.trim() : "";
+    if (other === senderSlackId) {
+      return { user_id: c.user_id as string, organization_id: c.organization_id as string };
+    }
+  }
+  return null;
+}
+
 type SlackTargetFlags = {
   organization_id: string;
   mention: boolean;
@@ -373,6 +418,7 @@ async function handleMessageNotificationEvent(
         }
       }
     }
+    let mergedDmRecipient = false;
     for (const sid of memberSlackIds) {
       if (sid === senderSlackId) continue;
       const { data: conn } = await supabase
@@ -390,6 +436,24 @@ async function handleMessageNotificationEvent(
         .maybeSingle();
       if (prof?.notify_slack_dm === false) continue;
       mergeSlackTarget(targets, conn.user_id, conn.organization_id, "dm");
+      mergedDmRecipient = true;
+    }
+    if (!mergedDmRecipient && channelType === "im" && channel.startsWith("D")) {
+      const probed = await slackDmRecipientViaConnectionProbe(supabase, teamId, channel, senderSlackId);
+      if (probed && probed.user_id !== senderKawiilId) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("notify_slack_dm")
+          .eq("user_id", probed.user_id)
+          .maybeSingle();
+        if (prof?.notify_slack_dm !== false) {
+          mergeSlackTarget(targets, probed.user_id, probed.organization_id, "dm");
+          console.log("slack-events: DM recipient resolved via connection probe", {
+            channel,
+            recipient: probed.user_id,
+          });
+        }
+      }
     }
   }
 
