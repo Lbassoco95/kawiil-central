@@ -467,6 +467,48 @@ Deno.serve(async (req) => {
   const legacyBase = flavor === "solutions" ? moffinLegacyBaseUrl() : moffinBase;
   const legacyToken = (flavor === "solutions" ? moffinLegacyApiKey() : moffinKey).trim();
 
+  // ── pg_cron branch: refreshAllPending via x-cron-secret (no JWT needed) ──
+  const cronSecret = Deno.env.get("CRON_SECRET")?.trim() ?? "";
+  const incomingCronSecret = req.headers.get("x-cron-secret")?.trim() ?? "";
+  if (cronSecret && incomingCronSecret && cronSecret === incomingCronSecret) {
+    let cronBody: Record<string, unknown> = {};
+    try { cronBody = await req.json(); } catch { /* empty body is fine */ }
+    if (cronBody.refreshAllPending) {
+      const admin = createClient(supabaseUrl, serviceKey);
+      const consultSelect =
+        "id, organization_id, project_id, client_id, consult_type, rfc, moffin_query_id, moffin_service, document_id, requested_by, raw_response";
+      const { data: pendingRows, error: pre } = await admin
+        .from("moffin_consults")
+        .select(consultSelect)
+        .or("status.eq.pending,and(status.eq.success,document_id.is.null)")
+        .not("moffin_query_id", "is", null)
+        .order("created_at", { ascending: true })
+        .limit(50);
+      if (pre) {
+        console.error("cron refreshAllPending select:", pre.message);
+        return new Response(JSON.stringify({ error: pre.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.log(`cron refreshAllPending: ${pendingRows?.length ?? 0} rows`);
+      const results = await refreshPendingConsultRows(
+        admin,
+        pendingRows as MoffinConsultDbRow[] | undefined,
+        legacyBase,
+        legacyToken,
+        solutionsBase,
+        solutionsBearer,
+        "cron-system",
+      );
+      return new Response(
+        JSON.stringify({ source: "cron", refreshed: results.length, results }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+  }
+  // ── end pg_cron branch ──
+
   const rawAuth =
     req.headers.get("Authorization") ??
     req.headers.get("authorization") ??
