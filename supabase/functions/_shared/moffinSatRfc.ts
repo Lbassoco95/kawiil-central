@@ -1,4 +1,8 @@
-import { mapMoffinStatus, moffinMessageImpliesSatStillProcessing } from "./moffinReportStatus.ts";
+import {
+  mapMoffinStatus,
+  moffinMessageImpliesSatStillProcessing,
+  moffinResponseMessagesFlattened,
+} from "./moffinReportStatus.ts";
 
 /**
  * Extracción de PDF / URLs de respuestas POST /query/sat_rfc (OpenAPI: “SAT RFC Certificates”).
@@ -393,7 +397,10 @@ export function summarizeSatRfcCertificates(
     return parts.length
       ? parts.join(" · ")
       : satReportIsPending(resp)
-        ? `CSF: en proceso${typeof resp.message === "string" && resp.message.trim() ? ` — ${resp.message.trim()}` : ""}`
+        ? `CSF: en proceso${(() => {
+            const hint = moffinResponseMessagesFlattened(resp).split("|").map((s) => s.trim()).find(Boolean);
+            return hint ? ` — ${hint}` : "";
+          })()}`
         : "CSF consultada";
   }
   if (svc === "32D" || /cumplimiento|opini[oó]n/i.test(String(resp?.service ?? ""))) {
@@ -404,13 +411,17 @@ export function summarizeSatRfcCertificates(
     return parts.length
       ? parts.join(" · ")
       : satReportIsPending(resp)
-        ? `32D: en proceso${typeof resp.message === "string" && resp.message.trim() ? ` — ${resp.message.trim()}` : ""}`
+        ? `32D: en proceso${(() => {
+            const hint = moffinResponseMessagesFlattened(resp).split("|").map((s) => s.trim()).find(Boolean);
+            return hint ? ` — ${hint}` : "";
+          })()}`
         : "Opinión de cumplimiento";
   }
   const r = resp?.response as Record<string, unknown> | null | undefined;
   if (!r || typeof r !== "object") {
     if (satReportIsPending(resp)) {
-      const hint = typeof resp.message === "string" && resp.message.trim() ? resp.message.trim() : null;
+      const hint =
+        moffinResponseMessagesFlattened(resp).split("|").map((s) => s.trim()).find(Boolean) ?? null;
       return hint ?? "Certificados SAT: consulta en proceso (Moffin)";
     }
     return "Sin respuesta de certificados";

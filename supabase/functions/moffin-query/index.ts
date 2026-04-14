@@ -261,7 +261,13 @@ async function persistMoffinReportToConsult(
     return { error: "Tipo de consulta no reconocido" };
   }
   const ct = row.consult_type as ConsultType;
-  const st = mapMoffinStatus(String(report.status ?? ""));
+  let st = mapMoffinStatus(String(report.status ?? ""));
+  if (
+    (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento") &&
+    moffinMessageImpliesSatStillProcessing(report)
+  ) {
+    st = "pending";
+  }
   let summary: string | null = null;
   if (ct === "lista_69b") summary = summarizeBlacklist(report);
   else summary = summarizeSatRfc(ct, report);
@@ -1067,7 +1073,14 @@ Deno.serve(async (req) => {
     json = { _parseError: true, _body: text.slice(0, 2000) };
   }
 
-  const moffinStatus = mapMoffinStatus(String(json.status ?? ""));
+  let moffinStatus = mapMoffinStatus(String(json.status ?? ""));
+  if (
+    moffinRes.ok &&
+    (consultType === "opinion_cumplimiento" || consultType === "constancia_situacion_fiscal") &&
+    moffinMessageImpliesSatStillProcessing(json)
+  ) {
+    moffinStatus = "pending";
+  }
   const errMsg =
     moffinRes.ok
       ? null

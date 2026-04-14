@@ -20,7 +20,7 @@ import {
   moffinSolutionsBaseUrl,
 } from "../_shared/moffinApiFlavor.ts";
 import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
-import { mapMoffinStatus } from "../_shared/moffinReportStatus.ts";
+import { mapMoffinStatus, moffinMessageImpliesSatStillProcessing } from "../_shared/moffinReportStatus.ts";
 import { extractSolutionsQueryId, moffinSolutionsGetJson } from "../_shared/moffinSolutionsClient.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
@@ -356,8 +356,15 @@ Deno.serve(async (req) => {
     }
   }
 
-  const st = moffinReport ? mapMoffinStatus(String(moffinReport.status ?? "")) : "pending";
   const mr = moffinReport as Record<string, unknown> | null;
+  let st = moffinReport ? mapMoffinStatus(String(moffinReport.status ?? "")) : "pending";
+  if (
+    mr &&
+    (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") &&
+    moffinMessageImpliesSatStillProcessing(mr)
+  ) {
+    st = "pending";
+  }
   const errMsg =
     st === "fail" || st === "error"
       ? String(
@@ -422,9 +429,11 @@ Deno.serve(async (req) => {
   const combinedError =
     st === "fail" || st === "error"
       ? errMsg
-      : pdfWarn
-        ? `Sin PDF adjunto: ${pdfWarn}`.slice(0, 500)
-        : null;
+      : st === "pending"
+        ? null
+        : pdfWarn
+          ? `Sin PDF adjunto: ${pdfWarn}`.slice(0, 500)
+          : null;
 
   const patch: Record<string, unknown> = {
     status: st,

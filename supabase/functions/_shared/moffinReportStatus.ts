@@ -25,9 +25,35 @@ export function mapMoffinStatus(s: string | undefined): MoffinConsultUiStatus {
   return "error";
 }
 
+/**
+ * Une mensajes en raíz y un nivel en `data`, `query`, `response`, `result` (Moffin a veces anida el texto).
+ */
+export function moffinResponseMessagesFlattened(json: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const push = (x: unknown) => {
+    if (typeof x === "string" && x.trim()) parts.push(x.trim());
+  };
+  push(json.message);
+  push(json.error);
+  push(json.statusText);
+  const shallow = (obj: unknown) => {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return;
+    const o = obj as Record<string, unknown>;
+    push(o.message);
+    push(o.error);
+    push(o.statusText);
+    push(o.description);
+  };
+  shallow(json.data);
+  shallow(json.query);
+  shallow(json.response);
+  shallow(json.result);
+  return parts.join(" | ");
+}
+
 /** Mensaje típico cuando Moffin aceptó la solicitud pero el PDF aún no está listo (async / cola). */
 export function moffinMessageImpliesQueuedProcessing(json: Record<string, unknown>): boolean {
-  const msg = String(json.message ?? json.statusText ?? "").toLowerCase();
+  const msg = moffinResponseMessagesFlattened(json).toLowerCase();
   return /queued|en cola|for processing|processing|pending|en proceso|async|submitted|being processed/i.test(
     msg,
   );
@@ -39,7 +65,7 @@ export function moffinMessageImpliesQueuedProcessing(json: Record<string, unknow
  */
 export function moffinMessageImpliesSatStillProcessing(json: Record<string, unknown>): boolean {
   if (moffinMessageImpliesQueuedProcessing(json)) return true;
-  const msg = String(json.message ?? json.statusText ?? "").toLowerCase();
+  const msg = moffinResponseMessagesFlattened(json).toLowerCase();
   return /service query fetched successfully|service query[\s\w]*successfully|query fetched successfully/i.test(
     msg,
   );
