@@ -28,6 +28,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUnreadCount } from "@/hooks/useMentionNotifications";
 import { useUnreadEmailCount } from "@/hooks/useMicrosoft";
+import { useSlackChannelNotificationBadges } from "@/hooks/useSlackChannelNotificationBadges";
 import {
   Tooltip,
   TooltipContent,
@@ -107,6 +108,8 @@ export function AppSidebar() {
   const { hasModule } = useModulePermissions();
   const { data: unreadCount = 0 } = useUnreadCount();
   const { data: unreadEmailCount = 0 } = useUnreadEmailCount();
+  const slackChannelBadges = useSlackChannelNotificationBadges(user?.id);
+  const slackUnreadTotal = Object.values(slackChannelBadges).reduce((s, n) => s + n, 0);
 
   const visibleGroups = navGroups.map((g) => ({
     ...g,
@@ -122,6 +125,13 @@ export function AppSidebar() {
     }
     if (url === "/microsoft365/correo" && unreadEmailCount > 0) {
       return showFull ? <BadgeCount count={unreadEmailCount} variant="destructive" /> : <BadgeDot variant="destructive" />;
+    }
+    if (url === "/comunicacion" && slackUnreadTotal > 0) {
+      return showFull ? (
+        <BadgeCount count={slackUnreadTotal} variant="destructive" />
+      ) : (
+        <BadgeDot variant="destructive" />
+      );
     }
     return null;
   };

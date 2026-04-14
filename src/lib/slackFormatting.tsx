@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, createElement } from "react";
 import { format, isToday, isYesterday, isThisWeek } from "date-fns";
 import { es } from "date-fns/locale";
+import { get as emojiGet } from "node-emoji";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { cn } from "@/lib/utils";
 
@@ -99,6 +100,19 @@ export const SLACK_EMOJI: Record<string, string> = {
   sparkles: "✨",
 };
 
+/** Token `<:alias:id>` (emoji de workspace) → `:alias:` para el parser `:alias:`. */
+export function normalizeSlackEmojiTokens(text: string): string {
+  return text.replace(/<:([a-z0-9_+-]+):[0-9A-Za-z]+>/gi, ":$1:");
+}
+
+/** Alias sin dos puntos (p. ej. reacciones Slack) → carácter Unicode o `:alias:`. */
+export function slackEmojiAliasToChar(alias: string): string {
+  const k = alias.replace(/^:|:$/g, "").toLowerCase();
+  if (SLACK_EMOJI[k]) return SLACK_EMOJI[k];
+  const u = emojiGet(k);
+  return u ?? `:${alias.replace(/^:|:$/g, "")}:`;
+}
+
 function displayNameForSlackUser(
   id: string,
   userMap: Record<string, SlackUserProfile | undefined>,
@@ -124,14 +138,15 @@ export type FormatContext = {
 };
 
 function replaceEmojiCodes(text: string): (string | ReactNode)[] {
+  const src = normalizeSlackEmojiTokens(text);
   const re = /:([a-z0-9_+-]+):/gi;
   const parts: (string | ReactNode)[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
+  while ((m = re.exec(src)) !== null) {
+    if (m.index > last) parts.push(src.slice(last, m.index));
     const alias = m[1].toLowerCase();
-    const uni = SLACK_EMOJI[alias];
+    const uni = SLACK_EMOJI[alias] ?? emojiGet(alias);
     if (uni) {
       parts.push(uni);
     } else {
@@ -147,8 +162,8 @@ function replaceEmojiCodes(text: string): (string | ReactNode)[] {
     }
     last = m.index + m[0].length;
   }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts.length ? parts : [text];
+  if (last < src.length) parts.push(src.slice(last));
+  return parts.length ? parts : [src];
 }
 
 /** Texto sin `code` inline: *bold* _italic_ ~strike~ + emoji + menciones. */
@@ -315,7 +330,7 @@ function parseMentionsAndLinks(text: string, ctx: FormatContext, keyBase: string
 /** Slack mrkdwn → React (subset). */
 export function slackMrkdwnToReact(text: string | undefined, ctx: FormatContext): ReactNode {
   if (!text?.trim()) return null;
-  const lines = text.split("\n");
+  const lines = normalizeSlackEmojiTokens(text).split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
   let bi = 0;

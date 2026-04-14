@@ -1294,13 +1294,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Handle 404 - item not found (e.g. stale recurring event occurrence)
+    /**
+     * Graph 404 / ErrorItemNotFound. Usamos HTTP 200 para que el cliente Supabase
+     * reciba el JSON en `data`: con 4xx `invoke` deja `data` en null y solo
+     * `error` (FunctionsHttpError), y el front no puede leer `code` → runtime / pantalla en blanco.
+     */
     if (message.includes("[404]") || message.includes("ErrorItemNotFound")) {
       return new Response(JSON.stringify({
         error: "El elemento no fue encontrado. Es posible que haya sido eliminado o modificado. Recarga la vista para actualizar.",
         code: "ITEM_NOT_FOUND",
       }), {
-        status: 404,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

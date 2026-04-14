@@ -25,6 +25,7 @@ import {
   sameSlackDay,
   slackMrkdwnToReact,
   slackSystemMessageLabel,
+  slackEmojiAliasToChar,
   slackTsToMs,
   type FormatContext,
 } from "@/lib/slackFormatting";
@@ -88,8 +89,8 @@ function initials(name: string): string {
 }
 
 function reactionLabel(name: string): string {
-  const k = name.replace(/^::|::$/g, "").toLowerCase();
-  return SLACK_EMOJI[k] || `:${name}:`;
+  const k = name.replace(/^::|::$/g, "").replace(/^:|:$/g, "").toLowerCase();
+  return slackEmojiAliasToChar(k);
 }
 
 function slackReactionNamesMatch(a: string, b: string): boolean {

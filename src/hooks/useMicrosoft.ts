@@ -31,6 +31,13 @@ function isNotConnectedError(data: any, error: any) {
   );
 }
 
+/** Mensajes estables: mismos textos en `throw` y en `retry` para no reintentar en vano. */
+const EMAIL_DETAIL_NOT_FOUND_MSG =
+  "Este mensaje ya no está disponible en Microsoft (puede haberse eliminado o movido). Vuelve a la lista y abre otro correo.";
+
+const CALENDAR_EVENT_DETAIL_NOT_FOUND_MSG =
+  "Este evento ya no está disponible en Microsoft (puede haberse eliminado o ser una instancia de serie desactualizada). Cierra el panel y actualiza el calendario.";
+
 function getActionableError(err: Error): string {
   const message = String(err?.message || "");
   const lower = message.toLowerCase();
@@ -175,6 +182,10 @@ export function useDeleteCalendarEvent() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "delete-event", params: { eventId } },
       });
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) {
+        return { success: true as const };
+      }
       if (error) throw error;
       return data;
     },
@@ -196,11 +207,20 @@ export function useEventDetail(eventId: string | null) {
         body: { action: "event-detail", params: { eventId } },
       });
       if (isNotConnectedError(data, error)) return null;
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) {
+        throw new Error(CALENDAR_EVENT_DETAIL_NOT_FOUND_MSG);
+      }
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
     },
     enabled: !!user && !!eventId,
+    retry: (count, err) => {
+      const m = String((err as Error)?.message ?? "");
+      if (m === CALENDAR_EVENT_DETAIL_NOT_FOUND_MSG) return false;
+      return count < 2;
+    },
   });
 }
 
@@ -226,6 +246,10 @@ export function useUpdateCalendarEvent() {
       const res = await supabase.functions.invoke("microsoft-api", {
         body: { action: "update-event", params: { eventId, payload } },
       });
+      const errBody = await readSupabaseFunctionErrorBody(res.error);
+      if (payloadIndicatesItemNotFound(res.data, res.error, errBody)) {
+        throw new Error("El evento no fue encontrado. Puede que haya sido eliminado o modificado.");
+      }
       if (res.error) {
         const msg = res.error?.message || String(res.error);
         if (msg.includes("Unexpected end of JSON") || msg.includes("json")) {
@@ -523,6 +547,8 @@ export function useEmailConversation(conversationId: string | null) {
         body: { action: "email-conversation", params: { conversationId } },
       });
       if (isNotConnectedError(data, error)) return [];
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) return [];
       if (error) throw error;
       const raw = data as unknown[] | { value?: unknown[] } | null | undefined;
       if (Array.isArray(raw)) return raw;
@@ -568,9 +594,6 @@ function payloadIndicatesItemNotFound(data: unknown, error: unknown, errBody: st
     .toLowerCase();
   return merged.includes("item_not_found") || merged.includes("erroritemnotfound");
 }
-
-const EMAIL_DETAIL_NOT_FOUND_MSG =
-  "Este mensaje ya no está disponible en Microsoft (puede haberse eliminado o movido). Vuelve a la lista y abre otro correo.";
 
 function serializeUnknownError(err: unknown): string {
   if (err == null) return "";

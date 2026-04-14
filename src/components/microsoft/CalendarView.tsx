@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -39,7 +40,7 @@ import {
 import { es } from "date-fns/locale";
 import {
   Plus, ChevronLeft, ChevronRight, Loader2, Trash2, Video, Pencil,
-  CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink,
+  CalendarDays, CheckSquare, Clock, MapPin, Users, ExternalLink, AlertCircle,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -113,6 +114,7 @@ function taskDueDateKey(due: string | null | undefined): string | null {
 }
 
 export function CalendarView() {
+  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "day" : "week"
@@ -131,7 +133,12 @@ export function CalendarView() {
     location: "", description: "", isOnlineMeeting: true, isAllDay: false, categories: [] as string[],
   });
 
-  const { data: eventDetail, isLoading: eventDetailLoading } = useEventDetail(selectedEventId);
+  const {
+    data: eventDetail,
+    isLoading: eventDetailLoading,
+    isError: eventDetailFailed,
+    error: eventDetailError,
+  } = useEventDetail(selectedEventId);
   const updateEvent = useUpdateCalendarEvent();
   const { data: outlookCategories = [] } = useOutlookCategories();
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
@@ -768,6 +775,27 @@ export function CalendarView() {
           </DialogHeader>
           {eventDetailLoading && !cachedEvent ? (
             <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+          ) : eventDetailFailed && !cachedEvent ? (
+            <div className="flex flex-col items-center gap-4 py-8 px-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted/50">
+                <AlertCircle className="h-7 w-7 text-muted-foreground" aria-hidden />
+              </div>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                {eventDetailError instanceof Error && eventDetailError.message
+                  ? eventDetailError.message
+                  : "No se pudo cargar este evento. Puede haberse eliminado en Outlook o ser una instancia de serie desactualizada."}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedEventId(null);
+                  void queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+                }}
+              >
+                Cerrar y actualizar calendario
+              </Button>
+            </div>
           ) : (cachedEvent || eventDetail) ? (
             <div className="space-y-4 py-2">
               {(eventDetail?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeeting?.joinUrl || cachedEvent?.onlineMeetingUrl) && (
