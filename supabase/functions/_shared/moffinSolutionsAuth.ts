@@ -181,13 +181,14 @@ export async function resolveMoffinSolutionsBearer(
         "Solutions sin credencial: define MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth; Moffin Solutions) o MOFFIN_SOLUTIONS_BEARER con el JWT devuelto por POST /oauth/token. El token de «Configuración → API» de app.moffin no sirve como Bearer en solutions-api.",
     };
   }
-  if (!looksLikeOauthAccessJwt(staticBearer)) {
-    const usedApiKeyFallback = !(Deno.env.get("MOFFIN_SOLUTIONS_BEARER")?.trim() ?? "");
+  // Solo validar forma JWT cuando el Bearer sale de MOFFIN_API_KEY (suele ser token legacy corto).
+  // Si MOFFIN_SOLUTIONS_BEARER está definido, no exigir tres segmentos: algunos entornos usan token opaco.
+  const explicitSolutionsBearer = (Deno.env.get("MOFFIN_SOLUTIONS_BEARER") ?? "").trim();
+  if (!explicitSolutionsBearer && !looksLikeOauthAccessJwt(staticBearer)) {
     return {
       ok: false,
-      message: usedApiKeyFallback
-        ? "MOFFIN_API_KEY es la clave legacy de app.moffin (lista 69-B); no sirve como Bearer en solutions-api. En Supabase → Edge Functions → Secrets añade MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (credenciales OAuth que entrega Moffin para Solutions), o MOFFIN_SOLUTIONS_BEARER = accessToken JWT de POST …/oauth/token."
-        : "MOFFIN_SOLUTIONS_BEARER debe ser el accessToken JWT devuelto por POST …/oauth/token (tres segmentos separados por punto). Si pegaste el token corto de app.moffin, usa OAuth con MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET en su lugar.",
+      message:
+        "MOFFIN_API_KEY es la clave legacy de app.moffin (lista 69-B); no sirve como Bearer en solutions-api. En Supabase → Edge Functions → Secrets añade MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth), o MOFFIN_SOLUTIONS_BEARER con el accessToken que devuelve POST …/oauth/token (campo accessToken / access_token en la respuesta JSON).",
     };
   }
   return { ok: true, bearer: staticBearer, via: "static" };

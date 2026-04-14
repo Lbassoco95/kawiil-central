@@ -27,11 +27,12 @@ function ciecEncryptionSecretOk(): boolean {
   return a.length >= 32 || b.length >= 32;
 }
 
-/** Credencial Bearer para solutions-api (OAuth en runtime o JWT estático válido). */
+/** Credencial Bearer para solutions-api (OAuth, BEARER explícito o JWT vía MOFFIN_API_KEY). */
 function solutionsAuthConfigured(): boolean {
   const id = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
   const sec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
   if (id && sec) return true;
+  if ((Deno.env.get("MOFFIN_SOLUTIONS_BEARER") ?? "").trim().length > 0) return true;
   const staticT = moffinSolutionsBearerToken();
   return staticT.length > 0 && looksLikeOauthAccessJwt(staticT);
 }
@@ -102,7 +103,7 @@ Deno.serve(async (req) => {
 
     if (!solutionsAuthConfigured()) {
       missing.push(
-        "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER = accessToken JWT de POST …/oauth/token (no uses el token corto de app.moffin en MOFFIN_API_KEY para CSF)",
+        "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER (accessToken de POST …/oauth/token) o MOFFIN_API_KEY solo si es JWT de ese OAuth (no el token corto de app.moffin)",
       );
     }
     if (!ciecEncryptionSecretOk()) {
