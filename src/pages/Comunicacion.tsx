@@ -114,6 +114,8 @@ export default function Comunicacion() {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const slackReadAckKeyRef = useRef<string | null>(null);
   const slackReadAckTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  /** Último `ts` del historial visible; se actualiza cada render tras `messages` (evita TDZ con deps de efectos). */
+  const slackLatestMessageTsRef = useRef<string | undefined>(undefined);
 
   const switchChannel = useCallback(
     (id: string, updateUrl: boolean) => {
@@ -524,22 +526,21 @@ export default function Comunicacion() {
     return [...pages].reverse().flatMap((p) => p.messages);
   }, [historyInfinite.data]);
 
-  const latestVisibleMessageTs = useMemo(() => {
-    const last = messages[messages.length - 1];
-    return last?.ts || undefined;
-  }, [messages]);
+  const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
+  slackLatestMessageTsRef.current = lastMessageTs;
 
   /** Al abrir una conversación, limpiar avisos Kawiil asociados a ese canal. */
   useEffect(() => {
     if (!user?.id || !selectedChannel) return;
+    const latestTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
     void (async () => {
       try {
         await markSlackChannelNotificationsRead(user.id, selectedChannel);
-        if (latestVisibleMessageTs) {
-          const ackKey = `${selectedChannel}|${latestVisibleMessageTs}`;
+        if (latestTs) {
+          const ackKey = `${selectedChannel}|${latestTs}`;
           if (slackReadAckKeyRef.current !== ackKey) {
             slackReadAckKeyRef.current = ackKey;
-            await markSlackConversationRead(selectedChannel, latestVisibleMessageTs);
+            await markSlackConversationRead(selectedChannel, latestTs);
           }
         }
         await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
@@ -549,7 +550,7 @@ export default function Comunicacion() {
         /* RLS u offline: no bloquear la UI */
       }
     })();
-  }, [selectedChannel, user?.id, qc, latestVisibleMessageTs]);
+  }, [selectedChannel, user?.id, qc, messages]);
 
   /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
   useEffect(() => {
@@ -575,10 +576,11 @@ export default function Comunicacion() {
           if (row.entity_type !== "slack" || !row.entity_id?.startsWith(`${selectedChannel}|`)) return;
           if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type) || !row.id) return;
           await supabase.from("notifications").update({ is_read: true }).eq("id", row.id);
-          if (latestVisibleMessageTs) {
+          const latestTs = slackLatestMessageTsRef.current;
+          if (latestTs) {
             clearTimeout(slackReadAckTimerRef.current);
             slackReadAckTimerRef.current = setTimeout(() => {
-              void markSlackConversationRead(selectedChannel, latestVisibleMessageTs).catch(() => {
+              void markSlackConversationRead(selectedChannel, latestTs).catch(() => {
                 /* sin bloqueo por fallo remoto */
               });
             }, 350);
@@ -594,7 +596,7 @@ export default function Comunicacion() {
       clearTimeout(slackReadAckTimerRef.current);
       supabase.removeChannel(rt);
     };
-  }, [user?.id, selectedChannel, qc, latestVisibleMessageTs]);
+  }, [user?.id, selectedChannel, qc]);
 
   const slackUserIds = useMemo(() => {
     const ids = new Set<string>();
