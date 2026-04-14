@@ -8,6 +8,7 @@ export type MoffinApiFlavor = "legacy" | "solutions";
 function normalizeSolutionsBearer(value: string): string {
   let v = value.trim().replace(/\r?\n/g, "").replace(/\s+/g, " ");
   if (/^bearer\s+/i.test(v)) v = v.replace(/^bearer\s+/i, "").trim();
+  if (/^token\s+/i.test(v)) v = v.replace(/^token\s+/i, "").trim();
   return v;
 }
 

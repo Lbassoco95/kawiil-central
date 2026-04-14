@@ -101,6 +101,14 @@ Deno.serve(async (req) => {
     solutionsBaseHost = solBase ? hostPreview(solBase.startsWith("http") ? solBase : `https://${solBase}`) : null;
     looksLikeSandbox = /sandbox/i.test(solBase);
 
+    const oid = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
+    const osec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
+    if ((oid && !osec) || (!oid && osec)) {
+      missing.push(
+        "OAuth incompleto: MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET deben existir los dos; si solo uno está definido, Kawiil no usa OAuth y puede fallar el perfil SAT",
+      );
+    }
+
     if (!solutionsAuthConfigured()) {
       missing.push(
         "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER (accessToken de POST …/oauth/token) o MOFFIN_API_KEY solo si es JWT de ese OAuth (no el token corto de app.moffin)",

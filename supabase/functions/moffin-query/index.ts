@@ -11,7 +11,10 @@ import {
   moffinSolutionsBaseUrl,
   moffinSolutionsBearerToken,
 } from "../_shared/moffinApiFlavor.ts";
-import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
+import {
+  type SolutionsStaticBearerSource,
+  resolveMoffinSolutionsBearer,
+} from "../_shared/moffinSolutionsAuth.ts";
 import {
   extractMoffinProfileId,
   extractSolutionsQueryId,
@@ -386,7 +389,21 @@ Deno.serve(async (req) => {
   let solutionsBearer = "";
   /** oauth = JWT vía /oauth/token; static = MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY (suele fallar 401 en profile). */
   let solutionsAuthVia: "oauth" | "static" | null = null;
+  /** Si auth es static, de qué variable salió el Bearer (para mensajes 401). */
+  let solutionsStaticSource: SolutionsStaticBearerSource | null = null;
   if (flavor === "solutions") {
+    const oid = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
+    const osec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
+    if ((oid && !osec) || (!oid && osec)) {
+      return new Response(
+        JSON.stringify({
+          error: "moffin_solutions_oauth_incomplete",
+          message:
+            "Debes definir los dos secretos MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth Solutions). Si solo uno está en Supabase, Kawiil no usa OAuth y toma MOFFIN_SOLUTIONS_BEARER o MOFFIN_API_KEY, lo que suele devolver 401 «Token inválido» en perfil SAT.",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
     if (!solAuth.ok) {
       return new Response(
@@ -399,6 +416,9 @@ Deno.serve(async (req) => {
     }
     solutionsBearer = solAuth.bearer;
     solutionsAuthVia = solAuth.via;
+    if (solAuth.via === "static") {
+      solutionsStaticSource = solAuth.staticSource;
+    }
   }
   const legacyBase = flavor === "solutions" ? moffinLegacyBaseUrl() : moffinBase;
   const legacyToken = (flavor === "solutions" ? moffinLegacyApiKey() : moffinKey).trim();
@@ -728,7 +748,9 @@ Deno.serve(async (req) => {
           profRes.status === 401
             ? solutionsAuthVia === "oauth"
               ? "401 con JWT de OAuth: revisa que Moffin haya habilitado consultas SAT (Solutions) para este clientId; prueba el mismo Bearer con curl a /query/sat/profile. Si Moffin usa otro host o credenciales, confírmalo con ellos."
-              : "401: la app usó Bearer estático (authUsed=static). Debes definir MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET en Supabase (credenciales OAuth de Solutions que entrega Moffin; no el token de Configuración → API de app.moffin). Opcional: MOFFIN_SOLUTIONS_BEARER = accessToken JWT devuelto por POST .../oauth/token."
+              : solutionsStaticSource === "solutions_bearer_env"
+                ? "401 con MOFFIN_SOLUTIONS_BEARER: ese valor no es un accessToken aceptado por solutions-api (expiró, otro ambiente o no es el de POST …/oauth/token). Renueva el token o borra el secreto y configura MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET para que Kawiil obtenga el Bearer por OAuth."
+                : "401 con Bearer tomado de MOFFIN_API_KEY: esa clave es de app.moffin (lista 69-B), no sirve para perfil SAT en Solutions. En Supabase define MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (credenciales OAuth que entrega Moffin para Solutions) o MOFFIN_SOLUTIONS_BEARER = accessToken devuelto por POST …/oauth/token."
             : undefined;
         return new Response(
           JSON.stringify({
@@ -736,6 +758,9 @@ Deno.serve(async (req) => {
             message: profRes.message,
             statusCode: profRes.status,
             authUsed: solutionsAuthVia,
+            ...(solutionsAuthVia === "static" && solutionsStaticSource
+              ? { bearerSource: solutionsStaticSource }
+              : {}),
             ...(hint401 ? { hint: hint401 } : {}),
           }),
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -782,7 +807,11 @@ Deno.serve(async (req) => {
         .single();
       const hint401Sat =
         satRes.status === 401
-          ? "401 en Solutions: usa OAuth MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (o JWT en MOFFIN_SOLUTIONS_BEARER). El token del panel app.moffin no sirve como Bearer en solutions-api."
+          ? solutionsAuthVia === "oauth"
+            ? "401 en Solutions (CSF/32D) con OAuth: revisa permisos del clientId en Moffin o token expirado."
+            : solutionsStaticSource === "solutions_bearer_env"
+              ? "401 en CSF/32D: MOFFIN_SOLUTIONS_BEARER inválido o expirado; renueva con /oauth/token o usa MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET."
+              : "401 en CSF/32D: no uses MOFFIN_API_KEY como Bearer en Solutions; configura OAuth (CLIENT_ID + CLIENT_SECRET) o MOFFIN_SOLUTIONS_BEARER con accessToken de /oauth/token."
           : undefined;
       return new Response(
         JSON.stringify({
@@ -790,6 +819,9 @@ Deno.serve(async (req) => {
           message: satRes.message,
           statusCode: satRes.status,
           consultId: rowErr?.id,
+          ...(solutionsAuthVia === "static" && solutionsStaticSource
+            ? { bearerSource: solutionsStaticSource }
+            : {}),
           ...(hint401Sat ? { hint: hint401Sat } : {}),
         }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
