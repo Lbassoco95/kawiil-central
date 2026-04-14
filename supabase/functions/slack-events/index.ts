@@ -71,6 +71,32 @@ async function slackConversationMembers(channelId: string, botToken: string): Pr
   return out;
 }
 
+/** Igual que `slackConversationMembers` pero con token de usuario (p. ej. remitente sin cuenta Kawiil). */
+async function slackConversationMembersUserToken(channelId: string, userAccessToken: string): Promise<string[]> {
+  const out: string[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const u = new URL("https://slack.com/api/conversations.members");
+    u.searchParams.set("channel", channelId);
+    if (cursor) u.searchParams.set("cursor", cursor);
+    const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${userAccessToken}` } });
+    const j = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      members?: string[];
+      response_metadata?: { next_cursor?: string };
+    };
+    if (!j.ok) {
+      console.warn("conversations.members (user token):", j.error || "unknown");
+      break;
+    }
+    out.push(...(j.members || []));
+    cursor = j.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+  return out;
+}
+
 /** DM 1:1: el otro usuario Slack (`user` en conversations.info con token del remitente). */
 async function slackImOtherSlackUserId(
   channelId: string,
@@ -320,19 +346,27 @@ async function handleMessageNotificationEvent(
 
   const channel = event.channel as string | undefined;
   const ts = event.ts as string | undefined;
-  const senderSlackId = event.user as string | undefined;
+  const senderSlackId =
+    typeof event.user === "string" && event.user.trim()
+      ? event.user.trim()
+      : typeof event.user_id === "string" && event.user_id.trim()
+        ? event.user_id.trim()
+        : undefined;
   const text = (event.text as string) || "";
 
-  if (!channel || !ts || !senderSlackId) return;
+  if (!channel || !ts) return;
   if (event.bot_id && subtype === "bot_message") return;
 
-  const { data: senderConn } = await supabase
-    .from("user_slack_connections")
-    .select("user_id")
-    .eq("slack_team_id", teamId)
-    .eq("slack_user_id", senderSlackId)
-    .maybeSingle();
-  const senderKawiilId = senderConn?.user_id as string | undefined;
+  let senderKawiilId: string | undefined;
+  if (senderSlackId) {
+    const { data: senderConn } = await supabase
+      .from("user_slack_connections")
+      .select("user_id")
+      .eq("slack_team_id", teamId)
+      .eq("slack_user_id", senderSlackId)
+      .maybeSingle();
+    senderKawiilId = senderConn?.user_id as string | undefined;
+  }
 
   const targets = new Map<string, SlackTargetFlags>();
 
@@ -426,15 +460,39 @@ async function handleMessageNotificationEvent(
       if (tok) {
         if (channel.startsWith("D")) {
           const other = await slackImOtherSlackUserId(channel, tok);
-          if (other && other !== senderSlackId) memberSlackIds = [senderSlackId, other];
+          if (other && (!senderSlackId || other !== senderSlackId)) {
+            memberSlackIds = senderSlackId ? [senderSlackId, other] : [other];
+          }
         } else {
           memberSlackIds = await slackChannelMembersViaUserToken(channel, tok);
         }
       }
     }
+    if (memberSlackIds.length === 0) {
+      const { data: dmTeamToks } = await supabase
+        .from("user_slack_connections")
+        .select("access_token")
+        .eq("slack_team_id", teamId)
+        .not("access_token", "is", null)
+        .limit(12);
+      for (const row of dmTeamToks || []) {
+        const t = row.access_token as string | undefined;
+        if (!t) continue;
+        if (channel.startsWith("D")) {
+          const other = await slackImOtherSlackUserId(channel, t);
+          if (other && (!senderSlackId || other !== senderSlackId)) {
+            memberSlackIds = senderSlackId ? [senderSlackId, other] : [other];
+            if (memberSlackIds.length > 0) break;
+          }
+        } else {
+          memberSlackIds = await slackChannelMembersViaUserToken(channel, t);
+          if (memberSlackIds.length > 0) break;
+        }
+      }
+    }
     let mergedDmRecipient = false;
     for (const sid of memberSlackIds) {
-      if (sid === senderSlackId) continue;
+      if (senderSlackId && sid === senderSlackId) continue;
       const { data: conn } = await supabase
         .from("user_slack_connections")
         .select("user_id, organization_id")
@@ -453,7 +511,7 @@ async function handleMessageNotificationEvent(
       mergeSlackTarget(targets, conn.user_id, conn.organization_id, "dm");
       mergedDmRecipient = true;
     }
-    if (!mergedDmRecipient && channelType === "im" && channel.startsWith("D")) {
+    if (!mergedDmRecipient && channelType === "im" && channel.startsWith("D") && senderSlackId) {
       const probed = await slackDmRecipientViaConnectionProbe(supabase, teamId, channel, senderSlackId);
       if (probed && probed.user_id !== senderKawiilId) {
         const { data: prof } = await supabase
@@ -491,6 +549,24 @@ async function handleMessageNotificationEvent(
         memberSlackIds = await slackChannelMembersViaUserToken(channel, tok);
       }
     }
+    if (memberSlackIds.length === 0) {
+      const { data: teamToks } = await supabase
+        .from("user_slack_connections")
+        .select("access_token")
+        .eq("slack_team_id", teamId)
+        .not("access_token", "is", null)
+        .limit(12);
+      for (const row of teamToks || []) {
+        const t = row.access_token as string | undefined;
+        if (!t) continue;
+        const ids = await slackConversationMembersUserToken(channel, t);
+        if (ids.length > 0) {
+          memberSlackIds = ids;
+          console.log("slack-events: channel members via team user token", { channel, count: ids.length });
+          break;
+        }
+      }
+    }
     if (memberSlackIds.length > 0) {
       const { data: memberConns } = await supabase
         .from("user_slack_connections")
@@ -502,7 +578,7 @@ async function handleMessageNotificationEvent(
       for (const row of memberConns || []) {
         const uid = row.user_id as string;
         const sid = row.slack_user_id as string;
-        if (sid === senderSlackId) continue;
+        if (senderSlackId && sid === senderSlackId) continue;
         if (uid === senderKawiilId) continue;
         if (mutedUserIds.has(uid)) continue;
         if (!orgByUser.has(uid)) {
@@ -529,7 +605,17 @@ async function handleMessageNotificationEvent(
     }
   }
 
-  if (targets.size === 0) return;
+  if (targets.size === 0) {
+    console.warn("slack-events: message sin destinatarios Kawiil", {
+      channel,
+      channelType,
+      ts,
+      eventId,
+      hadSenderSlackId: !!senderSlackId,
+      senderLinkedKawiil: !!senderKawiilId,
+    });
+    return;
+  }
 
   let channelDisplay: string | undefined;
   const botForInfo = Deno.env.get("SLACK_BOT_TOKEN");
