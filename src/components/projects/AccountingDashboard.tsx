@@ -527,9 +527,9 @@ export function AccountingDashboard({
       } else if (payload.pendingFound === 0) {
         toast.success("No había filas que requieran sincronizar con Moffin.");
       } else if (stillPending > 0) {
-        toast.info(
-          `Moffin sigue procesando ${stillPending} consulta(s) en cola (mensaje tipo “Service query fetched successfully”). Estado en tabla: pendiente; aún no hay PDF hasta que pase a éxito. Si el webhook (Svix) está bien, se actualizará solo; si no, vuelve a sincronizar más tarde.`,
-        );
+        toast("Sincronización lista — Moffin en cola", {
+          description: `Es el comportamiento esperado: ${stillPending} consulta(s) siguen en cola en Moffin, la tabla en pendiente y sin PDF hasta que pasen a éxito. No es un error. Si el webhook (Svix) está configurado, se actualizará solo; si no, vuelve a sincronizar más tarde.`,
+        });
       } else {
         toast.success("Consultas actualizadas desde Moffin (resultado listo; si tu plan entrega PDF, se sube al pasar a éxito).");
       }

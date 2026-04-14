@@ -104,9 +104,9 @@ export function MoffinSatStatusSummary({
       } else if (payload.pendingFound === 0) {
         toast.success("No había consultas pendientes con ID en Moffin.");
       } else if (stillPending > 0) {
-        toast.info(
-          `Moffin sigue procesando ${stillPending} en cola; la tabla queda en pendiente (sin PDF hasta éxito). Revisa Svix o vuelve a sincronizar más tarde.`,
-        );
+        toast("Sincronización lista — Moffin en cola", {
+          description: `Es normal: ${stillPending} consulta(s) aún en cola; la tabla en pendiente y sin PDF hasta éxito. No es un error. Revisa el webhook (Svix) o sincroniza más tarde.`,
+        });
       } else {
         toast.success("Estado actualizado desde Moffin (éxito; PDF si tu plan lo entrega).");
       }
