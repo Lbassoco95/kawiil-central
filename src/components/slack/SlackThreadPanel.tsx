@@ -18,6 +18,7 @@ type Props = {
   slackSelfUserId?: string | null;
   reactionPending?: { messageTs: string; name: string } | null;
   onToggleReaction?: (messageTs: string, emojiName: string, add: boolean) => void;
+  onCreateTaskFromMessage?: (message: SlackMessage) => void;
 };
 
 export function SlackThreadPanel({
@@ -31,6 +32,7 @@ export function SlackThreadPanel({
   slackSelfUserId = null,
   reactionPending = null,
   onToggleReaction,
+  onCreateTaskFromMessage,
 }: Props) {
   const [draft, setDraft] = useState("");
 
@@ -82,6 +84,7 @@ export function SlackThreadPanel({
                 slackSelfUserId={slackSelfUserId}
                 reactionPending={reactionPending}
                 onToggleReaction={onToggleReaction}
+                onCreateTaskFromMessage={onCreateTaskFromMessage}
               />
             </div>
           )}

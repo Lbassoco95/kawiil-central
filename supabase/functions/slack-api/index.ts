@@ -51,6 +51,7 @@ async function slackFilesUploadClassic(
 
 type SlackMethod =
   | "conversations.list"
+  | "conversations.mark"
   | "conversations.open"
   | "conversations.history"
   | "conversations.members"
@@ -64,6 +65,7 @@ type SlackMethod =
   | "users.list";
 
 const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
+const MAX_PRIVATE_FILE_FETCH_BYTES = 20 * 1024 * 1024;
 
 /**
  * Flujo recomendado por Slack (sustituye files.upload clásico, a menudo rechazado o limitado).
@@ -203,6 +205,63 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
   return res.json();
 }
 
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function slackUnreadSnapshot(token: string): Promise<{
+  ok: boolean;
+  unread_by_channel: Record<string, number>;
+  channels_total: number;
+}> {
+  const unreadByChannel: Record<string, number> = {};
+  let cursor: string | undefined;
+  let channelsTotal = 0;
+
+  for (let i = 0; i < 15; i++) {
+    const data = await slackCall(token, "conversations.list", {
+      types: "public_channel,private_channel,mpim,im",
+      limit: 1000,
+      cursor,
+    }) as {
+      ok?: boolean;
+      channels?: Array<{ id?: string; unread_count?: number; unread_count_display?: number }>;
+      response_metadata?: { next_cursor?: string };
+      error?: string;
+    };
+
+    if (!data.ok) {
+      return {
+        ok: false,
+        unread_by_channel: {},
+        channels_total: channelsTotal,
+      };
+    }
+
+    for (const ch of data.channels || []) {
+      if (!ch?.id) continue;
+      channelsTotal += 1;
+      const unread = Number(ch.unread_count_display ?? ch.unread_count ?? 0);
+      unreadByChannel[ch.id] = Number.isFinite(unread) && unread > 0 ? unread : 0;
+    }
+
+    cursor = data.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+
+  return {
+    ok: true,
+    unread_by_channel: unreadByChannel,
+    channels_total: channelsTotal,
+  };
+}
+
 /** users.profile.set requiere `profile` como JSON en el cuerpo form-urlencoded. */
 async function slackUsersProfileSet(token: string, profile: Record<string, unknown>) {
   const body = new URLSearchParams();
@@ -330,6 +389,24 @@ Deno.serve(async (req) => {
       const data = await slackCall(conn.access_token, "conversations.open", {
         users: users.replace(/\s+/g, ""),
       });
+      return jsonOk(data);
+    }
+
+    if (action === "conversations.mark") {
+      const channel = (json.channel as string)?.trim();
+      const ts = (json.ts as string | undefined)?.trim();
+      if (!channel) {
+        return jsonOk({ ok: false, error: "channel required" });
+      }
+      const data = await slackCall(conn.access_token, "conversations.mark", {
+        channel,
+        ts,
+      });
+      return jsonOk(data);
+    }
+
+    if (action === "conversations.unread.snapshot") {
+      const data = await slackUnreadSnapshot(conn.access_token);
       return jsonOk(data);
     }
 
@@ -485,6 +562,44 @@ Deno.serve(async (req) => {
       return jsonOk(data);
     }
 
+    if (action === "files.fetch_private") {
+      const url = (json.url as string | undefined)?.trim();
+      if (!url || !url.startsWith("https://")) {
+        return jsonOk({ ok: false, error: "valid https url required" });
+      }
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${conn.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        return jsonOk({ ok: false, error: `file_fetch_failed_${res.status}` });
+      }
+
+      const contentLength = Number(res.headers.get("content-length") || "0");
+      if (contentLength > MAX_PRIVATE_FILE_FETCH_BYTES) {
+        return jsonOk({ ok: false, error: "file too large for inline fetch" });
+      }
+
+      const buffer = await res.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      if (bytes.byteLength > MAX_PRIVATE_FILE_FETCH_BYTES) {
+        return jsonOk({ ok: false, error: "file too large for inline fetch" });
+      }
+
+      const contentType = res.headers.get("content-type") || "application/octet-stream";
+      const base64 = uint8ToBase64(bytes);
+      return jsonOk({
+        ok: true,
+        content_type: contentType,
+        size: bytes.byteLength,
+        base64,
+      });
+    }
+
     if (action === "files.upload") {
       const channel = json.channel as string;
       const filename = (json.filename as string) || "upload";
@@ -546,6 +661,8 @@ Deno.serve(async (req) => {
       allowed: [
         "conversations.list",
         "conversations.open",
+        "conversations.mark",
+        "conversations.unread.snapshot",
         "users.list",
         "conversations.history",
         "conversations.members",
@@ -555,6 +672,7 @@ Deno.serve(async (req) => {
         "chat.postMessage",
         "chat.scheduleMessage",
         "users.profile.set",
+        "files.fetch_private",
         "files.upload",
         "users.info.batch",
       ],

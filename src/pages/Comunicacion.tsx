@@ -15,6 +15,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
+  markSlackConversationRead,
   invokeSlackApi,
   invokeSlackFileUpload,
   isSlackPermissionDeniedMessage,
@@ -39,14 +40,16 @@ import { SlackMessageList } from "@/components/slack/SlackMessageList";
 import { SlackComposer } from "@/components/slack/SlackComposer";
 import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
+import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { Button } from "@/components/ui/button";
-import { conversationTitle } from "@/components/slack/slackGrouping";
+import { conversationTitle, slackUserDisplayName } from "@/components/slack/slackGrouping";
 import { Bell, Layers, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   useSlackChannelNotificationBadges,
   markSlackChannelNotificationsRead,
 } from "@/hooks/useSlackChannelNotificationBadges";
+import { useSlackUnreadSync } from "@/hooks/useSlackUnreadSync";
 
 type HistoryPage = {
   messages: SlackMessage[];
@@ -102,12 +105,15 @@ export default function Comunicacion() {
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
+  const [taskFromSlackMessage, setTaskFromSlackMessage] = useState<SlackMessage | null>(null);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const [pushBannerDismissed, setPushBannerDismissed] = useState(
     () => typeof window !== "undefined" && localStorage.getItem(PUSH_BANNER_DISMISS_KEY) === "1",
   );
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const slackReadAckKeyRef = useRef<string | null>(null);
+  const slackReadAckTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const switchChannel = useCallback(
     (id: string, updateUrl: boolean) => {
@@ -283,6 +289,12 @@ export default function Comunicacion() {
   const conversations = conversationsQuery.data || [];
 
   const slackUnreadByChannel = useSlackChannelNotificationBadges(user?.id);
+  useSlackUnreadSync({
+    enabled: isConnected,
+    userId: user?.id,
+    selectedChannel,
+    localUnreadByChannel: slackUnreadByChannel,
+  });
 
   /** Al abrir una conversación, limpiar avisos Kawiil asociados a ese canal. */
   useEffect(() => {
@@ -290,6 +302,13 @@ export default function Comunicacion() {
     void (async () => {
       try {
         await markSlackChannelNotificationsRead(user.id, selectedChannel);
+        if (latestVisibleMessageTs) {
+          const ackKey = `${selectedChannel}|${latestVisibleMessageTs}`;
+          if (slackReadAckKeyRef.current !== ackKey) {
+            slackReadAckKeyRef.current = ackKey;
+            await markSlackConversationRead(selectedChannel, latestVisibleMessageTs);
+          }
+        }
         await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
         await qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
         await qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
@@ -297,7 +316,7 @@ export default function Comunicacion() {
         /* RLS u offline: no bloquear la UI */
       }
     })();
-  }, [selectedChannel, user?.id, qc]);
+  }, [selectedChannel, user?.id, qc, latestVisibleMessageTs]);
 
   /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
   useEffect(() => {
@@ -323,6 +342,14 @@ export default function Comunicacion() {
           if (row.entity_type !== "slack" || !row.entity_id?.startsWith(`${selectedChannel}|`)) return;
           if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type) || !row.id) return;
           await supabase.from("notifications").update({ is_read: true }).eq("id", row.id);
+          if (latestVisibleMessageTs) {
+            clearTimeout(slackReadAckTimerRef.current);
+            slackReadAckTimerRef.current = setTimeout(() => {
+              void markSlackConversationRead(selectedChannel, latestVisibleMessageTs).catch(() => {
+                /* sin bloqueo por fallo remoto */
+              });
+            }, 350);
+          }
           qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
           qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
           qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
@@ -331,9 +358,10 @@ export default function Comunicacion() {
       .subscribe();
 
     return () => {
+      clearTimeout(slackReadAckTimerRef.current);
       supabase.removeChannel(rt);
     };
-  }, [user?.id, selectedChannel, qc]);
+  }, [user?.id, selectedChannel, qc, latestVisibleMessageTs]);
 
   const { data: sidebarGroupsRaw = [] } = useQuery({
     queryKey: ["slack-sidebar-groups", user?.id],
@@ -562,6 +590,11 @@ export default function Comunicacion() {
     if (!pages?.length) return [];
     return [...pages].reverse().flatMap((p) => p.messages);
   }, [historyInfinite.data]);
+
+  const latestVisibleMessageTs = useMemo(() => {
+    const last = messages[messages.length - 1];
+    return last?.ts || undefined;
+  }, [messages]);
 
   const slackUserIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1043,6 +1076,7 @@ export default function Comunicacion() {
               }
               onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
               selectedChannelId={selectedChannel}
+              onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
             />
             <SlackComposer
               value={draft}
@@ -1083,6 +1117,7 @@ export default function Comunicacion() {
                 : null
             }
             onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
+            onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
           />
         </div>
       ) : (
@@ -1114,6 +1149,22 @@ export default function Comunicacion() {
         connectionId={connection?.id}
         slackSelfUserId={connection?.slack_user_id}
         onChannelReady={(channelId) => selectChannel(channelId)}
+      />
+      <SlackCreateTaskDialog
+        open={!!taskFromSlackMessage}
+        onOpenChange={(open) => {
+          if (!open) setTaskFromSlackMessage(null);
+        }}
+        message={taskFromSlackMessage}
+        channelId={selectedChannel}
+        channelTitle={headerTitle}
+        authorLabel={
+          taskFromSlackMessage?.user
+            ? slackUserDisplayName(taskFromSlackMessage.user, userMap)
+            : taskFromSlackMessage?.bot_id
+              ? "Bot"
+              : "Usuario Slack"
+        }
       />
       <SlackWorkspaceLayout
         sidebar={sidebar}

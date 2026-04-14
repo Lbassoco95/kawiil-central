@@ -11,9 +11,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Loader2, MessageSquareText, Smile, UserPlus } from "lucide-react";
+import { ClipboardPlus, Download, FileText, Loader2, MessageSquareText, Smile, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { SlackMessage } from "@/lib/slackApi";
+import { fetchSlackPrivateFileBlob, type SlackMessage } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { slackUserDisplayName } from "./slackGrouping";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,7 @@ type Props = {
   reactionPending?: { messageTs: string; name: string } | null;
   onToggleReaction?: (messageTs: string, emojiName: string, add: boolean) => void;
   selectedChannelId: string;
+  onCreateTaskFromMessage?: (message: SlackMessage) => void;
 };
 
 const REACTION_PICKER_KEYS = [
@@ -99,30 +100,113 @@ function slackReactionNamesMatch(a: string, b: string): boolean {
   return false;
 }
 
+function formatFileSize(size: number | undefined): string | null {
+  if (size == null || !Number.isFinite(size)) return null;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[number] }) {
   const isImg = f.mimetype?.startsWith("image/");
   const label = f.title || f.name || "Archivo";
+  const privateUrl = f.url_private_download || f.url_private || "";
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const objectUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    };
+  }, []);
+
+  const resolvePrivateUrl = useCallback(async (): Promise<string | null> => {
+    if (resolvedUrl) return resolvedUrl;
+    if (!privateUrl) return null;
+    setLoading(true);
+    try {
+      const blob = await fetchSlackPrivateFileBlob(privateUrl);
+      const nextUrl = URL.createObjectURL(blob);
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+      objectUrlRef.current = nextUrl;
+      setResolvedUrl(nextUrl);
+      return nextUrl;
+    } catch {
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [privateUrl, resolvedUrl]);
+
+  useEffect(() => {
+    if (!isImg || !privateUrl) return;
+    void resolvePrivateUrl();
+  }, [isImg, privateUrl, resolvePrivateUrl]);
+
+  const openAttachment = useCallback(async () => {
+    const next = (await resolvePrivateUrl()) || f.permalink || privateUrl;
+    if (!next) return;
+    window.open(next, "_blank", "noopener,noreferrer");
+  }, [resolvePrivateUrl, f.permalink, privateUrl]);
+
+  const downloadAttachment = useCallback(async () => {
+    const next = (await resolvePrivateUrl()) || f.permalink || privateUrl;
+    if (!next) return;
+    const a = document.createElement("a");
+    a.href = next;
+    a.download = label;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+  }, [resolvePrivateUrl, f.permalink, privateUrl, label]);
+
+  const sizeLabel = formatFileSize(f.size);
+  const imageSrc = resolvedUrl || f.thumb_360 || f.thumb_80 || f.permalink || privateUrl;
+
   return (
     <div className="mt-1 flex flex-wrap gap-2">
-      {isImg && f.thumb_360 ? (
-        <a
-          href={f.permalink || f.url_private}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block rounded-md border border-border/60 overflow-hidden max-w-[220px]"
+      {isImg && imageSrc ? (
+        <button
+          type="button"
+          onClick={openAttachment}
+          className="relative block rounded-md border border-border/60 overflow-hidden max-w-[260px] text-left"
+          title="Abrir imagen"
         >
-          <img src={f.thumb_360} alt="" className="max-h-40 w-auto object-cover" />
-        </a>
+          <img src={imageSrc} alt={label} className="max-h-52 w-auto object-cover" />
+          {loading && (
+            <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
+              <Loader2 className="h-4 w-4 animate-spin text-white" />
+            </span>
+          )}
+        </button>
       ) : (
-        <a
-          href={f.permalink || f.url_private}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-2 py-1.5 text-xs hover:bg-muted/50"
-        >
-          <span className="font-medium truncate max-w-[200px]">{label}</span>
-          {f.size != null && <span className="text-muted-foreground shrink-0">{(f.size / 1024).toFixed(0)} KB</span>}
-        </a>
+        <div className="inline-flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-2 py-1.5 text-xs">
+          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="font-medium truncate max-w-[180px]">{label}</span>
+          {sizeLabel && <span className="text-muted-foreground shrink-0">{sizeLabel}</span>}
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded border border-border/70 px-1.5 py-0.5 hover:bg-muted/60"
+            onClick={openAttachment}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Abrir"}
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded border border-border/70 px-1.5 py-0.5 hover:bg-muted/60"
+            onClick={downloadAttachment}
+            disabled={loading}
+            title="Descargar"
+          >
+            <Download className="h-3 w-3" />
+          </button>
+        </div>
       )}
     </div>
   );
@@ -145,6 +229,7 @@ export function SlackMessageList({
   reactionPending = null,
   onToggleReaction,
   selectedChannelId,
+  onCreateTaskFromMessage,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [mentionUserId, setMentionUserId] = useState<string | null>(null);
@@ -435,24 +520,40 @@ export function SlackMessageList({
               </div>
             )
           )}
-          {onOpenThread && (
-            <Button
-              type="button"
-              variant={threadActiveHere ? "default" : "secondary"}
-              size="sm"
-              className={cn(
-                "mt-1.5 h-7 gap-1.5 text-xs font-medium shrink-0",
-                threadActiveHere && "bg-[#611f69] hover:bg-[#4a154b]",
+          {(onOpenThread || onCreateTaskFromMessage) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {onOpenThread && (
+              <Button
+                type="button"
+                variant={threadActiveHere ? "default" : "secondary"}
+                size="sm"
+                className={cn(
+                  "h-7 gap-1.5 text-xs font-medium shrink-0",
+                  threadActiveHere && "bg-[#611f69] hover:bg-[#4a154b]",
+                )}
+                onClick={() => onOpenThread(rootTs)}
+              >
+                <MessageSquareText className="h-3.5 w-3.5 shrink-0" />
+                {(m.reply_count ?? 0) > 0
+                  ? `${m.reply_count} en el hilo`
+                  : threadActiveHere
+                    ? "Hilo abierto"
+                    : "Responder en hilo"}
+              </Button>
               )}
-              onClick={() => onOpenThread(rootTs)}
-            >
-              <MessageSquareText className="h-3.5 w-3.5 shrink-0" />
-              {(m.reply_count ?? 0) > 0
-                ? `${m.reply_count} en el hilo`
-                : threadActiveHere
-                  ? "Hilo abierto"
-                  : "Responder en hilo"}
-            </Button>
+              {onCreateTaskFromMessage && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => onCreateTaskFromMessage(m)}
+                >
+                  <ClipboardPlus className="h-3.5 w-3.5 shrink-0" />
+                  Crear tarea
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>,

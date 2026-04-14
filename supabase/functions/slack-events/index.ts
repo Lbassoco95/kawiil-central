@@ -174,6 +174,7 @@ async function handleMessageNotificationEvent(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   event: Record<string, unknown>,
   teamId: string,
+  eventId?: string,
 ) {
   const subtype = event.subtype as string | undefined;
   if (
@@ -303,7 +304,24 @@ async function handleMessageNotificationEvent(
     source_user_id: null as string | null,
   }));
 
-  const { error } = await supabase.from("notifications").insert(rows);
+  const entityId = `${channel}|${ts}`;
+  const userIds = rows.map((r) => r.user_id);
+  const { data: existingRows } = await supabase
+    .from("notifications")
+    .select("user_id, type")
+    .eq("entity_type", "slack")
+    .eq("entity_id", entityId)
+    .in("user_id", userIds)
+    .in("type", ["slack_message", "slack_mention"]);
+
+  const existingKey = new Set((existingRows || []).map((r) => `${r.user_id}|${r.type}`));
+  const dedupedRows = rows.filter((r) => !existingKey.has(`${r.user_id}|${r.type}`));
+  if (dedupedRows.length === 0) {
+    console.log("Slack event deduped: no new notification rows", { channel, ts, eventId });
+    return;
+  }
+
+  const { error } = await supabase.from("notifications").insert(dedupedRows);
   if (error) {
     console.error("slack message notifications insert:", error);
     return;
@@ -312,7 +330,7 @@ async function handleMessageNotificationEvent(
   const deepUrl = `/comunicacion?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(ts)}`;
   const bodyPush = preview || "Nuevo mensaje";
   const pushTag = `slack-${channel}-${ts}`.replace(/\s/g, "");
-  for (const row of rows) {
+  for (const row of dedupedRows) {
     await sendWebPushForUsers(supabase, [row.user_id], row.title, bodyPush, deepUrl, pushTag);
   }
 }
@@ -632,10 +650,18 @@ serve(async (req) => {
   }
 
   const SLACK_SIGNING_SECRET = Deno.env.get("SLACK_SIGNING_SECRET");
+  const ALLOW_INSECURE_SLACK_EVENTS = Deno.env.get("ALLOW_INSECURE_SLACK_EVENTS") === "true";
 
   try {
     const body = await req.text();
     const contentType = req.headers.get("content-type") || "";
+    const retryNum = req.headers.get("x-slack-retry-num") || "";
+    const retryReason = req.headers.get("x-slack-retry-reason") || "";
+
+    if (!SLACK_SIGNING_SECRET && !ALLOW_INSECURE_SLACK_EVENTS) {
+      console.error("SLACK_SIGNING_SECRET missing. Rejecting request for safety.");
+      return new Response("Slack signing secret not configured", { status: 500 });
+    }
 
     // Verify signature if signing secret is configured
     if (SLACK_SIGNING_SECRET) {
@@ -689,9 +715,14 @@ serve(async (req) => {
     if (data.type === "event_callback") {
       const event = data.event;
       const teamId = data.team_id as string | undefined;
+      const eventId = data.event_id as string | undefined;
+
+      if (retryNum) {
+        console.log("Slack retry request", { retryNum, retryReason, eventId, teamId });
+      }
 
       if (event.type === "message" && teamId) {
-        await handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId);
+        await handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId, eventId);
       }
 
       if (event.type === "reaction_added") {

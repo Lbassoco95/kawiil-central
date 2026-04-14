@@ -60,6 +60,52 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
   return data as T;
 }
 
+function base64ToBlob(base64: string, contentType: string): Blob {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: contentType || "application/octet-stream" });
+}
+
+export async function markSlackConversationRead(channel: string, ts?: string): Promise<void> {
+  const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+    action: "conversations.mark",
+    channel,
+    ts,
+  });
+  if (!data.ok) throw new Error(data.error || "No se pudo marcar leído en Slack");
+}
+
+export async function fetchSlackUnreadSnapshot(): Promise<Record<string, number>> {
+  const data = await invokeSlackApi<{
+    ok: boolean;
+    error?: string;
+    unread_by_channel?: Record<string, number>;
+  }>({
+    action: "conversations.unread.snapshot",
+  });
+  if (!data.ok) throw new Error(data.error || "No se pudo leer estado de no leídos de Slack");
+  return data.unread_by_channel || {};
+}
+
+export async function fetchSlackPrivateFileBlob(url: string): Promise<Blob> {
+  const data = await invokeSlackApi<{
+    ok: boolean;
+    error?: string;
+    base64?: string;
+    content_type?: string;
+  }>({
+    action: "files.fetch_private",
+    url,
+  });
+  if (!data.ok || !data.base64) {
+    throw new Error(data.error || "No se pudo recuperar el adjunto de Slack");
+  }
+  return base64ToBlob(data.base64, data.content_type || "application/octet-stream");
+}
+
 /** Subida de archivo sin base64 (menor tamaño de petición, evita límites del gateway). */
 export async function invokeSlackFileUpload(formData: FormData): Promise<Record<string, unknown>> {
   const { data, error } = await supabase.functions.invoke("slack-api", { body: formData });
@@ -91,6 +137,7 @@ export type SlackFile = {
   filetype?: string;
   size?: number;
   url_private?: string;
+  url_private_download?: string;
   thumb_360?: string;
   thumb_80?: string;
   permalink?: string;
