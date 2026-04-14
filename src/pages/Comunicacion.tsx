@@ -296,73 +296,6 @@ export default function Comunicacion() {
     localUnreadByChannel: slackUnreadByChannel,
   });
 
-  /** Al abrir una conversación, limpiar avisos Kawiil asociados a ese canal. */
-  useEffect(() => {
-    if (!user?.id || !selectedChannel) return;
-    void (async () => {
-      try {
-        await markSlackChannelNotificationsRead(user.id, selectedChannel);
-        if (latestVisibleMessageTs) {
-          const ackKey = `${selectedChannel}|${latestVisibleMessageTs}`;
-          if (slackReadAckKeyRef.current !== ackKey) {
-            slackReadAckKeyRef.current = ackKey;
-            await markSlackConversationRead(selectedChannel, latestVisibleMessageTs);
-          }
-        }
-        await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
-        await qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-        await qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-      } catch {
-        /* RLS u offline: no bloquear la UI */
-      }
-    })();
-  }, [selectedChannel, user?.id, qc, latestVisibleMessageTs]);
-
-  /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
-  useEffect(() => {
-    if (!user?.id || !selectedChannel) return;
-
-    const rt = supabase
-      .channel(`slack-active-read-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
-        async (payload) => {
-          const row = payload.new as {
-            id?: string;
-            entity_type?: string;
-            entity_id?: string;
-            type?: string;
-          };
-          if (row.entity_type !== "slack" || !row.entity_id?.startsWith(`${selectedChannel}|`)) return;
-          if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type) || !row.id) return;
-          await supabase.from("notifications").update({ is_read: true }).eq("id", row.id);
-          if (latestVisibleMessageTs) {
-            clearTimeout(slackReadAckTimerRef.current);
-            slackReadAckTimerRef.current = setTimeout(() => {
-              void markSlackConversationRead(selectedChannel, latestVisibleMessageTs).catch(() => {
-                /* sin bloqueo por fallo remoto */
-              });
-            }, 350);
-          }
-          qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
-          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      clearTimeout(slackReadAckTimerRef.current);
-      supabase.removeChannel(rt);
-    };
-  }, [user?.id, selectedChannel, qc, latestVisibleMessageTs]);
-
   const { data: sidebarGroupsRaw = [] } = useQuery({
     queryKey: ["slack-sidebar-groups", user?.id],
     queryFn: async () => {
@@ -595,6 +528,73 @@ export default function Comunicacion() {
     const last = messages[messages.length - 1];
     return last?.ts || undefined;
   }, [messages]);
+
+  /** Al abrir una conversación, limpiar avisos Kawiil asociados a ese canal. */
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+    void (async () => {
+      try {
+        await markSlackChannelNotificationsRead(user.id, selectedChannel);
+        if (latestVisibleMessageTs) {
+          const ackKey = `${selectedChannel}|${latestVisibleMessageTs}`;
+          if (slackReadAckKeyRef.current !== ackKey) {
+            slackReadAckKeyRef.current = ackKey;
+            await markSlackConversationRead(selectedChannel, latestVisibleMessageTs);
+          }
+        }
+        await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+        await qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+        await qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+      } catch {
+        /* RLS u offline: no bloquear la UI */
+      }
+    })();
+  }, [selectedChannel, user?.id, qc, latestVisibleMessageTs]);
+
+  /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+
+    const rt = supabase
+      .channel(`slack-active-read-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        async (payload) => {
+          const row = payload.new as {
+            id?: string;
+            entity_type?: string;
+            entity_id?: string;
+            type?: string;
+          };
+          if (row.entity_type !== "slack" || !row.entity_id?.startsWith(`${selectedChannel}|`)) return;
+          if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type) || !row.id) return;
+          await supabase.from("notifications").update({ is_read: true }).eq("id", row.id);
+          if (latestVisibleMessageTs) {
+            clearTimeout(slackReadAckTimerRef.current);
+            slackReadAckTimerRef.current = setTimeout(() => {
+              void markSlackConversationRead(selectedChannel, latestVisibleMessageTs).catch(() => {
+                /* sin bloqueo por fallo remoto */
+              });
+            }, 350);
+          }
+          qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      clearTimeout(slackReadAckTimerRef.current);
+      supabase.removeChannel(rt);
+    };
+  }, [user?.id, selectedChannel, qc, latestVisibleMessageTs]);
 
   const slackUserIds = useMemo(() => {
     const ids = new Set<string>();
