@@ -1,4 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  getMoffinApiFlavor,
+  moffinLegacyApiKey,
+  moffinSolutionsBaseUrl,
+  moffinSolutionsBearerToken,
+} from "../_shared/moffinApiFlavor.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +18,20 @@ function hostPreview(url: string): string {
   } catch {
     return "";
   }
+}
+
+function ciecEncryptionSecretOk(): boolean {
+  const a = (Deno.env.get("MOFFIN_SAT_CIEC_SECRET") ?? "").trim();
+  const b = (Deno.env.get("MOFFIN_FIEL_SECRET") ?? "").trim();
+  return a.length >= 32 || b.length >= 32;
+}
+
+/** Credencial Bearer para solutions-api (OAuth en runtime o JWT estático). */
+function solutionsAuthConfigured(): boolean {
+  const id = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
+  const sec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
+  if (id && sec) return true;
+  return moffinSolutionsBearerToken().length > 0;
 }
 
 Deno.serve(async (req) => {
@@ -65,14 +85,45 @@ Deno.serve(async (req) => {
     );
   }
 
-  const apiKey = Deno.env.get("MOFFIN_API_KEY");
-  const baseUrl = (Deno.env.get("MOFFIN_BASE_URL") ?? "").replace(/\/$/, "");
-  const svix = Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET");
-
+  const flavor = getMoffinApiFlavor();
   const missing: string[] = [];
-  if (!apiKey?.trim()) missing.push("MOFFIN_API_KEY");
-  if (!baseUrl) missing.push("MOFFIN_BASE_URL");
-  if (!svix?.trim()) missing.push("MOFFIN_SVIX_SIGNING_SECRET");
+  const warnings: string[] = [];
+
+  let baseUrlHost: string | null = null;
+  let solutionsBaseHost: string | null = null;
+  let looksLikeSandbox = false;
+
+  if (flavor === "solutions") {
+    const solBase = moffinSolutionsBaseUrl();
+    solutionsBaseHost = solBase ? hostPreview(solBase.startsWith("http") ? solBase : `https://${solBase}`) : null;
+    looksLikeSandbox = /sandbox/i.test(solBase);
+
+    if (!solutionsAuthConfigured()) {
+      missing.push(
+        "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY (JWT de /oauth/token Solutions)",
+      );
+    }
+    if (!ciecEncryptionSecretOk()) {
+      missing.push("MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (mínimo 32 caracteres; cifrado CIEC en moffin-sat-ciec)");
+    }
+    if (!Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET")?.trim()) {
+      missing.push("MOFFIN_SVIX_SIGNING_SECRET (webhook Svix; actualización de consultas async)");
+    }
+    if (!moffinLegacyApiKey()) {
+      warnings.push(
+        "Lista 69-B: falta MOFFIN_LEGACY_API_KEY o MOFFIN_API_KEY (Token API legacy). CSF y opinión 32D no lo requieren.",
+      );
+    }
+  } else {
+    const apiKey = Deno.env.get("MOFFIN_API_KEY");
+    const baseUrl = (Deno.env.get("MOFFIN_BASE_URL") ?? "").replace(/\/$/, "");
+    const svix = Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET");
+    if (!apiKey?.trim()) missing.push("MOFFIN_API_KEY");
+    if (!baseUrl) missing.push("MOFFIN_BASE_URL");
+    if (!svix?.trim()) missing.push("MOFFIN_SVIX_SIGNING_SECRET");
+    baseUrlHost = baseUrl ? hostPreview(baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`) : null;
+    looksLikeSandbox = /sandbox\.moffin/i.test(baseUrl);
+  }
 
   const ok = missing.length === 0;
 
@@ -80,11 +131,17 @@ Deno.serve(async (req) => {
   return new Response(
     JSON.stringify({
       ok,
+      apiFlavor: flavor,
       missing,
-      baseUrlHost: baseUrl ? hostPreview(baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`) : null,
-      looksLikeSandbox: /sandbox\.moffin/i.test(baseUrl),
+      warnings,
+      ciecEncryptionOk: ciecEncryptionSecretOk(),
+      legacyApiKeyConfigured: !!moffinLegacyApiKey(),
+      solutionsAuthConfigured: flavor === "solutions" ? solutionsAuthConfigured() : null,
+      baseUrlHost,
+      solutionsBaseHost,
+      looksLikeSandbox,
       hint: ok
-        ? "Credenciales presentes en el servidor (no se muestran valores)."
+        ? "Credenciales mínimas para el modo configurado están presentes (no se muestran valores)."
         : "Configura los secretos en Supabase → Edge Functions → Secrets.",
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },

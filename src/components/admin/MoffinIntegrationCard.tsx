@@ -7,8 +7,14 @@ import { Loader2, Landmark, ExternalLink, ListChecks } from "lucide-react";
 
 type HealthPayload = {
   ok?: boolean;
+  apiFlavor?: "solutions" | "legacy";
   missing?: string[];
+  warnings?: string[];
+  ciecEncryptionOk?: boolean;
+  legacyApiKeyConfigured?: boolean;
+  solutionsAuthConfigured?: boolean | null;
   baseUrlHost?: string | null;
+  solutionsBaseHost?: string | null;
   looksLikeSandbox?: boolean;
   hint?: string;
   error?: string;
@@ -67,6 +73,11 @@ export function MoffinIntegrationCard() {
                   Faltan secretos
                 </Badge>
               )}
+              {data?.apiFlavor ? (
+                <Badge variant="outline" className="text-[10px]">
+                  Modo Edge: {data.apiFlavor}
+                </Badge>
+              ) : null}
               {data?.looksLikeSandbox ? (
                 <Badge variant="secondary" className="text-[10px]">
                   Base URL parece sandbox
@@ -81,10 +92,22 @@ export function MoffinIntegrationCard() {
                 {isFetching ? "Actualizando…" : "Volver a comprobar"}
               </button>
             </div>
+            {data?.solutionsBaseHost ? (
+              <p className="text-[11px] text-muted-foreground">
+                Host Solutions API: <code className="text-foreground">{data.solutionsBaseHost}</code>
+              </p>
+            ) : null}
             {data?.baseUrlHost ? (
               <p className="text-[11px] text-muted-foreground">
-                Host API Moffin: <code className="text-foreground">{data.baseUrlHost}</code>
+                Host API legacy: <code className="text-foreground">{data.baseUrlHost}</code>
               </p>
+            ) : null}
+            {data?.warnings && data.warnings.length > 0 ? (
+              <ul className="text-[11px] text-amber-700 dark:text-amber-400 list-disc pl-4 space-y-0.5">
+                {data.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
             ) : null}
             {data?.missing && data.missing.length > 0 ? (
               <p className="text-[11px] text-amber-700 dark:text-amber-400">
@@ -223,8 +246,17 @@ export function MoffinIntegrationCard() {
         </div>
 
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
-          <p className="font-medium text-foreground">Prueba en sandbox</p>
+          <p className="font-medium text-foreground">Prueba funcional (constancia / opinión)</p>
           <ul className="list-disc pl-4 space-y-1">
+            <li>
+              Desplegar en el mismo proyecto Supabase: <code className="text-foreground">moffin-query</code>,{" "}
+              <code className="text-foreground">moffin-sat-ciec</code> y <code className="text-foreground">moffin-webhook</code>{" "}
+              (esta última siempre con <code className="text-foreground">--no-verify-jwt</code>).
+            </li>
+            <li>
+              Aplicar migraciones de <code className="text-foreground">moffin_client_sat_ciec</code> (SQL Editor o{" "}
+              <code className="text-foreground">supabase db push</code>).
+            </li>
             <li>
               Cliente con RFC de ejemplo Moffin: <code className="text-foreground">PRPU800101111</code> (persona
               física).
@@ -236,6 +268,10 @@ export function MoffinIntegrationCard() {
             </li>
             <li>
               Webhook Svix debe apuntar a <code className="break-all text-foreground">{webhookUrl || "…/moffin-webhook"}</code>
+            </li>
+            <li>
+              Si el estado queda pendiente: botón «Sincronizar con Moffin» en Contabilidad y revisar logs de{" "}
+              <code className="text-foreground">moffin-webhook</code> en Supabase.
             </li>
           </ul>
         </div>
