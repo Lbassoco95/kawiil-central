@@ -340,9 +340,13 @@ async function handleMessageNotificationEvent(
       subtype,
     )
   ) {
+    console.log("slack-events: message ignorado (subtype)", { subtype, channel: event.channel, ts: event.ts, eventId });
     return;
   }
-  if (event.hidden) return;
+  if (event.hidden) {
+    console.log("slack-events: message ignorado (hidden)", { eventId, teamId });
+    return;
+  }
 
   const channel = event.channel as string | undefined;
   const ts = event.ts as string | undefined;
@@ -354,8 +358,23 @@ async function handleMessageNotificationEvent(
         : undefined;
   const text = (event.text as string) || "";
 
-  if (!channel || !ts) return;
-  if (event.bot_id && subtype === "bot_message") return;
+  if (!channel || !ts) {
+    console.warn("slack-events: message sin channel o ts", { eventId, teamId, channel, ts });
+    return;
+  }
+  if (event.bot_id && subtype === "bot_message") {
+    console.log("slack-events: message ignorado (bot_message)", { eventId, channel });
+    return;
+  }
+
+  console.log("slack-events: message → notificaciones Kawiil", {
+    eventId,
+    teamId,
+    channel,
+    ts,
+    senderSlackId: senderSlackId ?? null,
+    subtype: subtype ?? null,
+  });
 
   let senderKawiilId: string | undefined;
   if (senderSlackId) {
@@ -658,6 +677,14 @@ async function handleMessageNotificationEvent(
     console.error("slack message notifications insert:", error);
     return;
   }
+
+  console.log("slack-events: insert OK en notifications", {
+    count: dedupedRows.length,
+    channel,
+    ts,
+    eventId,
+    types: [...new Set(dedupedRows.map((r) => r.type))],
+  });
 
   const deepUrl = `/comunicacion?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(ts)}`;
   const bodyPush = preview || "Nuevo mensaje";
@@ -1078,6 +1105,12 @@ serve(async (req) => {
 
       if (event.type === "message") {
         if (teamId) {
+          console.log("slack-events: event_callback message", {
+            eventId,
+            teamId,
+            channel: event.channel,
+            api_app_id: (data as { api_app_id?: string }).api_app_id,
+          });
           await handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId, eventId);
         } else {
           console.warn("slack-events: message sin team_id resolvible; no se crean notificaciones Kawiil", {
