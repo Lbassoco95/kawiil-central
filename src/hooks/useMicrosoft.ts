@@ -413,6 +413,10 @@ export function useMarkEmailUnread() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "mark-unread", params: { messageId } },
       });
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) {
+        return { success: true as const };
+      }
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
@@ -775,6 +779,10 @@ export function useMarkEmailRead() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "mark-read", params: { messageId } },
       });
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) {
+        return { success: true as const };
+      }
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
