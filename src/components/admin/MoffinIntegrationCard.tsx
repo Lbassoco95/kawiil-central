@@ -16,6 +16,9 @@ type HealthPayload = {
   baseUrlHost?: string | null;
   solutionsBaseHost?: string | null;
   looksLikeSandbox?: boolean;
+  /** Desde Edge: misma base que SUPABASE_URL + /functions/v1/moffin-webhook */
+  moffinWebhookFullUrl?: string | null;
+  svixSigningSecretPresent?: boolean;
   hint?: string;
   error?: string;
   message?: string;
@@ -37,6 +40,14 @@ export function MoffinIntegrationCard() {
   const webhookUrl = import.meta.env.VITE_SUPABASE_URL
     ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1/moffin-webhook`
     : "";
+  const supabaseProjectRef = (() => {
+    try {
+      const h = new URL(String(import.meta.env.VITE_SUPABASE_URL ?? "")).hostname;
+      return h.split(".")[0] || "";
+    } catch {
+      return "";
+    }
+  })();
 
   return (
     <Card>
@@ -115,6 +126,20 @@ export function MoffinIntegrationCard() {
               </p>
             ) : data?.hint ? (
               <p className="text-[11px] text-muted-foreground">{data.hint}</p>
+            ) : null}
+            {typeof data?.svixSigningSecretPresent === "boolean" ? (
+              <p className="text-[11px] text-muted-foreground">
+                Webhook Svix: secreto en Edge{" "}
+                <strong className="text-foreground font-medium">
+                  {data.svixSigningSecretPresent ? "configurado" : "no configurado"}
+                </strong>
+                . La URL del endpoint debe coincidir con la que ve Moffin (misma instancia Supabase).
+              </p>
+            ) : null}
+            {data?.moffinWebhookFullUrl ? (
+              <p className="text-[10px] text-muted-foreground break-all">
+                Endpoint Kawiil: <code className="text-foreground">{data.moffinWebhookFullUrl}</code>
+              </p>
             ) : null}
           </div>
         )}
@@ -243,6 +268,54 @@ export function MoffinIntegrationCard() {
             <code className="text-foreground">MOFFIN_FIEL_FIELD_*</code>, <code className="text-foreground">MOFFIN_QUERY_EXTRA_BODY_*</code>,{" "}
             <code className="text-foreground">MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES</code>.
           </p>
+        </div>
+
+        <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">
+          <p className="font-medium text-foreground">Si al sincronizar sigue “en cola” (pendiente / sin PDF)</p>
+          <p>
+            Kawiil deja el estado en <strong className="text-foreground">pendiente</strong> mientras la respuesta de
+            Moffin indique cola o mensajes meta (p. ej. “Service query fetched successfully”). No es fallo de
+            sincronización: la API aún no entrega el cuerpo final. Cuando llegue resultado completo, pasa a éxito (y el
+            PDF si tu plan lo incluye).
+          </p>
+          <ol className="list-decimal pl-4 space-y-1.5">
+            <li>
+              <strong className="text-foreground">Admin</strong> (esta tarjeta): confirma{" "}
+              <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> y que el endpoint de arriba sea{" "}
+              <strong className="text-foreground">exactamente</strong> el que configuraste en Moffin/Svix
+              {supabaseProjectRef ? (
+                <>
+                  {" "}
+                  (ref Supabase del front: <code className="text-foreground">{supabaseProjectRef}</code>)
+                </>
+              ) : null}
+              .
+            </li>
+            <li>
+              En <strong className="text-foreground">Supabase → Edge Functions → Logs</strong>, filtra{" "}
+              <code className="text-foreground">moffin-webhook</code>: si ves{" "}
+              <code className="text-foreground">sin fila moffin_consults coincidente</code>, el evento llegó pero el{" "}
+              <code className="text-foreground">moffin_query_id</code> o el <code className="text-foreground">externalId</code>{" "}
+              no coincide con la fila (revisa con Moffin el payload).
+            </li>
+            <li>
+              Si ves <code className="text-foreground">verificación Svix falló</code>, el <code className="text-foreground">whsec_…</code> en
+              Secrets no es el mismo que en el portal de Moffin/Svix para ese endpoint.
+            </li>
+            <li>
+              En <strong className="text-foreground">SQL Editor</strong>, revisa filas atascadas (quizá consultas viejas
+              duplicadas):
+            </li>
+          </ol>
+          <pre className="text-[10px] leading-snug bg-background/80 border border-border/60 rounded p-2 overflow-x-auto text-foreground/90 whitespace-pre-wrap">
+            {`select id, consult_type, status, moffin_query_id, moffin_service,
+       created_at, left(coalesce(summary,''), 80) as summary_preview
+from public.moffin_consults
+where status = 'pending'
+   or (status = 'success' and document_id is null)
+order by created_at desc
+limit 25;`}
+          </pre>
         </div>
 
         <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2 text-[11px] text-muted-foreground">

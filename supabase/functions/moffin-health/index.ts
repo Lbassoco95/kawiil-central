@@ -137,6 +137,8 @@ Deno.serve(async (req) => {
   }
 
   const ok = missing.length === 0;
+  const svixSigningSecretPresent = !!(Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET")?.trim());
+  const moffinWebhookFullUrl = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/moffin-webhook`;
 
   // 200 siempre para que supabase.functions.invoke entregue el JSON (incluso si faltan secretos).
   return new Response(
@@ -151,6 +153,10 @@ Deno.serve(async (req) => {
       baseUrlHost,
       solutionsBaseHost,
       looksLikeSandbox,
+      /** URL exacta que debe registrar Moffin/Svix (verify_jwt false en moffin-webhook). */
+      moffinWebhookFullUrl,
+      /** true si existe MOFFIN_SVIX_SIGNING_SECRET (no se expone el valor). */
+      svixSigningSecretPresent,
       hint: ok
         ? "Credenciales mínimas para el modo configurado están presentes (no se muestran valores)."
         : "Configura los secretos en Supabase → Edge Functions → Secrets.",
