@@ -2071,6 +2071,7 @@ export type Database = {
           notify_slack_channel_watch: boolean
           notify_slack_vip: boolean
           notify_slack_dm: boolean
+          notify_slack_all_channels: boolean
           updated_at: string
           user_id: string
         }
@@ -2101,6 +2102,7 @@ export type Database = {
           notify_slack_channel_watch?: boolean
           notify_slack_vip?: boolean
           notify_slack_dm?: boolean
+          notify_slack_all_channels?: boolean
           updated_at?: string
           user_id: string
         }
@@ -2131,6 +2133,7 @@ export type Database = {
           notify_slack_channel_watch?: boolean
           notify_slack_vip?: boolean
           notify_slack_dm?: boolean
+          notify_slack_all_channels?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -2804,6 +2807,7 @@ export type Database = {
           channel_id: string
           is_vip: boolean
           is_starred: boolean
+          notifications_muted: boolean
           sort_order: number
           created_at: string
           updated_at: string
@@ -2815,6 +2819,7 @@ export type Database = {
           channel_id: string
           is_vip?: boolean
           is_starred?: boolean
+          notifications_muted?: boolean
           sort_order?: number
           created_at?: string
           updated_at?: string
@@ -2826,6 +2831,7 @@ export type Database = {
           channel_id?: string
           is_vip?: boolean
           is_starred?: boolean
+          notifications_muted?: boolean
           sort_order?: number
           created_at?: string
           updated_at?: string

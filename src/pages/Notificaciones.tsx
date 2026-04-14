@@ -138,7 +138,7 @@ function NotificationDeliveryPreferences() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "desktop_browser_notifications, desktop_push_notifications, in_app_toast_notifications, notification_sound_enabled, slack_message_sound_enabled, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip, notify_slack_dm",
+          "desktop_browser_notifications, desktop_push_notifications, in_app_toast_notifications, notification_sound_enabled, slack_message_sound_enabled, notify_slack_mentions, notify_slack_channel_watch, notify_slack_vip, notify_slack_dm, notify_slack_all_channels",
         )
         .eq("user_id", user!.id)
         .single();
@@ -419,6 +419,20 @@ function NotificationDeliveryPreferences() {
         </div>
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
+            <Label className="text-sm font-medium">Slack: todos los chats donde participas</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Aviso por cada mensaje en canales y grupos privados en los que estás (como tener el canal activo en Slack).
+              Puedes silenciar conversaciones puntuales con la campana en Comunicación; las @menciones siguen llegando.
+            </p>
+          </div>
+          <Switch
+            checked={profile?.notify_slack_all_channels !== false}
+            disabled={prefsLocked || prefsSaving}
+            onCheckedChange={(v) => updateFields.mutate({ notify_slack_all_channels: v })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
             <Label className="text-sm font-medium">Slack: conversaciones VIP (siempre notificar)</Label>
             <p className="text-xs text-muted-foreground max-w-md">
               Marca canales o DMs como VIP en Comunicación. Si lo desactivas, conservas la lista pero no recibes avisos.
@@ -480,8 +494,9 @@ function NotificationDeliveryPreferences() {
           ) : null}
         </div>
         <p className="text-xs text-muted-foreground">
-          En Comunicación activa &quot;Avisos de mensajes&quot; en un canal para enterarte sin @mención. En Slack
-          configura la misma URL de eventos que slash commands (<code className="text-[11px]">slack-events</code>).
+          Por defecto recibes avisos de los canales en los que participas; usa la campana en la lista de Comunicación
+          para silenciar uno concreto. La opción &quot;canales que sigo&quot; añade avisos extra si marcas seguimiento en
+          un canal. En Slack usa la misma URL de eventos que slash commands (<code className="text-[11px]">slack-events</code>).
         </p>
       </CardContent>
     </Card>

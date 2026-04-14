@@ -3,7 +3,21 @@ import { Link } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Loader2, Hash, Lock, MessageCircle, Users, Search, ChevronDown, Star, GripVertical, Crown, Sparkles } from "lucide-react";
+import {
+  Loader2,
+  Hash,
+  Lock,
+  MessageCircle,
+  Users,
+  Search,
+  ChevronDown,
+  Star,
+  GripVertical,
+  Crown,
+  Sparkles,
+  Bell,
+  BellOff,
+} from "lucide-react";
 import type { SlackConversation } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { groupSlackConversations, conversationTitle, type ConversationTitleOpts } from "./slackGrouping";
@@ -30,6 +44,8 @@ export type SlackCommPrefRow = {
   is_vip: boolean;
   is_starred: boolean;
   sort_order: number;
+  /** Silenciar avisos Kawiil en esta conversación (siguen las @menciones). */
+  notifications_muted: boolean;
 };
 
 type Props = {
@@ -44,6 +60,7 @@ type Props = {
   commPrefsByChannel: Record<string, SlackCommPrefRow>;
   onToggleVip: (channelId: string) => void;
   onToggleStar: (channelId: string) => void;
+  onToggleNotificationsMuted: (channelId: string) => void;
   onReorderVip: (orderedChannelIds: string[]) => void;
   onReorderStarred: (orderedChannelIds: string[]) => void;
   /** Grupos personalizados (tras VIP y destacados). */
@@ -125,6 +142,8 @@ function ConvRow({
   onToggleStar,
   isVip,
   onToggleVip,
+  notificationsMuted = false,
+  onToggleNotificationsMuted,
   unreadCount = 0,
   embedUnreadChrome = false,
 }: {
@@ -137,6 +156,8 @@ function ConvRow({
   onToggleStar?: () => void;
   isVip?: boolean;
   onToggleVip?: () => void;
+  notificationsMuted?: boolean;
+  onToggleNotificationsMuted?: () => void;
   unreadCount?: number;
   /** Si true, el contenedor padre (p. ej. fila sortable) ya pinta el fondo de no leído. */
   embedUnreadChrome?: boolean;
@@ -188,6 +209,30 @@ function ConvRow({
         <span className="truncate min-w-0">{isPublicChannel && c.name ? `#${c.name}` : title}</span>
         <UnreadBadge count={unreadCount} />
       </button>
+      {onToggleNotificationsMuted && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleNotificationsMuted();
+          }}
+          className={cn(
+            "p-1.5 rounded-md shrink-0 text-zinc-500 hover:text-sky-300",
+            notificationsMuted && "text-zinc-400",
+          )}
+          title={
+            notificationsMuted
+              ? "Avisos silenciados en Kawiil (sigue habiendo @menciones). Pulsa para activar."
+              : "Silenciar avisos de este chat en Kawiil (las @menciones siguen llegando)."
+          }
+        >
+          {notificationsMuted ? (
+            <BellOff className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <Bell className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </button>
+      )}
       {onToggleVip && (
         <button
           type="button"
@@ -235,6 +280,7 @@ export function SlackConversationList({
   commPrefsByChannel,
   onToggleVip,
   onToggleStar,
+  onToggleNotificationsMuted,
   onReorderVip,
   onReorderStarred,
   customGroups = [],
@@ -335,6 +381,8 @@ export function SlackConversationList({
       onToggleStar: () => onToggleStar(c.id),
       isVip: !!p?.is_vip,
       onToggleVip: () => onToggleVip(c.id),
+      notificationsMuted: !!p?.notifications_muted,
+      onToggleNotificationsMuted: () => onToggleNotificationsMuted(c.id),
       unreadCount: unreadFor(c.id),
     };
     if (sortable) {

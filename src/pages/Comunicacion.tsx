@@ -83,6 +83,10 @@ const MPIM_MEMBERS_BATCH = 40;
 const PUSH_BANNER_DISMISS_KEY = "kawiil-slack-push-banner-dismissed";
 const SLACK_NOTIF_TYPES_ACTIVE = new Set(["slack_message", "slack_mention"]);
 
+function defaultSlackCommPref(): SlackCommPrefRow {
+  return { is_vip: false, is_starred: false, sort_order: 0, notifications_muted: false };
+}
+
 type RawSidebarGroup = {
   id: string;
   title: string;
@@ -208,6 +212,7 @@ export default function Comunicacion() {
         is_vip: row.is_vip,
         is_starred: row.is_starred,
         sort_order: row.sort_order,
+        notifications_muted: row.notifications_muted === true,
       };
     }
     return r;
@@ -220,6 +225,7 @@ export default function Comunicacion() {
       is_vip?: boolean;
       is_starred?: boolean;
       sort_order?: number;
+      notifications_muted?: boolean;
     }) => {
       if (!user?.id || !profile?.organization_id) throw new Error("Sin sesión u organización");
       if (p.delete) {
@@ -239,6 +245,7 @@ export default function Comunicacion() {
           is_vip: p.is_vip!,
           is_starred: p.is_starred!,
           sort_order: p.sort_order!,
+          notifications_muted: p.notifications_muted ?? false,
         },
         { onConflict: "user_id,channel_id" },
       );
@@ -248,7 +255,15 @@ export default function Comunicacion() {
   });
 
   const reorderPrefsMutation = useMutation({
-    mutationFn: async (rows: { channelId: string; is_vip: boolean; is_starred: boolean; sort_order: number }[]) => {
+    mutationFn: async (
+      rows: {
+        channelId: string;
+        is_vip: boolean;
+        is_starred: boolean;
+        sort_order: number;
+        notifications_muted: boolean;
+      }[],
+    ) => {
       if (!user?.id || !profile?.organization_id) throw new Error("Sin sesión u organización");
       for (const r of rows) {
         const { error } = await supabase.from("slack_communication_prefs").upsert(
@@ -259,6 +274,7 @@ export default function Comunicacion() {
             is_vip: r.is_vip,
             is_starred: r.is_starred,
             sort_order: r.sort_order,
+            notifications_muted: r.notifications_muted,
           },
           { onConflict: "user_id,channel_id" },
         );
@@ -398,6 +414,7 @@ export default function Comunicacion() {
         channel_id,
         is_vip: false,
         is_starred: true,
+        notifications_muted: false,
         sort_order: i,
       }));
       const { error } = await supabase.from("slack_communication_prefs").upsert(rows, {
@@ -421,9 +438,9 @@ export default function Comunicacion() {
 
   const handleToggleVip = useCallback(
     (channelId: string) => {
-      const cur = commPrefsByChannel[channelId] || { is_vip: false, is_starred: false, sort_order: 0 };
+      const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
       const nv = !cur.is_vip;
-      if (!nv && !cur.is_starred) {
+      if (!nv && !cur.is_starred && !cur.notifications_muted) {
         savePrefMutation.mutate({ channelId, delete: true });
         return;
       }
@@ -439,6 +456,7 @@ export default function Comunicacion() {
         is_vip: nv,
         is_starred: cur.is_starred,
         sort_order: sort,
+        notifications_muted: cur.notifications_muted,
       });
     },
     [commPrefsByChannel, savePrefMutation],
@@ -446,9 +464,9 @@ export default function Comunicacion() {
 
   const handleToggleStar = useCallback(
     (channelId: string) => {
-      const cur = commPrefsByChannel[channelId] || { is_vip: false, is_starred: false, sort_order: 0 };
+      const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
       const ns = !cur.is_starred;
-      if (!ns && !cur.is_vip) {
+      if (!ns && !cur.is_vip && !cur.notifications_muted) {
         savePrefMutation.mutate({ channelId, delete: true });
         return;
       }
@@ -464,6 +482,26 @@ export default function Comunicacion() {
         is_vip: cur.is_vip,
         is_starred: ns,
         sort_order: sort,
+        notifications_muted: cur.notifications_muted,
+      });
+    },
+    [commPrefsByChannel, savePrefMutation],
+  );
+
+  const handleToggleNotificationsMuted = useCallback(
+    (channelId: string) => {
+      const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
+      const next = !cur.notifications_muted;
+      if (!next && !cur.is_vip && !cur.is_starred) {
+        savePrefMutation.mutate({ channelId, delete: true });
+        return;
+      }
+      savePrefMutation.mutate({
+        channelId,
+        is_vip: cur.is_vip,
+        is_starred: cur.is_starred,
+        sort_order: cur.sort_order,
+        notifications_muted: next,
       });
     },
     [commPrefsByChannel, savePrefMutation],
@@ -472,12 +510,13 @@ export default function Comunicacion() {
   const handleReorderVip = useCallback(
     (orderedChannelIds: string[]) => {
       const rows = orderedChannelIds.map((channelId, i) => {
-        const cur = commPrefsByChannel[channelId] || { is_vip: true, is_starred: false, sort_order: i };
+        const cur = commPrefsByChannel[channelId] ?? { ...defaultSlackCommPref(), is_vip: true, sort_order: i };
         return {
           channelId,
           is_vip: true,
           is_starred: cur.is_starred,
           sort_order: i,
+          notifications_muted: cur.notifications_muted,
         };
       });
       reorderPrefsMutation.mutate(rows);
@@ -488,12 +527,13 @@ export default function Comunicacion() {
   const handleReorderStarred = useCallback(
     (orderedChannelIds: string[]) => {
       const rows = orderedChannelIds.map((channelId, i) => {
-        const cur = commPrefsByChannel[channelId] || { is_vip: false, is_starred: true, sort_order: i };
+        const cur = commPrefsByChannel[channelId] ?? { ...defaultSlackCommPref(), is_starred: true, sort_order: i };
         return {
           channelId,
           is_vip: false,
           is_starred: true,
           sort_order: i,
+          notifications_muted: cur.notifications_muted,
         };
       });
       reorderPrefsMutation.mutate(rows);
@@ -926,6 +966,7 @@ export default function Comunicacion() {
       commPrefsByChannel={commPrefsByChannel}
       onToggleVip={handleToggleVip}
       onToggleStar={handleToggleStar}
+      onToggleNotificationsMuted={handleToggleNotificationsMuted}
       onReorderVip={handleReorderVip}
       onReorderStarred={handleReorderStarred}
       customGroups={customGroupsVm}
