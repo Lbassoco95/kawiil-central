@@ -101,14 +101,14 @@ export function MoffinSatStatusSummary({
         toast.warning(
           `Sincronización parcial: ${failed.length} consulta(s). ${failed[0]?.error ?? ""}`.trim(),
         );
-      } else {
-        toast.success(
-          payload.pendingFound === 0
-            ? "No había consultas pendientes con ID en Moffin."
-            : stillPending > 0
-              ? `Listo: Moffin aún procesa ${stillPending} en cola (puede tardar).`
-              : "Estado actualizado desde Moffin.",
+      } else if (payload.pendingFound === 0) {
+        toast.success("No había consultas pendientes con ID en Moffin.");
+      } else if (stillPending > 0) {
+        toast.info(
+          `Moffin sigue procesando ${stillPending} en cola; la tabla queda en pendiente (sin PDF hasta éxito). Revisa Svix o vuelve a sincronizar más tarde.`,
         );
+      } else {
+        toast.success("Estado actualizado desde Moffin (éxito; PDF si tu plan lo entrega).");
       }
       await queryClient.refetchQueries({ queryKey: ["moffin-consults-client", clientId] });
     } catch (e: unknown) {
@@ -139,16 +139,20 @@ export function MoffinSatStatusSummary({
         {title}
       </h2>
       <p className="text-[10px] text-muted-foreground leading-snug mb-3">
-        Constancia y opinión aquí son consultas de certificados RFC vía Moffin; un PDF oficial del SAT solo aparecerá si
-        Moffin lo entrega en tu contrato. Si no forma parte del producto, habrá que obtener esos PDF por otro medio
+        Constancia y opinión vía Moffin: si la API sigue devolviendo el mensaje de cola (p. ej. “Service query fetched
+        successfully”), el estado en Kawiil es <strong className="font-medium text-foreground/80">pendiente</strong> y
+        aún no hay PDF. Cuando Moffin termine de verde, el estado pasa a éxito y, si tu plan lo incluye, se sube el PDF.
+        Para actualizaciones automáticas hace falta que el webhook de Moffin (Svix) entregue el resultado; sin eso, usa
+        sincronizar cuando ya haya resultado listo. Si el producto no entrega PDF, obtén el documento por otro medio
         (SAT u otro proveedor).
       </p>
       {!isLoading && hasPendingSyncable ? (
         <div className="flex flex-wrap items-center gap-2 mb-3">
           {stalePending ? (
             <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-1.5 flex-1 min-w-[220px] leading-snug">
-              Llevan varios minutos en proceso. Si el webhook (Svix) no actualizó el resultado, fuerza la lectura en la
-              API de Moffin con el botón.
+              Llevan varios minutos en pendiente (cola Moffin). Confirma el webhook (Svix) para que llegue el estado
+              final; si no, pulsa el botón para leer la API cuando el resultado ya esté listo (hasta entonces seguirá
+              pendiente y sin PDF).
             </p>
           ) : null}
           <Button

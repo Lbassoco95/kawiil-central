@@ -524,14 +524,14 @@ export function AccountingDashboard({
       const stillPending = okRows.filter((r) => r.newStatus === "pending").length;
       if (failed.length) {
         toast.warning(`Sincronización parcial: ${failed[0]?.error ?? "revisa respuesta de Moffin"}`);
-      } else {
-        toast.success(
-          payload.pendingFound === 0
-            ? "No había filas que requieran sincronizar con Moffin."
-            : stillPending > 0
-              ? `Sincronización lista: Moffin sigue procesando ${stillPending} consulta(s) en cola (CSF/32D pueden tardar varios minutos).`
-              : "Consultas actualizadas desde Moffin.",
+      } else if (payload.pendingFound === 0) {
+        toast.success("No había filas que requieran sincronizar con Moffin.");
+      } else if (stillPending > 0) {
+        toast.info(
+          `Moffin sigue procesando ${stillPending} consulta(s) en cola (mensaje tipo “Service query fetched successfully”). Estado en tabla: pendiente; aún no hay PDF hasta que pase a éxito. Si el webhook (Svix) está bien, se actualizará solo; si no, vuelve a sincronizar más tarde.`,
         );
+      } else {
+        toast.success("Consultas actualizadas desde Moffin (resultado listo; si tu plan entrega PDF, se sube al pasar a éxito).");
       }
       await Promise.all([
         queryClient.refetchQueries({ queryKey: ["moffin-consults", projectId] }),
@@ -813,13 +813,15 @@ export function AccountingDashboard({
           )}
           {clientId && moffinStalePending ? (
             <p className="text-[11px] text-amber-900 dark:text-amber-100 rounded-md border border-amber-500/35 bg-amber-500/10 px-2 py-2 leading-snug">
-              Consultas SAT en <strong className="font-medium">pendiente</strong> desde hace varios minutos: confirma el
-              webhook de Moffin (Svix) o usa <strong className="font-medium">Sincronizar pendientes</strong> para leer el
-              estado en la API.
+              Consultas SAT en <strong className="font-medium">pendiente</strong> desde hace varios minutos: mientras
+              Moffin responda con el patrón de cola, el estado correcto es pendiente (aún no hay PDF). Revisa que el
+              webhook de Moffin (Svix) entregue el resultado final; si no llega, usa{" "}
+              <strong className="font-medium">Sincronizar pendientes</strong> para leer el estado en la API cuando ya
+              haya resultado.
             </p>
           ) : null}
           {clientId && hasPendingMoffinSync ? (
-            <div className="flex justify-end">
+            <div className="flex flex-col items-end gap-1.5">
               <Button
                 type="button"
                 variant="secondary"
@@ -835,6 +837,10 @@ export function AccountingDashboard({
                 )}
                 Sincronizar pendientes (Moffin API)
               </Button>
+              <p className="text-[10px] text-muted-foreground text-right max-w-md leading-snug">
+                Pendiente = en cola en Moffin; el PDF solo aplica cuando el estado pase a éxito y tu plan/API lo
+                entreguen. Sin webhook, los cambios se verán al pulsar sincronizar cuando el resultado esté listo.
+              </p>
             </div>
           ) : null}
           <p className="text-[10px] text-muted-foreground font-medium">Vista rápida (última consulta por tipo)</p>
