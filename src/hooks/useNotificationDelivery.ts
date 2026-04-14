@@ -1,5 +1,5 @@
 import { useEffect, useRef, useLayoutEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -48,6 +48,25 @@ function slackChannelIdFromEntityId(entityId: string | null | undefined): string
   return pipe > 0 ? entityId.slice(0, pipe) : null;
 }
 
+function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row: NotifRow) {
+  const isSlackMsg =
+    row?.entity_type === "slack" &&
+    (row?.type === "slack_message" || row?.type === "slack_mention");
+  if (!isSlackMsg) return;
+  qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
+  void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
+  const ch = slackChannelIdFromEntityId(row.entity_id ?? undefined);
+  if (ch) {
+    qc.invalidateQueries({ queryKey: ["slack-history", ch] });
+    qc.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        q.queryKey[0] === "slack-thread" &&
+        q.queryKey[1] === ch,
+    });
+  }
+}
+
 const RT_ERROR_TOAST_COOLDOWN_MS = 60_000;
 
 type NotificationDeliveryPrefs = {
@@ -64,6 +83,8 @@ type NotificationDeliveryPrefs = {
  * Requiere que `public.notifications` esté en la publicación Realtime de Supabase
  * (migración `20260416190000_notifications_realtime_and_delivery_prefs.sql`) y URL de
  * eventos Slack + `SLACK_SIGNING_SECRET` para inserts vía `slack-events`.
+ * INSERT + UPDATE invalidan badges Slack (`useSlackChannelNotificationBadges`) sin un
+ * canal Realtime adicional.
  */
 export function useNotificationDelivery() {
   const { user } = useAuth();
@@ -109,25 +130,7 @@ export function useNotificationDelivery() {
           const row = payload.new as NotifRow;
           qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
           qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-
-          const isSlackMsg =
-            row?.entity_type === "slack" &&
-            (row?.type === "slack_message" || row?.type === "slack_mention");
-
-          if (isSlackMsg) {
-            qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
-            void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
-            const ch = slackChannelIdFromEntityId(row.entity_id ?? undefined);
-            if (ch) {
-              qc.invalidateQueries({ queryKey: ["slack-history", ch] });
-              qc.invalidateQueries({
-                predicate: (q) =>
-                  Array.isArray(q.queryKey) &&
-                  q.queryKey[0] === "slack-thread" &&
-                  q.queryKey[1] === ch,
-              });
-            }
-          }
+          invalidateSlackCachesFromNotifRow(qc, user.id, row);
 
           const title = effectiveNotificationTitle(row);
           const p = prefsRef.current;
@@ -173,6 +176,21 @@ export function useNotificationDelivery() {
           } else if (surfaced && useGlobalSound) {
             playNotificationBeep();
           }
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const row = payload.new as NotifRow;
+          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+          invalidateSlackCachesFromNotifRow(qc, user.id, row);
         },
       )
       .subscribe((status, err) => {

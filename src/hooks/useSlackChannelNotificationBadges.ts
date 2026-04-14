@@ -1,18 +1,16 @@
-import { useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 
 const SLACK_NOTIF_TYPES = ["slack_message", "slack_mention"] as const;
-const RT_ERROR_TOAST_COOLDOWN_MS = 60_000;
 
 /**
  * Conteo de notificaciones Slack no leídas por channel_id (entity_id = channel|ts).
+ *
+ * No abre un segundo canal Realtime sobre `notifications` (evita CHANNEL_ERROR por
+ * duplicar la suscripción de `useNotificationDelivery` + Comunicación). Las
+ * invalidaciones en vivo vienen de ahí; aquí solo hay refetch periódico de respaldo.
  */
 export function useSlackChannelNotificationBadges(userId: string | undefined) {
-  const qc = useQueryClient();
-  const lastRtErrorToastAt = useRef(0);
-
   const query = useQuery({
     queryKey: ["slack-channel-notification-badges", userId],
     queryFn: async (): Promise<Record<string, number>> => {
@@ -37,43 +35,9 @@ export function useSlackChannelNotificationBadges(userId: string | undefined) {
     },
     enabled: !!userId,
     staleTime: 15_000,
+    refetchInterval: 90_000,
+    refetchIntervalInBackground: false,
   });
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const channel = supabase
-      .channel(`slack-badge-rt-${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
-        },
-      )
-      .subscribe((status, err) => {
-        if (status === "SUBSCRIBED") return;
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error("slack badges realtime:", status, err);
-          const now = Date.now();
-          if (now - lastRtErrorToastAt.current > RT_ERROR_TOAST_COOLDOWN_MS) {
-            lastRtErrorToastAt.current = now;
-            toast.error("Badges Slack en vivo desconectados. Recarga si no ves contadores.", {
-              duration: 8000,
-            });
-          }
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, qc]);
 
   return query.data ?? {};
 }
