@@ -29,7 +29,7 @@ import {
 } from "../_shared/moffinQueryPaths.ts";
 import {
   mapMoffinStatus,
-  moffinMessageImpliesQueuedProcessing,
+  moffinMessageImpliesSatStillProcessing,
 } from "../_shared/moffinReportStatus.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
@@ -827,11 +827,12 @@ Deno.serve(async (req) => {
     let moffinStatus = mapMoffinStatus(String(json.status ?? ""));
     if (
       satRes.ok &&
-      extractSolutionsQueryId(json) &&
       (consultType === "opinion_cumplimiento" || consultType === "constancia_situacion_fiscal")
     ) {
-      if (moffinMessageImpliesQueuedProcessing(json)) moffinStatus = "pending";
-      else if (
+      if (moffinMessageImpliesSatStillProcessing(json)) {
+        moffinStatus = "pending";
+      } else if (
+        extractSolutionsQueryId(json) &&
         moffinStatus === "error" &&
         (json.status === undefined || String(json.status ?? "").trim() === "")
       ) {

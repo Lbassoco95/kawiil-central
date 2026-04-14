@@ -1,7 +1,4 @@
-import {
-  mapMoffinStatus,
-  moffinMessageImpliesQueuedProcessing,
-} from "./moffinReportStatus.ts";
+import { mapMoffinStatus, moffinMessageImpliesSatStillProcessing } from "./moffinReportStatus.ts";
 
 /**
  * Extracción de PDF / URLs de respuestas POST /query/sat_rfc (OpenAPI: “SAT RFC Certificates”).
@@ -375,7 +372,7 @@ export function extractReportLevelPdfUrl(report: Record<string, unknown>): strin
 function satReportIsPending(resp: Record<string, unknown>): boolean {
   const stRaw = String(resp?.status ?? "").trim();
   if (mapMoffinStatus(stRaw) === "pending") return true;
-  return moffinMessageImpliesQueuedProcessing(resp);
+  return moffinMessageImpliesSatStillProcessing(resp);
 }
 
 export function summarizeSatRfcCertificates(

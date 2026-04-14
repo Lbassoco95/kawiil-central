@@ -32,3 +32,15 @@ export function moffinMessageImpliesQueuedProcessing(json: Record<string, unknow
     msg,
   );
 }
+
+/**
+ * Incluye cola + respuestas meta de Moffin (p. ej. GET service_queries) sin cuerpo SAT/PDF todavía.
+ * Ej.: "Service query fetched successfully".
+ */
+export function moffinMessageImpliesSatStillProcessing(json: Record<string, unknown>): boolean {
+  if (moffinMessageImpliesQueuedProcessing(json)) return true;
+  const msg = String(json.message ?? json.statusText ?? "").toLowerCase();
+  return /service query fetched successfully|service query[\s\w]*successfully|query fetched successfully/i.test(
+    msg,
+  );
+}

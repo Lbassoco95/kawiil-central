@@ -101,9 +101,25 @@ export async function moffinSolutionsGetJson(
 }
 
 export function extractSolutionsQueryId(json: Record<string, unknown>): string | null {
-  const id = json._id ?? json.id ?? json.queryId;
-  if (typeof id === "string" && id.trim()) return id.trim();
-  if (typeof id === "number") return String(id);
+  const coerce = (x: unknown): string | null => {
+    if (typeof x === "string" && x.trim()) return x.trim();
+    if (typeof x === "number" && Number.isFinite(x)) return String(x);
+    return null;
+  };
+  const direct = coerce(json._id ?? json.id ?? json.queryId);
+  if (direct) return direct;
+  const data = json.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    const inner = coerce(d._id ?? d.id ?? d.queryId);
+    if (inner) return inner;
+  }
+  const query = json.query;
+  if (query && typeof query === "object" && !Array.isArray(query)) {
+    const q = query as Record<string, unknown>;
+    const inner = coerce(q._id ?? q.id ?? q.queryId);
+    if (inner) return inner;
+  }
   return null;
 }
 
