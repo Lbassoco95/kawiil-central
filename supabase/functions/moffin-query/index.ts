@@ -467,15 +467,10 @@ Deno.serve(async (req) => {
   const legacyBase = flavor === "solutions" ? moffinLegacyBaseUrl() : moffinBase;
   const legacyToken = (flavor === "solutions" ? moffinLegacyApiKey() : moffinKey).trim();
 
-  const rawAuth =
-    req.headers.get("Authorization") ??
-    req.headers.get("authorization") ??
-    "";
-  const bearerMatch = rawAuth.match(/^Bearer\s+(\S+)/i);
-  const accessToken = bearerMatch?.[1];
-
-  // ── pg_cron branch: refreshAllPending via service_role_key (no user JWT needed) ──
-  if (accessToken && accessToken === serviceKey) {
+  // ── pg_cron branch: refreshAllPending via x-cron-secret (no JWT needed) ──
+  const cronSecret = Deno.env.get("CRON_SECRET")?.trim() ?? "";
+  const incomingCronSecret = req.headers.get("x-cron-secret")?.trim() ?? "";
+  if (cronSecret && incomingCronSecret && cronSecret === incomingCronSecret) {
     let cronBody: Record<string, unknown> = {};
     try { cronBody = await req.json(); } catch { /* empty body is fine */ }
     if (cronBody.refreshAllPending) {
@@ -513,6 +508,13 @@ Deno.serve(async (req) => {
     }
   }
   // ── end pg_cron branch ──
+
+  const rawAuth =
+    req.headers.get("Authorization") ??
+    req.headers.get("authorization") ??
+    "";
+  const bearerMatch = rawAuth.match(/^Bearer\s+(\S+)/i);
+  const accessToken = bearerMatch?.[1];
   if (!accessToken) {
     return new Response(JSON.stringify({ error: "No autorizado" }), {
       status: 401,

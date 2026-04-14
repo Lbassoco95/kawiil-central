@@ -58,7 +58,7 @@ project_id = "qppfampapbxdgednkofc"
   [functions.ai-email-draft]
     verify_jwt = true
   [functions.moffin-query]
-    verify_jwt = true
+    verify_jwt = false
   [functions.moffin-fiel]
     verify_jwt = true
   [functions.moffin-sat-ciec]
