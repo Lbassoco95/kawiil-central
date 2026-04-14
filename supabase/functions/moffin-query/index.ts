@@ -249,6 +249,21 @@ async function fetchMoffinReportById(
   return { ok: true, json };
 }
 
+/** Misma regla que al persistir: CSF/32D pueden quedar en cola aunque `status` raíz sea SUCCESS. */
+function resolvedMoffinConsultUiStatus(
+  consultType: ConsultType,
+  report: Record<string, unknown>,
+): "success" | "fail" | "pending" | "error" {
+  let st = mapMoffinStatus(String(report.status ?? ""));
+  if (
+    (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") &&
+    moffinMessageImpliesSatStillProcessing(report)
+  ) {
+    st = "pending";
+  }
+  return st;
+}
+
 async function persistMoffinReportToConsult(
   admin: ReturnType<typeof createClient>,
   row: MoffinConsultDbRow,
@@ -261,13 +276,7 @@ async function persistMoffinReportToConsult(
     return { error: "Tipo de consulta no reconocido" };
   }
   const ct = row.consult_type as ConsultType;
-  let st = mapMoffinStatus(String(report.status ?? ""));
-  if (
-    (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento") &&
-    moffinMessageImpliesSatStillProcessing(report)
-  ) {
-    st = "pending";
-  }
+  const st = resolvedMoffinConsultUiStatus(ct, report);
   let summary: string | null = null;
   if (ct === "lista_69b") summary = summarizeBlacklist(report);
   else summary = summarizeSatRfc(ct, report);
@@ -386,7 +395,7 @@ async function refreshPendingConsultRows(
       return {
         id: row.id,
         ok: true,
-        newStatus: mapMoffinStatus(String(fr.json.status ?? "")),
+        newStatus: resolvedMoffinConsultUiStatus(rowTyped.consult_type as ConsultType, fr.json),
       };
     }),
   );

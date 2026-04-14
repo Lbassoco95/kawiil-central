@@ -510,7 +510,7 @@ export function AccountingDashboard({
       });
       const payload = (data ?? {}) as {
         refresh?: boolean;
-        results?: Array<{ ok: boolean; error?: string }>;
+        results?: Array<{ ok: boolean; error?: string; newStatus?: string }>;
         pendingFound?: number;
         error?: string;
         message?: string;
@@ -533,12 +533,16 @@ export function AccountingDashboard({
               : "Consultas actualizadas desde Moffin.",
         );
       }
-      queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["moffin-consults", projectId] }),
+        clientId
+          ? queryClient.refetchQueries({ queryKey: ["moffin-consults-client", clientId] })
+          : Promise.resolve(),
+      ]);
       if (clientId) {
-        queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
-        queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
+        void queryClient.invalidateQueries({ queryKey: ["client-documents", clientId] });
       }
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      void queryClient.invalidateQueries({ queryKey: ["documents"] });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Error al sincronizar Moffin");
     } finally {

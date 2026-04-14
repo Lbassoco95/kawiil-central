@@ -85,7 +85,7 @@ export function MoffinSatStatusSummary({
       });
       const payload = (data ?? {}) as {
         refresh?: boolean;
-        results?: Array<{ ok: boolean; error?: string }>;
+        results?: Array<{ ok: boolean; error?: string; newStatus?: string }>;
         pendingFound?: number;
         error?: string;
         message?: string;
@@ -110,7 +110,7 @@ export function MoffinSatStatusSummary({
               : "Estado actualizado desde Moffin.",
         );
       }
-      void queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
+      await queryClient.refetchQueries({ queryKey: ["moffin-consults-client", clientId] });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Error al sincronizar");
     } finally {
