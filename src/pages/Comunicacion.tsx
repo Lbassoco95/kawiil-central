@@ -27,6 +27,7 @@ import {
   type SlackMessage,
 } from "@/lib/slackApi";
 import { fetchAllSlackConversations } from "@/lib/slackWorkspaceFetch";
+import { saveSlackReadCursor } from "@/lib/slackReadCursor";
 import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
 import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
@@ -290,12 +291,32 @@ export default function Comunicacion() {
 
   const conversations = conversationsQuery.data || [];
 
+  const slackPollChannelIds = useMemo(() => {
+    const CAP = 24;
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const add = (id: string) => {
+      if (!id || seen.has(id) || ids.length >= CAP) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    for (const c of conversations) {
+      const p = commPrefsByChannel[c.id];
+      if (p?.is_vip || p?.is_starred) add(c.id);
+    }
+    for (const c of conversations) {
+      add(c.id);
+    }
+    return ids;
+  }, [conversations, commPrefsByChannel]);
+
   const slackUnreadByChannel = useSlackChannelNotificationBadges(user?.id);
   const slackUnreadSnapshotQuery = useSlackUnreadSync({
     enabled: isConnected,
     userId: user?.id,
     selectedChannel,
     localUnreadByChannel: slackUnreadByChannel,
+    pollChannelIds: slackPollChannelIds,
   });
   const displayUnreadByChannel = useMemo(() => {
     const snapshot = slackUnreadSnapshotQuery.data ?? {};
@@ -537,6 +558,12 @@ export default function Comunicacion() {
 
   const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
   slackLatestMessageTsRef.current = lastMessageTs;
+
+  /** Cursor local para estimar no leídos vía conversations.history en slack-api. */
+  useEffect(() => {
+    if (!user?.id || !selectedChannel || !lastMessageTs) return;
+    saveSlackReadCursor(user.id, selectedChannel, lastMessageTs);
+  }, [user?.id, selectedChannel, lastMessageTs]);
 
   /** Al abrir una conversación, limpiar avisos Kawiil asociados a ese canal. */
   useEffect(() => {

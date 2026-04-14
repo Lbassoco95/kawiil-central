@@ -215,7 +215,10 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function slackUnreadSnapshot(token: string): Promise<{
+async function slackUnreadSnapshot(
+  token: string,
+  maxPages = 15,
+): Promise<{
   ok: boolean;
   unread_by_channel: Record<string, number>;
   channels_total: number;
@@ -224,7 +227,7 @@ async function slackUnreadSnapshot(token: string): Promise<{
   let cursor: string | undefined;
   let channelsTotal = 0;
 
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < maxPages; i++) {
     const data = await slackCall(token, "conversations.list", {
       types: "public_channel,private_channel,mpim,im",
       limit: 1000,
@@ -260,6 +263,55 @@ async function slackUnreadSnapshot(token: string): Promise<{
     unread_by_channel: unreadByChannel,
     channels_total: channelsTotal,
   };
+}
+
+/** Estima no leídos por canal con conversations.history (oldest = último ts visto en Kawiil). */
+async function slackUnreadHistoryBatch(
+  token: string,
+  readState: Record<string, string>,
+  channelIds: string[],
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const ids = [...new Set(channelIds.map((x) => String(x).trim()).filter(Boolean))].slice(0, 24);
+  const skipSubtype = new Set([
+    "channel_join",
+    "channel_leave",
+    "channel_topic",
+    "channel_purpose",
+    "channel_archive",
+    "channel_unarchive",
+  ]);
+
+  for (const channelId of ids) {
+    const oldest = readState[channelId]?.trim();
+    if (!oldest) {
+      out[channelId] = 0;
+      continue;
+    }
+    const data = await slackCall(token, "conversations.history", {
+      channel: channelId,
+      oldest,
+      limit: 100,
+      inclusive: "false",
+    }) as {
+      ok?: boolean;
+      error?: string;
+      messages?: Array<{ ts?: string; subtype?: string }>;
+    };
+    if (!data.ok) {
+      console.warn("conversations.history unread batch:", channelId, data.error);
+      out[channelId] = 0;
+      continue;
+    }
+    let n = 0;
+    for (const m of data.messages || []) {
+      if (!m?.ts) continue;
+      if (m.subtype && skipSubtype.has(m.subtype)) continue;
+      n += 1;
+    }
+    out[channelId] = Math.min(99, n);
+  }
+  return out;
 }
 
 /** users.profile.set requiere `profile` como JSON en el cuerpo form-urlencoded. */
@@ -406,8 +458,27 @@ Deno.serve(async (req) => {
     }
 
     if (action === "conversations.unread.snapshot") {
-      const data = await slackUnreadSnapshot(conn.access_token);
-      return jsonOk(data);
+      const rawIds = json.channel_ids as unknown;
+      const readState =
+        json.read_state && typeof json.read_state === "object" && json.read_state !== null
+          ? (json.read_state as Record<string, string>)
+          : {};
+      if (Array.isArray(rawIds) && rawIds.length > 0) {
+        const channelIds = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 24);
+        const fromHist = await slackUnreadHistoryBatch(conn.access_token, readState, channelIds);
+        const listSnap = await slackUnreadSnapshot(conn.access_token, 2);
+        const merged: Record<string, number> = { ...fromHist };
+        for (const [k, v] of Object.entries(listSnap.unread_by_channel)) {
+          merged[k] = Math.max(merged[k] || 0, v);
+        }
+        return jsonOk({
+          ok: true,
+          unread_by_channel: merged,
+          channels_total: channelIds.length,
+        });
+      }
+      const legacy = await slackUnreadSnapshot(conn.access_token, 15);
+      return jsonOk(legacy);
     }
 
     if (action === "users.list") {

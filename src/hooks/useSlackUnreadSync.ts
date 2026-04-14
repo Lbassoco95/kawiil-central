@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchSlackUnreadSnapshot } from "@/lib/slackApi";
+import { loadSlackReadMap } from "@/lib/slackReadCursor";
 import { markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 
 type Params = {
@@ -8,31 +9,44 @@ type Params = {
   userId: string | undefined;
   selectedChannel: string;
   localUnreadByChannel: Record<string, number>;
+  /** Canales a consultar con history+read_state (p. ej. VIP + lista). */
+  pollChannelIds: string[];
 };
 
 /**
  * Reconciliación periódica Slack -> Kawiil:
  * - Si Slack ya no tiene no-leídos en un canal, limpia pendientes locales.
  * - Si Slack reporta no-leídos donde Kawiil no ve nada, fuerza refresh de queries.
+ *
+ * Conteos por canal: conversations.history (oldest = cursor en localStorage) + merge con
+ * conversaciones.list (DM con unread_count si Slack lo envía).
  */
 export function useSlackUnreadSync({
   enabled,
   userId,
   selectedChannel,
   localUnreadByChannel,
+  pollChannelIds,
 }: Params) {
   const qc = useQueryClient();
   const inFlightReadRef = useRef<Set<string>>(new Set());
 
+  const pollKey = pollChannelIds.length ? [...pollChannelIds].sort().join(",") : "";
+
   const unreadSnapshotQuery = useQuery({
-    queryKey: ["slack-unread-snapshot", userId],
-    queryFn: () => fetchSlackUnreadSnapshot(),
-    enabled: enabled && !!userId,
+    queryKey: ["slack-unread-snapshot", userId, pollKey],
+    queryFn: async () => {
+      if (!userId) return {};
+      if (pollChannelIds.length === 0) return {};
+      const readState = loadSlackReadMap(userId);
+      return fetchSlackUnreadSnapshot({ channelIds: pollChannelIds, readState });
+    },
+    enabled: enabled && !!userId && pollChannelIds.length > 0,
     staleTime: 10_000,
     refetchOnWindowFocus: true,
     refetchInterval: () => {
       if (typeof document === "undefined") return 30_000;
-      return document.visibilityState === "visible" ? 15_000 : 60_000;
+      return document.visibilityState === "visible" ? 20_000 : 60_000;
     },
   });
 

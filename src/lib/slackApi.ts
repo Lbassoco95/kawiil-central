@@ -78,13 +78,22 @@ export async function markSlackConversationRead(channel: string, ts?: string): P
   if (!data.ok) throw new Error(data.error || "No se pudo marcar leído en Slack");
 }
 
-export async function fetchSlackUnreadSnapshot(): Promise<Record<string, number>> {
+export type SlackUnreadSnapshotParams = {
+  /** Canales a comprobar (máx. 24 en servidor). */
+  channelIds: string[];
+  /** Por canal: último ts visto en Kawiil (localStorage); sin entrada no se usa history para ese canal. */
+  readState: Record<string, string>;
+};
+
+export async function fetchSlackUnreadSnapshot(params: SlackUnreadSnapshotParams): Promise<Record<string, number>> {
   const data = await invokeSlackApi<{
     ok: boolean;
     error?: string;
     unread_by_channel?: Record<string, number>;
   }>({
     action: "conversations.unread.snapshot",
+    channel_ids: [...new Set(params.channelIds.map(String))].filter(Boolean).slice(0, 24),
+    read_state: params.readState,
   });
   if (!data.ok) throw new Error(data.error || "No se pudo leer estado de no leídos de Slack");
   return data.unread_by_channel || {};

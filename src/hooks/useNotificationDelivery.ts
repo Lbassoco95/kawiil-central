@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useLayoutEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -50,6 +50,13 @@ function slackChannelIdFromEntityId(entityId: string | null | undefined): string
 
 const RT_ERROR_TOAST_COOLDOWN_MS = 60_000;
 
+type NotificationDeliveryPrefs = {
+  desktop_browser_notifications?: boolean | null;
+  in_app_toast_notifications?: boolean | null;
+  notification_sound_enabled?: boolean | null;
+  slack_message_sound_enabled?: boolean | null;
+};
+
 /**
  * Toasts (Sonner) + Notification API del sistema según perfil; pitido opcional.
  * Invalida historial Slack al insertar notificación de mensajería para refrescar Comunicación.
@@ -62,6 +69,7 @@ export function useNotificationDelivery() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const lastRtErrorToastAt = useRef(0);
+  const prefsRef = useRef<NotificationDeliveryPrefs | undefined>(undefined);
 
   const { data: prefs } = useQuery({
     queryKey: ["notification-delivery-prefs", user?.id],
@@ -79,6 +87,10 @@ export function useNotificationDelivery() {
     enabled: !!user?.id,
     refetchOnWindowFocus: true,
   });
+
+  useLayoutEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -104,6 +116,7 @@ export function useNotificationDelivery() {
 
           if (isSlackMsg) {
             qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+            void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
             const ch = slackChannelIdFromEntityId(row.entity_id ?? undefined);
             if (ch) {
               qc.invalidateQueries({ queryKey: ["slack-history", ch] });
@@ -117,10 +130,11 @@ export function useNotificationDelivery() {
           }
 
           const title = effectiveNotificationTitle(row);
-          const allowToast = prefs?.in_app_toast_notifications !== false;
-          const allowDesktop = prefs?.desktop_browser_notifications !== false;
-          const globalSoundOn = prefs?.notification_sound_enabled === true;
-          const slackSoundOn = prefs?.slack_message_sound_enabled !== false;
+          const p = prefsRef.current;
+          const allowToast = p?.in_app_toast_notifications !== false;
+          const allowDesktop = p?.desktop_browser_notifications !== false;
+          const globalSoundOn = p?.notification_sound_enabled === true;
+          const slackSoundOn = p?.slack_message_sound_enabled !== false;
 
           let surfaced = false;
           if (allowToast) {
@@ -178,12 +192,5 @@ export function useNotificationDelivery() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [
-    user?.id,
-    qc,
-    prefs?.desktop_browser_notifications,
-    prefs?.in_app_toast_notifications,
-    prefs?.notification_sound_enabled,
-    prefs?.slack_message_sound_enabled,
-  ]);
+  }, [user?.id, qc]);
 }
