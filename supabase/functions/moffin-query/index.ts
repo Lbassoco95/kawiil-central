@@ -393,23 +393,15 @@ Deno.serve(async (req) => {
   /** Si auth es static, de qué variable salió el Bearer (para mensajes 401). */
   let solutionsStaticSource: SolutionsStaticBearerSource | null = null;
   if (flavor === "solutions") {
-    const oid = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
-    const osec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
-    if ((oid && !osec) || (!oid && osec)) {
-      return new Response(
-        JSON.stringify({
-          error: "moffin_solutions_oauth_incomplete",
-          message:
-            "Debes definir los dos secretos MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth Solutions). Si solo uno está en Supabase, Kawiil no usa OAuth y toma MOFFIN_SOLUTIONS_BEARER o MOFFIN_API_KEY, lo que suele devolver 401 «Token inválido» en perfil SAT.",
-        }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
     const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
     if (!solAuth.ok) {
+      const errCode =
+        "code" in solAuth && solAuth.code === "oauth_incomplete"
+          ? "moffin_solutions_oauth_incomplete"
+          : "moffin_solutions_auth";
       return new Response(
         JSON.stringify({
-          error: "moffin_solutions_auth",
+          error: errCode,
           message: solAuth.message,
         }),
         { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },

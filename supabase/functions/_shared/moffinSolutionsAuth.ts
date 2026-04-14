@@ -9,7 +9,7 @@ export type SolutionsStaticBearerSource = "solutions_bearer_env" | "api_key_env"
 export type ResolveMoffinSolutionsBearerResult =
   | { ok: true; bearer: string; via: "oauth" }
   | { ok: true; bearer: string; via: "static"; staticSource: SolutionsStaticBearerSource }
-  | { ok: false; message: string };
+  | { ok: false; message: string; code?: "oauth_incomplete" };
 
 /**
  * El accessToken de POST …/oauth/token (Solutions) suele ser JWT (tres segmentos base64url).
@@ -167,6 +167,15 @@ export async function resolveMoffinSolutionsBearer(
 ): Promise<ResolveMoffinSolutionsBearerResult> {
   const clientId = Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID")?.trim() ?? "";
   const clientSecret = Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET")?.trim() ?? "";
+
+  if ((clientId && !clientSecret) || (!clientId && clientSecret)) {
+    return {
+      ok: false,
+      code: "oauth_incomplete",
+      message:
+        "OAuth Solutions incompleto: MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET deben tener valor no vacío en Supabase. Si uno quedó vacío o mal pegado, Kawiil no usa /oauth/token y cae en Bearer estático (MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY), con 401 en perfil SAT.",
+    };
+  }
 
   if (clientId && clientSecret) {
     const now = Math.floor(Date.now() / 1000);
