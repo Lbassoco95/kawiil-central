@@ -57,7 +57,7 @@ function getNotificationIcon(type: string) {
 function NotificationAiPreferences() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const { data: profile } = useQuery({
+  const profileAiQuery = useQuery({
     queryKey: ["profile-proactive-ai", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -69,7 +69,9 @@ function NotificationAiPreferences() {
       return data;
     },
     enabled: !!user,
+    retry: 2,
   });
+  const profile = profileAiQuery.data;
 
   const updatePref = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -103,7 +105,7 @@ function NotificationAiPreferences() {
         </div>
         <Switch
           checked={profile?.proactive_ai_notifications !== false}
-          disabled={updatePref.isPending || !profile}
+          disabled={updatePref.isPending || profileAiQuery.isLoading}
           onCheckedChange={(v) => updatePref.mutate(v)}
         />
       </CardContent>
@@ -148,7 +150,9 @@ function NotificationDeliveryPreferences() {
     retry: 2,
   });
   const profile = profileQuery.data;
-  const profilePrefsLoading = profileQuery.isPending && !profileQuery.data;
+
+  /** Solo durante la primera carga con fetch activo. Si la consulta falla, NO bloquear (antes `!profile` dejaba todo gris para siempre). */
+  const prefsLocked = profileQuery.isLoading;
 
   const updateFields = useMutation({
     mutationFn: async (patch: Record<string, boolean>) => {
@@ -264,7 +268,6 @@ function NotificationDeliveryPreferences() {
           ? "Denegado (revisa candado del sitio)"
           : "Pendiente — usa «Pedir permiso del navegador»";
 
-  const prefsLocked = profilePrefsLoading || !profile;
   const prefsSaving = updateFields.isPending;
   const vapidReady = !!vapid?.trim();
   /** Sin VAPID solo se puede apagar push si ya estaba activo; encender siempre requiere clave pública en el build. */
@@ -299,8 +302,14 @@ function NotificationDeliveryPreferences() {
             </AlertDescription>
           </Alert>
         )}
-        {profilePrefsLoading && (
+        {prefsLocked && (
           <p className="text-xs text-muted-foreground">Cargando preferencias…</p>
+        )}
+        {profileQuery.isError && (
+          <p className="text-xs text-muted-foreground">
+            Mientras tanto puedes cambiar las opciones; si al guardar aparece error, revisa el mensaje de arriba o las migraciones de{" "}
+            <code className="rounded bg-muted px-1">profiles</code>.
+          </p>
         )}
         {!vapidReady && (
           <Alert className="border-amber-600/50 bg-amber-950/25 py-3">
