@@ -5,6 +5,7 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { FunctionsHttpError } from "@supabase/functions-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -163,14 +164,46 @@ export function useCreateCalendarEvent() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "create-event", params: { event } },
       });
-      if (error) throw error;
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (error) {
+        let detailedError = "";
+        if (errBody) {
+          try {
+            const parsed = JSON.parse(errBody) as { error?: unknown; code?: unknown };
+            const code = typeof parsed.code === "string" ? parsed.code : "";
+            const msg = typeof parsed.error === "string" ? parsed.error : "";
+            if (code === "PERMISSION_REQUIRED" && msg) {
+              throw new Error(msg);
+            }
+            detailedError = msg || errBody;
+          } catch {
+            detailedError = errBody;
+          }
+        }
+        const fallback = String((error as Error)?.message || "No se pudo crear el evento");
+        throw new Error(detailedError || fallback);
+      }
+      if (data?.error) throw new Error(String(data.error));
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
       toast.success("Evento creado en Outlook");
     },
-    onError: (err: Error) => toast.error("Error al crear evento: " + err.message),
+    onError: (err: Error) => {
+      const msg = String(err.message || "");
+      if (
+        msg.includes("Edge Function returned a non-2xx status code") ||
+        msg.includes("Failed to send a request to the Edge Function")
+      ) {
+        toast.error(
+          "No se pudo alcanzar la función microsoft-api en Supabase. Verifica VITE_SUPABASE_URL y despliega microsoft-api con --no-verify-jwt.",
+          { duration: 9000 },
+        );
+        return;
+      }
+      toast.error("Error al crear evento: " + msg);
+    },
   });
 }
 
@@ -565,12 +598,31 @@ export type CreateReplyDraftResult =
 
 /** Con HTTP ≠ 2xx el detalle a veces solo está en el body del Response (context/response), no en `data`. */
 async function readSupabaseFunctionErrorBody(error: unknown): Promise<string> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      return await error.context.clone().text();
+    } catch {
+      // continue with generic fallbacks
+    }
+  }
   if (!error || typeof error !== "object") return "";
   const e = error as Record<string, unknown>;
   const resp = e.context ?? e.response;
   if (resp instanceof Response) {
     try {
       return await resp.clone().text();
+    } catch {
+      return "";
+    }
+  }
+  if (resp && typeof resp === "object") {
+    try {
+      const clone = (resp as { clone?: () => unknown }).clone;
+      const maybeResponse = typeof clone === "function" ? clone.call(resp) : resp;
+      const text = (maybeResponse as { text?: () => Promise<string> }).text;
+      if (typeof text === "function") {
+        return await text.call(maybeResponse);
+      }
     } catch {
       return "";
     }
