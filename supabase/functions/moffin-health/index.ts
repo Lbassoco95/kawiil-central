@@ -5,6 +5,7 @@ import {
   moffinSolutionsBaseUrl,
   moffinSolutionsBearerToken,
 } from "../_shared/moffinApiFlavor.ts";
+import { looksLikeOauthAccessJwt } from "../_shared/moffinSolutionsAuth.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -26,12 +27,13 @@ function ciecEncryptionSecretOk(): boolean {
   return a.length >= 32 || b.length >= 32;
 }
 
-/** Credencial Bearer para solutions-api (OAuth en runtime o JWT estático). */
+/** Credencial Bearer para solutions-api (OAuth en runtime o JWT estático válido). */
 function solutionsAuthConfigured(): boolean {
   const id = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
   const sec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
   if (id && sec) return true;
-  return moffinSolutionsBearerToken().length > 0;
+  const staticT = moffinSolutionsBearerToken();
+  return staticT.length > 0 && looksLikeOauthAccessJwt(staticT);
 }
 
 Deno.serve(async (req) => {
@@ -100,7 +102,7 @@ Deno.serve(async (req) => {
 
     if (!solutionsAuthConfigured()) {
       missing.push(
-        "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY (JWT de /oauth/token Solutions)",
+        "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER = accessToken JWT de POST …/oauth/token (no uses el token corto de app.moffin en MOFFIN_API_KEY para CSF)",
       );
     }
     if (!ciecEncryptionSecretOk()) {

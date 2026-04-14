@@ -9,6 +9,7 @@ import {
   moffinLegacyApiKey,
   moffinLegacyBaseUrl,
   moffinSolutionsBaseUrl,
+  moffinSolutionsBearerToken,
 } from "../_shared/moffinApiFlavor.ts";
 import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
 import {
@@ -360,6 +361,7 @@ Deno.serve(async (req) => {
   const flavor = getMoffinApiFlavor();
   const solutionsOAuthConfigured =
     !!(Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID")?.trim() && Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET")?.trim());
+  const solutionsStaticConfigured = moffinSolutionsBearerToken().length > 0;
   const moffinKey = Deno.env.get("MOFFIN_API_KEY")?.trim() ?? "";
   const moffinBase =
     (Deno.env.get("MOFFIN_BASE_URL") ?? "https://app.moffin.mx/api/v1").replace(/\/$/, "");
@@ -367,12 +369,14 @@ Deno.serve(async (req) => {
   const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  if (!moffinKey && !(flavor === "solutions" && solutionsOAuthConfigured)) {
+  const solutionsAnyAuthConfigured =
+    solutionsOAuthConfigured || solutionsStaticConfigured;
+  if (!moffinKey && !(flavor === "solutions" && solutionsAnyAuthConfigured)) {
     return new Response(
       JSON.stringify({
         error: "moffin_not_configured",
         message:
-          "Configura MOFFIN_API_KEY (API legacy app.moffin / lista 69-B) o, para Solutions sin esa clave, MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth en solutions-api, ver documentación Moffin).",
+          "Configura MOFFIN_API_KEY (API legacy app.moffin / lista 69-B) o, para Solutions, MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) y/o MOFFIN_SOLUTIONS_BEARER (JWT de /oauth/token). Ver documentación Moffin Solutions.",
       }),
       { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

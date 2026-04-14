@@ -8,6 +8,18 @@ export type ResolveMoffinSolutionsBearerResult =
   | { ok: true; bearer: string; via: "oauth" | "static" }
   | { ok: false; message: string };
 
+/**
+ * El accessToken de POST …/oauth/token (Solutions) suele ser JWT (tres segmentos base64url).
+ * El token de «Configuración → API» de app.moffin no cumple esto y provoca 401 en profile/CSF.
+ */
+export function looksLikeOauthAccessJwt(token: string): boolean {
+  const t = token.trim().replace(/^bearer\s+/i, "").trim();
+  if (t.length < 30) return false;
+  const parts = t.split(".");
+  if (parts.length !== 3) return false;
+  return parts.every((p) => p.length >= 4 && !/\s/.test(p));
+}
+
 type OauthCache = { accessToken: string; expiresAtSec: number };
 
 let oauthCache: OauthCache | null = null;
@@ -167,6 +179,15 @@ export async function resolveMoffinSolutionsBearer(
       ok: false,
       message:
         "Solutions sin credencial: define MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth; Moffin Solutions) o MOFFIN_SOLUTIONS_BEARER con el JWT devuelto por POST /oauth/token. El token de «Configuración → API» de app.moffin no sirve como Bearer en solutions-api.",
+    };
+  }
+  if (!looksLikeOauthAccessJwt(staticBearer)) {
+    const usedApiKeyFallback = !(Deno.env.get("MOFFIN_SOLUTIONS_BEARER")?.trim() ?? "");
+    return {
+      ok: false,
+      message: usedApiKeyFallback
+        ? "MOFFIN_API_KEY es la clave legacy de app.moffin (lista 69-B); no sirve como Bearer en solutions-api. En Supabase → Edge Functions → Secrets añade MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (credenciales OAuth que entrega Moffin para Solutions), o MOFFIN_SOLUTIONS_BEARER = accessToken JWT de POST …/oauth/token."
+        : "MOFFIN_SOLUTIONS_BEARER debe ser el accessToken JWT devuelto por POST …/oauth/token (tres segmentos separados por punto). Si pegaste el token corto de app.moffin, usa OAuth con MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET en su lugar.",
     };
   }
   return { ok: true, bearer: staticBearer, via: "static" };
