@@ -1,12 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { moffinConsultNeedsApiSync, type MoffinConsultRow } from "@/lib/moffinDisplay";
 
 export function useMoffinConsultsByClient(clientId: string | undefined) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ["moffin-consults-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -21,9 +23,21 @@ export function useMoffinConsultsByClient(clientId: string | undefined) {
       return (data ?? []) as MoffinConsultRow[];
     },
     enabled: !!user && !!clientId,
-    refetchInterval: (q) => {
-      const rows = q.state.data as MoffinConsultRow[] | undefined;
-      return rows?.some((r) => moffinConsultNeedsApiSync(r)) ? 55_000 : false;
-    },
+    refetchInterval: false,
   });
+
+  const hasPendingSync = useMemo(
+    () => (query.data ?? []).some((r) => moffinConsultNeedsApiSync(r)),
+    [query.data],
+  );
+
+  useEffect(() => {
+    if (!user || !clientId || !hasPendingSync) return;
+    const id = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
+    }, 55_000);
+    return () => clearInterval(id);
+  }, [user, clientId, hasPendingSync, queryClient]);
+
+  return query;
 }

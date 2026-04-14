@@ -464,10 +464,7 @@ export function AccountingDashboard({
       return (data ?? []) as MoffinConsultRow[];
     },
     enabled: !!user && !!projectId,
-    refetchInterval: (q) => {
-      const list = q.state.data as MoffinConsultRow[] | undefined;
-      return list?.some((r) => moffinConsultNeedsApiSync(r)) ? 55_000 : false;
-    },
+    refetchInterval: false,
   });
 
   const latestMoffinByType = useMemo(() => {
@@ -482,6 +479,14 @@ export function AccountingDashboard({
     () => moffinRows.some((r) => moffinConsultNeedsApiSync(r)),
     [moffinRows],
   );
+
+  useEffect(() => {
+    if (!user || !projectId || !hasPendingMoffinSync) return;
+    const id = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ["moffin-consults", projectId] });
+    }, 55_000);
+    return () => clearInterval(id);
+  }, [user, projectId, hasPendingMoffinSync, queryClient]);
 
   const moffinStalePending = useMemo(() => {
     const keys = Object.keys(MOFFIN_CONSULT_META) as MoffinConsultType[];

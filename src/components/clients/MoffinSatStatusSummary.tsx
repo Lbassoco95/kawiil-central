@@ -19,6 +19,7 @@ import {
   invokeFunctionWithSession,
 } from "@/lib/supabaseInvoke";
 import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
 
 const toneClass: Record<string, string> = {
@@ -53,7 +54,8 @@ export function MoffinSatStatusSummary({
   className,
 }: Props) {
   const { user } = useAuth();
-  const { data: rows = [], isLoading, refetch } = useMoffinConsultsByClient(clientId);
+  const queryClient = useQueryClient();
+  const { data: rows = [], isLoading } = useMoffinConsultsByClient(clientId);
   const [syncBusy, setSyncBusy] = useState(false);
   const byType = pickLatestMoffinByType(rows);
 
@@ -104,13 +106,13 @@ export function MoffinSatStatusSummary({
             : "Estado actualizado desde Moffin.",
         );
       }
-      await refetch();
+      void queryClient.invalidateQueries({ queryKey: ["moffin-consults-client", clientId] });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Error al sincronizar");
     } finally {
       setSyncBusy(false);
     }
-  }, [clientId, refetch, user]);
+  }, [clientId, queryClient, user]);
   const r69 = lista69bHeadline(byType.get("lista_69b"));
   const constancia = certConsultLine(
     "RFC · constancia (Moffin)",

@@ -92,15 +92,34 @@ async function tryOAuthTokenRequest(
   return { ok: true, json };
 }
 
+/** URLs candidatas POST oauth/token (algunos despliegues usan /api/oauth/token u host sin /api). */
+function buildOauthTokenPostUrls(solutionsBaseUrl: string): string[] {
+  const explicit = Deno.env.get("MOFFIN_SOLUTIONS_OAUTH_TOKEN_URL")?.trim();
+  if (explicit) {
+    return [explicit.replace(/\/$/, "")];
+  }
+  const base = solutionsBaseUrl.replace(/\/$/, "");
+  const urls: string[] = [];
+  const add = (u: string) => {
+    const t = u.replace(/\/$/, "");
+    if (!urls.includes(t)) urls.push(t);
+  };
+  if (/\/api$/i.test(base)) {
+    add(`${base.replace(/\/api$/i, "")}/oauth/token`);
+    add(`${base}/oauth/token`);
+  } else {
+    add(`${base}/oauth/token`);
+    add(`${base}/api/oauth/token`);
+  }
+  return urls;
+}
+
 async function fetchOAuthAccessToken(baseUrl: string): Promise<ResolveMoffinSolutionsBearerResult> {
   const clientId = Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID")?.trim() ?? "";
   const clientSecret = Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET")?.trim() ?? "";
   if (!clientId || !clientSecret) {
     return { ok: false, message: "Faltan MOFFIN_SOLUTIONS_CLIENT_ID y/o MOFFIN_SOLUTIONS_CLIENT_SECRET" };
   }
-
-  const base = baseUrl.replace(/\/$/, "");
-  const url = `${base}/oauth/token`;
 
   const formBody = new URLSearchParams({
     grant_type: "client_credentials",
@@ -137,24 +156,28 @@ async function fetchOAuthAccessToken(baseUrl: string): Promise<ResolveMoffinSolu
     },
   ];
 
+  const postUrls = buildOauthTokenPostUrls(baseUrl);
   const errors: string[] = [];
-  for (const att of attempts) {
-    const r = await tryOAuthTokenRequest(url, att.headers, att.body, att.label);
-    if (r.ok) {
-      const accessToken = parseAccessToken(r.json);
-      const now = Math.floor(Date.now() / 1000);
-      const expiresAtSec = parseExpiresAt(r.json, now + 3600);
-      oauthCache = { accessToken, expiresAtSec };
-      return { ok: true, bearer: accessToken, via: "oauth" };
+  for (const url of postUrls) {
+    for (const att of attempts) {
+      const r = await tryOAuthTokenRequest(url, att.headers, att.body, att.label);
+      if (r.ok) {
+        const accessToken = parseAccessToken(r.json);
+        const now = Math.floor(Date.now() / 1000);
+        const expiresAtSec = parseExpiresAt(r.json, now + 3600);
+        oauthCache = { accessToken, expiresAtSec };
+        return { ok: true, bearer: accessToken, via: "oauth" };
+      }
+      errors.push(`${url} · ${att.label}: ${r.message}`);
+      oauthCache = null;
     }
-    errors.push(r.message);
-    oauthCache = null;
-    if (r.status >= 500) break;
   }
 
   return {
     ok: false,
-    message: `oauth/token falló (${errors.join(" | ")}). Revisa clientId/clientSecret con Moffin (Solutions).`,
+    message:
+      `oauth/token falló (${errors.join(" | ")}). Revisa clientId/clientSecret y MOFFIN_SOLUTIONS_BASE_URL. ` +
+      `Si Moffin documenta otra URL para OAuth, define MOFFIN_SOLUTIONS_OAUTH_TOKEN_URL (POST completo, sin barra final).`,
   };
 }
 
