@@ -20,6 +20,7 @@ import {
   moffinSolutionsBaseUrl,
 } from "../_shared/moffinApiFlavor.ts";
 import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
+import { mapMoffinStatus } from "../_shared/moffinReportStatus.ts";
 import { extractSolutionsQueryId, moffinSolutionsGetJson } from "../_shared/moffinSolutionsClient.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
@@ -36,16 +37,6 @@ type ConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumpli
 const KAWIIL_EXTERNAL_RE =
   /^kawiil-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(lista_69b|constancia_situacion_fiscal|opinion_cumplimiento)-(\d+)$/i;
 
-function mapMoffinStatus(
-  s: string | undefined,
-): "success" | "fail" | "pending" | "error" {
-  const u = String(s ?? "").trim().toUpperCase();
-  if (u === "SUCCESS") return "success";
-  if (u === "PENDING") return "pending";
-  if (u === "FAIL") return "fail";
-  return "error";
-}
-
 function blacklistInner(resp: Record<string, unknown>): Record<string, unknown> | null {
   const tryObj = (x: unknown): Record<string, unknown> | null =>
     x && typeof x === "object" && !Array.isArray(x) ? (x as Record<string, unknown>) : null;
@@ -60,9 +51,10 @@ function blacklistInner(resp: Record<string, unknown>): Record<string, unknown> 
 
 function summarizeBlacklist(resp: Record<string, unknown>): string {
   const inner = blacklistInner(resp);
-  const st = String(resp?.status ?? "").toUpperCase();
   if (!inner) {
-    return st === "PENDING" ? "Consulta en proceso (Moffin)" : "Sin detalle en respuesta";
+    return mapMoffinStatus(String(resp?.status)) === "pending"
+      ? "Consulta en proceso (Moffin)"
+      : "Sin detalle en respuesta";
   }
   const rfc = inner.RFC ?? inner.rfc;
   const est = inner.Estatus ?? inner.estatus ?? inner.resultado ?? inner.status;

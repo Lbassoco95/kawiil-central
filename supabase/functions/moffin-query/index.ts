@@ -27,6 +27,10 @@ import {
   moffinSolutionsProfilePath,
   moffinSolutionsQueryPathForConsult,
 } from "../_shared/moffinQueryPaths.ts";
+import {
+  mapMoffinStatus,
+  moffinMessageImpliesQueuedProcessing,
+} from "../_shared/moffinReportStatus.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
 
@@ -104,16 +108,6 @@ function moffinAccountType(
   return inferAccountTypeFromRfc(rfc);
 }
 
-function mapMoffinStatus(
-  s: string | undefined,
-): "success" | "fail" | "pending" | "error" {
-  const u = String(s ?? "").trim().toUpperCase();
-  if (u === "SUCCESS") return "success";
-  if (u === "PENDING") return "pending";
-  if (u === "FAIL") return "fail";
-  return "error";
-}
-
 /** Cuerpo útil de lista 69-B en distintas formas (POST inicial, GET /report/{id}). */
 function blacklistInner(resp: Record<string, unknown>): Record<string, unknown> | null {
   const tryObj = (x: unknown): Record<string, unknown> | null =>
@@ -129,9 +123,10 @@ function blacklistInner(resp: Record<string, unknown>): Record<string, unknown> 
 
 function summarizeBlacklist(resp: Record<string, unknown>): string {
   const inner = blacklistInner(resp);
-  const st = String(resp?.status ?? "").toUpperCase();
   if (!inner) {
-    return st === "PENDING" ? "Consulta en proceso (Moffin)" : "Sin detalle en respuesta";
+    return mapMoffinStatus(String(resp?.status)) === "pending"
+      ? "Consulta en proceso (Moffin)"
+      : "Sin detalle en respuesta";
   }
   const rfc = inner.RFC ?? inner.rfc;
   const est = inner.Estatus ?? inner.estatus ?? inner.resultado ?? inner.status;
@@ -832,11 +827,16 @@ Deno.serve(async (req) => {
     let moffinStatus = mapMoffinStatus(String(json.status ?? ""));
     if (
       satRes.ok &&
-      (json.status === undefined || String(json.status ?? "").trim() === "") &&
-      consultType === "opinion_cumplimiento" &&
-      extractSolutionsQueryId(json)
+      extractSolutionsQueryId(json) &&
+      (consultType === "opinion_cumplimiento" || consultType === "constancia_situacion_fiscal")
     ) {
-      moffinStatus = "pending";
+      if (moffinMessageImpliesQueuedProcessing(json)) moffinStatus = "pending";
+      else if (
+        moffinStatus === "error" &&
+        (json.status === undefined || String(json.status ?? "").trim() === "")
+      ) {
+        moffinStatus = "pending";
+      }
     }
     const summary = summarizeSatRfc(consultType, json);
     const moffinQueryIdStr = extractSolutionsQueryId(json);
@@ -885,9 +885,11 @@ Deno.serve(async (req) => {
     const insertErrorMessage =
       moffinStatus === "fail" || moffinStatus === "error"
         ? String(json.message ?? json.error ?? "Consulta Moffin fallida").slice(0, 500)
-        : pdfSidecarError
-          ? `Sin PDF adjunto: ${pdfSidecarError}`.slice(0, 500)
-          : null;
+        : moffinStatus === "pending"
+          ? null
+          : pdfSidecarError
+            ? `Sin PDF adjunto: ${pdfSidecarError}`.slice(0, 500)
+            : null;
 
     const { data: inserted, error: insErr } = await admin
       .from("moffin_consults")
@@ -1129,9 +1131,11 @@ Deno.serve(async (req) => {
   const insertErrorMessage =
     !moffinRes.ok
       ? errMsg
-      : pdfSidecarError
-        ? `Sin PDF adjunto: ${pdfSidecarError}`.slice(0, 500)
-        : null;
+      : moffinStatus === "pending"
+        ? null
+        : pdfSidecarError
+          ? `Sin PDF adjunto: ${pdfSidecarError}`.slice(0, 500)
+          : null;
 
   const { data: inserted, error: insErr } = await admin
     .from("moffin_consults")

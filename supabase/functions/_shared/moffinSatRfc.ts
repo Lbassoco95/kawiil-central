@@ -1,3 +1,8 @@
+import {
+  mapMoffinStatus,
+  moffinMessageImpliesQueuedProcessing,
+} from "./moffinReportStatus.ts";
+
 /**
  * Extracción de PDF / URLs de respuestas POST /query/sat_rfc (OpenAPI: “SAT RFC Certificates”).
  * Lo habitual son certificados FIEL/SELLO con `path`/`url` a objetos `.cer`, no PDF del SAT.
@@ -367,6 +372,12 @@ export function extractReportLevelPdfUrl(report: Record<string, unknown>): strin
   return null;
 }
 
+function satReportIsPending(resp: Record<string, unknown>): boolean {
+  const stRaw = String(resp?.status ?? "").trim();
+  if (mapMoffinStatus(stRaw) === "pending") return true;
+  return moffinMessageImpliesQueuedProcessing(resp);
+}
+
 export function summarizeSatRfcCertificates(
   consultType: MoffinSatRfcConsultType,
   resp: Record<string, unknown>,
@@ -382,18 +393,30 @@ export function summarizeSatRfcCertificates(
       cm != null ? `claveMensaje: ${cm}` : null,
       pdf,
     ].filter(Boolean);
-    return parts.length ? parts.join(" · ") : st === "PENDING" ? "CSF: en proceso" : "CSF consultada";
+    return parts.length
+      ? parts.join(" · ")
+      : satReportIsPending(resp)
+        ? `CSF: en proceso${typeof resp.message === "string" && resp.message.trim() ? ` — ${resp.message.trim()}` : ""}`
+        : "CSF consultada";
   }
   if (svc === "32D" || /cumplimiento|opini[oó]n/i.test(String(resp?.service ?? ""))) {
     const r = resp?.response as Record<string, unknown> | undefined;
     const op = r?.opinion != null ? `Opinión: ${r.opinion}` : null;
     const pdf = typeof r?.pdf === "string" ? "PDF disponible" : null;
     const parts = [op, pdf].filter(Boolean);
-    return parts.length ? parts.join(" · ") : st === "PENDING" ? "32D: en proceso" : "Opinión de cumplimiento";
+    return parts.length
+      ? parts.join(" · ")
+      : satReportIsPending(resp)
+        ? `32D: en proceso${typeof resp.message === "string" && resp.message.trim() ? ` — ${resp.message.trim()}` : ""}`
+        : "Opinión de cumplimiento";
   }
   const r = resp?.response as Record<string, unknown> | null | undefined;
   if (!r || typeof r !== "object") {
-    return st === "PENDING" ? "Certificados SAT: consulta en proceso" : "Sin respuesta de certificados";
+    if (satReportIsPending(resp)) {
+      const hint = typeof resp.message === "string" && resp.message.trim() ? resp.message.trim() : null;
+      return hint ?? "Certificados SAT: consulta en proceso (Moffin)";
+    }
+    return "Sin respuesta de certificados";
   }
   const certs = collectSatRfcCertificates(resp);
   const pred =
