@@ -53,6 +53,10 @@ const RT_ERROR_TOAST_COOLDOWN_MS = 60_000;
 /**
  * Toasts (Sonner) + Notification API del sistema según perfil; pitido opcional.
  * Invalida historial Slack al insertar notificación de mensajería para refrescar Comunicación.
+ *
+ * Requiere que `public.notifications` esté en la publicación Realtime de Supabase
+ * (migración `20260416190000_notifications_realtime_and_delivery_prefs.sql`) y URL de
+ * eventos Slack + `SLACK_SIGNING_SECRET` para inserts vía `slack-events`.
  */
 export function useNotificationDelivery() {
   const { user } = useAuth();
@@ -150,7 +154,9 @@ export function useNotificationDelivery() {
           const isSlackType = row?.type === "slack_message" || row?.type === "slack_mention";
           const useSlackSound = isSlackType && slackSoundOn;
           const useGlobalSound = !isSlackType && globalSoundOn;
-          if (surfaced && (useSlackSound || useGlobalSound)) {
+          if (useSlackSound) {
+            playNotificationBeep();
+          } else if (surfaced && useGlobalSound) {
             playNotificationBeep();
           }
         },

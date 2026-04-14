@@ -85,18 +85,31 @@ function SortableConvRow(props: Parameters<typeof ConvRow>[0] & { id: string; un
     transition,
     opacity: isDragging ? 0.85 : 1,
   };
+  const u = props.unreadCount ?? 0;
+  const rowHighlight = u > 0 && !props.selected;
   return (
-    <div ref={setNodeRef} style={style} {...attributes} className="flex items-stretch gap-0 rounded-md">
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className={cn(
+        "flex items-stretch gap-0 rounded-md",
+        rowHighlight && "bg-zinc-100 text-zinc-900 ring-1 ring-zinc-300/70 shadow-sm",
+      )}
+    >
       <button
         type="button"
-        className="px-0.5 flex items-center text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing touch-none"
+        className={cn(
+          "px-0.5 flex items-center cursor-grab active:cursor-grabbing touch-none",
+          rowHighlight ? "text-zinc-500 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-400",
+        )}
         {...listeners}
         aria-label="Arrastrar para reordenar"
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
       <div className="flex-1 min-w-0">
-        <ConvRow {...props} />
+        <ConvRow {...props} embedUnreadChrome={rowHighlight} />
       </div>
     </div>
   );
@@ -113,6 +126,7 @@ function ConvRow({
   isVip,
   onToggleVip,
   unreadCount = 0,
+  embedUnreadChrome = false,
 }: {
   c: SlackConversation;
   selected: boolean;
@@ -124,12 +138,18 @@ function ConvRow({
   isVip?: boolean;
   onToggleVip?: () => void;
   unreadCount?: number;
+  /** Si true, el contenedor padre (p. ej. fila sortable) ya pinta el fondo de no leído. */
+  embedUnreadChrome?: boolean;
 }) {
+  const hasUnread = unreadCount > 0;
+  const highlightUnread = hasUnread && !selected && !embedUnreadChrome;
+  const unreadInEmbed = hasUnread && !selected && embedUnreadChrome;
+
   return (
     <div
       className={cn(
         "relative w-full flex items-center gap-0 rounded-md transition-colors group/row",
-        selected ? "bg-zinc-700 text-white" : "hover:bg-zinc-800/90",
+        selected ? "bg-zinc-700 text-white" : highlightUnread ? "bg-zinc-100 text-zinc-900 ring-1 ring-zinc-300/70 shadow-sm" : "hover:bg-zinc-800/90",
       )}
     >
       <button
@@ -137,33 +157,36 @@ function ConvRow({
         onClick={onClick}
         className={cn(
           "relative flex-1 text-left pl-3 pr-1 py-1.5 rounded-md text-[13px] flex items-center gap-2 min-w-0",
-          selected ? "font-medium text-white" : unreadCount > 0 ? "font-semibold text-zinc-50" : "text-zinc-200",
+          selected
+            ? "font-medium text-white"
+            : highlightUnread || unreadInEmbed
+              ? "font-semibold text-zinc-900"
+              : hasUnread
+                ? "font-semibold text-zinc-50"
+                : "text-zinc-200",
         )}
-        title={isPublicChannel && c.name ? `#${c.name} — ${title}` : title}
+        title={
+          hasUnread
+            ? `${unreadCount} pendiente${unreadCount > 1 ? "s" : ""} · ${isPublicChannel && c.name ? `#${c.name} — ${title}` : title}`
+            : isPublicChannel && c.name
+              ? `#${c.name} — ${title}`
+              : title
+        }
       >
         {selected && (
           <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-primary" aria-hidden />
         )}
-        {unreadCount > 0 && (
-          <span
-            className="shrink-0 h-2 w-2 rounded-full bg-red-500 ring-2 ring-[#1a1d21]"
-            aria-hidden
-            title={`${unreadCount} notificación${unreadCount > 1 ? "es" : ""} en Kawiil`}
-          />
-        )}
         {c.is_im ? (
-          <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <MessageCircle className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
         ) : c.is_mpim ? (
-          <Users className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <Users className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
         ) : isPublicChannel ? (
-          <Hash className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <Hash className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
         ) : (
-          <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <Lock className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
         )}
         <span className="truncate min-w-0">{isPublicChannel && c.name ? `#${c.name}` : title}</span>
-        {unreadCount > 1 ? (
-          <span className="shrink-0 text-[10px] font-bold tabular-nums text-red-400">{unreadCount > 99 ? "99+" : unreadCount}</span>
-        ) : null}
+        <UnreadBadge count={unreadCount} />
       </button>
       {onToggleVip && (
         <button

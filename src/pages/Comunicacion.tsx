@@ -291,12 +291,21 @@ export default function Comunicacion() {
   const conversations = conversationsQuery.data || [];
 
   const slackUnreadByChannel = useSlackChannelNotificationBadges(user?.id);
-  useSlackUnreadSync({
+  const slackUnreadSnapshotQuery = useSlackUnreadSync({
     enabled: isConnected,
     userId: user?.id,
     selectedChannel,
     localUnreadByChannel: slackUnreadByChannel,
   });
+  const displayUnreadByChannel = useMemo(() => {
+    const snapshot = slackUnreadSnapshotQuery.data ?? {};
+    const out: Record<string, number> = {};
+    const keys = new Set([...Object.keys(slackUnreadByChannel), ...Object.keys(snapshot)]);
+    for (const k of keys) {
+      out[k] = Math.max(slackUnreadByChannel[k] ?? 0, snapshot[k] ?? 0);
+    }
+    return out;
+  }, [slackUnreadByChannel, slackUnreadSnapshotQuery.data]);
 
   const { data: sidebarGroupsRaw = [] } = useQuery({
     queryKey: ["slack-sidebar-groups", user?.id],
@@ -895,7 +904,7 @@ export default function Comunicacion() {
       customGroups={customGroupsVm}
       channelsInCustomGroups={channelsInCustomGroups}
       onReorderCustomGroup={handleReorderCustomGroup}
-      unreadByChannel={slackUnreadByChannel}
+      unreadByChannel={displayUnreadByChannel}
       headerActions={
         <div className="flex flex-col gap-1.5">
           {showSlackPushBanner && (

@@ -2,6 +2,7 @@
  * Slash commands + Event API (reacciones y mensajes para notificaciones Kawiil).
  * En Slack: suscribir eventos message.channels, message.groups, message.im, message.mpim
  * (además de reaction_added). Misma Request URL que esta función.
+ * Títulos con nombre de canal: SLACK_BOT_TOKEN + scopes conversations:read (o channels:read/groups:read según tipo).
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -70,6 +71,30 @@ async function slackConversationMembers(channelId: string, botToken: string): Pr
   return out;
 }
 
+/** Nombre para título de notificación (#canal, MD, grupo); requiere SLACK_BOT_TOKEN. */
+async function slackConversationDisplayName(
+  channelId: string,
+  botToken: string,
+): Promise<string | undefined> {
+  const u = new URL("https://slack.com/api/conversations.info");
+  u.searchParams.set("channel", channelId);
+  const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${botToken}` } });
+  const j = (await res.json()) as {
+    ok?: boolean;
+    error?: string;
+    channel?: { name?: string; is_im?: boolean; is_mpim?: boolean };
+  };
+  if (!j.ok || !j.channel) {
+    console.warn("conversations.info:", j.error || "unknown");
+    return undefined;
+  }
+  const ch = j.channel;
+  if (ch.is_im || ch.is_mpim) return undefined;
+  const n = typeof ch.name === "string" ? ch.name.trim() : "";
+  if (n) return `#${n}`;
+  return undefined;
+}
+
 type SlackTargetFlags = {
   organization_id: string;
   mention: boolean;
@@ -102,16 +127,21 @@ function mergeSlackTarget(
   targets.set(userId, cur);
 }
 
-function slackNotificationTitle(flags: SlackTargetFlags, channelType: string): string {
-  if (flags.mention) return "Slack · Te mencionaron";
+function slackNotificationTitle(
+  flags: SlackTargetFlags,
+  channelType: string,
+  channelDisplay?: string,
+): string {
+  const ch = channelDisplay ? ` · ${channelDisplay}` : "";
+  if (flags.mention) return `Slack · Te mencionaron${ch}`;
   if (flags.dm) {
-    return channelType === "im" ? "Slack · Mensaje directo" : "Slack · Grupo privado";
+    return channelType === "im" ? `Slack · Mensaje directo${ch}` : `Slack · Grupo privado${ch}`;
   }
-  if (flags.vip) return "Slack · VIP · Nuevo mensaje";
-  if (flags.watch) return "Slack · Canal en seguimiento";
-  if (channelType === "im") return "Slack · Mensaje directo";
-  if (channelType === "mpim") return "Slack · Grupo privado";
-  return "Slack · Canal";
+  if (flags.vip) return `Slack · VIP · Nuevo mensaje${ch}`;
+  if (flags.watch) return `Slack · Canal en seguimiento${ch}`;
+  if (channelType === "im") return `Slack · Mensaje directo${ch}`;
+  if (channelType === "mpim") return `Slack · Grupo privado${ch}`;
+  return `Slack · Canal${ch}`;
 }
 
 function slackNotificationType(flags: SlackTargetFlags): string {
@@ -291,13 +321,19 @@ async function handleMessageNotificationEvent(
 
   if (targets.size === 0) return;
 
+  let channelDisplay: string | undefined;
+  const botForInfo = Deno.env.get("SLACK_BOT_TOKEN");
+  if (botForInfo) {
+    channelDisplay = await slackConversationDisplayName(channel, botForInfo);
+  }
+
   const preview = text.replace(/<@[A-Z0-9]+>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 200);
 
   const rows = [...targets.entries()].map(([user_id, flags]) => ({
     user_id,
     organization_id: flags.organization_id,
     type: slackNotificationType(flags),
-    title: slackNotificationTitle(flags, channelType),
+    title: slackNotificationTitle(flags, channelType, channelDisplay),
     body: preview || "(sin texto)",
     entity_type: "slack",
     entity_id: `${channel}|${ts}`,
