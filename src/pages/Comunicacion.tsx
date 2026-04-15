@@ -218,9 +218,11 @@ export default function Comunicacion() {
   const commPrefsByChannel = useMemo(() => {
     const r: Record<string, SlackCommPrefRow> = {};
     for (const row of slackCommPrefs) {
+      const legacyVip = row.is_vip === true;
       r[row.channel_id] = {
-        is_vip: row.is_vip,
-        is_starred: row.is_starred,
+        // Compatibilidad: cualquier marca legacy VIP se trata como destacado.
+        is_vip: false,
+        is_starred: row.is_starred || legacyVip,
         sort_order: row.sort_order,
         notifications_muted: row.notifications_muted === true,
       };
@@ -340,24 +342,101 @@ export default function Comunicacion() {
     queryKey: ["slack-history", selectedChannel],
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam, signal }): Promise<HistoryPage> => {
-      const data = await invokeSlackApi<{
+      const qh0 = Date.now();
+      let historyPath = "initial";
+      const payload = {
+        action: "conversations.history",
+        channel: selectedChannel!,
+        limit: 50,
+        cursor: pageParam,
+      } as const;
+      let data: {
         ok: boolean;
         messages?: SlackMessage[];
         error?: string;
         response_metadata?: { next_cursor?: string };
-      }>(
-        {
-          action: "conversations.history",
-          channel: selectedChannel!,
-          limit: 50,
-          cursor: pageParam,
-        },
-        { signal, timeoutMs: 55_000 },
-      );
+      };
+      try {
+        data = await invokeSlackApi<{
+          ok: boolean;
+          messages?: SlackMessage[];
+          error?: string;
+          response_metadata?: { next_cursor?: string };
+        }>(payload, { signal, timeoutMs: 55_000 });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        // Si React Query cancela por invalidaciones/reenfoques, intentamos una vez sin signal.
+        if (msg.includes("se canceló") && !msg.includes("tardó demasiado")) {
+          historyPath = "retry-no-signal";
+          data = await invokeSlackApi<{
+            ok: boolean;
+            messages?: SlackMessage[];
+            error?: string;
+            response_metadata?: { next_cursor?: string };
+          }>(payload, { timeoutMs: 35_000 });
+        } else {
+          // #region agent log
+          fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
+            body: JSON.stringify({
+              sessionId: "a822aa",
+              runId: "pre",
+              hypothesisId: "H2",
+              location: "Comunicacion.tsx:historyInfinite:queryFn",
+              message: "history fetch threw (no retry)",
+              data: {
+                channel: selectedChannel,
+                errMsg: msg.slice(0, 240),
+                ms: Date.now() - qh0,
+              },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
+          throw e;
+        }
+      }
+      if (!data.ok && data.error === "not_in_channel" && selectedChannel?.startsWith("C")) {
+        historyPath = "join-then-history";
+        const joined = await invokeSlackApi<{ ok: boolean; error?: string }>({
+          action: "conversations.join",
+          channel: selectedChannel,
+        });
+        if (joined.ok) {
+          data = await invokeSlackApi<{
+            ok: boolean;
+            messages?: SlackMessage[];
+            error?: string;
+            response_metadata?: { next_cursor?: string };
+          }>(payload, { timeoutMs: 35_000 });
+        }
+      }
       if (!data.ok) throw new Error(data.error || "No se pudo cargar el historial");
       const raw = data.messages || [];
       const chrono = [...raw].reverse();
       const nextCursor = data.response_metadata?.next_cursor || undefined;
+      // #region agent log
+      fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
+        body: JSON.stringify({
+          sessionId: "a822aa",
+          runId: "pre",
+          hypothesisId: "H3",
+          location: "Comunicacion.tsx:historyInfinite:queryFn:success",
+          message: "history page resolved",
+          data: {
+            channel: selectedChannel,
+            path: historyPath,
+            msgCount: raw.length,
+            hasNext: !!nextCursor,
+            ms: Date.now() - qh0,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       return { messages: chrono, nextCursor };
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
@@ -367,6 +446,9 @@ export default function Comunicacion() {
       if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
       return failureCount < 2;
     },
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.visibilityState === "visible" ? 18_000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const messages = useMemo(() => {
@@ -394,6 +476,42 @@ export default function Comunicacion() {
     historyInfinite.data,
     selectedChannel,
     isConnected,
+  ]);
+
+  useEffect(() => {
+    if (!selectedChannel) return;
+    // #region agent log
+    fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
+      body: JSON.stringify({
+        sessionId: "a822aa",
+        runId: "pre",
+        hypothesisId: "H4",
+        location: "Comunicacion.tsx:historyInfinite:status",
+        message: "history query status snapshot",
+        data: {
+          channel: selectedChannel,
+          status: historyInfinite.status,
+          fetchStatus: historyInfinite.fetchStatus,
+          isLoading: historyInfinite.isLoading,
+          isFetching: historyInfinite.isFetching,
+          hasData: !!historyInfinite.data,
+          pages: historyInfinite.data?.pages?.length ?? 0,
+          errMsg: historyPanelError?.message?.slice(0, 200) ?? null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+  }, [
+    selectedChannel,
+    historyInfinite.status,
+    historyInfinite.fetchStatus,
+    historyInfinite.isLoading,
+    historyInfinite.isFetching,
+    historyInfinite.data,
+    historyPanelError,
   ]);
 
   const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;

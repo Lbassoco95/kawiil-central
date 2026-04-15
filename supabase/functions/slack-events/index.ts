@@ -273,7 +273,7 @@ function slackNotificationTitle(
   if (flags.dm) {
     return channelType === "im" ? `Slack · Mensaje directo${ch}` : `Slack · Grupo privado${ch}`;
   }
-  if (flags.vip) return `Slack · VIP · Nuevo mensaje${ch}`;
+  if (flags.vip) return `Slack · Conversación destacada · Nuevo mensaje${ch}`;
   if (flags.watch) return `Slack · Canal en seguimiento${ch}`;
   if (flags.channel) return `Slack · Nuevo mensaje${ch}`;
   if (channelType === "im") return `Slack · Mensaje directo${ch}`;

@@ -68,21 +68,133 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
   body: Record<string, unknown>,
   opts?: InvokeSlackApiOptions,
 ): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("slack-api", {
-    body,
-    ...(opts?.signal ? { signal: opts.signal } : {}),
-    ...(opts?.timeoutMs != null && opts.timeoutMs > 0 ? { timeout: opts.timeoutMs } : {}),
-  });
+  const dbgAct = String((body as { action?: unknown }).action || "");
+  const t0 = Date.now();
+  const timeoutMs = opts?.timeoutMs ?? 0;
+  const timeoutController = new AbortController();
+  const upstreamAbort = opts?.signal;
+  let timedOut = false;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const onUpstreamAbort = () => timeoutController.abort();
+  if (upstreamAbort) {
+    if (upstreamAbort.aborted) {
+      timeoutController.abort();
+    } else {
+      upstreamAbort.addEventListener("abort", onUpstreamAbort, { once: true });
+    }
+  }
+  if (timeoutMs > 0) {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      timeoutController.abort();
+    }, timeoutMs);
+  }
+
+  // #region agent log
+  fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
+    body: JSON.stringify({
+      sessionId: "a822aa",
+      runId: "pre",
+      hypothesisId: "H2",
+      location: "slackApi.ts:invokeSlackApi:start",
+      message: "invoke slack-api start",
+      data: {
+        action: dbgAct,
+        timeoutMs,
+        hasUpstreamSignal: !!upstreamAbort,
+        channelPrefix: typeof body.channel === "string" ? body.channel.slice(0, 1) : "",
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  let data: unknown;
+  let error: unknown;
+  try {
+    const res = await supabase.functions.invoke("slack-api", {
+      body,
+      signal: timeoutController.signal,
+    });
+    data = res.data;
+    error = res.error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (upstreamAbort && !upstreamAbort.aborted) {
+      upstreamAbort.removeEventListener("abort", onUpstreamAbort);
+    }
+  }
+
   if (error) {
+    // #region agent log
+    fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
+      body: JSON.stringify({
+        sessionId: "a822aa",
+        runId: "pre",
+        hypothesisId: "H2",
+        location: "slackApi.ts:invokeSlackApi:functions-error",
+        message: "supabase.functions.invoke error",
+        data: {
+          action: dbgAct,
+          timedOut,
+          upstreamAborted: !!upstreamAbort?.aborted,
+          ms: Date.now() - t0,
+          errName: error instanceof Error ? error.name : typeof error,
+          errMsg:
+            error instanceof Error
+              ? error.message.slice(0, 240)
+              : String(error).slice(0, 240),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     if (isAbortLikeFunctionsError(error)) {
-      throw new Error(
-        "La petición a Slack tardó demasiado o se canceló. Comprueba tu red o vuelve a abrir el canal.",
-      );
+      if (timedOut) {
+        throw new Error(
+          "La petición a Slack tardó demasiado. Comprueba tu red o vuelve a abrir el canal.",
+        );
+      }
+      if (upstreamAbort?.aborted) {
+        throw new Error("La petición a Slack se canceló al cambiar de canal o recargar la vista.");
+      }
+      throw new Error("La petición a Slack se canceló. Vuelve a intentarlo.");
     }
     const parsed = await readInvokeFailureMessage(error);
     throw new Error(parsed || (error instanceof Error ? error.message : "Error al llamar a Slack"));
   }
-  const d = data as { error?: string; message?: string } | null;
+  const d = data as { error?: string; message?: string; ok?: boolean; messages?: unknown[] } | null;
+  // #region agent log
+  if (
+    dbgAct === "conversations.history" ||
+    dbgAct === "conversations.join" ||
+    dbgAct === "conversations.members"
+  ) {
+    fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
+      body: JSON.stringify({
+        sessionId: "a822aa",
+        runId: "pre",
+        hypothesisId: "H1",
+        location: "slackApi.ts:invokeSlackApi:response",
+        message: "slack-api JSON body (subset)",
+        data: {
+          action: dbgAct,
+          ok: d?.ok,
+          slackError: d?.error,
+          msgCount: Array.isArray(d?.messages) ? d.messages.length : undefined,
+          ms: Date.now() - t0,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }
+  // #endregion
   if (d?.error === "slack_not_connected") {
     throw new Error(d.message || "Conecta Slack primero.");
   }

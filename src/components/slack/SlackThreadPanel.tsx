@@ -53,6 +53,9 @@ export function SlackThreadPanel({
       return data.messages || [];
     },
     enabled: open && !!channelId && !!threadTs,
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.visibilityState === "visible" ? 18_000 : false,
+    refetchIntervalInBackground: false,
   });
 
   const messages = threadQuery.data || [];

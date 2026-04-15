@@ -51,6 +51,7 @@ async function slackFilesUploadClassic(
 
 type SlackMethod =
   | "conversations.list"
+  | "conversations.join"
   | "conversations.mark"
   | "conversations.open"
   | "conversations.history"
@@ -441,6 +442,17 @@ Deno.serve(async (req) => {
       return jsonOk(data);
     }
 
+    if (action === "conversations.join") {
+      const channel = (json.channel as string)?.trim();
+      if (!channel) {
+        return jsonOk({ ok: false, error: "channel required" });
+      }
+      const data = await slackCall(conn.access_token, "conversations.join", {
+        channel,
+      });
+      return jsonOk(data);
+    }
+
     if (action === "conversations.open") {
       const users = (json.users as string)?.trim();
       if (!users) {
@@ -754,6 +766,7 @@ Deno.serve(async (req) => {
       error: "unknown_action",
       allowed: [
         "conversations.list",
+        "conversations.join",
         "conversations.open",
         "conversations.mark",
         "conversations.unread.snapshot",
