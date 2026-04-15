@@ -45,13 +45,42 @@ async function readInvokeFailureMessage(error: unknown): Promise<string | null> 
   }
 }
 
+function isAbortLikeFunctionsError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error && typeof (error as { name?: string }).name === "string"
+    ? (error as { name: string }).name
+    : "";
+  const msg = "message" in error && typeof (error as { message?: string }).message === "string"
+    ? String((error as { message: string }).message)
+    : "";
+  if (name === "AbortError") return true;
+  const m = msg.toLowerCase();
+  return m.includes("abort") || m.includes("timed out") || m.includes("timeout");
+}
+
+export type InvokeSlackApiOptions = {
+  signal?: AbortSignal;
+  /** Aborta el fetch si supera este tiempo (ms). Evita spinners eternos si la Edge o la red cuelgan. */
+  timeoutMs?: number;
+};
+
 export async function invokeSlackApi<T = Record<string, unknown>>(
   body: Record<string, unknown>,
+  opts?: InvokeSlackApiOptions,
 ): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("slack-api", { body });
+  const { data, error } = await supabase.functions.invoke("slack-api", {
+    body,
+    ...(opts?.signal ? { signal: opts.signal } : {}),
+    ...(opts?.timeoutMs != null && opts.timeoutMs > 0 ? { timeout: opts.timeoutMs } : {}),
+  });
   if (error) {
+    if (isAbortLikeFunctionsError(error)) {
+      throw new Error(
+        "La petición a Slack tardó demasiado o se canceló. Comprueba tu red o vuelve a abrir el canal.",
+      );
+    }
     const parsed = await readInvokeFailureMessage(error);
-    throw new Error(parsed || error.message || "Error al llamar a Slack");
+    throw new Error(parsed || (error instanceof Error ? error.message : "Error al llamar a Slack"));
   }
   const d = data as { error?: string; message?: string } | null;
   if (d?.error === "slack_not_connected") {

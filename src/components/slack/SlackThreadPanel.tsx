@@ -39,13 +39,16 @@ export function SlackThreadPanel({
   const threadQuery = useQuery({
     queryKey: ["slack-thread", channelId, threadTs],
     refetchOnWindowFocus: true,
-    queryFn: async () => {
-      const data = await invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; error?: string }>({
-        action: "conversations.replies",
-        channel: channelId,
-        ts: threadTs!,
-        limit: 80,
-      });
+    queryFn: async ({ signal }) => {
+      const data = await invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; error?: string }>(
+        {
+          action: "conversations.replies",
+          channel: channelId,
+          ts: threadTs!,
+          limit: 80,
+        },
+        { signal, timeoutMs: 55_000 },
+      );
       if (!data.ok) throw new Error(data.error || "No se pudo cargar el hilo");
       return data.messages || [];
     },

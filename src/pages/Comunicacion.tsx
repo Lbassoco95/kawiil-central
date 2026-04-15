@@ -339,18 +339,21 @@ export default function Comunicacion() {
   const historyInfinite = useInfiniteQuery({
     queryKey: ["slack-history", selectedChannel],
     initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam }): Promise<HistoryPage> => {
+    queryFn: async ({ pageParam, signal }): Promise<HistoryPage> => {
       const data = await invokeSlackApi<{
         ok: boolean;
         messages?: SlackMessage[];
         error?: string;
         response_metadata?: { next_cursor?: string };
-      }>({
-        action: "conversations.history",
-        channel: selectedChannel!,
-        limit: 50,
-        cursor: pageParam,
-      });
+      }>(
+        {
+          action: "conversations.history",
+          channel: selectedChannel!,
+          limit: 50,
+          cursor: pageParam,
+        },
+        { signal, timeoutMs: 55_000 },
+      );
       if (!data.ok) throw new Error(data.error || "No se pudo cargar el historial");
       const raw = data.messages || [];
       const chrono = [...raw].reverse();
@@ -359,6 +362,11 @@ export default function Comunicacion() {
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     enabled: isConnected && !!selectedChannel,
+    retry(failureCount, err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
+      return failureCount < 2;
+    },
   });
 
   const messages = useMemo(() => {
@@ -366,6 +374,27 @@ export default function Comunicacion() {
     if (!pages?.length) return [];
     return [...pages].reverse().flatMap((p) => p.messages);
   }, [historyInfinite.data]);
+
+  const historyPanelError = useMemo(() => {
+    if (historyInfinite.error) return historyInfinite.error as Error;
+    if (
+      historyInfinite.fetchStatus === "paused" &&
+      !historyInfinite.data &&
+      !!selectedChannel &&
+      isConnected
+    ) {
+      return new Error(
+        "Sin conexión o la red está en pausa. Comprueba tu conexión y vuelve a abrir el canal.",
+      );
+    }
+    return null;
+  }, [
+    historyInfinite.error,
+    historyInfinite.fetchStatus,
+    historyInfinite.data,
+    selectedChannel,
+    isConnected,
+  ]);
 
   const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
   slackLatestMessageTsRef.current = lastMessageTs;
@@ -377,7 +406,7 @@ export default function Comunicacion() {
     selectedChannel,
     localUnreadByChannel: slackUnreadByChannel,
     pollChannelIds: slackPollChannelIds,
-    holdUnreadSnapshot: !!selectedChannel && historyInfinite.isPending,
+    holdUnreadSnapshot: !!selectedChannel && historyInfinite.isFetching && historyInfinite.data === undefined,
   });
   const displayUnreadByChannel = useMemo(() => {
     const snapshot = slackUnreadSnapshotQuery.data ?? EMPTY_SLACK_UNREAD_SNAPSHOT;
@@ -481,50 +510,24 @@ export default function Comunicacion() {
     qc,
   ]);
 
-  const handleToggleVip = useCallback(
-    (channelId: string) => {
-      const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
-      const nv = !cur.is_vip;
-      if (!nv && !cur.is_starred && !cur.notifications_muted) {
-        savePrefMutation.mutate({ channelId, delete: true });
-        return;
-      }
-      let sort = cur.sort_order;
-      if (nv) {
-        const orders = Object.values(commPrefsByChannel)
-          .filter((p) => p.is_vip)
-          .map((p) => p.sort_order);
-        sort = (orders.length ? Math.max(...orders) : -1) + 1;
-      }
-      savePrefMutation.mutate({
-        channelId,
-        is_vip: nv,
-        is_starred: cur.is_starred,
-        sort_order: sort,
-        notifications_muted: cur.notifications_muted,
-      });
-    },
-    [commPrefsByChannel, savePrefMutation],
-  );
-
   const handleToggleStar = useCallback(
     (channelId: string) => {
       const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
       const ns = !cur.is_starred;
-      if (!ns && !cur.is_vip && !cur.notifications_muted) {
+      if (!ns && !cur.notifications_muted) {
         savePrefMutation.mutate({ channelId, delete: true });
         return;
       }
       let sort = cur.sort_order;
       if (ns && !cur.is_starred) {
         const orders = Object.values(commPrefsByChannel)
-          .filter((p) => p.is_starred && !p.is_vip)
+          .filter((p) => p.is_starred || p.is_vip)
           .map((p) => p.sort_order);
         sort = (orders.length ? Math.max(...orders) : -1) + 1;
       }
       savePrefMutation.mutate({
         channelId,
-        is_vip: cur.is_vip,
+        is_vip: false,
         is_starred: ns,
         sort_order: sort,
         notifications_muted: cur.notifications_muted,
@@ -543,7 +546,7 @@ export default function Comunicacion() {
       }
       savePrefMutation.mutate({
         channelId,
-        is_vip: cur.is_vip,
+        is_vip: false,
         is_starred: cur.is_starred,
         sort_order: cur.sort_order,
         notifications_muted: next,
@@ -557,7 +560,7 @@ export default function Comunicacion() {
     (channelId: string, muted: boolean) => {
       const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
       if (muted === cur.notifications_muted) return;
-      if (!muted && !cur.is_vip && !cur.is_starred) {
+      if (!muted && !cur.is_starred && !cur.is_vip) {
         savePrefMutation.mutate(
           { channelId, delete: true },
           {
@@ -570,7 +573,7 @@ export default function Comunicacion() {
       savePrefMutation.mutate(
         {
           channelId,
-          is_vip: cur.is_vip,
+          is_vip: false,
           is_starred: cur.is_starred,
           sort_order: cur.sort_order,
           notifications_muted: muted,
@@ -586,23 +589,6 @@ export default function Comunicacion() {
       );
     },
     [commPrefsByChannel, savePrefMutation],
-  );
-
-  const handleReorderVip = useCallback(
-    (orderedChannelIds: string[]) => {
-      const rows = orderedChannelIds.map((channelId, i) => {
-        const cur = commPrefsByChannel[channelId] ?? { ...defaultSlackCommPref(), is_vip: true, sort_order: i };
-        return {
-          channelId,
-          is_vip: true,
-          is_starred: cur.is_starred,
-          sort_order: i,
-          notifications_muted: cur.notifications_muted,
-        };
-      });
-      reorderPrefsMutation.mutate(rows);
-    },
-    [commPrefsByChannel, reorderPrefsMutation],
   );
 
   const handleReorderStarred = useCallback(
@@ -622,10 +608,35 @@ export default function Comunicacion() {
     [commPrefsByChannel, reorderPrefsMutation],
   );
 
-  const mpimIds = useMemo(
-    () => conversations.filter((c) => c.is_mpim).map((c) => c.id).slice(0, MAX_MPIMS_MEMBER_PREFETCH),
-    [conversations],
-  );
+  /** MPIM fuera de los primeros N por orden de lista no recibían `conversations.members.batch` → título «Grupo» y sin avatares. Prioriza destacados (incl. legacy VIP), grupos sidebar y el canal abierto. */
+  const mpimIds = useMemo(() => {
+    const cap = MAX_MPIMS_MEMBER_PREFETCH;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (id: string | undefined) => {
+      if (!id || seen.has(id) || out.length >= cap) return;
+      const conv = conversations.find((c) => c.id === id && c.is_mpim);
+      if (!conv) return;
+      seen.add(id);
+      out.push(id);
+    };
+    for (const c of conversations) {
+      if (!c.is_mpim) continue;
+      const p = commPrefsByChannel[c.id];
+      if (p?.is_starred || p?.is_vip) add(c.id);
+    }
+    for (const g of customGroupsVm) {
+      for (const c of g.conversations) {
+        if (c.is_mpim) add(c.id);
+      }
+    }
+    add(selectedChannel || undefined);
+    for (const c of conversations) {
+      if (c.is_mpim) add(c.id);
+      if (out.length >= cap) break;
+    }
+    return out;
+  }, [conversations, commPrefsByChannel, selectedChannel, customGroupsVm]);
 
   const { data: mpimMembersByChannel = {} } = useQuery({
     queryKey: ["slack-mpim-members", [...mpimIds].sort().join(",")],
@@ -761,24 +772,6 @@ export default function Comunicacion() {
     };
   }, [user?.id, selectedChannel, qc]);
 
-  const slackUserIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const c of conversations) {
-      if (c.is_im && c.user) ids.add(c.user);
-      if (c.is_mpim) {
-        const mem = mpimMembersByChannel[c.id];
-        if (mem) mem.forEach((id) => ids.add(id));
-      }
-    }
-    for (const m of messages) {
-      if (m.user) ids.add(m.user);
-      if (m.text) extractSlackUserIdsFromText(m.text).forEach((id) => ids.add(id));
-    }
-    return [...ids];
-  }, [conversations, messages, mpimMembersByChannel]);
-
-  const { data: userMap = {} } = useSlackUserProfiles(slackUserIds);
-
   const { data: channelMembers = [] } = useQuery({
     queryKey: ["slack-channel-members", selectedChannel],
     queryFn: async () => {
@@ -789,7 +782,7 @@ export default function Comunicacion() {
       });
       return d.members || [];
     },
-    enabled: isConnected && !!selectedChannel && !historyInfinite.isPending,
+    enabled: isConnected && !!selectedChannel,
     staleTime: 120_000,
   });
 
@@ -802,9 +795,35 @@ export default function Comunicacion() {
       });
       return d.ok ? d.channel : null;
     },
-    enabled: isConnected && !!selectedChannel && !historyInfinite.isPending,
+    enabled: isConnected && !!selectedChannel,
     staleTime: 120_000,
   });
+
+  const selectedMeta = useMemo(
+    () => (selectedChannel ? conversations.find((c) => c.id === selectedChannel) : undefined),
+    [conversations, selectedChannel],
+  );
+
+  const slackUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of conversations) {
+      if (c.is_im && c.user) ids.add(c.user);
+      if (c.is_mpim) {
+        const mem = mpimMembersByChannel[c.id];
+        if (mem) mem.forEach((id) => ids.add(id));
+      }
+    }
+    if (selectedMeta?.is_mpim) {
+      channelMembers.forEach((id) => ids.add(id));
+    }
+    for (const m of messages) {
+      if (m.user) ids.add(m.user);
+      if (m.text) extractSlackUserIdsFromText(m.text).forEach((id) => ids.add(id));
+    }
+    return [...ids];
+  }, [conversations, messages, mpimMembersByChannel, selectedMeta, channelMembers]);
+
+  const { data: userMap = {} } = useSlackUserProfiles(slackUserIds);
 
   const kawiilAvisosEncendidosEnCanal = useMemo(() => {
     if (!selectedChannel) return true;
@@ -929,17 +948,21 @@ export default function Comunicacion() {
     storedDraftForRestore.text !== draft
   );
 
+  const mpimMembersForTitles = useMemo(() => {
+    const merged: Record<string, string[]> = { ...mpimMembersByChannel };
+    if (selectedChannel && selectedMeta?.is_mpim && channelMembers.length) {
+      merged[selectedChannel] = channelMembers;
+    }
+    return merged;
+  }, [mpimMembersByChannel, selectedChannel, selectedMeta, channelMembers]);
+
   const titleOpts = useMemo(
     () => ({
-      mpimMembersByChannel,
+      mpimMembersByChannel: mpimMembersForTitles,
       slackSelfUserId: connection?.slack_user_id ?? null,
     }),
-    [mpimMembersByChannel, connection?.slack_user_id],
+    [mpimMembersForTitles, connection?.slack_user_id],
   );
-
-  const selectedMeta = useMemo(() => {
-    return conversations.find((c) => c.id === selectedChannel);
-  }, [conversations, selectedChannel]);
 
   const headerTitle = selectedMeta
     ? conversationTitle(selectedMeta, userMap, titleOpts)
@@ -1011,10 +1034,8 @@ export default function Comunicacion() {
       error={conversationsQuery.error as Error | null}
       titleOpts={titleOpts}
       commPrefsByChannel={commPrefsByChannel}
-      onToggleVip={handleToggleVip}
       onToggleStar={handleToggleStar}
       onToggleNotificationsMuted={handleToggleNotificationsMuted}
-      onReorderVip={handleReorderVip}
       onReorderStarred={handleReorderStarred}
       customGroups={customGroupsVm}
       channelsInCustomGroups={channelsInCustomGroups}
@@ -1201,7 +1222,7 @@ export default function Comunicacion() {
               userMap={userMap}
               highlightTs={tsFromUrl}
               isLoading={historyInfinite.isLoading}
-              error={historyInfinite.error as Error | null}
+              error={historyPanelError}
               bottomRef={bottomRef}
               hasMore={historyInfinite.hasNextPage}
               isFetchingMore={historyInfinite.isFetchingNextPage}

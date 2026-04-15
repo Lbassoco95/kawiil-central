@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Star,
   GripVertical,
-  Crown,
   Sparkles,
   Bell,
   BellOff,
@@ -41,6 +40,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 export type SlackCommPrefRow = {
+  /** Legacy en BD; la UI ya no ofrece VIP. */
   is_vip: boolean;
   is_starred: boolean;
   sort_order: number;
@@ -56,14 +56,12 @@ type Props = {
   isLoading: boolean;
   error: Error | null;
   titleOpts?: ConversationTitleOpts;
-  /** Preferencias por canal (VIP, destacado, orden). */
+  /** Preferencias por canal (destacado, silencio; `is_vip` solo legacy). */
   commPrefsByChannel: Record<string, SlackCommPrefRow>;
-  onToggleVip: (channelId: string) => void;
   onToggleStar: (channelId: string) => void;
   onToggleNotificationsMuted: (channelId: string) => void;
-  onReorderVip: (orderedChannelIds: string[]) => void;
   onReorderStarred: (orderedChannelIds: string[]) => void;
-  /** Grupos personalizados (tras VIP y destacados). */
+  /** Grupos personalizados (tras destacados). */
   customGroups?: Array<{ id: string; title: string; conversations: SlackConversation[] }>;
   channelsInCustomGroups?: Set<string>;
   onReorderCustomGroup?: (groupId: string, orderedChannelIds: string[]) => void;
@@ -140,8 +138,6 @@ function ConvRow({
   isPublicChannel,
   starred,
   onToggleStar,
-  isVip,
-  onToggleVip,
   notificationsMuted = false,
   onToggleNotificationsMuted,
   unreadCount = 0,
@@ -154,8 +150,6 @@ function ConvRow({
   isPublicChannel: boolean;
   starred?: boolean;
   onToggleStar?: () => void;
-  isVip?: boolean;
-  onToggleVip?: () => void;
   notificationsMuted?: boolean;
   onToggleNotificationsMuted?: () => void;
   unreadCount?: number;
@@ -233,22 +227,6 @@ function ConvRow({
           )}
         </button>
       )}
-      {onToggleVip && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleVip();
-          }}
-          className={cn(
-            "p-1.5 rounded-md shrink-0 text-zinc-500 hover:text-amber-300",
-            isVip && "text-amber-400",
-          )}
-          title={isVip ? "Quitar VIP (siempre notificar)" : "VIP: siempre notificar mensajes"}
-        >
-          <Crown className={cn("h-3.5 w-3.5", isVip && "fill-amber-400")} />
-        </button>
-      )}
       {onToggleStar && (
         <button
           type="button"
@@ -278,10 +256,8 @@ export function SlackConversationList({
   error,
   titleOpts,
   commPrefsByChannel,
-  onToggleVip,
   onToggleStar,
   onToggleNotificationsMuted,
-  onReorderVip,
   onReorderStarred,
   customGroups = [],
   channelsInCustomGroups = new Set<string>(),
@@ -303,25 +279,17 @@ export function SlackConversationList({
     return t.includes(needle) || n.includes(needle) || c.id.toLowerCase().includes(needle);
   };
 
-  const pinnedOrVip = (c: SlackConversation) => {
+  const pinnedInSidebar = (c: SlackConversation) => {
     const p = commPrefsByChannel[c.id];
-    return !!(p?.is_vip || p?.is_starred);
+    return !!(p?.is_starred || p?.is_vip);
   };
-
-  const vipOrdered = useMemo(() => {
-    const rows = conversations
-      .filter((c) => commPrefsByChannel[c.id]?.is_vip)
-      .map((c) => ({
-        c,
-        o: commPrefsByChannel[c.id]?.sort_order ?? 0,
-      }))
-      .sort((a, b) => a.o - b.o || a.c.id.localeCompare(b.c.id));
-    return rows.map((r) => r.c);
-  }, [conversations, commPrefsByChannel]);
 
   const starredOrdered = useMemo(() => {
     const rows = conversations
-      .filter((c) => commPrefsByChannel[c.id]?.is_starred && !commPrefsByChannel[c.id]?.is_vip)
+      .filter((c) => {
+        const p = commPrefsByChannel[c.id];
+        return !!(p?.is_starred || p?.is_vip);
+      })
       .map((c) => ({
         c,
         o: commPrefsByChannel[c.id]?.sort_order ?? 0,
@@ -336,16 +304,6 @@ export function SlackConversationList({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
-  const onDragEndVip = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = vipOrdered.map((c) => c.id);
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex < 0 || newIndex < 0) return;
-    onReorderVip(arrayMove(ids, oldIndex, newIndex));
-  };
 
   const onDragEndStarred = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -377,10 +335,8 @@ export function SlackConversationList({
       onClick: () => onSelect(c.id),
       title: conversationTitle(c, userMap, titleOpts),
       isPublicChannel,
-      starred: !!p?.is_starred,
+      starred: !!(p?.is_starred || p?.is_vip),
       onToggleStar: () => onToggleStar(c.id),
-      isVip: !!p?.is_vip,
-      onToggleVip: () => onToggleVip(c.id),
       notificationsMuted: !!p?.notifications_muted,
       onToggleNotificationsMuted: () => onToggleNotificationsMuted(c.id),
       unreadCount: unreadFor(c.id),
@@ -395,13 +351,12 @@ export function SlackConversationList({
     );
   };
 
-  const [openVip, setOpenVip] = useState(true);
   const [openPub, setOpenPub] = useState(true);
   const [openPriv, setOpenPriv] = useState(true);
   const [openDm, setOpenDm] = useState(true);
   const [openStar, setOpenStar] = useState(true);
 
-  const inSidebarSpecial = (c: SlackConversation) => pinnedOrVip(c) || channelsInCustomGroups.has(c.id);
+  const inSidebarSpecial = (c: SlackConversation) => pinnedInSidebar(c) || channelsInCustomGroups.has(c.id);
 
   const customGroupsFiltered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -431,7 +386,6 @@ export function SlackConversationList({
     return <div className="p-4 text-sm text-destructive">{error.message}</div>;
   }
 
-  const vipFiltered = vipOrdered.filter(filterMatch);
   const starFiltered = starredOrdered.filter(filterMatch);
 
   const publicFiltered = groups.publicChannels
@@ -463,24 +417,6 @@ export function SlackConversationList({
       </div>
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-2 pb-6 space-y-1">
-          {vipFiltered.length > 0 && (
-            <Collapsible open={openVip} onOpenChange={setOpenVip}>
-              <SectionHeader label="VIP · siempre notificar" unreadInSection={sumUnread(vipFiltered)} />
-              <CollapsibleContent>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndVip}>
-                  <SortableContext items={vipFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-0.5 mt-1">
-                      {vipFiltered.map((c) => {
-                        const isPub = !c.is_private && !c.is_im && !c.is_mpim;
-                        return renderConv(c, isPub, true);
-                      })}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-
           {starFiltered.length > 0 && (
             <Collapsible open={openStar} onOpenChange={setOpenStar}>
               <SectionHeader label="Destacados" unreadInSection={sumUnread(starFiltered)} />
