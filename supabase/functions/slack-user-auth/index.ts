@@ -1,9 +1,9 @@
 /**
  * Inicia OAuth de Slack (token de usuario). En la app Slack: Redirect URL =
  * {SUPABASE_URL}/functions/v1/slack-user-callback
- * Scopes de usuario (user_scope): conversations:read (necesario p. ej. conversations.members en slack-events),
- * channels:history,channels:read,groups:history,groups:read,im:history,im:read,im:write,mpim:history,mpim:read,mpim:write,
- * users:read,users:read.email,users.profile:write,chat:write,files:write,files:read
+ * Scopes de usuario (user_scope): channels/groups/im/mpim read+history (granular; no usar conversations:read en OAuth
+ * porque Slack suele responder invalid_scope_requested). channels:history,channels:read,groups:history,groups:read,
+ * im:history,im:read,im:write,mpim:history,mpim:read,mpim:write,users:read,users:read.email,users.profile:write,chat:write,files:write,files:read
  * Event Subscriptions (misma app, slack-events): message.channels, message.groups, message.im, message.mpim
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -14,7 +14,6 @@ const corsHeaders = {
 };
 
 const DEFAULT_USER_SCOPES = [
-  "conversations:read",
   "channels:history",
   "channels:read",
   "groups:history",

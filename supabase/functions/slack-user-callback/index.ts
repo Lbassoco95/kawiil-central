@@ -154,16 +154,18 @@ Deno.serve(async (req) => {
     const code = url.searchParams.get("code");
     const userId = url.searchParams.get("state");
     const errParam = url.searchParams.get("error");
+    const errDesc = url.searchParams.get("error_description");
 
     if (errParam) {
       const boot =
         `try{window.opener?.postMessage({type:'slack-auth-error',error:${JSON.stringify(errParam)}},${JSON.stringify(postMessageOrigin)});}catch(_){}`;
+      const detail = errDesc ? ` ${decodeURIComponent(errDesc.replace(/\+/g, " "))}` : "";
       return new Response(
         renderOAuthResultPage({
           status: "error",
           headline: "No se pudo conectar Slack",
           subline:
-            `Slack respondió: ${errParam}. Puedes cerrar esta ventana e intentar de nuevo desde Kawiil.`,
+            `Slack respondió: ${errParam}.${detail ? ` Detalle:${detail}` : ""} Puedes cerrar esta ventana e intentar de nuevo desde Kawiil.`,
           bootScript: boot,
         }),
         { headers: { "Content-Type": "text/html; charset=utf-8" } },
