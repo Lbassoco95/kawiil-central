@@ -472,10 +472,10 @@ Deno.serve(async (req) => {
           ? (json.read_state as Record<string, string>)
           : {};
       if (Array.isArray(rawIds) && rawIds.length > 0) {
-        const channelIds = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 24);
+        const channelIds = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 18);
         /** Secuencial: menos ráfagas concurrentes a Slack (rate limits / cierres de sesión). */
         const fromHist = await slackUnreadHistoryBatch(conn.access_token, readState, channelIds);
-        const listSnap = await slackUnreadSnapshot(conn.access_token, 12);
+        const listSnap = await slackUnreadSnapshot(conn.access_token, 8);
         const tokenFatal = new Set([
           "invalid_auth",
           "token_revoked",

@@ -80,6 +80,8 @@ function bumpParentReplyInSlackHistory(
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MPIM_MEMBERS_BATCH = 40;
+/** Límite de MPIM para prefetch de miembros (evita decenas de batches en workspaces grandes). */
+const MAX_MPIMS_MEMBER_PREFETCH = 48;
 const PUSH_BANNER_DISMISS_KEY = "kawiil-slack-push-banner-dismissed";
 const SLACK_NOTIF_TYPES_ACTIVE = new Set(["slack_message", "slack_mention"]);
 
@@ -334,6 +336,40 @@ export default function Comunicacion() {
     return ids;
   }, [conversations, commPrefsByChannel]);
 
+  const historyInfinite = useInfiniteQuery({
+    queryKey: ["slack-history", selectedChannel],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }): Promise<HistoryPage> => {
+      const data = await invokeSlackApi<{
+        ok: boolean;
+        messages?: SlackMessage[];
+        error?: string;
+        response_metadata?: { next_cursor?: string };
+      }>({
+        action: "conversations.history",
+        channel: selectedChannel!,
+        limit: 50,
+        cursor: pageParam,
+      });
+      if (!data.ok) throw new Error(data.error || "No se pudo cargar el historial");
+      const raw = data.messages || [];
+      const chrono = [...raw].reverse();
+      const nextCursor = data.response_metadata?.next_cursor || undefined;
+      return { messages: chrono, nextCursor };
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+    enabled: isConnected && !!selectedChannel,
+  });
+
+  const messages = useMemo(() => {
+    const pages = historyInfinite.data?.pages;
+    if (!pages?.length) return [];
+    return [...pages].reverse().flatMap((p) => p.messages);
+  }, [historyInfinite.data]);
+
+  const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
+  slackLatestMessageTsRef.current = lastMessageTs;
+
   const slackUnreadByChannel = useSlackChannelNotificationBadges(user?.id);
   const slackUnreadSnapshotQuery = useSlackUnreadSync({
     enabled: isConnected,
@@ -341,6 +377,7 @@ export default function Comunicacion() {
     selectedChannel,
     localUnreadByChannel: slackUnreadByChannel,
     pollChannelIds: slackPollChannelIds,
+    holdUnreadSnapshot: !!selectedChannel && historyInfinite.isPending,
   });
   const displayUnreadByChannel = useMemo(() => {
     const snapshot = slackUnreadSnapshotQuery.data ?? EMPTY_SLACK_UNREAD_SNAPSHOT;
@@ -585,7 +622,10 @@ export default function Comunicacion() {
     [commPrefsByChannel, reorderPrefsMutation],
   );
 
-  const mpimIds = useMemo(() => conversations.filter((c) => c.is_mpim).map((c) => c.id), [conversations]);
+  const mpimIds = useMemo(
+    () => conversations.filter((c) => c.is_mpim).map((c) => c.id).slice(0, MAX_MPIMS_MEMBER_PREFETCH),
+    [conversations],
+  );
 
   const { data: mpimMembersByChannel = {} } = useQuery({
     queryKey: ["slack-mpim-members", [...mpimIds].sort().join(",")],
@@ -608,40 +648,6 @@ export default function Comunicacion() {
     enabled: isConnected && mpimIds.length > 0,
     staleTime: 300_000,
   });
-
-  const historyInfinite = useInfiniteQuery({
-    queryKey: ["slack-history", selectedChannel],
-    initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam }): Promise<HistoryPage> => {
-      const data = await invokeSlackApi<{
-        ok: boolean;
-        messages?: SlackMessage[];
-        error?: string;
-        response_metadata?: { next_cursor?: string };
-      }>({
-        action: "conversations.history",
-        channel: selectedChannel!,
-        limit: 50,
-        cursor: pageParam,
-      });
-      if (!data.ok) throw new Error(data.error || "No se pudo cargar el historial");
-      const raw = data.messages || [];
-      const chrono = [...raw].reverse();
-      const nextCursor = data.response_metadata?.next_cursor || undefined;
-      return { messages: chrono, nextCursor };
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
-    enabled: isConnected && !!selectedChannel,
-  });
-
-  const messages = useMemo(() => {
-    const pages = historyInfinite.data?.pages;
-    if (!pages?.length) return [];
-    return [...pages].reverse().flatMap((p) => p.messages);
-  }, [historyInfinite.data]);
-
-  const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
-  slackLatestMessageTsRef.current = lastMessageTs;
 
   /** Cursor local para estimar no leídos vía conversations.history en slack-api. */
   useEffect(() => {
@@ -783,7 +789,7 @@ export default function Comunicacion() {
       });
       return d.members || [];
     },
-    enabled: isConnected && !!selectedChannel,
+    enabled: isConnected && !!selectedChannel && !historyInfinite.isPending,
     staleTime: 120_000,
   });
 
@@ -796,7 +802,7 @@ export default function Comunicacion() {
       });
       return d.ok ? d.channel : null;
     },
-    enabled: isConnected && !!selectedChannel,
+    enabled: isConnected && !!selectedChannel && !historyInfinite.isPending,
     staleTime: 120_000,
   });
 

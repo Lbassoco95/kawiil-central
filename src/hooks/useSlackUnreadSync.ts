@@ -20,6 +20,8 @@ type Params = {
   localUnreadByChannel: Record<string, number>;
   /** Canales a consultar con history+read_state (p. ej. VIP + lista). */
   pollChannelIds: string[];
+  /** Pausa el snapshot mientras carga el historial del canal (evita ráfaga concurrente a slack-api). */
+  holdUnreadSnapshot?: boolean;
 };
 
 /**
@@ -36,6 +38,7 @@ export function useSlackUnreadSync({
   selectedChannel,
   localUnreadByChannel,
   pollChannelIds,
+  holdUnreadSnapshot = false,
 }: Params) {
   const qc = useQueryClient();
   const inFlightReadRef = useRef<Set<string>>(new Set());
@@ -55,7 +58,7 @@ export function useSlackUnreadSync({
       const readState = loadSlackReadMap(userId);
       return fetchSlackUnreadSnapshot({ channelIds: pollChannelIds, readState });
     },
-    enabled: enabled && !!userId && pollChannelIds.length > 0,
+    enabled: enabled && !!userId && pollChannelIds.length > 0 && !holdUnreadSnapshot,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     refetchInterval: () => {
