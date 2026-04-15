@@ -158,6 +158,11 @@ export async function invokeSlackFileUpload(formData: FormData): Promise<Record<
   return (data || {}) as Record<string, unknown>;
 }
 
+/**
+ * `id` es el channel de Slack (`conversations.history`, etc.).
+ * Prefijos habituales: `C…` canal público, `G…` canal privado o MPIM, `D…` DM 1:1.
+ * MPIM y canal privado comparten forma `G…`; se distinguen por `is_mpim` / `is_im` en `conversations.list`.
+ */
 export type SlackConversation = {
   id: string;
   name?: string;

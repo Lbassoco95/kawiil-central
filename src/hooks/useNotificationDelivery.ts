@@ -49,7 +49,21 @@ function slackChannelIdFromEntityId(entityId: string | null | undefined): string
   return pipe > 0 ? entityId.slice(0, pipe) : null;
 }
 
-function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row: NotifRow) {
+type InvalidateSlackCachesOpts = {
+  /**
+   * Solo INSERT / avisos nuevos deben refrescar historial e hilos.
+   * Los UPDATE (p. ej. marcar leídas) a menudo no traen `is_read` en `payload.new` de Realtime;
+   * invalidar igual cancelaba el fetch del MPIM con muchas notificaciones.
+   */
+  refreshHistory: boolean;
+};
+
+function invalidateSlackCachesFromNotifRow(
+  qc: QueryClient,
+  userId: string,
+  row: NotifRow,
+  opts: InvalidateSlackCachesOpts,
+) {
   const isSlackMsg =
     row?.entity_type === "slack" &&
     (row?.type === "slack_message" || row?.type === "slack_mention");
@@ -57,18 +71,14 @@ function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row:
   qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
   void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
   const ch = slackChannelIdFromEntityId(row.entity_id ?? undefined);
-  if (ch) {
-    // UPDATE al marcar leídas (p. ej. al abrir el MPIM en Comunicación) dispara Realtime por fila o en ráfaga.
-    // Invalidar `slack-history` en cada UPDATE cancela el fetch del historial y deja el spinner colgado.
-    if (row.is_read !== true) {
-      qc.invalidateQueries({ queryKey: ["slack-history", ch] });
-      qc.invalidateQueries({
-        predicate: (q) =>
-          Array.isArray(q.queryKey) &&
-          q.queryKey[0] === "slack-thread" &&
-          q.queryKey[1] === ch,
-      });
-    }
+  if (ch && opts.refreshHistory) {
+    qc.invalidateQueries({ queryKey: ["slack-history", ch] });
+    qc.invalidateQueries({
+      predicate: (q) =>
+        Array.isArray(q.queryKey) &&
+        q.queryKey[0] === "slack-thread" &&
+        q.queryKey[1] === ch,
+    });
   }
 }
 
@@ -91,8 +101,7 @@ type NotificationDeliveryPrefs = {
  * (migración `20260416190000_notifications_realtime_and_delivery_prefs.sql`) y URL de
  * eventos Slack + `SLACK_SIGNING_SECRET` para inserts vía `slack-events`.
  * Además hace polling ligero de las últimas filas para toasts si Realtime falla.
- * INSERT + UPDATE invalidan badges Slack (`useSlackChannelNotificationBadges`) sin un
- * canal Realtime adicional.
+ * INSERT invalida también historial/hilos Slack; UPDATE solo badges/snapshot (evita bucles al marcar leídas).
  */
 function scheduleToastDedupe(id: string, dedupe: Set<string>) {
   dedupe.add(id);
@@ -205,7 +214,7 @@ export function useNotificationDelivery() {
         if (ts > maxTs) maxTs = ts;
         if (row.is_read) continue;
         deliverNotificationRow(row as NotifRow, "poll");
-        invalidateSlackCachesFromNotifRow(qc, user.id, row as NotifRow);
+        invalidateSlackCachesFromNotifRow(qc, user.id, row as NotifRow, { refreshHistory: true });
       }
       pollCursorIsoRef.current = maxTs;
       if (newer.length) {
@@ -239,7 +248,7 @@ export function useNotificationDelivery() {
           const row = payload.new as NotifRow;
           qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
           qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-          invalidateSlackCachesFromNotifRow(qc, user.id, row);
+          invalidateSlackCachesFromNotifRow(qc, user.id, row, { refreshHistory: true });
           deliverNotificationRow(row, "realtime");
         },
       )
@@ -255,7 +264,7 @@ export function useNotificationDelivery() {
           const row = payload.new as NotifRow;
           qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
           qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-          invalidateSlackCachesFromNotifRow(qc, user.id, row);
+          invalidateSlackCachesFromNotifRow(qc, user.id, row, { refreshHistory: false });
         },
       )
       .subscribe((status, err) => {

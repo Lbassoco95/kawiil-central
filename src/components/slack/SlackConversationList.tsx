@@ -83,9 +83,22 @@ function UnreadBadge({ count }: { count: number }) {
   );
 }
 
-function SectionHeader({ label, unreadInSection = 0 }: { label: string; unreadInSection?: number }) {
+function SectionHeader({
+  label,
+  unreadInSection = 0,
+  sectionId,
+}: {
+  label: string;
+  unreadInSection?: number;
+  /** Para comprobar en el DOM que el despliegue trae la lista sin bloque «VIP». */
+  sectionId?: string;
+}) {
   return (
-    <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 min-w-0">
+    <CollapsibleTrigger
+      id={sectionId}
+      data-slack-section={sectionId}
+      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 min-w-0"
+    >
       <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
       <span className="truncate min-w-0 flex-1 text-left">{label}</span>
       <UnreadBadge count={unreadInSection} />
@@ -419,7 +432,7 @@ export function SlackConversationList({
         <div className="p-2 pb-6 space-y-1">
           {starFiltered.length > 0 && (
             <Collapsible open={openStar} onOpenChange={setOpenStar}>
-              <SectionHeader label="Destacados" unreadInSection={sumUnread(starFiltered)} />
+              <SectionHeader label="Destacados" unreadInSection={sumUnread(starFiltered)} sectionId="slack-destacados" />
               <CollapsibleContent>
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndStarred}>
                   <SortableContext items={starFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
