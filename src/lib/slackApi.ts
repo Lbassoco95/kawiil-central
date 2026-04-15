@@ -4,6 +4,29 @@ import { supabase } from "@/integrations/supabase/client";
 /** Duración del toast cuando falta reautorizar Slack (OAuth & Permissions). */
 export const SLACK_PERMISSION_TOAST_MS = 22_000;
 
+/** Mensaje legible cuando `conversations.history` devuelve `ok: false`. */
+export function formatSlackHistoryLoadError(slackError: string | undefined): string {
+  const e = (slackError || "").trim();
+  const hints: Record<string, string> = {
+    not_in_channel:
+      "Slack indica que no estás en esta conversación (p. ej. grupo privado o canal). Ábrela en Slack o pulsa «Actualizar permisos Slack» en Comunicación.",
+    channel_not_found: "Slack no encuentra este canal. Puede haberse eliminado o el id ya no es válido.",
+    is_archived: "Esta conversación está archivada en Slack.",
+    ratelimited: "Slack pidió esperar un momento por límite de uso. Vuelve a abrir el canal en unos segundos.",
+    slack_timeout: "Slack tardó demasiado en responder. Vuelve a intentar o comprueba tu red.",
+    slack_network_error: "No se pudo conectar con Slack. Comprueba tu red.",
+    slack_http_429: "Slack devolvió demasiadas peticiones (429). Espera unos segundos y vuelve a intentar.",
+    member_of_max_number_of_channels:
+      "Slack indica que alcanzaste el máximo de canales en los que puedes estar. Sal de algunos en Slack y vuelve a intentar.",
+    restricted_action: "Tu organización o Slack restringe esta acción en esta conversación.",
+  };
+  if (hints[e]) return hints[e];
+  if (e.includes("missing_scope")) {
+    return "Faltan permisos en la app de Slack. Pulsa «Actualizar permisos Slack» en Comunicación y acepta de nuevo.";
+  }
+  return e ? `No se pudo cargar el historial (${e}).` : "No se pudo cargar el historial.";
+}
+
 /**
  * Errores típicos de permisos devueltos por slack-api (incluye `missing_scope — scopes requeridos: …`).
  */
@@ -68,8 +91,6 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
   body: Record<string, unknown>,
   opts?: InvokeSlackApiOptions,
 ): Promise<T> {
-  const dbgAct = String((body as { action?: unknown }).action || "");
-  const t0 = Date.now();
   const timeoutMs = opts?.timeoutMs ?? 0;
   const timeoutController = new AbortController();
   const upstreamAbort = opts?.signal;
@@ -90,27 +111,6 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
     }, timeoutMs);
   }
 
-  // #region agent log
-  fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
-    body: JSON.stringify({
-      sessionId: "a822aa",
-      runId: "pre",
-      hypothesisId: "H2",
-      location: "slackApi.ts:invokeSlackApi:start",
-      message: "invoke slack-api start",
-      data: {
-        action: dbgAct,
-        timeoutMs,
-        hasUpstreamSignal: !!upstreamAbort,
-        channelPrefix: typeof body.channel === "string" ? body.channel.slice(0, 1) : "",
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   let data: unknown;
   let error: unknown;
   try {
@@ -128,31 +128,6 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
   }
 
   if (error) {
-    // #region agent log
-    fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
-      body: JSON.stringify({
-        sessionId: "a822aa",
-        runId: "pre",
-        hypothesisId: "H2",
-        location: "slackApi.ts:invokeSlackApi:functions-error",
-        message: "supabase.functions.invoke error",
-        data: {
-          action: dbgAct,
-          timedOut,
-          upstreamAborted: !!upstreamAbort?.aborted,
-          ms: Date.now() - t0,
-          errName: error instanceof Error ? error.name : typeof error,
-          errMsg:
-            error instanceof Error
-              ? error.message.slice(0, 240)
-              : String(error).slice(0, 240),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     if (isAbortLikeFunctionsError(error)) {
       if (timedOut) {
         throw new Error(
@@ -167,34 +142,7 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
     const parsed = await readInvokeFailureMessage(error);
     throw new Error(parsed || (error instanceof Error ? error.message : "Error al llamar a Slack"));
   }
-  const d = data as { error?: string; message?: string; ok?: boolean; messages?: unknown[] } | null;
-  // #region agent log
-  if (
-    dbgAct === "conversations.history" ||
-    dbgAct === "conversations.join" ||
-    dbgAct === "conversations.members"
-  ) {
-    fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a822aa" },
-      body: JSON.stringify({
-        sessionId: "a822aa",
-        runId: "pre",
-        hypothesisId: "H1",
-        location: "slackApi.ts:invokeSlackApi:response",
-        message: "slack-api JSON body (subset)",
-        data: {
-          action: dbgAct,
-          ok: d?.ok,
-          slackError: d?.error,
-          msgCount: Array.isArray(d?.messages) ? d.messages.length : undefined,
-          ms: Date.now() - t0,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
+  const d = data as { error?: string; message?: string } | null;
   if (d?.error === "slack_not_connected") {
     throw new Error(d.message || "Conecta Slack primero.");
   }

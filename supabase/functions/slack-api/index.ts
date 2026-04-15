@@ -67,6 +67,7 @@ type SlackMethod =
 
 const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
 const MAX_PRIVATE_FILE_FETCH_BYTES = 20 * 1024 * 1024;
+const SLACK_HTTP_TIMEOUT_MS = 25_000;
 
 /**
  * Flujo recomendado por Slack (sustituye files.upload clásico, a menudo rechazado o limitado).
@@ -195,15 +196,32 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== "") body.set(k, String(v));
   }
-  const res = await fetch(`https://slack.com/api/${method}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
-  return res.json();
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), SLACK_HTTP_TIMEOUT_MS);
+  try {
+    const res = await fetch(`https://slack.com/api/${method}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      return { ok: false, error: `slack_http_${res.status}` };
+    }
+    return await res.json();
+  } catch (e) {
+    const abortName =
+      e && typeof e === "object" && "name" in e ? String((e as { name: string }).name) : "";
+    if (abortName === "AbortError") {
+      return { ok: false, error: "slack_timeout" };
+    }
+    return { ok: false, error: "slack_network_error" };
+  } finally {
+    clearTimeout(tid);
+  }
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -455,8 +473,19 @@ Deno.serve(async (req) => {
 
     if (action === "conversations.open") {
       const users = (json.users as string)?.trim();
+      const resumeChannel = (json.channel as string)?.trim();
+      /** Reanudar DM / MPIM existente por id (Slack documenta `channel` para retomar conversación). */
+      if (resumeChannel && !users) {
+        const data = await slackCall(conn.access_token, "conversations.open", {
+          channel: resumeChannel,
+        });
+        return jsonOk(data);
+      }
       if (!users) {
-        return jsonOk({ ok: false, error: "users required (Slack user IDs, comma-separated for grupos)" });
+        return jsonOk({
+          ok: false,
+          error: "users or channel required (users=… para nuevo DM/grupo; channel=id para reanudar)",
+        });
       }
       const data = await slackCall(conn.access_token, "conversations.open", {
         users: users.replace(/\s+/g, ""),
@@ -532,12 +561,27 @@ Deno.serve(async (req) => {
       if (!channel) {
         return jsonOk({ ok: false, error: "channel required" });
       }
-      const data = await slackCall(conn.access_token, "conversations.history", {
+      const histParams = {
         channel,
         cursor: json.cursor as string | undefined,
         limit: (json.limit as number) || 50,
         inclusive: "true",
-      });
+      };
+      let data = await slackCall(conn.access_token, "conversations.history", histParams);
+      // Canales públicos: a veces aparecen en lista pero el user token no está joined.
+      if (data?.ok === false && data?.error === "not_in_channel" && channel.startsWith("C")) {
+        const joined = await slackCall(conn.access_token, "conversations.join", { channel });
+        if (joined?.ok) {
+          data = await slackCall(conn.access_token, "conversations.history", histParams);
+        }
+      }
+      // MPIM / DM / privado (G…, D…): `not_in_channel` suele resolverse reabriendo la conversación.
+      if (data?.ok === false && data?.error === "not_in_channel" && (channel.startsWith("G") || channel.startsWith("D"))) {
+        const reopened = await slackCall(conn.access_token, "conversations.open", { channel });
+        if (reopened?.ok) {
+          data = await slackCall(conn.access_token, "conversations.history", histParams);
+        }
+      }
       return jsonOk(data);
     }
 
