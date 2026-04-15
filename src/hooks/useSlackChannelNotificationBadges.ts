@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 const SLACK_NOTIF_TYPES = ["slack_message", "slack_mention"] as const;
 
+/** Misma referencia siempre: evita que `?? {}` dispare efectos en cada render (p. ej. useSlackUnreadSync). */
+const EMPTY_SLACK_BADGE_COUNTS: Record<string, number> = Object.freeze({});
+
 /**
  * Conteo de notificaciones Slack no leídas por channel_id (entity_id = channel|ts).
  *
@@ -39,7 +42,7 @@ export function useSlackChannelNotificationBadges(userId: string | undefined) {
     refetchIntervalInBackground: false,
   });
 
-  return query.data ?? {};
+  return query.data ?? EMPTY_SLACK_BADGE_COUNTS;
 }
 
 export async function markSlackChannelNotificationsRead(userId: string, channelId: string) {

@@ -83,6 +83,9 @@ const MPIM_MEMBERS_BATCH = 40;
 const PUSH_BANNER_DISMISS_KEY = "kawiil-slack-push-banner-dismissed";
 const SLACK_NOTIF_TYPES_ACTIVE = new Set(["slack_message", "slack_mention"]);
 
+/** Misma referencia si no hay snapshot aún (evita churn si algo dependiera de la identidad del objeto). */
+const EMPTY_SLACK_UNREAD_SNAPSHOT: Record<string, number> = Object.freeze({});
+
 function defaultSlackCommPref(): SlackCommPrefRow {
   return { is_vip: false, is_starred: false, sort_order: 0, notifications_muted: false };
 }
@@ -337,7 +340,7 @@ export default function Comunicacion() {
     pollChannelIds: slackPollChannelIds,
   });
   const displayUnreadByChannel = useMemo(() => {
-    const snapshot = slackUnreadSnapshotQuery.data ?? {};
+    const snapshot = slackUnreadSnapshotQuery.data ?? EMPTY_SLACK_UNREAD_SNAPSHOT;
     const out: Record<string, number> = {};
     const keys = new Set([...Object.keys(slackUnreadByChannel), ...Object.keys(snapshot)]);
     for (const k of keys) {

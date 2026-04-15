@@ -1,8 +1,17 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchSlackUnreadSnapshot } from "@/lib/slackApi";
 import { loadSlackReadMap } from "@/lib/slackReadCursor";
 import { markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
+
+/** Firma estable por contenido (los refetch de React Query suelen devolver otro objeto con los mismos números). */
+function unreadCountsSignature(m: Record<string, number>): string {
+  if (!Object.keys(m).length) return "";
+  return Object.entries(m)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}:${v}`)
+    .join("|");
+}
 
 type Params = {
   enabled: boolean;
@@ -31,6 +40,11 @@ export function useSlackUnreadSync({
   const qc = useQueryClient();
   const inFlightReadRef = useRef<Set<string>>(new Set());
 
+  const localUnreadSig = useMemo(
+    () => unreadCountsSignature(localUnreadByChannel),
+    [localUnreadByChannel],
+  );
+
   const pollKey = pollChannelIds.length ? [...pollChannelIds].sort().join(",") : "";
 
   const unreadSnapshotQuery = useQuery({
@@ -50,6 +64,13 @@ export function useSlackUnreadSync({
     },
   });
 
+  const remoteUnreadSig = useMemo(() => {
+    const d = unreadSnapshotQuery.data;
+    if (d === undefined) return "__pending__";
+    return unreadCountsSignature(d);
+  }, [unreadSnapshotQuery.data]);
+
+  // Depende de firmas (contenido), no de nuevas referencias `{}` tras cada refetch.
   useEffect(() => {
     if (!userId) return;
     const remote = unreadSnapshotQuery.data;
@@ -82,7 +103,7 @@ export function useSlackUnreadSync({
       void qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
       void qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
     }
-  }, [unreadSnapshotQuery.data, localUnreadByChannel, selectedChannel, userId, qc]);
+  }, [localUnreadSig, remoteUnreadSig, selectedChannel, userId, qc]);
 
   return unreadSnapshotQuery;
 }
