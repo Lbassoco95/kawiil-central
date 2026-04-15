@@ -574,6 +574,13 @@ Deno.serve(async (req) => {
         if (joined?.ok) {
           data = await slackCall(conn.access_token, "conversations.history", histParams);
         }
+        // Algunos workspaces requieren además "reanudar" la conversación para este user token.
+        if (data?.ok === false && data?.error === "not_in_channel") {
+          const reopened = await slackCall(conn.access_token, "conversations.open", { channel });
+          if (reopened?.ok) {
+            data = await slackCall(conn.access_token, "conversations.history", histParams);
+          }
+        }
       }
       // MPIM / DM / privado (G…, D…): `not_in_channel` suele resolverse reabriendo la conversación.
       if (data?.ok === false && data?.error === "not_in_channel" && (channel.startsWith("G") || channel.startsWith("D"))) {
