@@ -12,6 +12,7 @@ type NotifRow = {
   type?: string;
   entity_type?: string;
   entity_id?: string | null;
+  is_read?: boolean | null;
 };
 
 function effectiveNotificationTitle(row: NotifRow): string {
@@ -57,13 +58,17 @@ function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row:
   void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
   const ch = slackChannelIdFromEntityId(row.entity_id ?? undefined);
   if (ch) {
-    qc.invalidateQueries({ queryKey: ["slack-history", ch] });
-    qc.invalidateQueries({
-      predicate: (q) =>
-        Array.isArray(q.queryKey) &&
-        q.queryKey[0] === "slack-thread" &&
-        q.queryKey[1] === ch,
-    });
+    // UPDATE al marcar leídas (p. ej. al abrir el MPIM en Comunicación) dispara Realtime por fila o en ráfaga.
+    // Invalidar `slack-history` en cada UPDATE cancela el fetch del historial y deja el spinner colgado.
+    if (row.is_read !== true) {
+      qc.invalidateQueries({ queryKey: ["slack-history", ch] });
+      qc.invalidateQueries({
+        predicate: (q) =>
+          Array.isArray(q.queryKey) &&
+          q.queryKey[0] === "slack-thread" &&
+          q.queryKey[1] === ch,
+      });
+    }
   }
 }
 
