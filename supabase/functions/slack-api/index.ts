@@ -222,6 +222,7 @@ async function slackUnreadSnapshot(
   ok: boolean;
   unread_by_channel: Record<string, number>;
   channels_total: number;
+  slack_error?: string;
 }> {
   const unreadByChannel: Record<string, number> = {};
   let cursor: string | undefined;
@@ -244,6 +245,7 @@ async function slackUnreadSnapshot(
         ok: false,
         unread_by_channel: {},
         channels_total: channelsTotal,
+        slack_error: typeof data.error === "string" ? data.error : undefined,
       };
     }
 
@@ -312,7 +314,7 @@ async function slackUnreadHistoryBatch(
     out[channelId] = Math.min(99, n);
   };
 
-  const CONCURRENCY = 6;
+  const CONCURRENCY = 3;
   for (let i = 0; i < ids.length; i += CONCURRENCY) {
     const slice = ids.slice(i, i + CONCURRENCY);
     await Promise.all(slice.map((id) => fetchOne(id)));
@@ -471,10 +473,23 @@ Deno.serve(async (req) => {
           : {};
       if (Array.isArray(rawIds) && rawIds.length > 0) {
         const channelIds = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 24);
-        const [fromHist, listSnap] = await Promise.all([
-          slackUnreadHistoryBatch(conn.access_token, readState, channelIds),
-          slackUnreadSnapshot(conn.access_token, 2),
+        /** Secuencial: menos ráfagas concurrentes a Slack (rate limits / cierres de sesión). */
+        const fromHist = await slackUnreadHistoryBatch(conn.access_token, readState, channelIds);
+        const listSnap = await slackUnreadSnapshot(conn.access_token, 12);
+        const tokenFatal = new Set([
+          "invalid_auth",
+          "token_revoked",
+          "account_inactive",
+          "not_allowed_token",
         ]);
+        if (listSnap.ok === false && listSnap.slack_error && tokenFatal.has(listSnap.slack_error)) {
+          return jsonOk({
+            ok: false,
+            error: listSnap.slack_error,
+            message: "El acceso de Slack dejó de ser válido. Vuelve a conectar desde Comunicación.",
+            unread_by_channel: {},
+          });
+        }
         const merged: Record<string, number> = { ...fromHist };
         for (const [k, v] of Object.entries(listSnap.unread_by_channel)) {
           merged[k] = Math.max(merged[k] || 0, v);

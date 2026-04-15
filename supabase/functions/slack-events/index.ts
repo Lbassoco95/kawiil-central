@@ -1033,14 +1033,34 @@ function extractSlackEventTeamId(data: Record<string, unknown>, event: Record<st
     const z = a[0] as Record<string, unknown>;
     return tryTeam(z?.team_id);
   };
+  const fromTeamObj = (): string | undefined => {
+    const t = (data as { team?: { id?: unknown } }).team;
+    if (t && typeof t === "object" && typeof (t as { id?: unknown }).id === "string") {
+      return tryTeam((t as { id: string }).id);
+    }
+    return undefined;
+  };
   return (
     tryTeam(data.team_id) ??
     tryTeam(event.team) ??
     tryTeam(event.team_id) ??
     tryTeam((event as { source_team_id?: unknown }).source_team_id) ??
     tryTeam((data as { context_team_id?: unknown }).context_team_id) ??
+    fromTeamObj() ??
     fromAuths()
   );
+}
+
+type EdgeGlobal = typeof globalThis & { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } };
+
+function runSlackEventInBackground(label: string, work: () => Promise<void>) {
+  const promise = work().catch((e) => console.error(`slack-events: ${label}`, e));
+  const eg = globalThis as EdgeGlobal;
+  if (typeof eg.EdgeRuntime?.waitUntil === "function") {
+    eg.EdgeRuntime.waitUntil(promise);
+  } else {
+    void promise;
+  }
 }
 
 serve(async (req) => {
@@ -1142,7 +1162,10 @@ serve(async (req) => {
             channel: event.channel,
             api_app_id: (data as { api_app_id?: string }).api_app_id,
           });
-          await handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId, eventId);
+          /** Responder 200 antes del tope de Slack (~3s); el trabajo sigue con waitUntil. */
+          runSlackEventInBackground("handleMessageNotificationEvent", () =>
+            handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId, eventId),
+          );
         } else {
           console.warn("slack-events: message sin team_id resolvible; no se crean notificaciones Kawiil", {
             event_id: eventId,
@@ -1153,7 +1176,7 @@ serve(async (req) => {
       }
 
       if (event.type === "reaction_added") {
-        await handleReactionEvent(event);
+        runSlackEventInBackground("handleReactionEvent", () => handleReactionEvent(event));
       }
 
       return new Response(JSON.stringify({ ok: true }), {
