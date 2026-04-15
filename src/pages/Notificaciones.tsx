@@ -433,9 +433,10 @@ function NotificationDeliveryPreferences() {
         </div>
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
-            <Label className="text-sm font-medium">Slack: conversaciones VIP (siempre notificar)</Label>
+            <Label className="text-sm font-medium">Slack: conversaciones destacadas</Label>
             <p className="text-xs text-muted-foreground max-w-md">
-              Marca canales o DMs como VIP en Comunicación. Si lo desactivas, conservas la lista pero no recibes avisos.
+              Avisos para los chats que marques con la estrella en Comunicación (lista «Destacados»). Si lo desactivas
+              aquí, no recibirás esos avisos aunque sigan en la lista.
             </p>
           </div>
           <Switch
