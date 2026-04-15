@@ -451,6 +451,9 @@ export function SlackConversationList({
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
           <Input
+            id="comunicacion-slack-buscar-conversaciones"
+            name="comunicacion_slack_buscar_conversaciones"
+            autoComplete="off"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar…"

@@ -98,6 +98,9 @@ export function SlackChannelHeader({
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <div className="hidden sm:flex items-center gap-1 max-w-[200px]">
             <Input
+              id="comunicacion-slack-buscar-mensajes"
+              name="comunicacion_slack_buscar_mensajes"
+              autoComplete="off"
               value={searchQ}
               onChange={(e) => setSearchQ(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && runSearch()}

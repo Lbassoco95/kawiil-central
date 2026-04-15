@@ -241,6 +241,8 @@ export function SlackGroupsOrganizerDialog({
               <Label htmlFor="new-grp">Nuevo grupo</Label>
               <Input
                 id="new-grp"
+                name="slack_new_sidebar_group_title"
+                autoComplete="off"
                 value={newGroupTitle}
                 onChange={(e) => setNewGroupTitle(e.target.value)}
                 onKeyDown={(e) => {
@@ -294,6 +296,9 @@ export function SlackGroupsOrganizerDialog({
                         <ChevronDown className="h-4 w-4" />
                       </Button>
                       <Input
+                        id={`slack-sidebar-group-title-${g.id}`}
+                        name={`slack_sidebar_group_title_${g.id}`}
+                        autoComplete="off"
                         defaultValue={g.title}
                         key={g.id}
                         className="h-8 text-sm flex-1"

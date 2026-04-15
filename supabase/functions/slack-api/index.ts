@@ -282,11 +282,11 @@ async function slackUnreadHistoryBatch(
     "channel_unarchive",
   ]);
 
-  for (const channelId of ids) {
+  const fetchOne = async (channelId: string) => {
     const oldest = readState[channelId]?.trim();
     if (!oldest) {
       out[channelId] = 0;
-      continue;
+      return;
     }
     const data = await slackCall(token, "conversations.history", {
       channel: channelId,
@@ -301,7 +301,7 @@ async function slackUnreadHistoryBatch(
     if (!data.ok) {
       console.warn("conversations.history unread batch:", channelId, data.error);
       out[channelId] = 0;
-      continue;
+      return;
     }
     let n = 0;
     for (const m of data.messages || []) {
@@ -310,6 +310,12 @@ async function slackUnreadHistoryBatch(
       n += 1;
     }
     out[channelId] = Math.min(99, n);
+  };
+
+  const CONCURRENCY = 6;
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    const slice = ids.slice(i, i + CONCURRENCY);
+    await Promise.all(slice.map((id) => fetchOne(id)));
   }
   return out;
 }
@@ -465,8 +471,10 @@ Deno.serve(async (req) => {
           : {};
       if (Array.isArray(rawIds) && rawIds.length > 0) {
         const channelIds = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 24);
-        const fromHist = await slackUnreadHistoryBatch(conn.access_token, readState, channelIds);
-        const listSnap = await slackUnreadSnapshot(conn.access_token, 2);
+        const [fromHist, listSnap] = await Promise.all([
+          slackUnreadHistoryBatch(conn.access_token, readState, channelIds),
+          slackUnreadSnapshot(conn.access_token, 2),
+        ]);
         const merged: Record<string, number> = { ...fromHist };
         for (const [k, v] of Object.entries(listSnap.unread_by_channel)) {
           merged[k] = Math.max(merged[k] || 0, v);

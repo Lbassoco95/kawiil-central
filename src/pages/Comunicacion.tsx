@@ -119,6 +119,8 @@ export default function Comunicacion() {
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const slackReadAckKeyRef = useRef<string | null>(null);
   const slackReadAckTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  /** Agrupa INSERT de notificaciones Slack (ráfagas) en una sola pasada de “marcar leído”. */
+  const slackOpenChannelNotifDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Último `ts` del historial visible; se actualiza cada render tras `messages` (evita TDZ con deps de efectos). */
   const slackLatestMessageTsRef = useRef<string | undefined>(undefined);
 
@@ -641,10 +643,10 @@ export default function Comunicacion() {
     saveSlackReadCursor(user.id, selectedChannel, lastMessageTs);
   }, [user?.id, selectedChannel, lastMessageTs]);
 
-  /** Al abrir una conversación, limpiar avisos Kawiil asociados a ese canal. */
+  /** Al abrir una conversación o al fijar el último ts visible, limpiar avisos Kawiil de ese canal (no depender de la identidad del array `messages`). */
   useEffect(() => {
     if (!user?.id || !selectedChannel) return;
-    const latestTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
+    const latestTs = lastMessageTs;
     void (async () => {
       try {
         await markSlackChannelNotificationsRead(user.id, selectedChannel);
@@ -662,7 +664,7 @@ export default function Comunicacion() {
         /* RLS u offline: no bloquear la UI */
       }
     })();
-  }, [selectedChannel, user?.id, qc, messages]);
+  }, [selectedChannel, user?.id, qc, lastMessageTs]);
 
   /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
   useEffect(() => {
@@ -678,7 +680,7 @@ export default function Comunicacion() {
           table: "notifications",
           filter: `user_id=eq.${user.id}`,
         },
-        async (payload) => {
+        (payload) => {
           const row = payload.new as {
             id?: string;
             entity_type?: string;
@@ -686,26 +688,42 @@ export default function Comunicacion() {
             type?: string;
           };
           if (row.entity_type !== "slack" || !row.entity_id?.startsWith(`${selectedChannel}|`)) return;
-          if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type) || !row.id) return;
-          await supabase.from("notifications").update({ is_read: true }).eq("id", row.id);
-          const latestTs = slackLatestMessageTsRef.current;
-          if (latestTs) {
-            clearTimeout(slackReadAckTimerRef.current);
-            slackReadAckTimerRef.current = setTimeout(() => {
-              void markSlackConversationRead(selectedChannel, latestTs).catch(() => {
-                /* sin bloqueo por fallo remoto */
-              });
-            }, 350);
+          if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type)) return;
+          if (slackOpenChannelNotifDebounceRef.current) {
+            clearTimeout(slackOpenChannelNotifDebounceRef.current);
           }
-          qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
-          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+          slackOpenChannelNotifDebounceRef.current = setTimeout(() => {
+            slackOpenChannelNotifDebounceRef.current = null;
+            void (async () => {
+              try {
+                await markSlackChannelNotificationsRead(user.id, selectedChannel);
+                const latestTs = slackLatestMessageTsRef.current;
+                if (latestTs) {
+                  clearTimeout(slackReadAckTimerRef.current);
+                  slackReadAckTimerRef.current = setTimeout(() => {
+                    void markSlackConversationRead(selectedChannel, latestTs).catch(() => {
+                      /* sin bloqueo por fallo remoto */
+                    });
+                  }, 350);
+                }
+                qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+                qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+                qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+              } catch {
+                /* offline / RLS */
+              }
+            })();
+          }, 500);
         },
       )
       .subscribe();
 
     return () => {
       clearTimeout(slackReadAckTimerRef.current);
+      if (slackOpenChannelNotifDebounceRef.current) {
+        clearTimeout(slackOpenChannelNotifDebounceRef.current);
+        slackOpenChannelNotifDebounceRef.current = null;
+      }
       supabase.removeChannel(rt);
     };
   }, [user?.id, selectedChannel, qc]);

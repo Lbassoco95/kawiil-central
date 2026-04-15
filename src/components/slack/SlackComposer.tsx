@@ -298,6 +298,8 @@ export function SlackComposer({
     >
       <input
         ref={fileInputRef}
+        id="comunicacion-slack-adjunto"
+        name="slack_adjunto"
         type="file"
         className="hidden"
         onChange={onPickFile}
@@ -452,6 +454,7 @@ export function SlackComposer({
                   <Label htmlFor="slack-schedule-dt">Fecha y hora</Label>
                   <input
                     id="slack-schedule-dt"
+                    name="slack_schedule_datetime"
                     type="datetime-local"
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={scheduleLocal}
@@ -484,6 +487,9 @@ export function SlackComposer({
         )}
         <Textarea
           ref={ta}
+          id="comunicacion-slack-mensaje"
+          name="slack_message_body"
+          autoComplete="off"
           value={value}
           onChange={(e) => onChangeTextarea(e.target.value)}
           onKeyDown={onKeyDown}

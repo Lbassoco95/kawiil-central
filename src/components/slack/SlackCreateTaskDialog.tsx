@@ -104,12 +104,22 @@ export function SlackCreateTaskDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1">
-            <Label>Título</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título de la tarea" />
+            <Label htmlFor="slack-task-title">Título</Label>
+            <Input
+              id="slack-task-title"
+              name="slack_task_title"
+              autoComplete="off"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Título de la tarea"
+            />
           </div>
           <div className="space-y-1">
-            <Label>Descripción</Label>
+            <Label htmlFor="slack-task-description">Descripción</Label>
             <Textarea
+              id="slack-task-description"
+              name="slack_task_description"
+              autoComplete="off"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={7}
@@ -149,8 +159,14 @@ export function SlackCreateTaskDialog({
             </div>
           </div>
           <div className="space-y-1">
-            <Label>Fecha límite (opcional)</Label>
-            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <Label htmlFor="slack-task-due">Fecha límite (opcional)</Label>
+            <Input
+              id="slack-task-due"
+              name="slack_task_due_date"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
           </div>
         </div>
         <DialogFooter>

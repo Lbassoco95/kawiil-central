@@ -45,8 +45,8 @@ export function useSlackUnreadSync({
     staleTime: 10_000,
     refetchOnWindowFocus: true,
     refetchInterval: () => {
-      if (typeof document === "undefined") return 30_000;
-      return document.visibilityState === "visible" ? 20_000 : 60_000;
+      if (typeof document === "undefined") return 45_000;
+      return document.visibilityState === "visible" ? 35_000 : 90_000;
     },
   });
 
