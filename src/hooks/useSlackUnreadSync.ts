@@ -101,7 +101,8 @@ export function useSlackUnreadSync({
     const remoteCurrent = remote[selectedChannel] ?? 0;
     const localCurrent = localUnreadByChannel[selectedChannel] ?? 0;
     if (remoteCurrent > 0 && localCurrent === 0) {
-      void qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+      // No invalidar `slack-history` del canal abierto: el snapshot de no leídos puede dispararse en bucle
+      // (remoto > 0, badges locales aún 0) y cada invalidación cancela/refetch del historial → spinner perpetuo.
       void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
       void qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
       void qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
