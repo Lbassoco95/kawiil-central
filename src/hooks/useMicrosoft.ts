@@ -1147,8 +1147,11 @@ export function useUnreadEmailCount() {
         body: { action: "inbox-folder-meta" },
       });
       if (isNotConnectedError(data, error)) return 0;
+      /** Sidebar en todas las rutas: no tumbar Comunicación/Slack si Graph no resuelve Inbox (404 / ITEM_NOT_FOUND). */
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (payloadIndicatesItemNotFound(data, error, errBody)) return 0;
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) throw new Error(String(data.error));
       return Number(data?.unreadItemCount ?? 0);
     },
     enabled: !!user,
