@@ -58,6 +58,22 @@ type HistoryPage = {
   nextCursor?: string;
 };
 
+function withHardTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const tid = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(tid);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(tid);
+        reject(error);
+      },
+    );
+  });
+}
+
 function bumpParentReplyInSlackHistory(
   old: InfiniteData<HistoryPage> | undefined,
   parentTs: string,
@@ -356,22 +372,30 @@ export default function Comunicacion() {
         response_metadata?: { next_cursor?: string };
       };
       try {
-        data = await invokeSlackApi<{
-          ok: boolean;
-          messages?: SlackMessage[];
-          error?: string;
-          response_metadata?: { next_cursor?: string };
-        }>(payload, { signal, timeoutMs: 55_000 });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "";
-        // Si React Query cancela por invalidaciones/reenfoques, intentamos una vez sin signal.
-        if (msg.includes("se canceló") && !msg.includes("tardó demasiado")) {
-          data = await invokeSlackApi<{
+        data = await withHardTimeout(
+          invokeSlackApi<{
             ok: boolean;
             messages?: SlackMessage[];
             error?: string;
             response_metadata?: { next_cursor?: string };
-          }>(payload, { timeoutMs: 35_000 });
+          }>(payload, { signal, timeoutMs: 55_000 }),
+          62_000,
+          "La carga del historial tardó demasiado. Vuelve a abrir el canal.",
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        // Si React Query cancela por invalidaciones/reenfoques, intentamos una vez sin signal.
+        if (msg.includes("se canceló") && !msg.includes("tardó demasiado")) {
+          data = await withHardTimeout(
+            invokeSlackApi<{
+              ok: boolean;
+              messages?: SlackMessage[];
+              error?: string;
+              response_metadata?: { next_cursor?: string };
+            }>(payload, { timeoutMs: 35_000 }),
+            40_000,
+            "La recarga del historial tardó demasiado. Vuelve a abrir el canal.",
+          );
         } else {
           throw e;
         }
@@ -804,7 +828,7 @@ export default function Comunicacion() {
         action: "conversations.members",
         channel: selectedChannel!,
         limit: 200,
-      });
+      }, { timeoutMs: 25_000 });
       return d.members || [];
     },
     enabled: isConnected && !!selectedChannel,
@@ -817,7 +841,7 @@ export default function Comunicacion() {
       const d = await invokeSlackApi<{ ok: boolean; channel?: Record<string, unknown> }>({
         action: "conversations.info",
         channel: selectedChannel!,
-      });
+      }, { timeoutMs: 25_000 });
       return d.ok ? d.channel : null;
     },
     enabled: isConnected && !!selectedChannel,
