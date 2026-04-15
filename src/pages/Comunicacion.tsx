@@ -124,6 +124,8 @@ export default function Comunicacion() {
   const slackReadAckTimerRef = useRef<ReturnType<typeof setTimeout>>();
   /** Agrupa INSERT de notificaciones Slack (ráfagas) en una sola pasada de “marcar leído”. */
   const slackOpenChannelNotifDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Evita ráfagas mark-read + invalidate al cargar historial o cambiar de canal (menos trabajo = menos “pasmado”). */
+  const slackMarkChannelReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Último `ts` del historial visible; se actualiza cada render tras `messages` (evita TDZ con deps de efectos). */
   const slackLatestMessageTsRef = useRef<string | undefined>(undefined);
 
@@ -140,6 +142,7 @@ export default function Comunicacion() {
       const nextDraft = user?.id ? loadSlackDraft(user.id, id)?.text ?? "" : "";
       setDraft(nextDraft);
       setSelectedChannel(id);
+      slackReadAckKeyRef.current = null;
       if (updateUrl) {
         setSearchParams({ channel: id });
       }
@@ -313,7 +316,7 @@ export default function Comunicacion() {
   const conversations = conversationsQuery.data || [];
 
   const slackPollChannelIds = useMemo(() => {
-    const CAP = 24;
+    const CAP = 18;
     const ids: string[] = [];
     const seen = new Set<string>();
     const add = (id: string) => {
@@ -585,7 +588,7 @@ export default function Comunicacion() {
   const mpimIds = useMemo(() => conversations.filter((c) => c.is_mpim).map((c) => c.id), [conversations]);
 
   const { data: mpimMembersByChannel = {} } = useQuery({
-    queryKey: ["slack-mpim-members", mpimIds.sort().join(",")],
+    queryKey: ["slack-mpim-members", [...mpimIds].sort().join(",")],
     queryFn: async () => {
       if (mpimIds.length === 0) return {} as Record<string, string[]>;
       const merged: Record<string, string[]> = {};
@@ -649,24 +652,41 @@ export default function Comunicacion() {
   /** Al abrir una conversación o al fijar el último ts visible, limpiar avisos Kawiil de ese canal (no depender de la identidad del array `messages`). */
   useEffect(() => {
     if (!user?.id || !selectedChannel) return;
+    const uid = user.id;
+    const channelId = selectedChannel;
     const latestTs = lastMessageTs;
-    void (async () => {
-      try {
-        await markSlackChannelNotificationsRead(user.id, selectedChannel);
-        if (latestTs) {
-          const ackKey = `${selectedChannel}|${latestTs}`;
-          if (slackReadAckKeyRef.current !== ackKey) {
-            slackReadAckKeyRef.current = ackKey;
-            await markSlackConversationRead(selectedChannel, latestTs);
+    if (slackMarkChannelReadDebounceRef.current) {
+      clearTimeout(slackMarkChannelReadDebounceRef.current);
+      slackMarkChannelReadDebounceRef.current = null;
+    }
+    slackMarkChannelReadDebounceRef.current = setTimeout(() => {
+      slackMarkChannelReadDebounceRef.current = null;
+      void (async () => {
+        try {
+          await markSlackChannelNotificationsRead(uid, channelId);
+          if (latestTs) {
+            const ackKey = `${channelId}|${latestTs}`;
+            if (slackReadAckKeyRef.current !== ackKey) {
+              slackReadAckKeyRef.current = ackKey;
+              await markSlackConversationRead(channelId, latestTs);
+            }
           }
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] }),
+            qc.invalidateQueries({ queryKey: ["user-notifications", uid] }),
+            qc.invalidateQueries({ queryKey: ["unread-notifications-count", uid] }),
+          ]);
+        } catch {
+          /* RLS u offline: no bloquear la UI */
         }
-        await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
-        await qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-        await qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-      } catch {
-        /* RLS u offline: no bloquear la UI */
+      })();
+    }, 450);
+    return () => {
+      if (slackMarkChannelReadDebounceRef.current) {
+        clearTimeout(slackMarkChannelReadDebounceRef.current);
+        slackMarkChannelReadDebounceRef.current = null;
       }
-    })();
+    };
   }, [selectedChannel, user?.id, qc, lastMessageTs]);
 
   /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
@@ -726,6 +746,10 @@ export default function Comunicacion() {
       if (slackOpenChannelNotifDebounceRef.current) {
         clearTimeout(slackOpenChannelNotifDebounceRef.current);
         slackOpenChannelNotifDebounceRef.current = null;
+      }
+      if (slackMarkChannelReadDebounceRef.current) {
+        clearTimeout(slackMarkChannelReadDebounceRef.current);
+        slackMarkChannelReadDebounceRef.current = null;
       }
       supabase.removeChannel(rt);
     };

@@ -56,11 +56,11 @@ export function useSlackUnreadSync({
       return fetchSlackUnreadSnapshot({ channelIds: pollChannelIds, readState });
     },
     enabled: enabled && !!userId && pollChannelIds.length > 0,
-    staleTime: 10_000,
-    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
     refetchInterval: () => {
-      if (typeof document === "undefined") return 45_000;
-      return document.visibilityState === "visible" ? 35_000 : 90_000;
+      if (typeof document === "undefined") return 120_000;
+      return document.visibilityState === "visible" ? 90_000 : 180_000;
     },
   });
 
