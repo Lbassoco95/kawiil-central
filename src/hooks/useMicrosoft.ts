@@ -39,6 +39,30 @@ const EMAIL_DETAIL_NOT_FOUND_MSG =
 const CALENDAR_EVENT_DETAIL_NOT_FOUND_MSG =
   "Este evento ya no está disponible en Microsoft (puede haberse eliminado o ser una instancia de serie desactualizada). Cierra el panel y actualiza el calendario.";
 
+function debugMicrosoftRuntimeLog(
+  runId: string,
+  hypothesisId: string,
+  location: string,
+  message: string,
+  data: Record<string, unknown>,
+) {
+  // #region agent log
+  fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "394acc" },
+    body: JSON.stringify({
+      sessionId: "394acc",
+      runId,
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+}
+
 function getActionableError(err: Error): string {
   const message = String(err?.message || "");
   const lower = message.toLowerCase();
@@ -410,11 +434,48 @@ export function useOutlookEmails(folderId = "inbox", search?: string) {
         pageSkip = typeof pageParam === "number" && Number.isFinite(pageParam) ? pageParam : 0;
         params.skip = pageSkip;
       }
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H1_FOLDER_OR_PAGINATION_INVALID",
+        "src/hooks/useMicrosoft.ts:useOutlookEmails.queryFn.beforeInvoke",
+        "Invocando microsoft-api/emails",
+        {
+          folderId,
+          hasSearch: Boolean(search),
+          pageParamType: typeof pageParam,
+          pageSkip,
+          hasNextLinkParam: typeof pageParam === "string" && pageParam.startsWith("http"),
+        },
+      );
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "emails", params },
       });
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H4_EDGE_DEPLOYMENT_MISMATCH",
+        "src/hooks/useMicrosoft.ts:useOutlookEmails.queryFn.afterInvoke",
+        "Respuesta de microsoft-api/emails",
+        {
+          hasError: Boolean(error),
+          errorMessage: String((error as Error)?.message ?? ""),
+          dataCode: String((data as { code?: unknown } | null)?.code ?? ""),
+          dataError: String((data as { error?: unknown } | null)?.error ?? ""),
+          errBodySnippet: errBody.slice(0, 260),
+        },
+      );
       if (isNotConnectedError(data, error)) {
         return { emails: [], pageSkip: 0, totalCount: 0 };
+      }
+      if (payloadIndicatesItemNotFound(data, error, errBody)) {
+        debugMicrosoftRuntimeLog(
+          "post-fix",
+          "H1_FOLDER_OR_PAGINATION_INVALID",
+          "src/hooks/useMicrosoft.ts:useOutlookEmails.queryFn.itemNotFoundFallback",
+          "ITEM_NOT_FOUND en emails tratado como lista vacía",
+          { folderId, pageSkip },
+        );
+        return { emails: [], pageSkip, totalCount: 0 };
       }
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -558,10 +619,41 @@ export function useMailFolders() {
   return useQuery({
     queryKey: ["mail-folders"],
     queryFn: async () => {
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H2_MAIL_FOLDERS_GRAPH_NOT_FOUND",
+        "src/hooks/useMicrosoft.ts:useMailFolders.queryFn.beforeInvoke",
+        "Invocando microsoft-api/mail-folders",
+        {},
+      );
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "mail-folders" },
       });
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H2_MAIL_FOLDERS_GRAPH_NOT_FOUND",
+        "src/hooks/useMicrosoft.ts:useMailFolders.queryFn.afterInvoke",
+        "Respuesta de microsoft-api/mail-folders",
+        {
+          hasError: Boolean(error),
+          errorMessage: String((error as Error)?.message ?? ""),
+          dataCode: String((data as { code?: unknown } | null)?.code ?? ""),
+          dataError: String((data as { error?: unknown } | null)?.error ?? ""),
+          errBodySnippet: errBody.slice(0, 260),
+        },
+      );
       if (isNotConnectedError(data, error)) return [];
+      if (payloadIndicatesItemNotFound(data, error, errBody)) {
+        debugMicrosoftRuntimeLog(
+          "post-fix",
+          "H2_MAIL_FOLDERS_GRAPH_NOT_FOUND",
+          "src/hooks/useMicrosoft.ts:useMailFolders.queryFn.itemNotFoundFallback",
+          "ITEM_NOT_FOUND en mail-folders tratado como lista vacía",
+          {},
+        );
+        return [];
+      }
       if (error) throw error;
       return Array.isArray(data) ? data : [];
     },
@@ -803,11 +895,31 @@ export function useEmailDetail(messageId: string | null) {
   return useQuery({
     queryKey: ["email-detail", messageId],
     queryFn: async () => {
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H3_STALE_MESSAGE_ID_ON_MOUNT",
+        "src/hooks/useMicrosoft.ts:useEmailDetail.queryFn.beforeInvoke",
+        "Invocando microsoft-api/email-detail",
+        { hasMessageId: Boolean(messageId), messageIdPrefix: String(messageId ?? "").slice(0, 20) },
+      );
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "email-detail", params: { messageId } },
       });
-      if (isNotConnectedError(data, error)) return null;
       const errBody = await readSupabaseFunctionErrorBody(error);
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H3_STALE_MESSAGE_ID_ON_MOUNT",
+        "src/hooks/useMicrosoft.ts:useEmailDetail.queryFn.afterInvoke",
+        "Respuesta de microsoft-api/email-detail",
+        {
+          hasError: Boolean(error),
+          errorMessage: String((error as Error)?.message ?? ""),
+          dataCode: String((data as { code?: unknown } | null)?.code ?? ""),
+          dataError: String((data as { error?: unknown } | null)?.error ?? ""),
+          errBodySnippet: errBody.slice(0, 260),
+        },
+      );
+      if (isNotConnectedError(data, error)) return null;
       if (payloadIndicatesItemNotFound(data, error, errBody)) {
         throw new Error(EMAIL_DETAIL_NOT_FOUND_MSG);
       }
@@ -1143,12 +1255,32 @@ export function useUnreadEmailCount() {
   return useQuery({
     queryKey: INBOX_UNREAD_QUERY_KEY,
     queryFn: async () => {
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H2_MAIL_FOLDERS_GRAPH_NOT_FOUND",
+        "src/hooks/useMicrosoft.ts:useUnreadEmailCount.queryFn.beforeInvoke",
+        "Invocando microsoft-api/inbox-folder-meta",
+        {},
+      );
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "inbox-folder-meta" },
       });
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      debugMicrosoftRuntimeLog(
+        "pre-fix",
+        "H2_MAIL_FOLDERS_GRAPH_NOT_FOUND",
+        "src/hooks/useMicrosoft.ts:useUnreadEmailCount.queryFn.afterInvoke",
+        "Respuesta de microsoft-api/inbox-folder-meta",
+        {
+          hasError: Boolean(error),
+          errorMessage: String((error as Error)?.message ?? ""),
+          dataCode: String((data as { code?: unknown } | null)?.code ?? ""),
+          dataError: String((data as { error?: unknown } | null)?.error ?? ""),
+          errBodySnippet: errBody.slice(0, 260),
+        },
+      );
       if (isNotConnectedError(data, error)) return 0;
       /** Sidebar en todas las rutas: no tumbar Comunicación/Slack si Graph no resuelve Inbox (404 / ITEM_NOT_FOUND). */
-      const errBody = await readSupabaseFunctionErrorBody(error);
       if (payloadIndicatesItemNotFound(data, error, errBody)) return 0;
       if (error) throw error;
       if (data?.error) throw new Error(String(data.error));
