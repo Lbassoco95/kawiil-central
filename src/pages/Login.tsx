@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { ACTIVE_SUPABASE_HOST, supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,17 +12,40 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const supabaseHost = ACTIVE_SUPABASE_HOST;
+
+  const mapAuthErrorMessage = (message: string) => {
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes("invalid login credentials")) {
+      return `Correo o contraseña inválidos. Si sigues dentro en producción, revisa que esta app apunte al Supabase correcto (${supabaseHost}).`;
+    }
+
+    if (normalized.includes("email not confirmed")) {
+      return "Tu correo aún no está confirmado. Revisa tu bandeja de entrada o solicita un nuevo acceso desde administración.";
+    }
+
+    if (normalized.includes("too many requests")) {
+      return "Demasiados intentos de inicio de sesión. Espera unos minutos e intenta de nuevo.";
+    }
+
+    return message;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const normalizedEmail = email.trim().toLowerCase();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    });
 
     if (error) {
       toast({
         title: "Error al iniciar sesión",
-        description: error.message,
+        description: mapAuthErrorMessage(error.message),
         variant: "destructive",
       });
     } else {
@@ -38,6 +61,7 @@ const Login = () => {
           <img src="/images/kawiil-logo.png" alt="Kawiil" className="h-14 w-14" />
           <img src="/images/kawiil-brand-blue.png" alt="Kawiil MX" className="h-8" />
           <p className="text-xs text-muted-foreground">Plataforma de gestión interna</p>
+          <p className="text-[10px] text-muted-foreground/80">Supabase: {supabaseHost}</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-5">

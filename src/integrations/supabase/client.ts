@@ -2,8 +2,55 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const EXPECTED_PROJECT_ID = 'qppfampapbxdgednkofc';
+const EXPECTED_SUPABASE_URL = `https://${EXPECTED_PROJECT_ID}.supabase.co`;
+const EXPECTED_SUPABASE_PUBLISHABLE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwcGZhbXBhcGJ4ZGdlZG5rb2ZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUzNzEzODEsImV4cCI6MjA3MDk0NzM4MX0.KGiTXxE0kwhGyScgK4LvQdU1Gktux2AWHG27_d5bztQ';
+
+const envSupabaseUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+const envPublishableKey = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '').trim();
+
+const getHostFromUrl = (url: string) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+};
+
+const getProjectRefFromJwt = (jwt: string) => {
+  try {
+    const payload = jwt.split('.')[1];
+    if (!payload) return '';
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const decoded = atob(padded);
+    const parsed = JSON.parse(decoded) as { ref?: string };
+    return typeof parsed.ref === 'string' ? parsed.ref : '';
+  } catch {
+    return '';
+  }
+};
+
+const expectedHost = `${EXPECTED_PROJECT_ID}.supabase.co`;
+const envHost = getHostFromUrl(envSupabaseUrl);
+const envKeyRef = getProjectRefFromJwt(envPublishableKey);
+const hasValidEnvConfig = envHost === expectedHost && envKeyRef === EXPECTED_PROJECT_ID;
+
+const SUPABASE_URL = hasValidEnvConfig ? envSupabaseUrl : EXPECTED_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = hasValidEnvConfig
+  ? envPublishableKey
+  : EXPECTED_SUPABASE_PUBLISHABLE_KEY;
+
+export const ACTIVE_SUPABASE_HOST = getHostFromUrl(SUPABASE_URL) || expectedHost;
+
+if (!hasValidEnvConfig && typeof window !== 'undefined') {
+  console.warn(
+    `[supabase] Config de entorno invalida para este proyecto (url="${envHost || 'no-configurado'}", keyRef="${
+      envKeyRef || 'no-configurado'
+    }"). Se usa fallback seguro a ${expectedHost}.`
+  );
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
