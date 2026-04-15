@@ -164,12 +164,12 @@ export function useNotificationDelivery() {
       }
     }
 
-    const isSlackType = row?.type === "slack_message" || row?.type === "slack_mention";
-    const useSlackSound = isSlackType && slackSoundOn;
-    const useGlobalSound = !isSlackType && globalSoundOn;
-    if (useSlackSound) {
+    /** Menciones Slack: pitido siempre (independiente de `slack_message_sound_enabled`). */
+    if (row?.type === "slack_mention") {
       playNotificationBeep();
-    } else if (surfaced && useGlobalSound) {
+    } else if (row?.type === "slack_message" && slackSoundOn) {
+      playNotificationBeep();
+    } else if (surfaced && globalSoundOn && row?.type !== "slack_message") {
       playNotificationBeep();
     }
   }, [user?.id]);

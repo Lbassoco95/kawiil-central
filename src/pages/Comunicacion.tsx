@@ -986,7 +986,8 @@ export default function Comunicacion() {
                       <Link to="/notificaciones" className="underline font-medium text-amber-200">
                         Notificaciones
                       </Link>{" "}
-                      (permiso del navegador + sonido Slack).
+                      (permiso del navegador + sonido Slack). Silenciar un chat con la campana en la lista no bloquea
+                      las @menciones.
                     </p>
                     <p>
                       Para recibir Slack con la pestaña cerrada, activa también push en{" "}

@@ -1,8 +1,18 @@
 /**
  * Slash commands + Event API (reacciones y mensajes para notificaciones Kawiil).
- * En Slack: suscribir eventos message.channels, message.groups, message.im, message.mpim
- * (además de reaction_added). Misma Request URL que esta función.
- * Títulos con nombre de canal: SLACK_BOT_TOKEN + scopes conversations:read (o channels:read/groups:read según tipo).
+ *
+ * Política de mensajes (handleMessageNotificationEvent):
+ * - Canales/grupos públicos o privados: notificar a todos los miembros Slack con cuenta Kawiil en el workspace,
+ *   excepto el remitente y quienes tengan `slack_communication_prefs.notifications_muted` para ese canal.
+ * - @menciones: siguen notificando aunque el canal esté silenciado (no se filtra por mutedUserIds en el bloque de menciones).
+ * - VIP y seguimiento de canal respetan silencio por conversación.
+ *
+ * Slack (misma app que los secretos del proyecto):
+ * - Event Subscriptions → Request URL → esta función; verificar challenge.
+ * - Subscribe to bot events: message.channels, message.groups, message.im, message.mpim, reaction_added.
+ * - SLACK_SIGNING_SECRET de esa app en Supabase Secrets.
+ * - SLACK_BOT_TOKEN + invitar el bot a canales donde quieras `conversations.members` (sin miembros no hay broadcast).
+ * - Scopes útiles: conversations:read, channels:read, groups:read, im:read, mpim:read, chat:write (slash/reacciones).
  */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -326,7 +336,7 @@ async function sendWebPushForUsers(
   }
 }
 
-/** Notificaciones in-app (+ push): @mención, seguimiento, VIP, MD/grupo privado (con SLACK_BOT_TOKEN). */
+/** Notificaciones in-app (+ push): cada mensaje en canal/grupo a miembros Kawiil, @mención, seguimiento, VIP, DM/mpim. */
 async function handleMessageNotificationEvent(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   event: Record<string, unknown>,
@@ -388,6 +398,8 @@ async function handleMessageNotificationEvent(
   }
 
   const targets = new Map<string, SlackTargetFlags>();
+  /** Solo rama channel/group: miembros Slack del canal resueltos (antes de filtrar a Kawiil). */
+  let debugPubChannelSlackMemberCount = 0;
 
   const { data: mutedPrefRows } = await supabase
     .from("slack_communication_prefs")
@@ -586,6 +598,7 @@ async function handleMessageNotificationEvent(
         }
       }
     }
+    debugPubChannelSlackMemberCount = memberSlackIds.length;
     if (memberSlackIds.length > 0) {
       const { data: memberConns } = await supabase
         .from("user_slack_connections")
@@ -606,17 +619,7 @@ async function handleMessageNotificationEvent(
         }
       }
       if (candidateIds.length > 0) {
-        const { data: allChProfs } = await supabase
-          .from("profiles")
-          .select("user_id, notify_slack_all_channels")
-          .in("user_id", candidateIds);
-        const offAll = new Set(
-          (allChProfs || [])
-            .filter((p: { notify_slack_all_channels?: boolean }) => p.notify_slack_all_channels === false)
-            .map((p: { user_id: string }) => p.user_id),
-        );
         for (const uid of candidateIds) {
-          if (offAll.has(uid)) continue;
           const oid = orgByUser.get(uid);
           if (oid) mergeSlackTarget(targets, uid, oid, "channel");
         }
@@ -632,6 +635,12 @@ async function handleMessageNotificationEvent(
       eventId,
       hadSenderSlackId: !!senderSlackId,
       senderLinkedKawiil: !!senderKawiilId,
+      mentionCount: mentionIds.length,
+      watchesCount: (watches || []).length,
+      vipCount: (vipRows || []).length,
+      hasSlackBotToken: Boolean(Deno.env.get("SLACK_BOT_TOKEN")),
+      pubChannelSlackMemberCount:
+        channelType === "channel" || channelType === "group" ? debugPubChannelSlackMemberCount : undefined,
     });
     return;
   }
@@ -685,6 +694,14 @@ async function handleMessageNotificationEvent(
     eventId,
     types: [...new Set(dedupedRows.map((r) => r.type))],
   });
+  if (dedupedRows.length > 50) {
+    console.warn("slack-events: muchas notificaciones en un solo mensaje", {
+      count: dedupedRows.length,
+      channel,
+      ts,
+      eventId,
+    });
+  }
 
   const deepUrl = `/comunicacion?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(ts)}`;
   const bodyPush = preview || "Nuevo mensaje";
@@ -1053,11 +1070,13 @@ serve(async (req) => {
       // Check timestamp freshness (5 minutes)
       const now = Math.floor(Date.now() / 1000);
       if (Math.abs(now - parseInt(timestamp)) > 300) {
+        console.warn("slack-events: 403 request too old (firma Slack)");
         return new Response("Request too old", { status: 403 });
       }
 
       const valid = await verifySlackSignature(body, timestamp, slackSig, SLACK_SIGNING_SECRET);
       if (!valid) {
+        console.warn("slack-events: 403 invalid signature (revisa SLACK_SIGNING_SECRET vs app Slack)");
         return new Response("Invalid signature", { status: 403 });
       }
     }
@@ -1068,6 +1087,11 @@ serve(async (req) => {
       const command = params.get("command");
       const payload: Record<string, string> = {};
       params.forEach((v, k) => (payload[k] = v));
+
+      console.log("slack-events: slash_command", {
+        command: command ?? null,
+        user_id: params.get("user_id")?.slice(0, 12) ?? null,
+      });
 
       let result;
       if (command === "/tarea") {
@@ -1088,6 +1112,7 @@ serve(async (req) => {
 
     // URL verification challenge
     if (data.type === "url_verification") {
+      console.log("slack-events: url_verification ok");
       return new Response(JSON.stringify({ challenge: data.challenge }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1098,6 +1123,12 @@ serve(async (req) => {
       const event = data.event as Record<string, unknown>;
       const teamId = extractSlackEventTeamId(data as Record<string, unknown>, event);
       const eventId = data.event_id as string | undefined;
+
+      console.log("slack-events: event_callback", {
+        eventType: event.type,
+        teamId: teamId ?? null,
+        eventId,
+      });
 
       if (retryNum) {
         console.log("Slack retry request", { retryNum, retryReason, eventId, teamId });
