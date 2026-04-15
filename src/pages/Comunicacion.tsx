@@ -169,7 +169,7 @@ export default function Comunicacion() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("organization_id")
+        .select("organization_id, notify_slack_all_channels")
         .eq("user_id", user!.id)
         .single();
       if (error) throw error;
@@ -507,6 +507,42 @@ export default function Comunicacion() {
     [commPrefsByChannel, savePrefMutation],
   );
 
+  /** Avisos del encabezado: `muted=false` = recibir mensajes de este chat en Kawiil (por defecto sí). */
+  const handleSetChannelNotificationsMuted = useCallback(
+    (channelId: string, muted: boolean) => {
+      const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
+      if (muted === cur.notifications_muted) return;
+      if (!muted && !cur.is_vip && !cur.is_starred) {
+        savePrefMutation.mutate(
+          { channelId, delete: true },
+          {
+            onSuccess: () =>
+              toast.success("Avisos activados en esta conversación (como el resto de canales donde participas)."),
+          },
+        );
+        return;
+      }
+      savePrefMutation.mutate(
+        {
+          channelId,
+          is_vip: cur.is_vip,
+          is_starred: cur.is_starred,
+          sort_order: cur.sort_order,
+          notifications_muted: muted,
+        },
+        {
+          onSuccess: () =>
+            toast.success(
+              muted
+                ? "Avisos desactivados solo aquí (las @menciones siguen llegando)."
+                : "Avisos activados en esta conversación.",
+            ),
+        },
+      );
+    },
+    [commPrefsByChannel, savePrefMutation],
+  );
+
   const handleReorderVip = useCallback(
     (orderedChannelIds: string[]) => {
       const rows = orderedChannelIds.map((channelId, i) => {
@@ -719,50 +755,10 @@ export default function Comunicacion() {
     staleTime: 120_000,
   });
 
-  const { data: isWatching } = useQuery({
-    queryKey: ["slack-watch", user?.id, selectedChannel],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("slack_channel_watches")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("channel_id", selectedChannel)
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user && !!selectedChannel && isConnected,
-  });
-
-  const watchMutation = useMutation({
-    mutationFn: async (watch: boolean) => {
-      if (!profile?.organization_id || !selectedChannel) return;
-      if (watch) {
-        const { error } = await supabase.from("slack_channel_watches").upsert(
-          {
-            user_id: user!.id,
-            organization_id: profile.organization_id,
-            channel_id: selectedChannel,
-          },
-          { onConflict: "user_id,channel_id" },
-        );
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("slack_channel_watches")
-          .delete()
-          .eq("user_id", user!.id)
-          .eq("channel_id", selectedChannel);
-        if (error) throw error;
-      }
-    },
-    onSuccess: (_, watch) => {
-      qc.invalidateQueries({ queryKey: ["slack-watch", user?.id, selectedChannel] });
-      toast.success(
-        watch ? "Canal en seguimiento: te avisaremos de mensajes aquí" : "Dejaste de seguir el canal",
-      );
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const kawiilAvisosEncendidosEnCanal = useMemo(() => {
+    if (!selectedChannel) return true;
+    return !commPrefsByChannel[selectedChannel]?.notifications_muted;
+  }, [selectedChannel, commPrefsByChannel]);
 
   const toastSlackPermissionDenied = (e: Error, hint: string) => {
     const msg = e.message || "";
@@ -1114,6 +1110,18 @@ export default function Comunicacion() {
 
   const main = (
     <>
+      {profile?.notify_slack_all_channels === false && isConnected && (
+        <Alert className="rounded-none border-x-0 border-t-0 border-amber-600/50 bg-amber-950/20 text-amber-100">
+          <AlertTitle className="text-sm">Avisos globales de Slack desactivados</AlertTitle>
+          <AlertDescription className="text-xs text-amber-100/90">
+            No recibirás mensajes de canales aunque el interruptor de cada chat esté en «Avisos». Actívalo en{" "}
+            <Link to="/notificaciones" className="underline font-medium">
+              Notificaciones
+            </Link>{" "}
+            (opción «todos los chats donde participas»).
+          </AlertDescription>
+        </Alert>
+      )}
       {selectedChannel ? (
         <div className="flex flex-1 min-h-0 min-w-0">
           <div className="flex flex-1 min-w-0 min-h-0 flex-col">
@@ -1123,9 +1131,11 @@ export default function Comunicacion() {
               showHash={showHash}
               topic={channelTopic}
               memberCount={memberCount}
-              isWatching={!!isWatching}
-              onWatchChange={(v) => watchMutation.mutate(v)}
-              watchPending={watchMutation.isPending}
+              isWatching={kawiilAvisosEncendidosEnCanal}
+              onWatchChange={(avisosOn) =>
+                selectedChannel && handleSetChannelNotificationsMuted(selectedChannel, !avisosOn)
+              }
+              watchPending={savePrefMutation.isPending}
               showSidebarTrigger={isMobile}
               onOpenSidebar={() => setMobileListOpen(true)}
               messages={messages}

@@ -124,17 +124,26 @@ export function SlackChannelHeader({
             </DialogContent>
           </Dialog>
           {isWatching ? (
-            <Bell className="h-4 w-4 text-primary hidden sm:block" />
+            <Bell className="h-4 w-4 text-primary hidden sm:block" aria-hidden />
           ) : (
-            <BellOff className="h-4 w-4 text-muted-foreground hidden sm:block" />
+            <BellOff className="h-4 w-4 text-muted-foreground hidden sm:block" aria-hidden />
           )}
           <Switch
             id="slack-watch"
             checked={isWatching}
             disabled={watchPending}
             onCheckedChange={onWatchChange}
+            title={
+              isWatching
+                ? "Recibes avisos en Kawiil por mensajes en este chat. Desactiva para silenciar solo aquí (@menciones siguen)."
+                : "Avisos silenciados solo en este chat. Activa para volver a recibir mensajes (si los avisos globales están encendidos en Notificaciones)."
+            }
           />
-          <Label htmlFor="slack-watch" className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap">
+          <Label
+            htmlFor="slack-watch"
+            className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap"
+            title="Por defecto encendido en todos los canales; aquí solo silencias esta conversación."
+          >
             Avisos
           </Label>
         </div>
