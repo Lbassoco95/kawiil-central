@@ -1845,8 +1845,8 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - El artifact debe estar completo y bien formateado en Markdown.
 - Después de crear un artifact, incluye un breve resumen en el chat de lo que generaste y por qué.
 - Si el usuario pide explícitamente **Excel, Word o PowerPoint**, o el tipo de documento requiere formato editable Office, usa **create_office_document**.
-- Para **papel de trabajo**: si predomina estructura tabular/cálculo, selecciona `spreadsheet`; si predomina narrativa jurídica/técnica, usa `word_document`.
-- En create_office_document siempre incluye `requested_kind`, `confidence`, `reason`, `domain_subtype` y la estructura del archivo (`spreadsheet`, `word_document` o `presentation`). Si `confidence < 0.55`, primero pide aclaración y no generes archivo.
+- Para **papel de trabajo**: si predomina estructura tabular/cálculo, selecciona 'spreadsheet'; si predomina narrativa jurídica/técnica, usa 'word_document'.
+- En create_office_document siempre incluye 'requested_kind', 'confidence', 'reason', 'domain_subtype' y la estructura del archivo ('spreadsheet', 'word_document' o 'presentation'). Si 'confidence < 0.55', primero pide aclaración y no generes archivo.
 
 ### 5b. Creación de proyectos y tareas
 - **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto. Puedes incluir fases y tareas directamente en la herramienta.
