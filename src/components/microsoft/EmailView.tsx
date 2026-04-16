@@ -37,6 +37,7 @@ import {
   useDeleteEmail,
   useEmailAttachments,
   useUnreadEmailCount,
+  INBOX_UNREAD_QUERY_KEY,
   SCHEDULED_MAIL_JOBS_QUERY_KEY,
 } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
@@ -63,7 +64,7 @@ import {
   Sparkles, Languages, ListTodo, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
-  Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List,
+  Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, RefreshCw,
   Eye, Download, CalendarClock,
 } from "lucide-react";
 import DOMPurify from "dompurify";
@@ -496,6 +497,20 @@ export function EmailView() {
     clearTimeout((window as any).__emailSearchTimeout);
     (window as any).__emailSearchTimeout = setTimeout(() => setDebouncedSearch(val), 500);
   };
+
+  const handleRefreshEmails = useCallback(async () => {
+    const tasks: Array<Promise<unknown>> = [
+      emailsQuery.refetch(),
+      queryClient.invalidateQueries({ queryKey: ["mail-folders"] }),
+      queryClient.invalidateQueries({ queryKey: INBOX_UNREAD_QUERY_KEY }),
+    ];
+
+    if (selectedEmailId) {
+      tasks.push(refetchEmailDetail());
+    }
+
+    await Promise.allSettled(tasks);
+  }, [emailsQuery, queryClient, selectedEmailId, refetchEmailDetail]);
 
   const handleStartReply = async (action: EmailAction) => {
     if (!selectedEmailId || !action) return;
@@ -1223,6 +1238,21 @@ export function EmailView() {
                   onChange={(e) => handleSearch(e.target.value)}
                 />
               </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => void handleRefreshEmails()}
+                    disabled={emailsQuery.isRefetching}
+                    aria-label="Actualizar correos"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", emailsQuery.isRefetching && "animate-spin")} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Actualizar correos</TooltipContent>
+              </Tooltip>
               <Button size="sm" className="h-9 shrink-0 gap-2 px-4" onClick={() => setComposeOpen(true)}>
                 <Send className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Redactar</span>
