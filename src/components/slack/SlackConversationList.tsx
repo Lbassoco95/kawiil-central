@@ -40,7 +40,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 export type SlackCommPrefRow = {
-  /** Legacy en BD; la UI ya no ofrece VIP. */
+  /** Legacy en BD; en UI siempre se maneja como false. */
   is_vip: boolean;
   is_starred: boolean;
   sort_order: number;
@@ -56,7 +56,7 @@ type Props = {
   isLoading: boolean;
   error: Error | null;
   titleOpts?: ConversationTitleOpts;
-  /** Preferencias por canal (destacado, silencio; `is_vip` solo legacy). */
+  /** Preferencias por canal (destacado/silencio). */
   commPrefsByChannel: Record<string, SlackCommPrefRow>;
   onToggleStar: (channelId: string) => void;
   onToggleNotificationsMuted: (channelId: string) => void;
@@ -294,14 +294,14 @@ export function SlackConversationList({
 
   const pinnedInSidebar = (c: SlackConversation) => {
     const p = commPrefsByChannel[c.id];
-    return !!(p?.is_starred || p?.is_vip);
+    return p?.is_starred === true;
   };
 
   const starredOrdered = useMemo(() => {
     const rows = conversations
       .filter((c) => {
         const p = commPrefsByChannel[c.id];
-        return !!(p?.is_starred || p?.is_vip);
+        return p?.is_starred === true;
       })
       .map((c) => ({
         c,
@@ -348,7 +348,7 @@ export function SlackConversationList({
       onClick: () => onSelect(c.id),
       title: conversationTitle(c, userMap, titleOpts),
       isPublicChannel,
-      starred: !!(p?.is_starred || p?.is_vip),
+      starred: p?.is_starred === true,
       onToggleStar: () => onToggleStar(c.id),
       notificationsMuted: !!p?.notifications_muted,
       onToggleNotificationsMuted: () => onToggleNotificationsMuted(c.id),

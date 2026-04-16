@@ -116,6 +116,16 @@ type RawSidebarGroup = {
   slack_sidebar_group_channels: { channel_id: string; sort_order: number }[] | null;
 };
 
+type SlackCommPrefDbRow = {
+  user_id: string;
+  organization_id: string;
+  channel_id: string;
+  is_vip: boolean | null;
+  is_starred: boolean | null;
+  sort_order: number | null;
+  notifications_muted: boolean | null;
+};
+
 export default function Comunicacion() {
   const { user } = useAuth();
   const { isTransformador } = useUserRole();
@@ -210,7 +220,7 @@ export default function Comunicacion() {
     queryFn: async () => {
       const { data, error } = await supabase.from("slack_communication_prefs").select("*").eq("user_id", user!.id);
       if (error) throw error;
-      return data;
+      return (data || []) as SlackCommPrefDbRow[];
     },
     enabled: !!user?.id && isConnected,
   });
@@ -235,12 +245,10 @@ export default function Comunicacion() {
   const commPrefsByChannel = useMemo(() => {
     const r: Record<string, SlackCommPrefRow> = {};
     for (const row of slackCommPrefs) {
-      const legacyVip = row.is_vip === true;
       r[row.channel_id] = {
-        // Compatibilidad: cualquier marca legacy VIP se trata como destacado.
         is_vip: false,
-        is_starred: row.is_starred || legacyVip,
-        sort_order: row.sort_order,
+        is_starred: row.is_starred === true,
+        sort_order: row.sort_order ?? 0,
         notifications_muted: row.notifications_muted === true,
       };
     }
@@ -280,7 +288,52 @@ export default function Comunicacion() {
       );
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user?.id] }),
+    onMutate: async (p) => {
+      if (!user?.id) return { prev: undefined };
+      const queryKey = ["slack-comm-prefs", user.id] as const;
+      await qc.cancelQueries({ queryKey });
+      const prev = qc.getQueryData<SlackCommPrefDbRow[]>(queryKey);
+      const current = prev ?? [];
+      let next = current;
+      if (p.delete) {
+        next = current.filter((row) => row.channel_id !== p.channelId);
+      } else {
+        const idx = current.findIndex((row) => row.channel_id === p.channelId);
+        const base: SlackCommPrefDbRow =
+          idx >= 0
+            ? current[idx]
+            : {
+                user_id: user.id,
+                organization_id: profile?.organization_id ?? "",
+                channel_id: p.channelId,
+                is_vip: false,
+                is_starred: false,
+                sort_order: 0,
+                notifications_muted: false,
+              };
+        const updated: SlackCommPrefDbRow = {
+          ...base,
+          channel_id: p.channelId,
+          is_vip: p.is_vip ?? base.is_vip ?? false,
+          is_starred: p.is_starred ?? base.is_starred ?? false,
+          sort_order: p.sort_order ?? base.sort_order ?? 0,
+          notifications_muted: p.notifications_muted ?? base.notifications_muted ?? false,
+        };
+        if (idx >= 0) {
+          next = [...current];
+          next[idx] = updated;
+        } else {
+          next = [...current, updated];
+        }
+      }
+      qc.setQueryData(queryKey, next);
+      return { prev };
+    },
+    onError: (_error, _vars, ctx) => {
+      if (!user?.id || !ctx?.prev) return;
+      qc.setQueryData(["slack-comm-prefs", user.id], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user?.id] }),
   });
 
   const reorderPrefsMutation = useMutation({
@@ -347,13 +400,35 @@ export default function Comunicacion() {
     };
     for (const c of conversations) {
       const p = commPrefsByChannel[c.id];
-      if (p?.is_vip || p?.is_starred) add(c.id);
+      if (p?.is_starred) add(c.id);
     }
     for (const c of conversations) {
       add(c.id);
     }
     return ids;
   }, [conversations, commPrefsByChannel]);
+
+  useEffect(() => {
+    if (!user?.id || !isConnected || !slackPrefsFetched) return;
+    const mark = `slack-vip-legacy-sanitized-${user.id}`;
+    if (localStorage.getItem(mark) === "1") return;
+    const hasLegacyVip = slackCommPrefs.some((row) => row.is_vip === true);
+    if (!hasLegacyVip) {
+      localStorage.setItem(mark, "1");
+      return;
+    }
+    void (async () => {
+      const { error } = await supabase
+        .from("slack_communication_prefs")
+        .update({ is_vip: false })
+        .eq("user_id", user.id)
+        .eq("is_vip", true);
+      if (!error) {
+        localStorage.setItem(mark, "1");
+        qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user.id] });
+      }
+    })();
+  }, [user?.id, isConnected, slackPrefsFetched, slackCommPrefs, qc]);
 
   const historyInfinite = useInfiniteQuery({
     queryKey: ["slack-history", selectedChannel],
@@ -570,7 +645,7 @@ export default function Comunicacion() {
       let sort = cur.sort_order;
       if (ns && !cur.is_starred) {
         const orders = Object.values(commPrefsByChannel)
-          .filter((p) => p.is_starred || p.is_vip)
+          .filter((p) => p.is_starred)
           .map((p) => p.sort_order);
         sort = (orders.length ? Math.max(...orders) : -1) + 1;
       }
@@ -589,7 +664,7 @@ export default function Comunicacion() {
     (channelId: string) => {
       const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
       const next = !cur.notifications_muted;
-      if (!next && !cur.is_vip && !cur.is_starred) {
+      if (!next && !cur.is_starred) {
         savePrefMutation.mutate({ channelId, delete: true });
         return;
       }
@@ -609,7 +684,7 @@ export default function Comunicacion() {
     (channelId: string, muted: boolean) => {
       const cur = commPrefsByChannel[channelId] ?? defaultSlackCommPref();
       if (muted === cur.notifications_muted) return;
-      if (!muted && !cur.is_starred && !cur.is_vip) {
+      if (!muted && !cur.is_starred) {
         savePrefMutation.mutate(
           { channelId, delete: true },
           {
@@ -657,7 +732,7 @@ export default function Comunicacion() {
     [commPrefsByChannel, reorderPrefsMutation],
   );
 
-  /** MPIM fuera de los primeros N por orden de lista no recibían `conversations.members.batch` → título «Grupo» y sin avatares. Prioriza destacados (incl. legacy VIP), grupos sidebar y el canal abierto. */
+  /** MPIM fuera de los primeros N por orden de lista no recibían `conversations.members.batch` → título «Grupo» y sin avatares. Prioriza destacados, grupos sidebar y el canal abierto. */
   const mpimIds = useMemo(() => {
     const cap = MAX_MPIMS_MEMBER_PREFETCH;
     const seen = new Set<string>();
@@ -672,7 +747,7 @@ export default function Comunicacion() {
     for (const c of conversations) {
       if (!c.is_mpim) continue;
       const p = commPrefsByChannel[c.id];
-      if (p?.is_starred || p?.is_vip) add(c.id);
+      if (p?.is_starred) add(c.id);
     }
     for (const g of customGroupsVm) {
       for (const c of g.conversations) {
