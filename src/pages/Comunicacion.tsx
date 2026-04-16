@@ -288,52 +288,7 @@ export default function Comunicacion() {
       );
       if (error) throw error;
     },
-    onMutate: async (p) => {
-      if (!user?.id) return { prev: undefined };
-      const queryKey = ["slack-comm-prefs", user.id] as const;
-      await qc.cancelQueries({ queryKey });
-      const prev = qc.getQueryData<SlackCommPrefDbRow[]>(queryKey);
-      const current = prev ?? [];
-      let next = current;
-      if (p.delete) {
-        next = current.filter((row) => row.channel_id !== p.channelId);
-      } else {
-        const idx = current.findIndex((row) => row.channel_id === p.channelId);
-        const base: SlackCommPrefDbRow =
-          idx >= 0
-            ? current[idx]
-            : {
-                user_id: user.id,
-                organization_id: profile?.organization_id ?? "",
-                channel_id: p.channelId,
-                is_vip: false,
-                is_starred: false,
-                sort_order: 0,
-                notifications_muted: false,
-              };
-        const updated: SlackCommPrefDbRow = {
-          ...base,
-          channel_id: p.channelId,
-          is_vip: p.is_vip ?? base.is_vip ?? false,
-          is_starred: p.is_starred ?? base.is_starred ?? false,
-          sort_order: p.sort_order ?? base.sort_order ?? 0,
-          notifications_muted: p.notifications_muted ?? base.notifications_muted ?? false,
-        };
-        if (idx >= 0) {
-          next = [...current];
-          next[idx] = updated;
-        } else {
-          next = [...current, updated];
-        }
-      }
-      qc.setQueryData(queryKey, next);
-      return { prev };
-    },
-    onError: (_error, _vars, ctx) => {
-      if (!user?.id || !ctx?.prev) return;
-      qc.setQueryData(["slack-comm-prefs", user.id], ctx.prev);
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user?.id] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user?.id] }),
   });
 
   const reorderPrefsMutation = useMutation({
