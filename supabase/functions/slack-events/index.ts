@@ -4,7 +4,7 @@
  * Política de mensajes (handleMessageNotificationEvent):
  * - Canales/grupos públicos o privados: notificar a todos los miembros Slack con cuenta Kawiil en el workspace,
  *   excepto el remitente y quienes tengan `slack_communication_prefs.notifications_muted` para ese canal.
- * - @menciones: siguen notificando aunque el canal esté silenciado (no se filtra por mutedUserIds en el bloque de menciones).
+ * - @menciones: siempre notifican (incluso si el canal está silenciado o el usuario apagó toggles no críticos).
  * - VIP y seguimiento de canal respetan silencio por conversación.
  *
  * Slack (misma app que los secretos del proyecto):
@@ -17,6 +17,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as hexEncode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
+import { sendWebPushToUsers } from "../_shared/webPush.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',
@@ -285,57 +286,6 @@ function slackNotificationType(flags: SlackTargetFlags): string {
   return flags.mention ? "slack_mention" : "slack_message";
 }
 
-async function sendWebPushForUsers(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  userIds: string[],
-  title: string,
-  body: string,
-  url: string,
-  pushTag?: string,
-) {
-  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
-  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-  if (!publicKey || !privateKey || userIds.length === 0) return;
-
-  const webpush = (await import("npm:web-push@3.6.6")).default;
-  const contact = Deno.env.get("VAPID_CONTACT_EMAIL") || "mailto:hello@kawiil.com";
-  webpush.setVapidDetails(contact, publicKey, privateKey);
-
-  for (const uid of userIds) {
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("desktop_push_notifications")
-      .eq("user_id", uid)
-      .maybeSingle();
-    if (prof?.desktop_push_notifications !== true) continue;
-
-    const { data: subs } = await supabase
-      .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth")
-      .eq("user_id", uid);
-
-    for (const s of subs || []) {
-      try {
-        await webpush.sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify({
-            title,
-            body,
-            url,
-            tag: pushTag || `kawiil-slack-${Date.now()}`,
-          }),
-        );
-      } catch (e: unknown) {
-        const code = (e as { statusCode?: number })?.statusCode;
-        if (code === 404 || code === 410) {
-          await supabase.from("push_subscriptions").delete().eq("id", s.id);
-        }
-        console.error("webpush error:", code);
-      }
-    }
-  }
-}
-
 /** Notificaciones in-app (+ push): cada mensaje en canal/grupo a miembros Kawiil, @mención, seguimiento, VIP, DM/mpim. */
 async function handleMessageNotificationEvent(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -420,12 +370,6 @@ async function handleMessageNotificationEvent(
 
     for (const row of mentionRows || []) {
       if (row.user_id === senderKawiilId) continue;
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("notify_slack_mentions")
-        .eq("user_id", row.user_id)
-        .maybeSingle();
-      if (prof?.notify_slack_mentions === false) continue;
       mergeSlackTarget(targets, row.user_id, row.organization_id, "mention");
     }
   }
@@ -707,7 +651,14 @@ async function handleMessageNotificationEvent(
   const bodyPush = preview || "Nuevo mensaje";
   const pushTag = `slack-${channel}-${ts}`.replace(/\s/g, "");
   for (const row of dedupedRows) {
-    await sendWebPushForUsers(supabase, [row.user_id], row.title, bodyPush, deepUrl, pushTag);
+    await sendWebPushToUsers(supabase, {
+      userIds: [row.user_id],
+      title: row.title,
+      body: bodyPush,
+      url: deepUrl,
+      tag: pushTag,
+      force: row.type === "slack_mention",
+    });
   }
 }
 

@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Copy, Download, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import type { AiArtifact } from "@/hooks/useAiArtifacts";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ArtifactViewerProps {
   artifact: AiArtifact;
@@ -15,19 +16,50 @@ interface ArtifactViewerProps {
 export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerProps) {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(artifact.content);
+  const isOffice = artifact.content_type === "office";
+
+  const getTextDownloadMeta = () => {
+    if (artifact.content_type === "csv") return { ext: "csv", mime: "text/csv;charset=utf-8" };
+    if (artifact.content_type === "html") return { ext: "html", mime: "text/html;charset=utf-8" };
+    if (artifact.content_type === "code") return { ext: "txt", mime: "text/plain;charset=utf-8" };
+    return { ext: "md", mime: "text/markdown;charset=utf-8" };
+  };
+
+  const safeTitle = artifact.title.replace(/[^a-zA-Z0-9_-]/g, "_") || "documento";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(artifact.content);
     toast.success("Copiado al portapapeles");
   };
 
-  const handleDownload = () => {
-    const ext = artifact.content_type === "csv" ? "csv" : artifact.content_type === "html" ? "html" : "md";
-    const blob = new Blob([artifact.content], { type: "text/plain;charset=utf-8" });
+  const handleDownload = async () => {
+    if (isOffice) {
+      if (!artifact.storage_path || !artifact.storage_bucket) {
+        toast.error("No hay ruta de archivo Office disponible en este artefacto.");
+        return;
+      }
+      const { data, error } = await supabase.storage
+        .from(artifact.storage_bucket)
+        .download(artifact.storage_path);
+      if (error || !data) {
+        toast.error(error?.message || "No se pudo descargar el archivo Office.");
+        return;
+      }
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safeTitle}.${artifact.file_ext || "docx"}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    const meta = getTextDownloadMeta();
+    const blob = new Blob([artifact.content], { type: meta.mime });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${artifact.title.replace(/[^a-zA-Z0-9_-]/g, "_")}.${ext}`;
+    a.download = `${safeTitle}.${meta.ext}`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -49,14 +81,14 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
           <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={handleCopy}>
             <Copy className="h-2.5 w-2.5" /> Copiar
           </Button>
-          <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={handleDownload}>
+          <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={() => void handleDownload()}>
             <Download className="h-2.5 w-2.5" /> Descargar
           </Button>
-          {!editing ? (
+          {!editing && !isOffice ? (
             <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setEditContent(artifact.content); setEditing(true); }}>
               <Pencil className="h-2.5 w-2.5" /> Editar
             </Button>
-          ) : (
+          ) : editing ? (
             <>
               <Button size="sm" variant="default" className="h-6 text-[10px] gap-1 px-2" onClick={handleSave}>
                 <Check className="h-2.5 w-2.5" /> Guardar
@@ -65,7 +97,12 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 <X className="h-2.5 w-2.5" />
               </Button>
             </>
-          )}
+          ) : null}
+          {isOffice ? (
+            <span className="text-[10px] text-muted-foreground self-center">
+              Archivo {artifact.office_kind === "spreadsheet" ? "Excel" : artifact.office_kind === "presentation" ? "PowerPoint" : "Word"}
+            </span>
+          ) : null}
         </div>
       </div>
 

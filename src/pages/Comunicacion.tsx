@@ -408,8 +408,11 @@ export default function Comunicacion() {
     return ids;
   }, [conversations, commPrefsByChannel]);
 
+  const vipSanitizedRef = useRef(false);
   useEffect(() => {
+    if (vipSanitizedRef.current) return;
     if (!user?.id || !isConnected || !slackPrefsFetched) return;
+    vipSanitizedRef.current = true;
     const mark = `slack-vip-legacy-sanitized-${user.id}`;
     if (localStorage.getItem(mark) === "1") return;
     const hasLegacyVip = slackCommPrefs.some((row) => row.is_vip === true);
@@ -418,12 +421,13 @@ export default function Comunicacion() {
       return;
     }
     void (async () => {
-      const { error } = await supabase
-        .from("slack_communication_prefs")
-        .update({ is_vip: false })
-        .eq("user_id", user.id)
-        .eq("is_vip", true);
-      if (!error) {
+      try {
+        await supabase
+          .from("slack_communication_prefs")
+          .update({ is_vip: false })
+          .eq("user_id", user.id)
+          .eq("is_vip", true);
+      } finally {
         localStorage.setItem(mark, "1");
         qc.invalidateQueries({ queryKey: ["slack-comm-prefs", user.id] });
       }

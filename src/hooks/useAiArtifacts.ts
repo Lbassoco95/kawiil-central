@@ -11,6 +11,12 @@ export interface AiArtifact {
   title: string;
   content: string;
   content_type: string;
+  office_kind: "spreadsheet" | "word_document" | "presentation" | null;
+  file_ext: string | null;
+  mime_type: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  external_file_id: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendWebPushToUsers } from "../_shared/webPush.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -118,6 +119,13 @@ async function notifyCompletion(supabase: any, orgId: string, agentLabel: string
     }));
 
     await supabase.from("notifications").insert(rows);
+    await sendWebPushToUsers(supabase, {
+      userIds: Array.from(userIds),
+      title: `Agente ${agentLabel} completado`,
+      body: `El agente ${agentLabel} ${description}.`,
+      url: "/conocimiento?tab=agentes",
+      tag: `knowledge-sync-${agentLabel.toLowerCase()}`,
+    });
   } catch (e: any) {
     console.error("notifyCompletion error:", e.message);
   }

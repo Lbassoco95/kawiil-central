@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendWebPushToUsers } from "../_shared/webPush.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,6 +66,9 @@ Deno.serve(async (req) => {
     });
 
     const sinceIso = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString();
+    const appOrigin =
+      (Deno.env.get("SITE_URL") || Deno.env.get("PUBLIC_APP_URL") || "").replace(/\/$/, "") ||
+      "https://app.kawiil.com";
 
     const { data: existing } = await svc
       .from("notifications")
@@ -80,34 +84,56 @@ Deno.serve(async (req) => {
       const key = `deadline_overdue_task:${t.id}`;
       if (existingKeys.has(key)) continue;
       existingKeys.add(key);
+      const title = "Tarea vencida";
+      const body = `"${t.title}" venció el ${String(t.due_date).slice(0, 10)}`;
       const { error } = await svc.from("notifications").insert({
         user_id: t.assigned_to as string,
         organization_id: t.organization_id,
         type: "deadline_overdue_task",
-        title: "Tarea vencida",
-        body: `"${t.title}" venció el ${String(t.due_date).slice(0, 10)}`,
+        title,
+        body,
         entity_type: "task",
         entity_id: t.id,
         is_read: false,
       });
-      if (!error) inserted++;
+      if (!error) {
+        inserted++;
+        await sendWebPushToUsers(svc, {
+          userIds: [t.assigned_to as string],
+          title,
+          body,
+          url: `${appOrigin}/tareas?taskId=${encodeURIComponent(t.id)}`,
+          tag: `deadline-overdue-${t.id}`,
+        });
+      }
     }
 
     for (const t of dueTomorrow) {
       const key = `deadline_due_tomorrow_task:${t.id}`;
       if (existingKeys.has(key)) continue;
       existingKeys.add(key);
+      const title = "Tarea vence mañana";
+      const body = `"${t.title}" vence el ${tomorrowYmd}`;
       const { error } = await svc.from("notifications").insert({
         user_id: t.assigned_to as string,
         organization_id: t.organization_id,
         type: "deadline_due_tomorrow_task",
-        title: "Tarea vence mañana",
-        body: `"${t.title}" vence el ${tomorrowYmd}`,
+        title,
+        body,
         entity_type: "task",
         entity_id: t.id,
         is_read: false,
       });
-      if (!error) inserted++;
+      if (!error) {
+        inserted++;
+        await sendWebPushToUsers(svc, {
+          userIds: [t.assigned_to as string],
+          title,
+          body,
+          url: `${appOrigin}/tareas?taskId=${encodeURIComponent(t.id)}`,
+          tag: `deadline-tomorrow-${t.id}`,
+        });
+      }
     }
 
     // Recordatorios personales con cadencia diaria (máx. 1 notificación / usuario / ~22 h)
@@ -148,17 +174,25 @@ Deno.serve(async (req) => {
           n === 1
             ? preview
             : `${n} pendientes: ${preview}${n > 5 ? `… (+${n - 5})` : ""}`;
+        const title = n === 1 ? "Recordatorio (resumen diario)" : "Recordatorios (resumen diario)";
         const { error: dIns } = await svc.from("notifications").insert({
           user_id: uid,
           organization_id: bucket.organization_id,
           type: "reminders_daily_digest",
-          title: n === 1 ? "Recordatorio (resumen diario)" : "Recordatorios (resumen diario)",
+          title,
           body,
           is_read: false,
         });
         if (!dIns) {
           inserted++;
           usersWithRecentDaily.add(uid);
+          await sendWebPushToUsers(svc, {
+            userIds: [uid],
+            title,
+            body,
+            url: `${appOrigin}/dashboard`,
+            tag: `reminder-daily-${uid}`,
+          });
         }
       }
     }

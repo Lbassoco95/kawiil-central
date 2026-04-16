@@ -66,6 +66,10 @@ type NotificationDeliveryPrefs = {
   slack_message_sound_enabled?: boolean | null;
 };
 
+function isMandatoryMention(row: NotifRow): boolean {
+  return row.type === "mention" || row.type === "slack_mention";
+}
+
 /**
  * Toasts (Sonner) + Notification API del sistema según perfil; pitido opcional.
  * Invalida historial Slack al insertar notificación de mensajería para refrescar Comunicación.
@@ -117,8 +121,9 @@ export function useNotificationDelivery() {
 
     const title = effectiveNotificationTitle(row);
     const p = prefsRef.current;
-    const allowToast = p?.in_app_toast_notifications !== false;
-    const allowDesktop = p?.desktop_browser_notifications !== false;
+    const mandatoryMention = isMandatoryMention(row);
+    const allowToast = mandatoryMention || p?.in_app_toast_notifications !== false;
+    const allowDesktop = mandatoryMention || p?.desktop_browser_notifications !== false;
     const globalSoundOn = p?.notification_sound_enabled === true;
     const slackSoundOn = p?.slack_message_sound_enabled !== false;
 
@@ -151,8 +156,8 @@ export function useNotificationDelivery() {
       }
     }
 
-    /** Menciones Slack: pitido siempre (independiente de `slack_message_sound_enabled`). */
-    if (row?.type === "slack_mention") {
+    /** Menciones obligatorias: pitido siempre, aunque el usuario desactive otros avisos. */
+    if (mandatoryMention) {
       playNotificationBeep();
     } else if (row?.type === "slack_message" && slackSoundOn) {
       playNotificationBeep();

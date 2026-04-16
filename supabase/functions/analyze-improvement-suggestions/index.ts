@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendWebPushToUsers } from "../_shared/webPush.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -85,6 +86,9 @@ serve(async (req) => {
     }
 
     const svc = createClient(supabaseUrl, serviceKey);
+    const appOrigin =
+      (Deno.env.get("SITE_URL") || Deno.env.get("PUBLIC_APP_URL") || "").replace(/\/$/, "") ||
+      "https://app.kawiil.com";
 
     const { data: existing } = await svc
       .from("improvement_suggestions")
@@ -228,6 +232,13 @@ serve(async (req) => {
         entity_id: suggestionId,
         source_user_id: user.id,
         is_read: false,
+      });
+      await sendWebPushToUsers(svc, {
+        userIds: [uid],
+        title: "Nueva sugerencia de mejora",
+        body: summaryObj.text,
+        url: `${appOrigin}/conocimiento?tab=sugerencias`,
+        tag: `improvement-${suggestionId}`,
       });
     }
 

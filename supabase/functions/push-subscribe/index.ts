@@ -40,7 +40,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const action = body.action === "unsubscribe" ? "unsubscribe" : "subscribe";
+
+    if (action === "unsubscribe") {
+      const endpoint = typeof body.endpoint === "string" ? body.endpoint.trim() : "";
+      let query = supabase.from("push_subscriptions").delete().eq("user_id", user.id);
+      if (endpoint) query = query.eq("endpoint", endpoint);
+      const { error } = await query;
+      if (error) {
+        console.error("push_subscriptions delete:", error);
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, action }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const endpoint = body.endpoint as string;
     const keys = body.keys as { p256dh?: string; auth?: string };
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
@@ -69,7 +88,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, action }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

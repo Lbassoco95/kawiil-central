@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendWebPushToUsers } from "../_shared/webPush.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,49 +11,6 @@ const DIGEST_TYPE = "reminders_hourly_digest";
 const DEDUPE_MS = 55 * 60 * 1000;
 const MAX_TITLES_IN_BODY = 5;
 const TITLE_PREVIEW_CHARS = 80;
-
-async function sendWebPushToUser(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  title: string,
-  body: string,
-  url: string,
-) {
-  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
-  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-  if (!publicKey || !privateKey) return;
-
-  const { data: prof } = await supabase
-    .from("profiles")
-    .select("desktop_push_notifications")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (prof?.desktop_push_notifications !== true) return;
-
-  const webpush = (await import("npm:web-push@3.6.6")).default;
-  const contact = Deno.env.get("VAPID_CONTACT_EMAIL") || "mailto:hello@kawiil.com";
-  webpush.setVapidDetails(contact, publicKey, privateKey);
-
-  const { data: subs } = await supabase
-    .from("push_subscriptions")
-    .select("id, endpoint, p256dh, auth")
-    .eq("user_id", userId);
-
-  for (const s of subs || []) {
-    try {
-      await webpush.sendNotification(
-        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        JSON.stringify({ title, body, url }),
-      );
-    } catch (e: unknown) {
-      const code = (e as { statusCode?: number })?.statusCode;
-      if (code === 404 || code === 410) {
-        await supabase.from("push_subscriptions").delete().eq("id", s.id);
-      }
-      console.error("reminder-hourly-digest webpush:", code);
-    }
-  }
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -157,13 +115,13 @@ Deno.serve(async (req) => {
       recentlyNotified.add(uid);
 
       if (pushByUser.get(uid)) {
-        await sendWebPushToUser(
-          svc,
-          uid,
-          n === 1 ? "Recordatorio pendiente" : "Recordatorios pendientes",
+        await sendWebPushToUsers(svc, {
+          userIds: [uid],
+          title: n === 1 ? "Recordatorio pendiente" : "Recordatorios pendientes",
           body,
-          `${appOrigin}/dashboard`,
-        );
+          url: `${appOrigin}/dashboard`,
+          tag: `reminder-hourly-${uid}`,
+        });
       }
     }
 

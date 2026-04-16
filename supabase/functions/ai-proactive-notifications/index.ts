@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendWebPushToUsers } from "../_shared/webPush.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,6 +52,9 @@ Deno.serve(async (req) => {
 
     const todayYmd = ymdMexico(new Date());
     const recentCutoff = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+    const appOrigin =
+      (Deno.env.get("SITE_URL") || Deno.env.get("PUBLIC_APP_URL") || "").replace(/\/$/, "") ||
+      "https://app.kawiil.com";
 
     const { data: profiles, error: pe } = await svc
       .from("profiles")
@@ -125,15 +129,24 @@ Deno.serve(async (req) => {
         (data.content?.find((b: { type?: string }) => b.type === "text") as { text?: string } | undefined)?.text?.trim() ||
         "Revisa tus tareas: hay pendientes con fecha próxima o vencida.";
 
+      const title = "Sugerencia del día";
+      const body = bodyText.slice(0, 1200);
       await svc.from("notifications").insert({
         user_id: uid,
         organization_id: orgId,
         type: "ai_proactive_tip",
-        title: "Sugerencia del día",
-        body: bodyText.slice(0, 1200),
+        title,
+        body,
         entity_type: "dashboard",
         entity_id: null,
         is_read: false,
+      });
+      await sendWebPushToUsers(svc, {
+        userIds: [uid],
+        title,
+        body,
+        url: `${appOrigin}/`,
+        tag: `ai-proactive-${uid}`,
       });
       sent += 1;
     }

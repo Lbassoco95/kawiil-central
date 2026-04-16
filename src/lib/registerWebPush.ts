@@ -83,3 +83,37 @@ export async function registerWebPushSubscription(): Promise<void> {
   const d = data as { error?: string };
   if (d?.error) throw new Error(d.error);
 }
+
+/**
+ * Elimina la suscripción local de PushManager y limpia endpoints del usuario en backend.
+ * Se usa al apagar "push con la pestaña cerrada" para evitar endpoints huérfanos.
+ */
+export async function unregisterWebPushSubscription(): Promise<void> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return;
+  }
+
+  const reg =
+    (await navigator.serviceWorker.getRegistration("/sw.js")) ||
+    (await navigator.serviceWorker.getRegistration());
+
+  let endpoint: string | undefined;
+  if (reg) {
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      endpoint = sub.endpoint;
+      try {
+        await sub.unsubscribe();
+      } catch {
+        // Continuamos para limpiar también en backend aunque falle el browser unsubscribe.
+      }
+    }
+  }
+
+  const { data, error } = await supabase.functions.invoke("push-subscribe", {
+    body: { action: "unsubscribe", endpoint },
+  });
+  if (error) throw new Error(rawErrorMessage(error) || "No se pudo desregistrar push en servidor.");
+  const d = data as { error?: string };
+  if (d?.error) throw new Error(d.error);
+}

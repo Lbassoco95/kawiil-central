@@ -596,6 +596,7 @@ export function useChat() {
       pushProgress("ai_connect", "Conectando con Kawiil AI y procesando contexto…");
 
       let assistantContent = "";
+      const hasArtifactMarker = (text: string) => /\[artifact:[a-f0-9-]{36}\|/.test(text);
 
       try {
         const session = await supabase.auth.getSession();
@@ -760,6 +761,9 @@ export function useChat() {
               .invoke("extract-ai-memories", { body: { conversation_id: convId } })
               .catch(() => {});
             qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+            if (hasArtifactMarker(assistantContent)) {
+              qc.invalidateQueries({ queryKey: ["ai-artifacts", activeAiProjectId ?? null] });
+            }
           } else {
             throw new Error("El servidor respondió sin contenido de texto.");
           }
@@ -878,6 +882,9 @@ export function useChat() {
             .invoke("extract-ai-memories", { body: { conversation_id: convId } })
             .catch(() => {});
           qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+          if (hasArtifactMarker(assistantContent)) {
+            qc.invalidateQueries({ queryKey: ["ai-artifacts", activeAiProjectId ?? null] });
+          }
         } else {
           const errText =
             "**No se recibió respuesta del modelo.** Suele ocurrir si los adjuntos son demasiado pesados para el proveedor de IA, si hubo un corte de red o un fallo temporal. Prueba con menos archivos, archivos más livianos o reintenta en unos minutos.";

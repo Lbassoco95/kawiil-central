@@ -307,7 +307,15 @@ export function KnowledgePanel({
                 Pide a la IA generar un manual, reporte o documento
               </p>
             ) : (
-              artifacts.map((art) => (
+              artifacts.map((art) => {
+                const typeLabel = art.content_type === "office"
+                  ? art.office_kind === "spreadsheet"
+                    ? "Excel"
+                    : art.office_kind === "presentation"
+                      ? "PowerPoint"
+                      : "Word"
+                  : art.content_type;
+                return (
                 <div
                   key={art.id}
                   className="group flex items-center gap-2 rounded-lg px-2.5 py-2 cursor-pointer hover:bg-secondary/40 transition-colors"
@@ -317,7 +325,7 @@ export function KnowledgePanel({
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] font-medium truncate">{art.title}</p>
                     <p className="text-[9px] text-muted-foreground">
-                      {art.content_type} · {new Date(art.created_at).toLocaleDateString("es-MX")}
+                      {typeLabel} · {new Date(art.created_at).toLocaleDateString("es-MX")}
                     </p>
                   </div>
                   <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -341,7 +349,8 @@ export function KnowledgePanel({
                     </button>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

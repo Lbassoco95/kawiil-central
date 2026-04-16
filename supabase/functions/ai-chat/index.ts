@@ -955,6 +955,111 @@ const anthropicTools = [
     },
   },
   {
+    name: "create_office_document",
+    description:
+      "Genera un documento Office REAL (Excel .xlsx, Word .docx, PowerPoint .pptx) con contenido poblado. ÚSALA cuando el usuario pida explícitamente un entregable en Excel/Word/PowerPoint o cuando el formato solicitado implique archivo editable.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Título del documento final." },
+        requested_kind: {
+          type: "string",
+          enum: ["spreadsheet", "word_document", "presentation"],
+          description: "Formato Office elegido tras analizar la intención del usuario.",
+        },
+        confidence: {
+          type: "number",
+          description: "Confianza de clasificación entre 0 y 1. Si es baja, pide aclaración al usuario.",
+        },
+        reason: { type: "string", description: "Motivo breve de por qué se eligió ese formato." },
+        domain_subtype: { type: "string", description: "Tipo de documento detectado (ej. papel_trabajo, minuta, reporte)." },
+        preview_markdown: {
+          type: "string",
+          description: "Resumen corto en Markdown para mostrar como vista previa en el visor.",
+        },
+        spreadsheet: {
+          type: "object",
+          properties: {
+            sheets: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  rows: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        cells: {
+                          type: "array",
+                          items: { type: ["string", "number", "boolean", "null"] },
+                        },
+                      },
+                      required: ["cells"],
+                    },
+                  },
+                },
+                required: ["rows"],
+              },
+            },
+          },
+        },
+        word_document: {
+          type: "object",
+          properties: {
+            sections: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  heading: { type: "string" },
+                  paragraphs: { type: "array", items: { type: "string" } },
+                  tables: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        headers: { type: "array", items: { type: "string" } },
+                        rows: { type: "array", items: { type: "array", items: { type: "string" } } },
+                      },
+                      required: ["rows"],
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        presentation: {
+          type: "object",
+          properties: {
+            slides: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  bullets: { type: "array", items: { type: "string" } },
+                  notes: { type: "string" },
+                  table: {
+                    type: "object",
+                    properties: {
+                      headers: { type: "array", items: { type: "string" } },
+                      rows: { type: "array", items: { type: "array", items: { type: "string" } } },
+                    },
+                    required: ["rows"],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      required: ["title", "requested_kind", "confidence"],
+    },
+  },
+  {
     name: "create_project",
     description: "Crea un nuevo proyecto en Kawiil. USA ESTA HERRAMIENTA cuando el usuario pida crear un proyecto, ya sea directamente o a partir de una minuta de reunión, un análisis o instrucciones. Puedes asociar el proyecto a un cliente existente y definir el área de servicio. Incluye fases si el proyecto lo requiere.",
     input_schema: {
@@ -1698,7 +1803,7 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 
 **Excepción breve:** como máximo **una** lista corta al final (3 a 5 ítems) solo si son pasos ejecutables muy concretos; el resto de la respuesta debe ser párrafos.
 
-**Artifacts:** el contenido largo va en create_artifact; en el chat solo **párrafos** de resumen (qué es y para qué sirve).
+**Artifacts:** el contenido largo va en herramientas de documento; en el chat solo **párrafos** de resumen (qué es y para qué sirve).
 
 **Ejemplos (así debe verse tu salida al usuario, en prosa):** «Tienes cinco pendientes esta semana; el que más presiona es [X] porque vence mañana. Yo empezaría por ese y luego bajaría a [Y].» «El proyecto de [Cliente] va bien: ya cerraron los tres primeros hitos. Lo que toca ahora es [siguiente paso], sobre todo porque [razón breve].»
 
@@ -1739,6 +1844,9 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - Usa create_artifact cuando el contenido generado supere ~500 palabras o sea un documento formal/estructurado.
 - El artifact debe estar completo y bien formateado en Markdown.
 - Después de crear un artifact, incluye un breve resumen en el chat de lo que generaste y por qué.
+- Si el usuario pide explícitamente **Excel, Word o PowerPoint**, o el tipo de documento requiere formato editable Office, usa **create_office_document**.
+- Para **papel de trabajo**: si predomina estructura tabular/cálculo, selecciona `spreadsheet`; si predomina narrativa jurídica/técnica, usa `word_document`.
+- En create_office_document siempre incluye `requested_kind`, `confidence`, `reason`, `domain_subtype` y la estructura del archivo (`spreadsheet`, `word_document` o `presentation`). Si `confidence < 0.55`, primero pide aclaración y no generes archivo.
 
 ### 5b. Creación de proyectos y tareas
 - **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto. Puedes incluir fases y tareas directamente en la herramienta.
@@ -2155,6 +2263,7 @@ serve(async (req) => {
         orgId!,
         ai_project_id || null,
         sseProgressPreamble,
+        authHeader!,
       );
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
@@ -2257,6 +2366,10 @@ async function handleCreateArtifact(
 
   const { title, content, content_type } = input;
   if (!title || !content) return JSON.stringify({ error: "title and content are required" });
+  const normalizedContentType = typeof content_type === "string" ? content_type : "markdown";
+  if (!["markdown", "code", "html", "csv"].includes(normalizedContentType)) {
+    return JSON.stringify({ error: "content_type inválido para create_artifact" });
+  }
 
   const { data: artifact, error } = await svc.from("ai_artifacts").insert({
     ai_project_id: aiProjectId || null,
@@ -2264,7 +2377,7 @@ async function handleCreateArtifact(
     organization_id: orgId,
     title,
     content,
-    content_type: content_type || "markdown",
+    content_type: normalizedContentType,
   }).select("id").single();
 
   if (error) {
@@ -2289,7 +2402,7 @@ async function handleCreateArtifact(
           source_type: "artifact",
           source_id: artifact.id,
           content: `[Artifact: ${title}] ${content}`.substring(0, 4000),
-          metadata: { title, ai_project_id: aiProjectId, content_type: content_type || "markdown" },
+          metadata: { title, ai_project_id: aiProjectId, content_type: normalizedContentType },
           embedding: JSON.stringify(embData.data[0].embedding),
           token_count: Math.ceil(textToEmbed.length / 3.5),
         });
@@ -2302,8 +2415,152 @@ async function handleCreateArtifact(
   return JSON.stringify({
     artifact_id: artifact.id,
     title,
-    content_type: content_type || "markdown",
+    content_type: normalizedContentType,
     message: `Artifact "${title}" creado exitosamente.`,
+  });
+}
+
+type OfficeKind = "spreadsheet" | "word_document" | "presentation";
+
+const OFFICE_KIND_TO_EXT: Record<OfficeKind, "xlsx" | "docx" | "pptx"> = {
+  spreadsheet: "xlsx",
+  word_document: "docx",
+  presentation: "pptx",
+};
+
+const OFFICE_KIND_TO_MIME: Record<OfficeKind, string> = {
+  spreadsheet: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  word_document: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  presentation: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+function isValidOfficeKind(value: unknown): value is OfficeKind {
+  return value === "spreadsheet" || value === "word_document" || value === "presentation";
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const clean = base64.replace(/\s+/g, "");
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function handleCreateOfficeDocument(
+  input: any,
+  userId: string,
+  orgId: string,
+  aiProjectId: string | null,
+  authHeader: string,
+): Promise<string> {
+  const title = typeof input?.title === "string" ? input.title.trim() : "";
+  const requestedKind = input?.requested_kind;
+  const confidence = typeof input?.confidence === "number" ? input.confidence : NaN;
+  const reason = typeof input?.reason === "string" ? input.reason : "";
+  const domainSubtype = typeof input?.domain_subtype === "string" ? input.domain_subtype : null;
+  const previewMarkdown = typeof input?.preview_markdown === "string" ? input.preview_markdown.trim() : "";
+
+  if (!title) return JSON.stringify({ error: "title es obligatorio" });
+  if (!isValidOfficeKind(requestedKind)) return JSON.stringify({ error: "requested_kind inválido" });
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    return JSON.stringify({ error: "confidence debe estar entre 0 y 1" });
+  }
+  if (confidence < 0.55) {
+    return JSON.stringify({
+      error:
+        "confidence baja para generar Office real; pide aclaración del formato al usuario antes de crear el archivo.",
+      code: "low_confidence",
+      confidence,
+    });
+  }
+
+  const officePayload = {
+    title,
+    requested_kind: requestedKind,
+    confidence,
+    reason,
+    domain_subtype: domainSubtype,
+    preview_markdown: previewMarkdown,
+    spreadsheet: input?.spreadsheet,
+    word_document: input?.word_document,
+    presentation: input?.presentation,
+  };
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const renderResp = await fetch(`${supabaseUrl}/functions/v1/render-office-document`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authHeader,
+      apikey: anonKey,
+    },
+    body: JSON.stringify(officePayload),
+  });
+
+  const renderJson = await renderResp.json().catch(() => null);
+  if (!renderResp.ok || !renderJson?.success) {
+    const reasonMsg = renderJson?.error || `render-office-document error ${renderResp.status}`;
+    return JSON.stringify({ error: reasonMsg, code: "office_render_failed" });
+  }
+
+  const fileBase64 = typeof renderJson.content_base64 === "string" ? renderJson.content_base64 : "";
+  if (!fileBase64) return JSON.stringify({ error: "render-office-document no devolvió contenido binario." });
+  const fileBytes = base64ToUint8Array(fileBase64);
+
+  const fileExt = OFFICE_KIND_TO_EXT[requestedKind];
+  const mimeType = OFFICE_KIND_TO_MIME[requestedKind];
+  const artifactId = crypto.randomUUID();
+  const safeTitle = title.replace(/[^\w\- ]+/g, "_").trim().replace(/\s+/g, "_").slice(0, 80) || "documento";
+  const storagePath = `ai-artifacts/${orgId}/${userId}/${artifactId}_${safeTitle}.${fileExt}`;
+  const storageBucket = "documents";
+
+  const svcUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const svc = createClient(svcUrl, serviceKey);
+
+  const { error: uploadErr } = await svc.storage.from(storageBucket).upload(storagePath, fileBytes, {
+    contentType: mimeType,
+    upsert: false,
+  });
+  if (uploadErr) {
+    console.error("Office upload error:", uploadErr);
+    return JSON.stringify({ error: uploadErr.message, code: "office_upload_failed" });
+  }
+
+  const preview = previewMarkdown ||
+    `# ${title}\n\nDocumento generado en formato ${
+      requestedKind === "spreadsheet" ? "Excel" : requestedKind === "word_document" ? "Word" : "PowerPoint"
+    }.\n\nMotivo de formato: ${reason || "Selección automática por intención del usuario."}`;
+
+  const { error: insertErr } = await svc.from("ai_artifacts").insert({
+    id: artifactId,
+    ai_project_id: aiProjectId || null,
+    user_id: userId,
+    organization_id: orgId,
+    title,
+    content: preview,
+    content_type: "office",
+    office_kind: requestedKind,
+    file_ext: fileExt,
+    mime_type: mimeType,
+    storage_bucket: storageBucket,
+    storage_path: storagePath,
+  });
+
+  if (insertErr) {
+    console.error("Office artifact insert error:", insertErr);
+    return JSON.stringify({ error: insertErr.message, code: "office_artifact_insert_failed" });
+  }
+
+  return JSON.stringify({
+    artifact_id: artifactId,
+    title,
+    content_type: "office",
+    office_kind: requestedKind,
+    file_ext: fileExt,
+    mime_type: mimeType,
+    message: `Documento Office "${title}" generado exitosamente.`,
   });
 }
 
@@ -2733,13 +2990,14 @@ async function handleClaudeChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
   supabase: any, userId: string, orgId: string, aiProjectId: string | null,
   progressPreamble: Array<{ phase: string; message: string }>,
+  authHeader: string,
 ): Promise<Response> {
   let anthropicMsgs = pruneClaudeMessages(
     toAnthropicMessages(userMessages),
     MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
   );
   const MAX_ROUNDS = 8;
-  const createdArtifacts: { id: string; title: string; content_type: string }[] = [];
+  const createdArtifacts: { id: string; title: string; content_type: string; office_kind?: string }[] = [];
 
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
   const memoryToolDef = {
@@ -2829,6 +3087,22 @@ async function handleClaudeChat(
               createdArtifacts.push({ id: parsed.artifact_id, title: parsed.title, content_type: parsed.content_type || "markdown" });
             }
           } catch {}
+        } else if (tu.name === "create_office_document") {
+          console.log(`Office Tool: ${tu.input?.title} (${tu.input?.requested_kind})`);
+          result = await handleCreateOfficeDocument(tu.input || {}, userId, orgId, aiProjectId, authHeader);
+          try {
+            const parsed = JSON.parse(result);
+            if (parsed.artifact_id) {
+              createdArtifacts.push({
+                id: parsed.artifact_id,
+                title: parsed.title,
+                content_type: "office",
+                office_kind: parsed.office_kind,
+              });
+            }
+          } catch {
+            /* ignore parse issues */
+          }
         } else {
           console.log(`Tool [Claude]: ${tu.name}`, tu.input);
           result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId);
@@ -2852,7 +3126,7 @@ async function handleClaudeChat(
 
     if (createdArtifacts.length > 0) {
       const markers = createdArtifacts.map(
-        (a) => `[artifact:${a.id}|${a.title}|${a.content_type}]`
+        (a) => `[artifact:${a.id}|${a.title}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`
       ).join("\n");
       textContent = textContent + "\n\n" + markers;
     }

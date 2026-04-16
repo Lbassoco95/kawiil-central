@@ -24,7 +24,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { registerWebPushSubscription, formatPushRegistrationUserMessage } from "@/lib/registerWebPush";
+import {
+  registerWebPushSubscription,
+  unregisterWebPushSubscription,
+  formatPushRegistrationUserMessage,
+} from "@/lib/registerWebPush";
 import { playNotificationBeep } from "@/lib/notificationBeep";
 import { cn } from "@/lib/utils";
 
@@ -219,6 +223,11 @@ function NotificationDeliveryPreferences() {
   const toggleDesktopPush = useMutation({
     mutationFn: async (enabled: boolean) => {
       if (!enabled) {
+        try {
+          await unregisterWebPushSubscription();
+        } catch (cleanupErr) {
+          console.warn("push cleanup warning:", cleanupErr);
+        }
         const { error } = await supabase
           .from("profiles")
           .update({ desktop_push_notifications: false })
@@ -448,11 +457,13 @@ function NotificationDeliveryPreferences() {
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label className="text-sm font-medium">Slack: avisarme si me @mencionan</Label>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Esta categoría es obligatoria por seguridad operativa: las menciones siempre notifican en app y sistema.
+            </p>
           </div>
           <Switch
-            checked={profile?.notify_slack_mentions !== false}
-            disabled={prefsLocked || prefsSaving}
-            onCheckedChange={(v) => updateFields.mutate({ notify_slack_mentions: v })}
+            checked={true}
+            disabled={true}
           />
         </div>
         <div className="flex items-center justify-between gap-4">
