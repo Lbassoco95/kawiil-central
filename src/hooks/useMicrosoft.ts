@@ -46,6 +46,9 @@ function debugMicrosoftRuntimeLog(
   message: string,
   data: Record<string, unknown>,
 ) {
+  // Evita ruido en producción (Vercel) por endpoint local de depuración.
+  if (typeof window === "undefined" || window.location.hostname !== "localhost") return;
+
   // #region agent log
   fetch("http://127.0.0.1:7529/ingest/4eecdc26-3565-4c2c-a1bb-5c01272c93f9", {
     method: "POST",

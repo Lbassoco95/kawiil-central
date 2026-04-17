@@ -35,7 +35,10 @@ const getProjectRefFromJwt = (jwt: string) => {
 const expectedHost = `${EXPECTED_PROJECT_ID}.supabase.co`;
 const envHost = getHostFromUrl(envSupabaseUrl);
 const envKeyRef = getProjectRefFromJwt(envPublishableKey);
-const hasValidEnvConfig = envHost === expectedHost && envKeyRef === EXPECTED_PROJECT_ID;
+const isSbPublishableKey = envPublishableKey.startsWith('sb_publishable_');
+const hasValidEnvConfig =
+  envHost === expectedHost &&
+  (envKeyRef === EXPECTED_PROJECT_ID || isSbPublishableKey);
 
 const SUPABASE_URL = hasValidEnvConfig ? envSupabaseUrl : EXPECTED_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = hasValidEnvConfig
