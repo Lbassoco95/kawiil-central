@@ -198,7 +198,11 @@ function formatPlainRichChunk(chunk: string, ctx: FormatContext, keyBase: string
       continue;
     }
     const next = rest.search(/[*_~]/);
-    const plain = next === -1 ? rest : rest.slice(0, next);
+    // Si el siguiente formateo está justo en índice 0 pero no es un par válido (p. ej. "*"
+    // suelto sin cierre), debemos avanzar al menos 1 carácter para evitar un bucle infinito
+    // que sature la memoria del navegador.
+    const advance = next === -1 ? rest.length : next === 0 ? 1 : next;
+    const plain = rest.slice(0, advance);
     const em = replaceEmojiCodes(plain);
     for (const p of em) {
       if (typeof p === "string") {
@@ -207,8 +211,7 @@ function formatPlainRichChunk(chunk: string, ctx: FormatContext, keyBase: string
         out.push(p);
       }
     }
-    if (next === -1) break;
-    rest = rest.slice(plain.length);
+    rest = rest.slice(advance);
   }
   return out;
 }
