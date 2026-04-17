@@ -212,8 +212,16 @@ export function useNotificationDelivery() {
   useEffect(() => {
     if (!user?.id) return;
 
+    const channelTopic = `notifications-rt-${user.id}`;
+    // Evita colisiones "already joined" si el layout se monta dos veces.
+    for (const existing of supabase.getChannels()) {
+      if (existing.topic === channelTopic) {
+        supabase.removeChannel(existing);
+      }
+    }
+
     const channel = supabase
-      .channel(`notifications-rt-${user.id}`)
+      .channel(channelTopic)
       .on(
         "postgres_changes",
         {
