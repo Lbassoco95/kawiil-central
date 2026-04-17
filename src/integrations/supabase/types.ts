@@ -109,141 +109,6 @@ export type Database = {
           },
         ]
       }
-      ai_feedback: {
-        Row: {
-          id: string
-          organization_id: string
-          user_id: string
-          chat_message_id: string | null
-          rating: string
-          created_at: string
-          feedback_category: string | null
-          feedback_comment: string | null
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          user_id: string
-          chat_message_id?: string | null
-          rating: string
-          created_at?: string
-          feedback_category?: string | null
-          feedback_comment?: string | null
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          user_id?: string
-          chat_message_id?: string | null
-          rating?: string
-          created_at?: string
-          feedback_category?: string | null
-          feedback_comment?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_feedback_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_user_memories: {
-        Row: {
-          id: string
-          organization_id: string
-          user_id: string
-          memory_type: string
-          content: string
-          content_hash: string
-          source_conversation_id: string | null
-          enabled: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          user_id: string
-          memory_type: string
-          content: string
-          content_hash: string
-          source_conversation_id?: string | null
-          enabled?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          user_id?: string
-          memory_type?: string
-          content?: string
-          content_hash?: string
-          source_conversation_id?: string | null
-          enabled?: boolean
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_user_memories_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      improvement_suggestions: {
-        Row: {
-          id: string
-          organization_id: string
-          user_id: string
-          conversation_id: string
-          chat_message_id: string
-          suggestion_text: string
-          category: string
-          summary: Json | null
-          status: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          user_id: string
-          conversation_id: string
-          chat_message_id: string
-          suggestion_text: string
-          category: string
-          summary?: Json | null
-          status?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          user_id?: string
-          conversation_id?: string
-          chat_message_id?: string
-          suggestion_text?: string
-          category?: string
-          summary?: Json | null
-          status?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "improvement_suggestions_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       annual_declarations: {
         Row: {
           created_at: string
@@ -508,35 +373,6 @@ export type Database = {
           },
         ]
       }
-      client_collaborators: {
-        Row: {
-          client_id: string
-          created_at: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          client_id: string
-          created_at?: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          client_id?: string
-          created_at?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_collaborators_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       clients: {
         Row: {
           address: string | null
@@ -556,10 +392,6 @@ export type Database = {
           primary_area: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id: string | null
           rfc: string | null
-          savio_customer_id: string | null
-          savio_customer_linked_at: string | null
-          sat_fiel_location_hint: string | null
-          sat_fiel_managed_by_firm: boolean
           services: Database["public"]["Enums"]["service_area"][]
           status: Database["public"]["Enums"]["client_status"]
           updated_at: string
@@ -582,10 +414,6 @@ export type Database = {
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
           rfc?: string | null
-          savio_customer_id?: string | null
-          savio_customer_linked_at?: string | null
-          sat_fiel_location_hint?: string | null
-          sat_fiel_managed_by_firm?: boolean
           services?: Database["public"]["Enums"]["service_area"][]
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
@@ -608,10 +436,6 @@ export type Database = {
           primary_area?: Database["public"]["Enums"]["service_area"] | null
           responsible_user_id?: string | null
           rfc?: string | null
-          savio_customer_id?: string | null
-          savio_customer_linked_at?: string | null
-          sat_fiel_location_hint?: string | null
-          sat_fiel_managed_by_firm?: boolean
           services?: Database["public"]["Enums"]["service_area"][]
           status?: Database["public"]["Enums"]["client_status"]
           updated_at?: string
@@ -842,35 +666,6 @@ export type Database = {
           },
         ]
       }
-      finance_income_viewers: {
-        Row: {
-          can_write_savio: boolean
-          created_at: string
-          organization_id: string
-          user_id: string
-        }
-        Insert: {
-          can_write_savio?: boolean
-          created_at?: string
-          organization_id: string
-          user_id: string
-        }
-        Update: {
-          can_write_savio?: boolean
-          created_at?: string
-          organization_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "finance_income_viewers_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       expenses: {
         Row: {
           amount: number
@@ -881,7 +676,6 @@ export type Database = {
           created_at: string
           currency: string
           description: string
-          attachments: Json
           expense_date: string
           id: string
           notes: string | null
@@ -901,7 +695,6 @@ export type Database = {
           amount: number
           approved_at?: string | null
           approved_by?: string | null
-          attachments?: Json
           category: string
           client_id?: string | null
           created_at?: string
@@ -926,7 +719,6 @@ export type Database = {
           amount?: number
           approved_at?: string | null
           approved_by?: string | null
-          attachments?: Json
           category?: string
           client_id?: string | null
           created_at?: string
@@ -1260,429 +1052,6 @@ export type Database = {
           },
         ]
       }
-      email_log: {
-        Row: {
-          id: string
-          organization_id: string
-          lead_id: string
-          template_id: string | null
-          sequence_step_id: string | null
-          to_email: string
-          additional_to_emails: string[]
-          subject: string
-          status: string
-          scheduled_at: string | null
-          sent_at: string | null
-          opened_at: string | null
-          clicked_at: string | null
-          error_message: string | null
-          graph_message_id: string | null
-          created_at: string
-          body_html: string | null
-          body_text: string | null
-          direction: string
-          from_email: string | null
-          from_name: string | null
-          thread_id: string | null
-          conversation_id: string | null
-          in_reply_to: string | null
-          is_read: boolean
-          has_attachments: boolean
-          attachments: Json
-          received_at: string | null
-          headers: Json
-        }
-        Insert: {
-          id?: string
-          organization_id?: string
-          lead_id: string
-          template_id?: string | null
-          sequence_step_id?: string | null
-          to_email: string
-          additional_to_emails?: string[]
-          subject: string
-          status?: string
-          scheduled_at?: string | null
-          sent_at?: string | null
-          opened_at?: string | null
-          clicked_at?: string | null
-          error_message?: string | null
-          graph_message_id?: string | null
-          created_at?: string
-          body_html?: string | null
-          body_text?: string | null
-          direction?: string
-          from_email?: string | null
-          from_name?: string | null
-          thread_id?: string | null
-          conversation_id?: string | null
-          in_reply_to?: string | null
-          is_read?: boolean
-          has_attachments?: boolean
-          attachments?: Json
-          received_at?: string | null
-          headers?: Json
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          lead_id?: string
-          template_id?: string | null
-          sequence_step_id?: string | null
-          to_email?: string
-          additional_to_emails?: string[]
-          subject?: string
-          status?: string
-          scheduled_at?: string | null
-          sent_at?: string | null
-          opened_at?: string | null
-          clicked_at?: string | null
-          error_message?: string | null
-          graph_message_id?: string | null
-          created_at?: string
-          body_html?: string | null
-          body_text?: string | null
-          direction?: string
-          from_email?: string | null
-          from_name?: string | null
-          thread_id?: string | null
-          conversation_id?: string | null
-          in_reply_to?: string | null
-          is_read?: boolean
-          has_attachments?: boolean
-          attachments?: Json
-          received_at?: string | null
-          headers?: Json
-        }
-        Relationships: []
-      }
-      email_sync_state: {
-        Row: {
-          id: string
-          organization_id: string
-          mailbox_email: string
-          last_sync_at: string | null
-          delta_link: string | null
-          next_sync_at: string | null
-          sync_status: string
-          error_message: string | null
-          total_synced: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          mailbox_email?: string
-          last_sync_at?: string | null
-          delta_link?: string | null
-          next_sync_at?: string | null
-          sync_status?: string
-          error_message?: string | null
-          total_synced?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          mailbox_email?: string
-          last_sync_at?: string | null
-          delta_link?: string | null
-          next_sync_at?: string | null
-          sync_status?: string
-          error_message?: string | null
-          total_synced?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      email_tracking_events: {
-        Row: {
-          id: string
-          email_log_id: string
-          lead_id: string
-          event_type: string
-          metadata: Json
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          email_log_id: string
-          lead_id: string
-          event_type: string
-          metadata?: Json
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          email_log_id?: string
-          lead_id?: string
-          event_type?: string
-          metadata?: Json
-          created_at?: string
-        }
-        Relationships: []
-      }
-      email_sequence_steps: {
-        Row: {
-          id: string
-          sequence_id: string
-          template_id: string
-          step_order: number
-          delay_hours: number
-          condition: Json | null
-        }
-        Insert: {
-          id?: string
-          sequence_id: string
-          template_id: string
-          step_order: number
-          delay_hours?: number
-          condition?: Json | null
-        }
-        Update: {
-          id?: string
-          sequence_id?: string
-          template_id?: string
-          step_order?: number
-          delay_hours?: number
-          condition?: Json | null
-        }
-        Relationships: []
-      }
-      email_sequences: {
-        Row: {
-          id: string
-          organization_id: string
-          name: string
-          description: string | null
-          trigger_stage: string | null
-          is_active: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          name: string
-          description?: string | null
-          trigger_stage?: string | null
-          is_active?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          name?: string
-          description?: string | null
-          trigger_stage?: string | null
-          is_active?: boolean
-          created_at?: string
-        }
-        Relationships: []
-      }
-      email_templates: {
-        Row: {
-          id: string
-          organization_id: string
-          name: string
-          subject: string
-          body_html: string
-          body_text: string | null
-          category: string
-          is_active: boolean
-          default_attachment_key: string | null
-          created_by: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          name: string
-          subject: string
-          body_html: string
-          body_text?: string | null
-          category?: string
-          is_active?: boolean
-          default_attachment_key?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          name?: string
-          subject?: string
-          body_html?: string
-          body_text?: string | null
-          category?: string
-          is_active?: boolean
-          default_attachment_key?: string | null
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      lead_activities: {
-        Row: {
-          id: string
-          organization_id: string
-          lead_id: string
-          user_id: string | null
-          type: string
-          metadata: Json | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id?: string
-          lead_id: string
-          user_id?: string | null
-          type: string
-          metadata?: Json | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          lead_id?: string
-          user_id?: string | null
-          type?: string
-          metadata?: Json | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      leads: {
-        Row: {
-          id: string
-          organization_id: string
-          created_at: string
-          meta_lead_id: string | null
-          meta_created_at: string | null
-          campaign_name: string | null
-          form_name: string | null
-          full_name: string
-          email: string | null
-          phone: string | null
-          whatsapp: string | null
-          company_name: string | null
-          country_code: string | null
-          country_name: string | null
-          preferred_contact: string | null
-          preferred_time: string | null
-          stage_id: string
-          owner_id: string | null
-          priority: string
-          score: number
-          tags: string[] | null
-          source: string
-          is_active: boolean
-          notes: string | null
-          updated_at: string
-          calendly_booked_at: string | null
-          calendly_event_uri: string | null
-          calendly_status: string | null
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          created_at?: string
-          meta_lead_id?: string | null
-          meta_created_at?: string | null
-          campaign_name?: string | null
-          form_name?: string | null
-          full_name: string
-          email?: string | null
-          phone?: string | null
-          whatsapp?: string | null
-          company_name?: string | null
-          country_code?: string | null
-          country_name?: string | null
-          preferred_contact?: string | null
-          preferred_time?: string | null
-          stage_id: string
-          owner_id?: string | null
-          priority?: string
-          score?: number
-          tags?: string[] | null
-          source?: string
-          is_active?: boolean
-          notes?: string | null
-          updated_at?: string
-          calendly_booked_at?: string | null
-          calendly_event_uri?: string | null
-          calendly_status?: string | null
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          created_at?: string
-          meta_lead_id?: string | null
-          meta_created_at?: string | null
-          campaign_name?: string | null
-          form_name?: string | null
-          full_name?: string
-          email?: string | null
-          phone?: string | null
-          whatsapp?: string | null
-          company_name?: string | null
-          country_code?: string | null
-          country_name?: string | null
-          preferred_contact?: string | null
-          preferred_time?: string | null
-          stage_id?: string
-          owner_id?: string | null
-          priority?: string
-          score?: number
-          tags?: string[] | null
-          source?: string
-          is_active?: boolean
-          notes?: string | null
-          updated_at?: string
-          calendly_booked_at?: string | null
-          calendly_event_uri?: string | null
-          calendly_status?: string | null
-        }
-        Relationships: []
-      }
-      pipeline_stages: {
-        Row: {
-          id: string
-          organization_id: string
-          name: string
-          slug: string
-          position: number
-          color: string
-          is_terminal: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          name: string
-          slug: string
-          position?: number
-          color?: string
-          is_terminal?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          name?: string
-          slug?: string
-          position?: number
-          color?: string
-          is_terminal?: boolean
-          created_at?: string
-        }
-        Relationships: []
-      }
       microsoft_tokens: {
         Row: {
           access_token: string
@@ -1715,92 +1084,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      moffin_consults: {
-        Row: {
-          id: string
-          organization_id: string
-          project_id: string
-          client_id: string | null
-          rfc: string
-          consult_type: string
-          moffin_service: string | null
-          status: string
-          error_message: string | null
-          summary: string | null
-          raw_response: Json
-          moffin_query_id: string | null
-          moffin_uuid: string | null
-          document_id: string | null
-          requested_by: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          organization_id: string
-          project_id: string
-          client_id?: string | null
-          rfc: string
-          consult_type: string
-          moffin_service?: string | null
-          status: string
-          error_message?: string | null
-          summary?: string | null
-          raw_response?: Json
-          moffin_query_id?: string | null
-          moffin_uuid?: string | null
-          document_id?: string | null
-          requested_by?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          organization_id?: string
-          project_id?: string
-          client_id?: string | null
-          rfc?: string
-          consult_type?: string
-          moffin_service?: string | null
-          status?: string
-          error_message?: string | null
-          summary?: string | null
-          raw_response?: Json
-          moffin_query_id?: string | null
-          moffin_uuid?: string | null
-          document_id?: string | null
-          requested_by?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "moffin_consults_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "moffin_consults_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "moffin_consults_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "moffin_consults_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "documents"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       mood_checkins: {
         Row: {
@@ -1851,6 +1134,7 @@ export type Database = {
           body: string | null
           created_at: string
           entity_id: string | null
+          entity_ref: string | null
           entity_type: string | null
           id: string
           is_read: boolean
@@ -1864,6 +1148,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           entity_id?: string | null
+          entity_ref?: string | null
           entity_type?: string | null
           id?: string
           is_read?: boolean
@@ -1877,6 +1162,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           entity_id?: string | null
+          entity_ref?: string | null
           entity_type?: string | null
           id?: string
           is_read?: boolean
@@ -2054,24 +1340,11 @@ export type Database = {
           id: string
           invitation_accepted: boolean
           is_active: boolean
-          kawiiler_permissions: Json
           microsoft_email: string | null
           microsoft_user_id: string | null
           onboarding_status: string
           organization_id: string
           phone: string | null
-          proactive_ai_notifications: boolean
-          reminders_hourly_digest: boolean
-          in_app_toast_notifications: boolean
-          notification_sound_enabled: boolean
-          slack_message_sound_enabled: boolean
-          desktop_browser_notifications: boolean
-          desktop_push_notifications: boolean
-          notify_slack_mentions: boolean
-          notify_slack_channel_watch: boolean
-          notify_slack_vip: boolean
-          notify_slack_dm: boolean
-          notify_slack_all_channels: boolean
           updated_at: string
           user_id: string
         }
@@ -2085,24 +1358,11 @@ export type Database = {
           id?: string
           invitation_accepted?: boolean
           is_active?: boolean
-          kawiiler_permissions?: Json
           microsoft_email?: string | null
           microsoft_user_id?: string | null
           onboarding_status?: string
           organization_id: string
           phone?: string | null
-          proactive_ai_notifications?: boolean
-          reminders_hourly_digest?: boolean
-          in_app_toast_notifications?: boolean
-          notification_sound_enabled?: boolean
-          slack_message_sound_enabled?: boolean
-          desktop_browser_notifications?: boolean
-          desktop_push_notifications?: boolean
-          notify_slack_mentions?: boolean
-          notify_slack_channel_watch?: boolean
-          notify_slack_vip?: boolean
-          notify_slack_dm?: boolean
-          notify_slack_all_channels?: boolean
           updated_at?: string
           user_id: string
         }
@@ -2116,24 +1376,11 @@ export type Database = {
           id?: string
           invitation_accepted?: boolean
           is_active?: boolean
-          kawiiler_permissions?: Json
           microsoft_email?: string | null
           microsoft_user_id?: string | null
           onboarding_status?: string
           organization_id?: string
           phone?: string | null
-          proactive_ai_notifications?: boolean
-          reminders_hourly_digest?: boolean
-          in_app_toast_notifications?: boolean
-          notification_sound_enabled?: boolean
-          slack_message_sound_enabled?: boolean
-          desktop_browser_notifications?: boolean
-          desktop_push_notifications?: boolean
-          notify_slack_mentions?: boolean
-          notify_slack_channel_watch?: boolean
-          notify_slack_vip?: boolean
-          notify_slack_dm?: boolean
-          notify_slack_all_channels?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -2308,7 +1555,6 @@ export type Database = {
           id: string
           is_completed: boolean
           organization_id: string
-          repeat_kind: string
           title: string
           updated_at: string
           user_id: string
@@ -2322,7 +1568,6 @@ export type Database = {
           id?: string
           is_completed?: boolean
           organization_id: string
-          repeat_kind?: string
           title: string
           updated_at?: string
           user_id: string
@@ -2336,7 +1581,6 @@ export type Database = {
           id?: string
           is_completed?: boolean
           organization_id?: string
-          repeat_kind?: string
           title?: string
           updated_at?: string
           user_id?: string
@@ -2350,45 +1594,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      scheduled_mail_jobs: {
-        Row: {
-          id: string
-          user_id: string
-          status: Database["public"]["Enums"]["scheduled_mail_job_status"]
-          scheduled_at: string
-          kind: Database["public"]["Enums"]["scheduled_mail_job_kind"]
-          draft_id: string
-          payload: Json
-          error_message: string | null
-          sent_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          status?: Database["public"]["Enums"]["scheduled_mail_job_status"]
-          scheduled_at: string
-          kind?: Database["public"]["Enums"]["scheduled_mail_job_kind"]
-          draft_id: string
-          payload?: Json
-          error_message?: string | null
-          sent_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          status?: Database["public"]["Enums"]["scheduled_mail_job_status"]
-          scheduled_at?: string
-          kind?: Database["public"]["Enums"]["scheduled_mail_job_kind"]
-          draft_id?: string
-          payload?: Json
-          error_message?: string | null
-          sent_at?: string | null
-          created_at?: string
-        }
-        Relationships: []
       }
       savio_webhook_events: {
         Row: {
@@ -2427,56 +1632,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "savio_webhook_events_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      savio_write_log: {
-        Row: {
-          created_at: string
-          error_message: string | null
-          id: string
-          ok: boolean
-          operation: string
-          organization_id: string
-          request_summary: Json
-          savio_http_status: number | null
-          savio_path: string
-          savio_response_excerpt: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          error_message?: string | null
-          id?: string
-          ok?: boolean
-          operation: string
-          organization_id: string
-          request_summary?: Json
-          savio_http_status?: number | null
-          savio_path: string
-          savio_response_excerpt?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          error_message?: string | null
-          id?: string
-          ok?: boolean
-          operation?: string
-          organization_id?: string
-          request_summary?: Json
-          savio_http_status?: number | null
-          savio_path?: string
-          savio_response_excerpt?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "savio_write_log_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -2571,11 +1726,8 @@ export type Database = {
           due_date: string | null
           id: string
           is_recurring: boolean
-          is_subtask: boolean
           organization_id: string
-          parent_task_id: string | null
           priority: Database["public"]["Enums"]["task_priority"]
-          phase_key: string | null
           project_id: string | null
           recurrence_pattern: string | null
           started_at: string | null
@@ -2605,11 +1757,8 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_recurring?: boolean
-          is_subtask?: boolean
           organization_id: string
-          parent_task_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]
-          phase_key?: string | null
           project_id?: string | null
           recurrence_pattern?: string | null
           started_at?: string | null
@@ -2639,11 +1788,8 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_recurring?: boolean
-          is_subtask?: boolean
           organization_id?: string
-          parent_task_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"]
-          phase_key?: string | null
           project_id?: string | null
           recurrence_pattern?: string | null
           started_at?: string | null
@@ -2674,13 +1820,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tasks_parent_task_id_fkey"
-            columns: ["parent_task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
           {
@@ -2730,232 +1869,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tax_obligation_types_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      push_subscriptions: {
-        Row: {
-          id: string
-          user_id: string
-          endpoint: string
-          p256dh: string
-          auth: string
-          user_agent: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          endpoint: string
-          p256dh: string
-          auth: string
-          user_agent?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          endpoint?: string
-          p256dh?: string
-          auth?: string
-          user_agent?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      slack_channel_watches: {
-        Row: {
-          id: string
-          user_id: string
-          organization_id: string
-          channel_id: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          organization_id: string
-          channel_id: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          organization_id?: string
-          channel_id?: string
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slack_channel_watches_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slack_communication_prefs: {
-        Row: {
-          id: string
-          user_id: string
-          organization_id: string
-          channel_id: string
-          is_vip: boolean
-          is_starred: boolean
-          notifications_muted: boolean
-          sort_order: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          organization_id: string
-          channel_id: string
-          is_vip?: boolean
-          is_starred?: boolean
-          notifications_muted?: boolean
-          sort_order?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          organization_id?: string
-          channel_id?: string
-          is_vip?: boolean
-          is_starred?: boolean
-          notifications_muted?: boolean
-          sort_order?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slack_communication_prefs_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slack_sidebar_group_channels: {
-        Row: {
-          id: string
-          group_id: string
-          channel_id: string
-          sort_order: number
-        }
-        Insert: {
-          id?: string
-          group_id: string
-          channel_id: string
-          sort_order?: number
-        }
-        Update: {
-          id?: string
-          group_id?: string
-          channel_id?: string
-          sort_order?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slack_sidebar_group_channels_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "slack_sidebar_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slack_sidebar_groups: {
-        Row: {
-          id: string
-          user_id: string
-          organization_id: string
-          title: string
-          sort_order: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          organization_id: string
-          title?: string
-          sort_order?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          organization_id?: string
-          title?: string
-          sort_order?: number
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slack_sidebar_groups_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      user_slack_connections: {
-        Row: {
-          id: string
-          user_id: string
-          organization_id: string
-          slack_team_id: string
-          slack_user_id: string
-          access_token: string
-          refresh_token: string | null
-          token_expires_at: string | null
-          scopes: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          organization_id: string
-          slack_team_id: string
-          slack_user_id: string
-          access_token: string
-          refresh_token?: string | null
-          token_expires_at?: string | null
-          scopes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          organization_id?: string
-          slack_team_id?: string
-          slack_user_id?: string
-          access_token?: string
-          refresh_token?: string | null
-          token_expires_at?: string | null
-          scopes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_slack_connections_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -3033,30 +1946,6 @@ export type Database = {
           },
         ]
       }
-      user_mail_directory: {
-        Row: {
-          user_id: string
-          email: string
-          display_name: string | null
-          last_seen_at: string
-          created_at: string
-        }
-        Insert: {
-          user_id: string
-          email: string
-          display_name?: string | null
-          last_seen_at?: string
-          created_at?: string
-        }
-        Update: {
-          user_id?: string
-          email?: string
-          display_name?: string | null
-          last_seen_at?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
       user_roles: {
         Row: {
           id: string
@@ -3080,42 +1969,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      assign_lead: {
-        Args: { p_lead_id: string; p_owner_id: string | null }
-        Returns: Json
-      }
-      bulk_assign_leads: {
-        Args: { p_lead_ids: string[]; p_owner_id: string | null }
-        Returns: Json
-      }
-      cancel_sequence: {
-        Args: { p_lead_id: string; p_sequence_id: string }
-        Returns: Json
-      }
-      detect_duplicates: {
-        Args: { p_email: string | null; p_phone: string | null }
-        Returns: Json
-      }
-      enqueue_sequence: {
-        Args: { p_lead_id: string; p_sequence_id: string }
-        Returns: Json
-      }
-      enqueue_sequence_system: {
-        Args: {
-          p_lead_id: string
-          p_organization_id: string
-          p_sequence_id: string
-        }
-        Returns: Json
-      }
-      get_activity_adoption_stats: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      get_ai_learning_stats_for_org: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
       get_celula_mood_stats: {
         Args: { _end_date: string; _org_id: string; _start_date: string }
         Returns: {
@@ -3126,24 +1979,7 @@ export type Database = {
           total_responses: number
         }[]
       }
-      get_pipeline_stats: {
-        Args: { p_date_from?: string | null; p_date_to?: string | null }
-        Returns: Json
-      }
-      pipeline_calendly_apply_system: {
-        Args: {
-          p_booked_at?: string | null
-          p_event_uri?: string | null
-          p_lead_id: string
-          p_new_stage_id?: string | null
-          p_organization_id: string
-          p_status: string
-        }
-        Returns: Json
-      }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
-      can_view_savio_finance: { Args: { _user_id: string }; Returns: boolean }
-      can_write_savio_finance: { Args: { _user_id: string }; Returns: boolean }
       has_finance_access: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
@@ -3157,22 +1993,12 @@ export type Database = {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
       }
-      move_lead_stage: {
-        Args: { p_lead_id: string; p_new_stage_id: string }
-        Returns: Json
-      }
-      score_lead: {
-        Args: { p_lead_id: string; p_reason?: string | null; p_score: number }
-        Returns: Json
-      }
       user_in_celula: {
         Args: { _celula_slug: string; _user_id: string }
         Returns: boolean
       }
     }
     Enums: {
-      scheduled_mail_job_kind: "send_draft"
-      scheduled_mail_job_status: "pending" | "processing" | "sent" | "failed" | "cancelled"
       app_role: "transformador" | "referente" | "ejecutor" | "en_formacion"
       client_status: "activo" | "inactivo" | "prospecto"
       client_type: "persona_moral" | "persona_fisica"
@@ -3322,8 +2148,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      scheduled_mail_job_kind: ["send_draft"],
-      scheduled_mail_job_status: ["pending", "processing", "sent", "failed", "cancelled"],
       app_role: ["transformador", "referente", "ejecutor", "en_formacion"],
       client_status: ["activo", "inactivo", "prospecto"],
       client_type: ["persona_moral", "persona_fisica"],
