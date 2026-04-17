@@ -114,7 +114,9 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
   const privateUrl = f.url_private_download || f.url_private || "";
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const objectUrlRef = useRef<string | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -144,10 +146,35 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
     }
   }, [privateUrl, resolvedUrl]);
 
+  // Lazy-load: solo bajamos el blob cuando el adjunto entra a la vista.
+  // Evita descargar decenas de imágenes en paralelo al abrir una conversación (OOM en Chrome).
   useEffect(() => {
     if (!isImg || !privateUrl) return;
+    const el = wrapperRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setIsVisible(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isImg, privateUrl]);
+
+  useEffect(() => {
+    if (!isImg || !privateUrl || !isVisible || resolvedUrl) return;
     void resolvePrivateUrl();
-  }, [isImg, privateUrl, resolvePrivateUrl]);
+  }, [isImg, privateUrl, isVisible, resolvedUrl, resolvePrivateUrl]);
 
   const openAttachment = useCallback(async () => {
     const next = (await resolvePrivateUrl()) || f.permalink || privateUrl;
@@ -171,7 +198,7 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
   const imageSrc = resolvedUrl;
 
   return (
-    <div className="mt-1 flex flex-wrap gap-2">
+    <div ref={wrapperRef} className="mt-1 flex flex-wrap gap-2">
       {isImg && privateUrl ? (
         <button
           type="button"
@@ -180,16 +207,21 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
           title="Abrir imagen"
         >
           {imageSrc ? (
-            <img src={imageSrc} alt={label} className="max-h-52 w-auto object-cover" />
+            <img
+              src={imageSrc}
+              alt={label}
+              loading="lazy"
+              decoding="async"
+              className="max-h-52 w-auto object-cover"
+            />
           ) : (
             <div className="flex h-40 w-[260px] items-center justify-center bg-muted/50">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : (
+                <FileText className="h-5 w-5 text-muted-foreground" />
+              )}
             </div>
-          )}
-          {loading && imageSrc && (
-            <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
-              <Loader2 className="h-4 w-4 animate-spin text-white" />
-            </span>
           )}
         </button>
       ) : (
