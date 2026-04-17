@@ -58,10 +58,10 @@ export function LeadActivityPanel({ leadId, leadName, leadEmail, currentStageId 
       />
       <SendEmailModal
         open={openModal === "email"}
-        onOpenChange={(v) => !v && setOpenModal(null)}
+        onClose={() => setOpenModal(null)}
         leadId={leadId}
         leadName={leadName}
-        leadEmail={leadEmail}
+        leadEmail={leadEmail || ""}
       />
       <LogWhatsAppModal
         open={openModal === "whatsapp"}

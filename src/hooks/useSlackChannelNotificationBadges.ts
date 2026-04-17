@@ -7,11 +7,10 @@ const SLACK_NOTIF_TYPES = ["slack_message", "slack_mention"] as const;
 const EMPTY_SLACK_BADGE_COUNTS: Record<string, number> = Object.freeze({});
 
 /**
- * Conteo de notificaciones Slack no leídas por channel_id (entity_id = channel|ts).
+ * Conteo de notificaciones Slack no leídas por channel_id.
  *
- * No abre un segundo canal Realtime sobre `notifications` (evita CHANNEL_ERROR por
- * duplicar la suscripción de `useNotificationDelivery` + Comunicación). Las
- * invalidaciones en vivo vienen de ahí; aquí solo hay refetch periódico de respaldo.
+ * Slack guarda `channel|ts` (texto, no UUID) en `entity_ref`. La columna `entity_id`
+ * es UUID y queda nula para notificaciones de Slack.
  */
 export function useSlackChannelNotificationBadges(userId: string | undefined) {
   const query = useQuery({
@@ -20,18 +19,19 @@ export function useSlackChannelNotificationBadges(userId: string | undefined) {
       if (!userId) return {};
       const { data, error } = await supabase
         .from("notifications")
-        .select("entity_id")
+        .select("entity_ref")
         .eq("user_id", userId)
         .eq("entity_type", "slack")
         .eq("is_read", false)
+        .not("entity_ref", "is", null)
         .in("type", [...SLACK_NOTIF_TYPES]);
       if (error) throw error;
       const counts: Record<string, number> = {};
-      for (const row of data || []) {
-        const eid = row.entity_id as string | null;
-        if (!eid) continue;
-        const pipe = eid.indexOf("|");
-        const ch = pipe > 0 ? eid.slice(0, pipe) : eid;
+      for (const row of (data || []) as Array<{ entity_ref: string | null }>) {
+        const ref = row.entity_ref;
+        if (!ref) continue;
+        const pipe = ref.indexOf("|");
+        const ch = pipe > 0 ? ref.slice(0, pipe) : ref;
         counts[ch] = (counts[ch] || 0) + 1;
       }
       return counts;
@@ -52,6 +52,6 @@ export async function markSlackChannelNotificationsRead(userId: string, channelI
     .eq("user_id", userId)
     .eq("entity_type", "slack")
     .in("type", [...SLACK_NOTIF_TYPES])
-    .like("entity_id", `${channelId}|%`);
+    .like("entity_ref", `${channelId}|%`);
   if (error) throw error;
 }

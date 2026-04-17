@@ -476,7 +476,7 @@ export function EmailView() {
         if (selectedEmailId === messageId) {
           const idx = allEmails.findIndex((e: any) => e.id === messageId);
           const next = allEmails[idx + 1] || allEmails[idx - 1];
-          setSelectedEmailId(next?.id || null);
+          setSelectedEmailId((next as { id?: string } | undefined)?.id || null);
           resetAction();
         }
         setMovePopoverOpen(false);
@@ -538,7 +538,7 @@ export function EmailView() {
         replyAll: action === "reply-all",
       });
       if (draft && "unsupported" in draft && draft.unsupported) {
-        toast.warning(draft.message);
+        toast.warning(String((draft as { message?: unknown }).message ?? "No soportado"));
         return;
       }
       const d = draft as { id?: string; body?: { content?: string } };
@@ -706,7 +706,7 @@ export function EmailView() {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
     const next = allEmails[idx + 1] || allEmails[idx - 1];
     if (selectedEmailId === emailId) {
-      setSelectedEmailId(next?.id || null);
+      setSelectedEmailId((next as { id?: string } | undefined)?.id || null);
       resetAction();
     }
     archiveEmail.mutate(emailId);
@@ -716,7 +716,7 @@ export function EmailView() {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
     const next = allEmails[idx + 1] || allEmails[idx - 1];
     if (selectedEmailId === emailId) {
-      setSelectedEmailId(next?.id || null);
+      setSelectedEmailId((next as { id?: string } | undefined)?.id || null);
       resetAction();
     }
     deleteEmail.mutate(emailId);

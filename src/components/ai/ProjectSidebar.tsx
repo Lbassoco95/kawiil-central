@@ -96,7 +96,9 @@ export function ProjectSidebar({
       onClick={() => onLoadConversation(c.id)}
     >
       {c.ai_project_id ? (
-        <BrainCircuit className="h-3 w-3 shrink-0 text-primary" title="Chat de proyecto IA" />
+        <span title="Chat de proyecto IA" className="inline-flex">
+          <BrainCircuit className="h-3 w-3 shrink-0 text-primary" />
+        </span>
       ) : (
         <MessageSquare className="h-3 w-3 shrink-0" />
       )}
