@@ -167,19 +167,26 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
   }, [resolvePrivateUrl, f.permalink, privateUrl, label]);
 
   const sizeLabel = formatFileSize(f.size);
-  const imageSrc = resolvedUrl || f.thumb_360 || f.thumb_80 || f.permalink || privateUrl;
+  // Slack bloquea thumbs cross-origin (CORB) y rate-limita (429). Siempre resolvemos vía Edge `slack-api`.
+  const imageSrc = resolvedUrl;
 
   return (
     <div className="mt-1 flex flex-wrap gap-2">
-      {isImg && imageSrc ? (
+      {isImg && privateUrl ? (
         <button
           type="button"
           onClick={openAttachment}
           className="relative block rounded-md border border-border/60 overflow-hidden max-w-[260px] text-left"
           title="Abrir imagen"
         >
-          <img src={imageSrc} alt={label} className="max-h-52 w-auto object-cover" />
-          {loading && (
+          {imageSrc ? (
+            <img src={imageSrc} alt={label} className="max-h-52 w-auto object-cover" />
+          ) : (
+            <div className="flex h-40 w-[260px] items-center justify-center bg-muted/50">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {loading && imageSrc && (
             <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
               <Loader2 className="h-4 w-4 animate-spin text-white" />
             </span>
