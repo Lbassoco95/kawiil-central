@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { ACTIVE_SUPABASE_URL } from "@/integrations/supabase/client";
 import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
 import { Loader2, Landmark, ExternalLink, ListChecks } from "lucide-react";
 
@@ -37,12 +38,10 @@ export function MoffinIntegrationCard() {
     staleTime: 60_000,
   });
 
-  const webhookUrl = import.meta.env.VITE_SUPABASE_URL
-    ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1/moffin-webhook`
-    : "";
+  const webhookUrl = `${ACTIVE_SUPABASE_URL.replace(/\/$/, "")}/functions/v1/moffin-webhook`;
   const supabaseProjectRef = (() => {
     try {
-      const h = new URL(String(import.meta.env.VITE_SUPABASE_URL ?? "")).hostname;
+      const h = new URL(ACTIVE_SUPABASE_URL).hostname;
       return h.split(".")[0] || "";
     } catch {
       return "";

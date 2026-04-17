@@ -1,6 +1,6 @@
-import { supabase } from "@/integrations/supabase/client";
+import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
 
 const MSG_ANTHROPIC_BILLING_FALLBACK =
   "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
@@ -23,6 +23,17 @@ export type AiChatSimpleMessage = {
   content: string;
 };
 
+async function getAccessTokenWithRefresh(): Promise<string | null> {
+  let session = await supabase.auth.getSession();
+  let token = session.data.session?.access_token ?? null;
+  if (token) return token;
+
+  await supabase.auth.refreshSession().catch(() => {});
+  session = await supabase.auth.getSession();
+  token = session.data.session?.access_token ?? null;
+  return token;
+}
+
 /**
  * Modo simple + insightLite en ai-chat: una respuesta JSON, sin herramientas ni SSE.
  * Menos tokens y menos carga que el chat completo; reintenta ante 429.
@@ -35,9 +46,8 @@ export async function fetchAiChatSimpleContent(
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const session = await supabase.auth.getSession();
-    const token = session.data.session?.access_token;
-    if (!token) throw new Error("No hay sesión");
+    const token = await getAccessTokenWithRefresh();
+    if (!token) throw new Error("No hay sesión activa. Inicia sesión de nuevo.");
 
     const resp = await fetch(CHAT_URL, {
       method: "POST",
@@ -54,6 +64,16 @@ export async function fetchAiChatSimpleContent(
     });
 
     const ct = resp.headers.get("content-type") || "";
+
+    if (resp.status === 401) {
+      lastError = new Error("Tu sesión expiró. Recarga la página para reconectar.");
+      if (attempt < maxAttempts - 1) {
+        await supabase.auth.refreshSession().catch(() => {});
+        await new Promise((r) => setTimeout(r, 500));
+        continue;
+      }
+      throw lastError;
+    }
 
     if (resp.status === 429) {
       let msg = "Demasiadas solicitudes. Intenta de nuevo en unos segundos.";

@@ -1,13 +1,13 @@
 import { useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { usePipelineStages } from "@/hooks/usePipeline";
 import { Input } from "@/components/ui/input";
 
 const fnUrl = (name: string) =>
-  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${name}`;
+  `${ACTIVE_SUPABASE_URL}/functions/v1/${name}`;
 
 export default function PipelineSettings() {
   const { data: stages = [] } = usePipelineStages();

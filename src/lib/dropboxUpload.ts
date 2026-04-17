@@ -1,4 +1,8 @@
-import { supabase } from "@/integrations/supabase/client";
+import {
+  ACTIVE_SUPABASE_PUBLISHABLE_KEY,
+  ACTIVE_SUPABASE_URL,
+  supabase,
+} from "@/integrations/supabase/client";
 
 /**
  * Uploads a file to Dropbox via a dedicated edge function.
@@ -21,14 +25,13 @@ export async function uploadFileToDropbox(
     }
   }
 
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const anonKey = ACTIVE_SUPABASE_PUBLISHABLE_KEY;
 
   // Get session token for auth
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token || anonKey;
 
-  const url = `https://${projectId}.supabase.co/functions/v1/dropbox-upload`;
+  const url = `${ACTIVE_SUPABASE_URL}/functions/v1/dropbox-upload`;
 
   const response = await fetch(url, {
     method: "POST",

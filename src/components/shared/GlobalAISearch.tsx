@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
+import { ACTIVE_SUPABASE_URL } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 interface SearchResult {
@@ -31,7 +32,7 @@ const TYPE_LABELS: Record<string, string> = {
   pipeline_lead: "Oportunidad",
 };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
 
 export function GlobalAISearch({ className }: { className?: string }) {
   const [query, setQuery] = useState("");

@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import type { ChatProgressStep } from "@/components/ai/ChatProcessingPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   MAX_CHAT_ATTACHMENT_BATCH_BYTES,
@@ -46,7 +46,7 @@ export interface SendMessageOptions {
   onAfterChatUpload?: (file: File) => Promise<void>;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
 
 const MSG_ANTHROPIC_BILLING_FALLBACK =
   "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +

@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, ExternalLink, FileText, Image, FileSpreadsheet, Code, Loader2, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface DocumentPreviewDialogProps {
@@ -60,7 +60,7 @@ function getFileLabel(type: string) {
 
 function buildAbsoluteSignedUrl(signedUrl: string) {
   if (signedUrl.startsWith("http://") || signedUrl.startsWith("https://")) return signedUrl;
-  return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1${signedUrl}`;
+  return `${ACTIVE_SUPABASE_URL}/storage/v1${signedUrl}`;
 }
 
 export function DocumentPreviewDialog({ open, onOpenChange, document }: DocumentPreviewDialogProps) {

@@ -1,7 +1,11 @@
-import { supabase } from "@/integrations/supabase/client";
+import {
+  ACTIVE_SUPABASE_PUBLISHABLE_KEY,
+  ACTIVE_SUPABASE_URL,
+  supabase,
+} from "@/integrations/supabase/client";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const SUPABASE_URL = ACTIVE_SUPABASE_URL;
+const SUPABASE_ANON = ACTIVE_SUPABASE_PUBLISHABLE_KEY;
 
 type AttachmentPayload = {
   contentBytes: string;

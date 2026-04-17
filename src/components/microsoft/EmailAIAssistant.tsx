@@ -5,8 +5,9 @@ import { Loader2, Sparkles, Copy, X, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
+import { ACTIVE_SUPABASE_URL } from "@/integrations/supabase/client";
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
 
 const FULL_PROMPTS = [
   { label: "Respuesta profesional", prompt: "Redacta una respuesta profesional y cordial a este correo." },

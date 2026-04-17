@@ -42,6 +42,8 @@ const SUPABASE_PUBLISHABLE_KEY = hasValidEnvConfig
   ? envPublishableKey
   : EXPECTED_SUPABASE_PUBLISHABLE_KEY;
 
+export const ACTIVE_SUPABASE_URL = SUPABASE_URL;
+export const ACTIVE_SUPABASE_PUBLISHABLE_KEY = SUPABASE_PUBLISHABLE_KEY;
 export const ACTIVE_SUPABASE_HOST = getHostFromUrl(SUPABASE_URL) || expectedHost;
 
 if (!hasValidEnvConfig && typeof window !== 'undefined') {

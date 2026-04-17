@@ -18,7 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useTaskDetail, useAddComment, useUpdateTask, type Task } from "@/hooks/useTasks";
 import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssignees";
 import { useCelulaOptions } from "@/hooks/useCelulaOptions";
-import { supabase } from "@/integrations/supabase/client";
+import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -406,7 +406,9 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(doc.file_path, 60, { download: true });
       if (error) throw error;
       const a = document.createElement("a");
-      a.href = data.signedUrl.startsWith("http") ? data.signedUrl : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1${data.signedUrl}`;
+      a.href = data.signedUrl.startsWith("http")
+        ? data.signedUrl
+        : `${ACTIVE_SUPABASE_URL}/storage/v1${data.signedUrl}`;
       a.download = doc.name;
       document.body.appendChild(a);
       a.click();
