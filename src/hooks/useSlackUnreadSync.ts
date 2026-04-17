@@ -92,6 +92,10 @@ export function useSlackUnreadSync({
           await qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
           await qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
         })
+        .catch((err) => {
+          // No invalidar si falla: corta bucle del spinner ante errores recurrentes (p. ej. 42883).
+          console.warn("[slack-unread-sync] markRead falló (silenciado):", err);
+        })
         .finally(() => {
           inFlightReadRef.current.delete(channelId);
         });

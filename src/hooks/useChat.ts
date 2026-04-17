@@ -707,6 +707,7 @@ export function useChat() {
                 error?: string;
                 message?: string;
                 code?: string;
+                detail?: string;
               };
               if (resp.status === 402 || j.code === "anthropic_billing") {
                 errMsg = j.message || j.error || MSG_ANTHROPIC_BILLING_FALLBACK;

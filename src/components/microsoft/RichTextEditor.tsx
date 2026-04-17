@@ -110,7 +110,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(function R
   useImperativeHandle(ref, () => ({
     setHtml(html: string) {
       if (!editor) return;
-      editor.commands.setContent(stripBidiControlChars(html || "") || "<p></p>", false);
+      editor.commands.setContent(stripBidiControlChars(html || "") || "<p></p>");
       onHtmlChange?.(editor.getHTML());
     },
     focus() {

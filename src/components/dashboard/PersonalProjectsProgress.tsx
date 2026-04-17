@@ -34,7 +34,7 @@ export function PersonalProjectsProgress({
                 type="button"
                 onClick={() => navigate(`/proyectos/${r.id}`)}
                 className="w-full text-left rounded-xl border border-border/60 bg-card/30 hover:bg-secondary/25 hover:border-border transition-colors px-3 py-2.5 group"
-                style={{ animationDelay: compact ? 0 : `${Math.min(i, 6) * 40}ms`, animationFillMode: "both" }}
+                style={{ animationDelay: compact ? "0ms" : `${Math.min(i, 6) * 40}ms`, animationFillMode: "both" }}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">

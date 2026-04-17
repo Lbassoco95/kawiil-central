@@ -604,17 +604,18 @@ async function handleMessageNotificationEvent(
     title: slackNotificationTitle(flags, channelType, channelDisplay),
     body: preview || "(sin texto)",
     entity_type: "slack",
-    entity_id: `${channel}|${ts}`,
+    entity_id: null as string | null,
+    entity_ref: `${channel}|${ts}`,
     source_user_id: null as string | null,
   }));
 
-  const entityId = `${channel}|${ts}`;
+  const entityRef = `${channel}|${ts}`;
   const userIds = rows.map((r) => r.user_id);
   const { data: existingRows } = await supabase
     .from("notifications")
     .select("user_id, type")
     .eq("entity_type", "slack")
-    .eq("entity_id", entityId)
+    .eq("entity_ref", entityRef)
     .in("user_id", userIds)
     .in("type", ["slack_message", "slack_mention"]);
 
