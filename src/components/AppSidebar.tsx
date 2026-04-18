@@ -80,6 +80,12 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "Hub", url: "/hub", icon: Building2, moduleKey: "hub" },
       { title: "Finanzas", url: "/finanzas", icon: Wallet, moduleKey: "finanzas" },
+      {
+        title: "Plantillas contables",
+        url: "/contabilidad/plantillas",
+        icon: FileText,
+        tooltip: "Plantillas de correos del área contable (ISN/IMSS, provisionales, nóminas, anuales)",
+      },
       { title: "Administración", url: "/admin", icon: Settings, moduleKey: "admin" },
     ],
   },

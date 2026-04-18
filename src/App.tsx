@@ -35,6 +35,7 @@ import EmailTemplates from "./pages/pipeline/EmailTemplates";
 import EmailSequences from "./pages/pipeline/EmailSequences";
 import PipelineSettings from "./pages/pipeline/PipelineSettings";
 import PipelineActivities from "./pages/pipeline/PipelineActivities";
+import EmailTemplatesContabilidad from "./pages/contabilidad/EmailTemplatesContabilidad";
 
 const queryClient = new QueryClient();
 
@@ -106,6 +107,7 @@ const App = () => (
                 <Route path="sequences" element={<EmailSequences />} />
                 <Route path="settings" element={<PipelineSettings />} />
               </Route>
+              <Route path="/contabilidad/plantillas" element={<ProtectedRoute><EmailTemplatesContabilidad /></ProtectedRoute>} />
               <Route path="/admin" element={<ProtectedRoute><ModuleGate moduleKey="admin"><Admin /></ModuleGate></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>

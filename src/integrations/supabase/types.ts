@@ -1886,8 +1886,10 @@ export type Database = {
           is_active: boolean
           name: string
           organization_id: string
+          scope: string
           subject: string
           updated_at: string
+          variables: Json
         }
         Insert: {
           body_html: string
@@ -1900,8 +1902,10 @@ export type Database = {
           is_active?: boolean
           name: string
           organization_id: string
+          scope?: string
           subject: string
           updated_at?: string
+          variables?: Json
         }
         Update: {
           body_html?: string
@@ -1914,8 +1918,10 @@ export type Database = {
           is_active?: boolean
           name?: string
           organization_id?: string
+          scope?: string
           subject?: string
           updated_at?: string
+          variables?: Json
         }
         Relationships: [
           {

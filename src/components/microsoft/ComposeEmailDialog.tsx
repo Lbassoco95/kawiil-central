@@ -22,10 +22,26 @@ import {
   validateRecipientGroups,
   type ComposerAttachment,
 } from "@/lib/emailComposer";
+import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
+
+export interface ComposeDefaultTemplateContext {
+  razon_social?: string;
+  clientId?: string;
+  projectId?: string;
+  [key: string]: string | undefined;
+}
 
 interface ComposeEmailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Prefill values for the recipient, subject, and body. */
+  initialTo?: string;
+  initialSubject?: string;
+  initialBodyHtml?: string;
+  /** Valores precargados para el selector de plantillas contables. */
+  defaultTemplateContext?: ComposeDefaultTemplateContext;
+  /** Muestra el selector de plantillas del área contable. Por defecto true. */
+  showAccountingTemplates?: boolean;
 }
 
 function plainTextToEmailHtml(text: string): string {
@@ -162,7 +178,15 @@ function ComposeRecipientInput({
   );
 }
 
-export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogProps) {
+export function ComposeEmailDialog({
+  open,
+  onOpenChange,
+  initialTo,
+  initialSubject,
+  initialBodyHtml,
+  defaultTemplateContext,
+  showAccountingTemplates = true,
+}: ComposeEmailDialogProps) {
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
@@ -200,6 +224,12 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
   useEffect(() => {
     if (open) {
       signatureAppliedRef.current = false;
+      if (initialTo) setTo(initialTo);
+      if (initialSubject) setSubject(initialSubject);
+      if (initialBodyHtml) {
+        bodyRef.current = initialBodyHtml;
+        signatureAppliedRef.current = true;
+      }
       setEditorKey((k) => k + 1);
     } else {
       setTo("");
@@ -216,6 +246,7 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
       bodyRef.current = "";
       setAttachments([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
@@ -320,17 +351,35 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
     }
   };
 
+  const applyAccountingTemplate = useCallback(
+    (result: { subject: string; bodyHtml: string }) => {
+      setSubject(result.subject);
+      editorRef.current?.setHtml(result.bodyHtml);
+      bodyRef.current = result.bodyHtml;
+      signatureAppliedRef.current = true;
+    },
+    [],
+  );
+
   const iaToolbarButton = (
-    <Button
-      type="button"
-      variant="ghost"
-      className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 gap-1 text-xs h-7 px-2"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => setAiPanelOpen((v) => !v)}
-    >
-      <Sparkles className="h-3.5 w-3.5" />
-      IA
-    </Button>
+    <div className="flex items-center gap-1">
+      {showAccountingTemplates ? (
+        <AccountingTemplatePicker
+          onApply={applyAccountingTemplate}
+          defaults={defaultTemplateContext as Record<string, string> | undefined}
+        />
+      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 gap-1 text-xs h-7 px-2"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setAiPanelOpen((v) => !v)}
+      >
+        <Sparkles className="h-3.5 w-3.5" />
+        IA
+      </Button>
+    </div>
   );
 
   return (
@@ -499,6 +548,7 @@ export function ComposeEmailDialog({ open, onOpenChange }: ComposeEmailDialogPro
               <RichTextEditor
                 key={editorKey}
                 ref={editorRef}
+                initialHtml={initialBodyHtml}
                 placeholder="Escribe tu mensaje..."
                 onHtmlChange={(html) => {
                   bodyRef.current = html;

@@ -31,6 +31,7 @@ import {
   FileCheck2,
   Loader2,
   RefreshCw,
+  Mail,
 } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
 import { nowMX } from "@/lib/dateUtils";
@@ -70,6 +71,7 @@ import { MoffinFielCredentialsSection } from "./MoffinFielCredentialsSection";
 import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
+import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 
 type MoffinConsultType = "lista_69b" | "constancia_situacion_fiscal" | "opinion_cumplimiento";
 
@@ -348,6 +350,23 @@ export function AccountingDashboard({
 
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map((p) => [p.user_id, p.full_name])), [profiles]);
+
+  const [composeOpen, setComposeOpen] = useState(false);
+
+  const { data: clientInfo } = useQuery({
+    queryKey: ["accounting-dashboard-client", clientId],
+    queryFn: async () => {
+      if (!clientId) return null;
+      const { data, error } = await supabase
+        .from("clients")
+        .select("name, email")
+        .eq("id", clientId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!clientId,
+  });
 
   const { data: projectTasks = [] } = useQuery({
     queryKey: ["project-tasks", projectId],
@@ -670,6 +689,29 @@ export function AccountingDashboard({
 
   return (
     <div className="space-y-4">
+      {clientId ? (
+        <div className="flex items-center justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setComposeOpen(true)}
+            className="gap-2"
+          >
+            <Mail className="h-4 w-4" />
+            Enviar correo al cliente
+          </Button>
+          <ComposeEmailDialog
+            open={composeOpen}
+            onOpenChange={setComposeOpen}
+            initialTo={clientInfo?.email || ""}
+            defaultTemplateContext={{
+              razon_social: clientInfo?.name || "",
+              clientId,
+              projectId,
+            }}
+          />
+        </div>
+      ) : null}
       <CriticalityDelayCard projectId={projectId} />
 
       <Card className="border-border/80">
