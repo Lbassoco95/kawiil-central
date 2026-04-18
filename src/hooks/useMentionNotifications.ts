@@ -9,6 +9,7 @@ export interface MentionNotification {
   body: string | null;
   entity_type: string | null;
   entity_id: string | null;
+  entity_ref?: string | null;
   source_user_id: string | null;
   is_read: boolean;
   created_at: string;

@@ -21,6 +21,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.push-subscribe]
     verify_jwt = false
+  [functions.push-test]
+    verify_jwt = false
   [functions.microsoft-auth]
     verify_jwt = false
   [functions.microsoft-callback]

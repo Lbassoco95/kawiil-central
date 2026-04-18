@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { playNotificationBeep } from "@/lib/notificationBeep";
+import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
 
 type NotifRow = {
   id?: string;
@@ -12,6 +13,7 @@ type NotifRow = {
   type?: string;
   entity_type?: string;
   entity_id?: string | null;
+  entity_ref?: string | null;
   is_read?: boolean | null;
 };
 
@@ -173,12 +175,31 @@ export function useNotificationDelivery() {
     ) {
       try {
         const tag = row.id ? `kawiil-${row.id}` : `kawiil-${row.type || "notif"}-${Date.now()}`;
-        new Notification(title, {
+        const deepLink = slackDeepLinkFromNotification({
+          entity_type: row.entity_type,
+          entity_ref: row.entity_ref,
+          entity_id: row.entity_id,
+          type: row.type,
+        });
+        const n = new Notification(title, {
           body: row.body?.trim() || undefined,
           tag,
           silent: false,
-          requireInteraction: false,
+          // DMs y menciones son "semi-mandatory": banner sticky hasta que se atienda,
+          // igual que en el Service Worker (public/sw.js).
+          requireInteraction: mandatorySurface,
+          data: deepLink ? { url: deepLink } : undefined,
         });
+        n.onclick = () => {
+          try {
+            window.focus();
+            if (deepLink) {
+              window.location.href = deepLink;
+            }
+          } finally {
+            n.close();
+          }
+        };
         surfaced = true;
       } catch (err) {
         console.warn("[notif] desktop Notification error", err);
@@ -204,7 +225,7 @@ export function useNotificationDelivery() {
     const tick = async () => {
       const { data, error } = await supabase
         .from("notifications")
-        .select("id, type, entity_type, entity_id, title, body, created_at, is_read")
+        .select("id, type, entity_type, entity_id, entity_ref, title, body, created_at, is_read")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(15);

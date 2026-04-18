@@ -30,6 +30,7 @@ import {
   formatPushRegistrationUserMessage,
 } from "@/lib/registerWebPush";
 import { playNotificationBeep } from "@/lib/notificationBeep";
+import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
 import { cn } from "@/lib/utils";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
@@ -218,6 +219,36 @@ function NotificationDeliveryPreferences() {
       toast.success("Avisos con la app cerrada activados");
     },
     onError: (e: Error) => toast.error(formatPushRegistrationUserMessage(e)),
+  });
+
+  const sendTestPush = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke<{
+        ok: boolean;
+        reason?: string;
+        subsCount?: number;
+        message?: string;
+      }>("push-test", { body: {} });
+      if (error) throw error;
+      if (!data) throw new Error("Sin respuesta de push-test");
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.ok) {
+        toast.success(data.message || "Push de prueba enviado");
+      } else if (data.reason === "no_subscriptions") {
+        toast.message("No hay suscripciones push", {
+          description:
+            data.message ||
+            "Activa «Push con la pestaña cerrada» en este navegador antes de probar.",
+        });
+      } else if (data.reason === "vapid_not_configured") {
+        toast.error(data.message || "VAPID no configurado en Supabase");
+      } else {
+        toast.message(data.message || "Push de prueba: resultado inesperado");
+      }
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo enviar el push de prueba"),
   });
 
   const toggleDesktopPush = useMutation({
@@ -504,6 +535,16 @@ function NotificationDeliveryPreferences() {
               Registrar push (app cerrada)
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => sendTestPush.mutate()}
+            disabled={sendTestPush.isPending}
+            title="Envía un push de prueba a tus suscripciones actuales para diagnosticar el banner del sistema."
+          >
+            Enviar push de prueba
+          </Button>
         </div>
         <p className="text-xs text-muted-foreground">
           Por defecto recibes avisos de los canales en los que participas; usa la campana en la lista de Comunicación
@@ -567,17 +608,22 @@ export default function Notificaciones() {
       navigate("/conocimiento?tab=sugerencias");
     } else if (m.type === "ai_proactive_tip") {
       navigate("/");
-    } else if (m.entity_type === "slack" && m.entity_id) {
-      const pipe = m.entity_id.indexOf("|");
-      if (pipe > 0) {
-        const ch = m.entity_id.slice(0, pipe);
-        const ts = m.entity_id.slice(pipe + 1);
-        navigate(`/comunicacion?channel=${encodeURIComponent(ch)}&ts=${encodeURIComponent(ts)}`);
-      } else {
+    } else {
+      const slackUrl = slackDeepLinkFromNotification({
+        entity_type: m.entity_type,
+        entity_ref: m.entity_ref,
+        entity_id: m.entity_id,
+        type: m.type,
+      });
+      if (slackUrl) {
+        navigate(slackUrl);
+      } else if (
+        m.entity_type === "slack" ||
+        m.type === "slack_message" ||
+        m.type === "slack_mention"
+      ) {
         navigate("/comunicacion");
       }
-    } else if (m.type === "slack_message" || m.type === "slack_mention") {
-      navigate("/comunicacion");
     }
   };
 
