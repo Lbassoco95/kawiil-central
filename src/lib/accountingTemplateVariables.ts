@@ -70,6 +70,19 @@ export interface AccountingTemplateVariable {
   modeSupport?: boolean;
   /** Texto que se anexa cuando el modo es `favor`. */
   favorText?: string;
+  /**
+   * Variables que comparten el mismo `exclusiveGroup` son mutuamente
+   * excluyentes (p. ej. "saldo a favor" vs "a pagar" en la declaración
+   * anual). El picker las renderiza bajo un único selector y pone en
+   * modo `perdida` a las no elegidas.
+   */
+  exclusiveGroup?: string;
+  /**
+   * Nombre de otra variable. Esta sólo se muestra en el formulario si
+   * aquella está activa (modo ≠ `perdida`). Útil por ejemplo para que
+   * la CLABE sólo aparezca cuando hay saldo a favor.
+   */
+  dependsOn?: string;
 }
 
 export function supportsCurrencyMode(
@@ -112,9 +125,9 @@ export const DEFAULT_VARIABLES_BY_CATEGORY: Record<
   ],
   envio_anuales: [
     { name: "razon_social", label: "Razón social", type: "text", bold: false, required: true },
-    { name: "saldo_favor", label: "Saldo a favor", type: "currency", bold: true, required: false, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
-    { name: "a_pagar", label: "Monto a pagar", type: "currency", bold: true, required: false, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
-    { name: "clabe", label: "CLABE bancaria para devolución", type: "text", bold: true, required: false },
+    { name: "saldo_favor", label: "Saldo a favor", type: "currency", bold: true, required: false, exclusiveGroup: "resultado_anual" },
+    { name: "a_pagar", label: "Monto a pagar", type: "currency", bold: true, required: false, exclusiveGroup: "resultado_anual" },
+    { name: "clabe", label: "CLABE bancaria para devolución", type: "text", bold: true, required: false, dependsOn: "saldo_favor" },
   ],
 };
 
@@ -148,6 +161,18 @@ export function parseTemplateVariables(
         : typeof o.favorText === "string"
           ? o.favorText
           : undefined;
+    const exclusiveGroupRaw =
+      typeof o.exclusive_group === "string"
+        ? o.exclusive_group
+        : typeof o.exclusiveGroup === "string"
+          ? o.exclusiveGroup
+          : undefined;
+    const dependsOnRaw =
+      typeof o.depends_on === "string"
+        ? o.depends_on
+        : typeof o.dependsOn === "string"
+          ? o.dependsOn
+          : undefined;
     result.push({
       name,
       label,
@@ -156,6 +181,8 @@ export function parseTemplateVariables(
       required: o.required === undefined ? true : Boolean(o.required),
       modeSupport: modeSupportRaw === undefined ? false : Boolean(modeSupportRaw),
       favorText: favorTextRaw,
+      exclusiveGroup: exclusiveGroupRaw,
+      dependsOn: dependsOnRaw,
     });
   }
   return result;

@@ -50,6 +50,16 @@ export interface AccountingTemplatePickerClient {
   rfc: string | null;
 }
 
+type RenderNode =
+  | { kind: "single"; variable: AccountingTemplateVariable }
+  | {
+      kind: "group";
+      name: string;
+      variables: AccountingTemplateVariable[];
+    };
+
+const NONE_VALUE = "__none__";
+
 interface AccountingTemplatePickerProps {
   onApply: (result: AccountingTemplatePickerApplied) => void;
   onClientSelected?: (client: AccountingTemplatePickerClient) => void;
@@ -103,10 +113,17 @@ export function AccountingTemplatePicker({
     }
     const nextValues: Record<string, string> = {};
     const nextModes: Record<string, CurrencyMode> = {};
+    // Variables en exclusiveGroup: todas en "perdida"; el usuario elige cuál activar.
+    // Variables con dependsOn: también "perdida" (aparecen cuando la dep está activa).
+    // Resto de las variables con modeSupport: "pago" por defecto.
     for (const v of variables) {
       const fromDefaults = defaults?.[v.name];
       nextValues[v.name] = fromDefaults ?? "";
-      if (supportsCurrencyMode(v)) nextModes[v.name] = "pago";
+      if (v.exclusiveGroup || v.dependsOn) {
+        nextModes[v.name] = "perdida";
+      } else if (supportsCurrencyMode(v)) {
+        nextModes[v.name] = "pago";
+      }
     }
     setValues(nextValues);
     setModes(nextModes);
@@ -149,6 +166,57 @@ export function AccountingTemplatePicker({
     setSelectedClient(null);
     setClientQuery("");
     setShowClientList(false);
+  };
+
+  const renderNodes = useMemo<RenderNode[]>(() => {
+    const seenGroups = new Set<string>();
+    const nodes: RenderNode[] = [];
+    for (const v of variables) {
+      if (v.exclusiveGroup) {
+        if (seenGroups.has(v.exclusiveGroup)) continue;
+        seenGroups.add(v.exclusiveGroup);
+        nodes.push({
+          kind: "group",
+          name: v.exclusiveGroup,
+          variables: variables.filter(
+            (x) => x.exclusiveGroup === v.exclusiveGroup,
+          ),
+        });
+      } else {
+        nodes.push({ kind: "single", variable: v });
+      }
+    }
+    return nodes;
+  }, [variables]);
+
+  const getGroupActiveName = (members: AccountingTemplateVariable[]): string => {
+    const active = members.find((m) => (modes[m.name] ?? "perdida") !== "perdida");
+    return active?.name ?? NONE_VALUE;
+  };
+
+  const handleGroupChange = (
+    members: AccountingTemplateVariable[],
+    newActiveName: string,
+  ) => {
+    setModes((prev) => {
+      const next = { ...prev };
+      for (const m of members) {
+        next[m.name] = m.name === newActiveName ? "pago" : "perdida";
+      }
+      // Sincroniza variables dependientes: si la dep está activa, activa la
+      // dependiente automáticamente; si la dep se desactiva, fuérzala a
+      // "perdida".
+      for (const v of variables) {
+        if (!v.dependsOn) continue;
+        const depMode = next[v.dependsOn] ?? "perdida";
+        if (depMode === "perdida") {
+          next[v.name] = "perdida";
+        } else if ((prev[v.name] ?? "perdida") === "perdida") {
+          next[v.name] = "pago";
+        }
+      }
+      return next;
+    });
   };
 
   const handleApply = () => {
@@ -349,7 +417,93 @@ export function AccountingTemplatePicker({
               Completa los campos. Los marcados se insertarán en{" "}
               <strong>negritas</strong>.
             </p>
-            {variables.map((v) => {
+            {renderNodes.map((node) => {
+              if (node.kind === "group") {
+                const activeName = getGroupActiveName(node.variables);
+                const active = node.variables.find((m) => m.name === activeName);
+                return (
+                  <div
+                    key={`grp-${node.name}`}
+                    className="space-y-1 rounded-md border border-border bg-muted/30 p-2"
+                  >
+                    <Label className="text-xs font-medium">¿Qué aplica?</Label>
+                    <Select
+                      value={activeName}
+                      onValueChange={(val) => handleGroupChange(node.variables, val)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {node.variables.map((m) => (
+                          <SelectItem key={m.name} value={m.name}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={NONE_VALUE}>
+                          Ninguno / En ceros
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {active ? (
+                      <div className="pt-1 space-y-1">
+                        <Label
+                          htmlFor={`tpl-var-${active.name}`}
+                          className="text-xs"
+                        >
+                          {active.label}
+                          {active.bold ? (
+                            <span className="ml-1 text-[10px] text-blue-600 font-semibold">
+                              (negritas)
+                            </span>
+                          ) : null}
+                        </Label>
+                        <Input
+                          id={`tpl-var-${active.name}`}
+                          type={
+                            active.type === "date"
+                              ? "date"
+                              : active.type === "currency"
+                              ? "number"
+                              : "text"
+                          }
+                          step={active.type === "currency" ? "0.01" : undefined}
+                          inputMode={
+                            active.type === "currency" ? "decimal" : undefined
+                          }
+                          placeholder={
+                            active.type === "currency"
+                              ? "Ej. 1234.56"
+                              : active.type === "date"
+                              ? ""
+                              : `Ej. ${active.label}`
+                          }
+                          value={values[active.name] ?? ""}
+                          onChange={(e) =>
+                            setValues((prev) => ({
+                              ...prev,
+                              [active.name]: e.target.value,
+                            }))
+                          }
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground italic">
+                        No se incluirán estas líneas en el correo.
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+
+              const v = node.variable;
+              // Variable dependiente oculta cuando su dep está inactiva.
+              if (v.dependsOn) {
+                const depMode = modes[v.dependsOn] ?? "pago";
+                if (depMode === "perdida") return null;
+              }
               const canSwitchMode = supportsCurrencyMode(v);
               const mode = modes[v.name] ?? "pago";
               const isLoss = canSwitchMode && mode === "perdida";
