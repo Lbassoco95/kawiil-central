@@ -58,6 +58,10 @@ function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row:
 const RT_ERROR_TOAST_COOLDOWN_MS = 60_000;
 const SLACK_POLL_MS = 22_000;
 const TOAST_DEDUPE_MS = 120_000;
+/** Ventana en que, al montar el hook, seguimos considerando "en vivo" una fila no leída. */
+const FIRST_TICK_CATCHUP_MS = 30_000;
+/** Backoff exponencial para reintentar la suscripción Realtime. */
+const RT_RECONNECT_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 
 type NotificationDeliveryPrefs = {
   desktop_browser_notifications?: boolean | null;
@@ -68,6 +72,18 @@ type NotificationDeliveryPrefs = {
 
 function isMandatoryMention(row: NotifRow): boolean {
   return row.type === "mention" || row.type === "slack_mention";
+}
+
+/**
+ * DMs de Slack: tratamos como semi-obligatorios para que siempre abran toast + notificación
+ * de escritorio aunque el usuario apague otros toggles genéricos. El beep sigue respetando
+ * `slack_message_sound_enabled`.
+ */
+function isMandatorySlackDirect(row: NotifRow): boolean {
+  if (row.type !== "slack_message") return false;
+  if (row.entity_type !== "slack") return false;
+  const t = row.title?.trim() ?? "";
+  return t.startsWith("Slack · Mensaje directo") || t.startsWith("Slack · Grupo privado");
 }
 
 /**
@@ -114,7 +130,7 @@ export function useNotificationDelivery() {
     prefsRef.current = prefs;
   }, [prefs]);
 
-  const deliverNotificationRow = useCallback((row: NotifRow, _source: "realtime" | "poll") => {
+  const deliverNotificationRow = useCallback((row: NotifRow, source: "realtime" | "poll" | "poll-catchup") => {
     if (!user?.id || !row.id) return;
     if (toastDedupeIdsRef.current.has(row.id)) return;
     scheduleToastDedupe(row.id, toastDedupeIdsRef.current);
@@ -122,16 +138,29 @@ export function useNotificationDelivery() {
     const title = effectiveNotificationTitle(row);
     const p = prefsRef.current;
     const mandatoryMention = isMandatoryMention(row);
-    const allowToast = mandatoryMention || p?.in_app_toast_notifications !== false;
-    const allowDesktop = mandatoryMention || p?.desktop_browser_notifications !== false;
+    const mandatoryDm = isMandatorySlackDirect(row);
+    const mandatorySurface = mandatoryMention || mandatoryDm;
+    const allowToast = mandatorySurface || p?.in_app_toast_notifications !== false;
+    const allowDesktop = mandatorySurface || p?.desktop_browser_notifications !== false;
     const globalSoundOn = p?.notification_sound_enabled === true;
     const slackSoundOn = p?.slack_message_sound_enabled !== false;
+
+    console.debug("[notif] deliver", {
+      id: row.id,
+      type: row.type,
+      entity_type: row.entity_type,
+      source,
+      mandatoryMention,
+      mandatoryDm,
+      allowToast,
+      allowDesktop,
+    });
 
     let surfaced = false;
     if (allowToast) {
       toast.info(title, {
         description: row.body?.trim() || undefined,
-        duration: 6500,
+        duration: mandatorySurface ? 9000 : 6500,
         className:
           "!min-w-[min(100vw-1.5rem,20rem)] sm:!min-w-[22rem] !max-w-[min(100vw-1.5rem,26rem)] !shadow-xl !border-border/80",
       });
@@ -151,13 +180,15 @@ export function useNotificationDelivery() {
           requireInteraction: false,
         });
         surfaced = true;
-      } catch {
-        /* ignore */
+      } catch (err) {
+        console.warn("[notif] desktop Notification error", err);
       }
+    } else if (allowDesktop && typeof Notification !== "undefined" && Notification.permission !== "granted") {
+      console.debug("[notif] desktop skipped", { permission: Notification.permission });
     }
 
-    /** Menciones obligatorias: pitido siempre, aunque el usuario desactive otros avisos. */
-    if (mandatoryMention) {
+    /** Menciones y DMs obligatorios: pitido siempre, aunque el usuario desactive otros avisos. */
+    if (mandatorySurface) {
       playNotificationBeep();
     } else if (row?.type === "slack_message" && slackSoundOn) {
       playNotificationBeep();
@@ -179,8 +210,27 @@ export function useNotificationDelivery() {
         .limit(15);
       if (error || !data?.length) return;
 
+      const newestTs = data[0].created_at as string;
+
       if (pollCursorIsoRef.current === null) {
-        pollCursorIsoRef.current = data[0].created_at as string;
+        // Primer tick: entregar filas no leídas creadas en la ventana de catch-up por si Realtime no
+        // estaba listo cuando cayeron. Deduplicación por `toastDedupeIdsRef` evita doble toast si
+        // Realtime también las entrega después.
+        const cutoffIso = new Date(Date.now() - FIRST_TICK_CATCHUP_MS).toISOString();
+        const recent = [...data].reverse().filter((r) => (r.created_at as string) >= cutoffIso);
+        let delivered = 0;
+        for (const row of recent) {
+          if (row.is_read) continue;
+          deliverNotificationRow(row as NotifRow, "poll-catchup");
+          invalidateSlackCachesFromNotifRow(qc, user.id, row as NotifRow);
+          delivered += 1;
+        }
+        if (delivered > 0) {
+          console.debug("[notif] poll catch-up delivered", { count: delivered });
+          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+        }
+        pollCursorIsoRef.current = newestTs;
         return;
       }
 
@@ -213,62 +263,110 @@ export function useNotificationDelivery() {
     if (!user?.id) return;
 
     const channelTopic = `notifications-rt-${user.id}`;
-    // Evita colisiones "already joined" si el layout se monta dos veces.
-    for (const existing of supabase.getChannels()) {
-      if (existing.topic === channelTopic) {
-        supabase.removeChannel(existing);
-      }
-    }
+    let cancelled = false;
+    let attempt = 0;
+    let retryTimerId: number | null = null;
+    let activeChannel: ReturnType<typeof supabase.channel> | null = null;
 
-    const channel = supabase
-      .channel(channelTopic)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const row = payload.new as NotifRow;
-          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-          invalidateSlackCachesFromNotifRow(qc, user.id, row);
-          deliverNotificationRow(row, "realtime");
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const row = payload.new as NotifRow;
-          qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-          qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-          invalidateSlackCachesFromNotifRow(qc, user.id, row);
-        },
-      )
-      .subscribe((status, err) => {
-        if (status === "SUBSCRIBED") return;
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error("notifications realtime:", status, err);
-          const now = Date.now();
-          if (now - lastRtErrorToastAt.current > RT_ERROR_TOAST_COOLDOWN_MS) {
-            lastRtErrorToastAt.current = now;
-            toast.error("Avisos en vivo desconectados. Recarga la página si dejan de llegar notificaciones.", {
-              duration: 8000,
-            });
-          }
+    const scheduleReconnect = (reason: string) => {
+      if (cancelled) return;
+      const delay = RT_RECONNECT_BACKOFF_MS[Math.min(attempt, RT_RECONNECT_BACKOFF_MS.length - 1)];
+      attempt += 1;
+      console.warn("[notif] realtime reconnect scheduled", { reason, delayMs: delay, attempt });
+      if (retryTimerId !== null) {
+        window.clearTimeout(retryTimerId);
+      }
+      retryTimerId = window.setTimeout(() => {
+        retryTimerId = null;
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      if (cancelled) return;
+
+      // Evita colisiones "already joined" si el layout se monta dos veces o reconectamos.
+      for (const existing of supabase.getChannels()) {
+        if (existing.topic === channelTopic) {
+          supabase.removeChannel(existing);
         }
-      });
+      }
+
+      const channel = supabase
+        .channel(channelTopic)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const row = payload.new as NotifRow;
+            qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+            qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+            invalidateSlackCachesFromNotifRow(qc, user.id, row);
+            deliverNotificationRow(row, "realtime");
+          },
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            const row = payload.new as NotifRow;
+            qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+            qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+            invalidateSlackCachesFromNotifRow(qc, user.id, row);
+          },
+        )
+        .subscribe((status, err) => {
+          if (cancelled) return;
+          if (status === "SUBSCRIBED") {
+            console.debug("[notif] realtime SUBSCRIBED", channelTopic);
+            attempt = 0;
+            return;
+          }
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            console.error("notifications realtime:", status, err);
+            const now = Date.now();
+            if (now - lastRtErrorToastAt.current > RT_ERROR_TOAST_COOLDOWN_MS) {
+              lastRtErrorToastAt.current = now;
+              toast.error("Avisos en vivo desconectados. Intentando reconectar…", {
+                duration: 6000,
+              });
+            }
+            // Limpia este canal y programa reintento con backoff.
+            try {
+              supabase.removeChannel(channel);
+            } catch {
+              /* ignore */
+            }
+            if (activeChannel === channel) activeChannel = null;
+            scheduleReconnect(status);
+          }
+        });
+
+      activeChannel = channel;
+    };
+
+    connect();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (retryTimerId !== null) {
+        window.clearTimeout(retryTimerId);
+        retryTimerId = null;
+      }
+      if (activeChannel) {
+        supabase.removeChannel(activeChannel);
+        activeChannel = null;
+      }
     };
   }, [user?.id, qc, deliverNotificationRow]);
 }
