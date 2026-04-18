@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,8 +18,8 @@ import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { useCreateExpense } from "@/hooks/useExpenses";
-import { toast } from "sonner";
-import { Paperclip, X } from "lucide-react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { expensesLimits } from "@/lib/fileIntake/limits";
 
 const CATEGORY_OPTIONS = [
   { value: "terceros", label: "Gastos por terceros / cliente" },
@@ -41,8 +41,7 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const MAX_EXPENSE_FILES = 10;
-const MAX_EXPENSE_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_EXPENSE_FILES = expensesLimits.maxFiles;
 
 interface Props {
   open: boolean;
@@ -53,7 +52,6 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const createExpense = useCreateExpense();
   const { data: clients = [] } = useClients();
   const { data: projects = [] } = useProjects();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   useEffect(() => {
@@ -81,25 +79,6 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const projectOptions = projects
     .filter((p: any) => !watchClient || p.client_id === watchClient)
     .map((p: any) => ({ value: p.id, label: p.name }));
-
-  const addFiles = (list: FileList | null) => {
-    if (!list?.length) return;
-    const next = [...pendingFiles];
-    for (let i = 0; i < list.length; i++) {
-      const f = list.item(i)!;
-      if (next.length >= MAX_EXPENSE_FILES) {
-        toast.error(`Máximo ${MAX_EXPENSE_FILES} archivos por gasto`);
-        break;
-      }
-      if (f.size > MAX_EXPENSE_FILE_BYTES) {
-        toast.error(`«${f.name}» supera 20 MB`);
-        continue;
-      }
-      next.push(f);
-    }
-    setPendingFiles(next);
-    if (fileRef.current) fileRef.current.value = "";
-  };
 
   const onSubmit = async (values: FormValues) => {
     await createExpense.mutateAsync({
@@ -262,50 +241,17 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
             <div className="space-y-2">
               <FormLabel className="text-sm font-medium">Comprobantes (opcional)</FormLabel>
               <p className="text-xs text-muted-foreground">
-                Facturas, tickets o capturas. Hasta {MAX_EXPENSE_FILES} archivos, 20 MB c/u.
+                Facturas, tickets o capturas. Hasta {MAX_EXPENSE_FILES} archivos, 20 MB c/u. Puedes arrastrar un .zip y se expanden.
               </p>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                className="hidden"
-                accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx,application/pdf,image/*"
-                onChange={(e) => addFiles(e.target.files)}
+              <FileDropzone
+                files={pendingFiles}
+                onChange={setPendingFiles}
+                limits={expensesLimits}
+                variant="area"
+                hint="Arrastra archivos o haz click"
+                subhint="PDF, imágenes, Office o .zip"
+                showSize
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => fileRef.current?.click()}
-              >
-                <Paperclip className="h-4 w-4" />
-                Agregar archivos
-              </Button>
-              {pendingFiles.length > 0 && (
-                <ul className="rounded-md border divide-y text-sm max-h-32 overflow-y-auto">
-                  {pendingFiles.map((f, idx) => (
-                    <li
-                      key={`${f.name}-${idx}`}
-                      className="flex items-center justify-between gap-2 px-2 py-1.5"
-                    >
-                      <span className="truncate text-xs" title={f.name}>{f.name}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        aria-label="Quitar archivo"
-                        onClick={() =>
-                          setPendingFiles((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

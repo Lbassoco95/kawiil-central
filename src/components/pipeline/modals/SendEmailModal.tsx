@@ -1,4 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { Switch } from "@/components/ui/switch";
+import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,7 +31,6 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { pipelineQueryKeys, useEmailTemplates } from "@/hooks/usePipeline";
 import { Mail } from "lucide-react";
-import { Paperclip, X } from "lucide-react";
 import { RichTextEditor } from "@/components/microsoft/RichTextEditor";
 import { filesToComposerAttachments, type ComposerAttachment } from "@/lib/emailComposer";
 
@@ -116,8 +118,8 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
   const qc = useQueryClient();
   const { data: templates = [] } = useEmailTemplates();
   const [saving, setSaving] = useState(false);
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [keepZips, setKeepZips] = useState(true);
 
   const form = useForm<EmailForm>({
     resolver: zodResolver(emailSchema),
@@ -148,7 +150,8 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
     form.setValue("body_html", "");
     form.setValue("template_id", undefined);
     form.setValue("schedule_follow_up", false);
-    setAttachments([]);
+    setPendingFiles([]);
+    setKeepZips(true);
   }, [open, leadEmail, replyTo, form]);
 
   const watchFollowUp = form.watch("schedule_follow_up");
@@ -205,6 +208,15 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         );
       }
       if (!logEntry) throw new Error("No se pudo crear el registro de envío");
+
+      let attachments: ComposerAttachment[] = [];
+      if (pendingFiles.length > 0) {
+        try {
+          attachments = await filesToComposerAttachments(pendingFiles);
+        } catch (error) {
+          throw new Error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
+        }
+      }
 
       const { data: result, error: fnErr } = await supabase.functions.invoke(
         "send-pipeline-email",
@@ -268,7 +280,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
         template_id: undefined,
         schedule_follow_up: false,
       });
-      setAttachments([]);
+      setPendingFiles([]);
     } catch (e: unknown) {
       toast.error(errorMessageFromUnknown(e));
     } finally {
@@ -277,24 +289,6 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
   });
 
   const activeTemplates = templates.filter((t) => t.is_active);
-
-  const handleAttachmentPick = async (files: FileList | null) => {
-    if (!files?.length) return;
-    try {
-      const parsed = await filesToComposerAttachments(files);
-      setAttachments((prev) => {
-        const merged = [...prev];
-        for (const item of parsed) {
-          if (!merged.some((existing) => existing.name === item.name && existing.size === item.size)) {
-            merged.push(item);
-          }
-        }
-        return merged;
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
-    }
-  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -430,44 +424,26 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
             </p>
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => void handleAttachmentPick(e.target.files)}
-          />
-          <div
-            className="rounded-md border border-dashed p-3 text-sm text-muted-foreground"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              void handleAttachmentPick(e.dataTransfer.files);
-            }}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs">Adjuntos</span>
-              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                <Paperclip className="h-3.5 w-3.5 mr-1" />
-                Adjuntar
-              </Button>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>Adjuntos</span>
+              <label className="inline-flex items-center gap-2 shrink-0">
+                <Switch checked={keepZips} onCheckedChange={setKeepZips} />
+                <span className="text-xs">Mantener .zip</span>
+              </label>
             </div>
-            {attachments.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {attachments.map((file) => (
-                  <div key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
-                    <span className="max-w-[180px] truncate">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)))}
-                      aria-label={`Quitar ${file.name}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            <FileDropzone
+              files={pendingFiles}
+              onChange={setPendingFiles}
+              limits={withLimits(emailLimits, {
+                accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar,.7z,.msg,.eml",
+                zipMode: keepZips ? "keep" : "auto",
+              })}
+              variant="area"
+              hint="Arrastra archivos o haz click"
+              subhint={keepZips ? "Los .zip se envían tal cual" : "Los .zip se expanden y se envían como archivos"}
+              showSize
+            />
           </div>
 
           {replyTo?.body_html ? (

@@ -32,6 +32,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
 
 export default function Hub() {
   const { isAdminOrManager } = useUserRole();
@@ -243,7 +245,17 @@ export default function Hub() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Archivo *</Label>
-              <Input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*" onChange={(e) => setProcedureFile(e.target.files?.[0] ?? null)} className="text-sm" />
+              <FileDropzone
+                files={procedureFile ? [procedureFile] : []}
+                onChange={(files) => setProcedureFile(files[0] ?? null)}
+                limits={withLimits(singleFileLimits, {
+                  accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*",
+                })}
+                variant="area"
+                hint="Arrastra el archivo o haz click"
+                subhint="PDF, Office, texto o imagen"
+                showSize
+              />
             </div>
           </div>
           <DialogFooter>

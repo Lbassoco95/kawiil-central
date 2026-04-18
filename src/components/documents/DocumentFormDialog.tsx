@@ -8,10 +8,11 @@ import { useCreateDocument } from "@/hooks/useDocuments";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
-import { supabase } from "@/integrations/supabase/client";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { toast } from "sonner";
-import { Upload, FileText, Loader2, Cloud, HardDrive } from "lucide-react";
+import { Loader2, Cloud, HardDrive } from "lucide-react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
 
 interface Props {
   open: boolean;
@@ -30,13 +31,15 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) {
-      setFile(selected);
-      if (!name) setName(selected.name);
-    }
+  const dropzoneFiles = file ? [file] : [];
+  const handleDropzoneChange = (next: File[]) => {
+    const selected = next[0] ?? null;
+    setFile(selected);
+    if (selected && !name) setName(selected.name);
   };
+  const dropzoneLimits = withLimits(singleFileLimits, {
+    accept: ACCEPTED_DOCUMENT_EXTENSIONS,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,30 +127,15 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
             <p className="text-xs text-muted-foreground mb-1">
               PDF, Word (.doc, .docx), texto (.txt, .csv, .md), Excel, PowerPoint o imágenes
             </p>
-            <label className="cursor-pointer block">
-              <input
-                type="file"
-                className="hidden"
-                onChange={handleFileChange}
-                accept={ACCEPTED_DOCUMENT_EXTENSIONS}
-              />
-              <div className="flex items-center gap-3 p-4 border-2 border-dashed rounded-md text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors">
-                {file ? (
-                  <>
-                    <FileText className="h-5 w-5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate font-medium text-foreground">{file.name}</p>
-                      <p className="text-xs">{(file.size / 1024).toFixed(0)} KB</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-5 w-5" />
-                    <span>Haz clic para seleccionar un archivo</span>
-                  </>
-                )}
-              </div>
-            </label>
+            <FileDropzone
+              files={dropzoneFiles}
+              onChange={handleDropzoneChange}
+              limits={dropzoneLimits}
+              variant="area"
+              showSize
+              hint="Arrastra el archivo aqui o haz click"
+              subhint="Un archivo a la vez"
+            />
           </div>
 
           <div>

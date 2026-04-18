@@ -1,4 +1,6 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { genericLimits } from "@/lib/fileIntake/limits";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,8 +9,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/tasks/MentionTextarea";
 import {
-  Send, MessageSquare, Paperclip, ScanLine,
-  Link2, X, Loader2, ExternalLink,
+  Send, MessageSquare, ScanLine,
+  Link2, X, ExternalLink,
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
@@ -41,7 +43,7 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
   const [uploading, setUploading] = useState(false);
   const [linkInput, setLinkInput] = useState("");
   const [showLinkPopover, setShowLinkPopover] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingCommentFiles, setPendingCommentFiles] = useState<File[]>([]);
 
   const { data: comments = [] } = useQuery({
     queryKey: ["step-comments", projectId, stepKey],
@@ -70,11 +72,12 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
     enabled: !!user,
   });
 
-  const handleFileUpload = async (files: FileList | null) => {
+  const handleFileUpload = async (files: File[]) => {
     if (!files || files.length === 0) return;
+    setPendingCommentFiles(files);
     setUploading(true);
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         if (file.size > 25 * 1024 * 1024) {
           toast.error(`${file.name} excede 25MB`);
           continue;
@@ -95,7 +98,7 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
       toast.error("Error al subir archivo: " + e.message);
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setPendingCommentFiles([]);
     }
   };
 
@@ -305,27 +308,17 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
 
         {/* Attachment buttons */}
         <div className="flex flex-col gap-0.5 shrink-0">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => handleFileUpload(e.target.files)}
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6"
-            onClick={() => fileInputRef.current?.click()}
+          <FileDropzone
+            files={pendingCommentFiles}
+            onChange={handleFileUpload}
+            limits={genericLimits}
+            variant="button"
             disabled={uploading}
-            title="Adjuntar archivo desde equipo"
-          >
-            {uploading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Paperclip className="h-3 w-3" />
-            )}
-          </Button>
+            showChips={false}
+            buttonSize="icon"
+            buttonVariant="ghost"
+            className="shrink-0"
+          />
 
           <Button
             size="icon"

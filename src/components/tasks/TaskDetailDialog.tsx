@@ -30,6 +30,8 @@ import {
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { genericLimits, withLimits } from "@/lib/fileIntake/limits";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
@@ -106,7 +108,9 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const [showCommentDropbox, setShowCommentDropbox] = useState(false);
   const [commentLinkInput, setCommentLinkInput] = useState("");
   const [showCommentLinkPopover, setShowCommentLinkPopover] = useState(false);
-  const commentFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingCommentFiles, setPendingCommentFiles] = useState<File[]>([]);
+  const [pendingFileTabFiles, setPendingFileTabFiles] = useState<File[]>([]);
+  const fileTabLimits = withLimits(genericLimits, { accept: ACCEPTED_DOCUMENT_EXTENSIONS });
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
   const [showBlockTime, setShowBlockTime] = useState(false);
@@ -379,11 +383,12 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     });
   };
 
-  const handleCommentFileUpload = async (files: FileList | null) => {
+  const handleCommentFileUpload = async (files: File[]) => {
     if (!files || files.length === 0) return;
+    setPendingCommentFiles(files);
     setCommentUploading(true);
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         if (file.size > 25 * 1024 * 1024) { toast.error(`${file.name} excede 25MB`); continue; }
         const safeName = sanitizeStorageFileName(file.name);
         const path = `comment-attachments/${Date.now()}_${safeName}`;
@@ -398,7 +403,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
       toast.error("Error al subir archivo: " + e.message);
     } finally {
       setCommentUploading(false);
-      if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+      setPendingCommentFiles([]);
     }
   };
 
@@ -452,26 +457,36 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     updateTask.mutate({ id: taskId, dropbox_links: currentLinks.filter((_, i) => i !== index) });
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
+  const handleFileUpload = async (files: File[]) => {
+    if (!files || files.length === 0 || !user) return;
+    setPendingFileTabFiles(files);
     setUploading(true);
+    let ok = 0;
+    let failed = 0;
     try {
-      const safeName = sanitizeStorageFileName(file.name);
-      const filePath = `tasks/${taskId}/${Date.now()}_${safeName}`;
-      const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
-      if (uploadError) throw uploadError;
       const { data: profile } = await supabase.from("profiles").select("organization_id").eq("user_id", user.id).single();
-      await supabase.from("documents").insert({
-        name: file.name, file_path: filePath, mime_type: file.type, file_size: file.size,
-        task_id: taskId, organization_id: profile!.organization_id, uploaded_by: user.id, source: "supabase" as const,
-      });
+      for (const file of files) {
+        try {
+          const safeName = sanitizeStorageFileName(file.name);
+          const filePath = `tasks/${taskId}/${Date.now()}_${safeName}`;
+          const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
+          if (uploadError) throw uploadError;
+          await supabase.from("documents").insert({
+            name: file.name, file_path: filePath, mime_type: file.type, file_size: file.size,
+            task_id: taskId, organization_id: profile!.organization_id, uploaded_by: user.id, source: "supabase" as const,
+          });
+          ok += 1;
+        } catch (err: any) {
+          failed += 1;
+          console.error("[TaskDetailDialog] upload fallo", file.name, err);
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ["task-documents", taskId] });
-      toast.success("Archivo subido correctamente");
-    } catch (err: any) {
-      toast.error("Error al subir archivo: " + err.message);
+      if (ok > 0) toast.success(`${ok} archivo(s) subidos correctamente`);
+      if (failed > 0) toast.error(`${failed} archivo(s) fallaron`);
     } finally {
       setUploading(false);
+      setPendingFileTabFiles([]);
     }
   };
 
@@ -884,10 +899,17 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       />
                     </div>
                     <div className="flex flex-col gap-0.5 shrink-0">
-                      <input ref={commentFileInputRef} type="file" multiple className="hidden" onChange={(e) => handleCommentFileUpload(e.target.files)} />
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => commentFileInputRef.current?.click()} disabled={commentUploading} title="Adjuntar archivo">
-                        {commentUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
-                      </Button>
+                      <FileDropzone
+                        files={pendingCommentFiles}
+                        onChange={handleCommentFileUpload}
+                        limits={genericLimits}
+                        variant="button"
+                        disabled={commentUploading}
+                        showChips={false}
+                        buttonSize="icon"
+                        buttonVariant="ghost"
+                        className="shrink-0"
+                      />
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowCommentDropbox(true)} title="Seleccionar de Dropbox">
                         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" /></svg>
                       </Button>
@@ -983,12 +1005,17 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                     ))}
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <label className="cursor-pointer">
-                      <input type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleFileUpload} disabled={uploading} />
-                      <div className="flex items-center gap-2 p-2.5 border-2 border-dashed rounded-md text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer">
-                        <Upload className="h-3.5 w-3.5" />{uploading ? "Subiendo..." : "Subir archivo"}
-                      </div>
-                    </label>
+                    <FileDropzone
+                      files={pendingFileTabFiles}
+                      onChange={handleFileUpload}
+                      limits={fileTabLimits}
+                      variant="area"
+                      disabled={uploading}
+                      showChips={false}
+                      hint={uploading ? "Subiendo..." : "Subir archivos"}
+                      subhint="Arrastra varios o un .zip (se expande)"
+                      className="text-xs"
+                    />
                     <label className="cursor-pointer">
                       <input type="file" className="hidden" accept="image/*" capture="environment" onChange={async (e) => {
                         const capturedFile = e.target.files?.[0];

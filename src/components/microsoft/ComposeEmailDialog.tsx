@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +16,7 @@ import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection } f
 import { useOrgUsers, type OrgUser } from "@/hooks/useOrgUsers";
 import { useMailDirectoryContacts, useSyncMailDirectory, type MailDirectoryContact } from "@/hooks/useMailDirectory";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, Paperclip, X, BookUser } from "lucide-react";
+import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, BookUser } from "lucide-react";
 import { toast } from "sonner";
 import {
   filesToComposerAttachments,
@@ -198,8 +200,8 @@ export function ComposeEmailDialog({
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [hasAiDraft, setHasAiDraft] = useState(false);
-  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [keepZips, setKeepZips] = useState(true);
   const lastInstructionRef = useRef("");
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -244,7 +246,8 @@ export function ComposeEmailDialog({
       setHasAiDraft(false);
       lastInstructionRef.current = "";
       bodyRef.current = "";
-      setAttachments([]);
+      setPendingFiles([]);
+      setKeepZips(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -321,6 +324,16 @@ export function ComposeEmailDialog({
       return;
     }
 
+    let attachments: ComposerAttachment[] = [];
+    if (pendingFiles.length > 0) {
+      try {
+        attachments = await filesToComposerAttachments(pendingFiles);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
+        return;
+      }
+    }
+
     await sendEmail.mutateAsync({
       to: toList,
       cc: ccList.length ? ccList : undefined,
@@ -331,24 +344,6 @@ export function ComposeEmailDialog({
     });
 
     onOpenChange(false);
-  };
-
-  const handleAttachmentPick = async (files: FileList | null) => {
-    if (!files?.length) return;
-    try {
-      const parsed = await filesToComposerAttachments(files);
-      setAttachments((prev) => {
-        const merged = [...prev];
-        for (const item of parsed) {
-          if (!merged.some((existing) => existing.name === item.name && existing.size === item.size)) {
-            merged.push(item);
-          }
-        }
-        return merged;
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
-    }
   };
 
   const applyAccountingTemplate = useCallback(
@@ -560,54 +555,26 @@ export function ComposeEmailDialog({
                 toolbarEndSlot={iaToolbarButton}
               />
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.msg,.eml"
-                onChange={(e) => void handleAttachmentPick(e.target.files)}
-              />
-              <div
-                className="rounded-md border border-dashed p-3 text-sm text-muted-foreground shrink-0"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  void handleAttachmentPick(e.dataTransfer.files);
-                }}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs">
-                    Adjuntos (documentos, imágenes, zip…). La firma del nuevo correo usa tu perfil de Microsoft 365.
-                  </span>
-                  <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                    <Paperclip className="h-3.5 w-3.5 mr-1" />
-                    Adjuntar
-                  </Button>
+              <div className="space-y-2 shrink-0">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>Adjuntos (documentos, imágenes, zip…). La firma del nuevo correo usa tu perfil de Microsoft 365.</span>
+                  <label className="inline-flex items-center gap-2 shrink-0">
+                    <Switch checked={keepZips} onCheckedChange={setKeepZips} />
+                    <span className="text-xs">Mantener .zip</span>
+                  </label>
                 </div>
-                {attachments.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {attachments.map((file) => (
-                      <div
-                        key={`${file.name}-${file.size}`}
-                        className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs"
-                      >
-                        <span className="max-w-[180px] truncate">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAttachments((prev) =>
-                              prev.filter((f) => !(f.name === file.name && f.size === file.size))
-                            )
-                          }
-                          aria-label={`Quitar ${file.name}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <FileDropzone
+                  files={pendingFiles}
+                  onChange={setPendingFiles}
+                  limits={withLimits(emailLimits, {
+                    accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar,.7z,.msg,.eml",
+                    zipMode: keepZips ? "keep" : "auto",
+                  })}
+                  variant="area"
+                  hint="Arrastra archivos o haz click"
+                  subhint={keepZips ? "Los .zip se envían tal cual" : "Los .zip se expanden y se envían como archivos"}
+                  showSize
+                />
               </div>
             </div>
           </div>

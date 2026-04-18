@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, Send, Loader2, X, Minus, Plus, FileText } from "lucide-react";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
 import { ChatProcessingPanel } from "@/components/ai/ChatProcessingPanel";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { chatLimits } from "@/lib/fileIntake/limits";
 import { cn } from "@/lib/utils";
 import { useLocation } from "react-router-dom";
 
@@ -102,7 +104,17 @@ export function FloatingAIChat() {
 
   // Full chat panel
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[380px] h-[520px] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+    <FileDropzone
+      files={pendingFiles}
+      onChange={setPendingFiles}
+      limits={chatLimits}
+      disabled={isStreaming}
+      variant="overlay"
+      showChips={false}
+      enablePaste={false}
+      hint="Suelta archivos para adjuntar"
+      className="fixed bottom-6 right-6 z-50 w-[380px] h-[520px] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200"
+    >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 bg-secondary/20">
         <Sparkles className="h-4 w-4 text-primary" />
@@ -309,6 +321,6 @@ export function FloatingAIChat() {
           </Button>
         </div>
       </div>
-    </div>
+    </FileDropzone>
   );
 }

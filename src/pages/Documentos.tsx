@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -18,11 +18,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
-  Plus, Search, FileText, Link, ExternalLink, Trash2, Upload,
+  Plus, Search, FileText, Link, ExternalLink, Trash2,
   Eye, Folder, FolderOpen, ChevronLeft, Image,
   FileSpreadsheet, File, FileCode, Loader2, HardDrive, Cloud,
   FolderPlus, Pencil
 } from "lucide-react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { documentsLimits } from "@/lib/fileIntake/limits";
 
 // ─── File icon helper ─────────────────────────────────────────
 function getFileIcon(name: string, source?: string) {
@@ -77,7 +79,7 @@ function DropboxLiveBrowser() {
   const [renameTarget, setRenameTarget] = useState<DropboxEntry | null>(null);
   const [renameName, setRenameName] = useState("");
   const [renaming, setRenaming] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   // Picker state for when personal folder is not set yet
   const [showFolderPicker, setShowFolderPicker] = useState(false);
@@ -225,21 +227,34 @@ function DropboxLiveBrowser() {
     }
   };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !currentPath) return;
+  const uploadBatch = async (files: File[]) => {
+    if (!currentPath || files.length === 0) return;
     setUploading(true);
+    let ok = 0;
+    let failed = 0;
     try {
-      const uploadPath = `${currentPath}/${file.name}`;
-      await uploadFileToDropbox(file, uploadPath);
-      toast.success(`"${file.name}" subido a Dropbox`);
+      for (const file of files) {
+        try {
+          await uploadFileToDropbox(file, `${currentPath}/${file.name}`);
+          ok += 1;
+        } catch (err: any) {
+          failed += 1;
+          console.error("[Documentos] Dropbox upload fallo", file.name, err);
+        }
+      }
+      if (ok > 0) toast.success(`${ok} archivo(s) subidos a Dropbox`);
+      if (failed > 0) toast.error(`${failed} archivo(s) no se pudieron subir`);
       browse(currentPath);
-    } catch (err: any) {
-      toast.error("Error al subir: " + err.message);
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
+      setPendingFiles([]);
     }
+  };
+
+  const handleDropzoneChange = (next: File[]) => {
+    if (next.length === 0) return;
+    setPendingFiles(next);
+    void uploadBatch(next);
   };
 
   const handleCreateFolder = async () => {
@@ -351,17 +366,16 @@ function DropboxLiveBrowser() {
               <FolderPlus className="h-3 w-3" />
               Nueva carpeta
             </Button>
-            <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
+            <FileDropzone
+              files={pendingFiles}
+              onChange={handleDropzoneChange}
+              limits={documentsLimits}
+              variant="compact"
               disabled={uploading}
-              onClick={() => fileRef.current?.click()}
-            >
-              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-              Subir archivo
-            </Button>
+              showChips={false}
+              buttonLabel={uploading ? "Subiendo..." : "Subir archivos (.zip se expande)"}
+              className="w-auto"
+            />
           </div>
         )}
       </div>

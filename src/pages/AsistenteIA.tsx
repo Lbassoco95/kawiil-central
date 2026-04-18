@@ -32,6 +32,8 @@ import { ArtifactCard } from "@/components/ai/ArtifactCard";
 import { ArtifactViewer } from "@/components/ai/ArtifactViewer";
 import { ProjectPreviewCard } from "@/components/ai/ProjectPreviewCard";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { chatLimits } from "@/lib/fileIntake/limits";
 import { ChatProcessingPanel } from "@/components/ai/ChatProcessingPanel";
 import {
   MAX_CHAT_ATTACHMENT_BATCH_BYTES,
@@ -579,7 +581,17 @@ const AsistenteIA = () => {
         )}
 
         {/* Main chat area */}
-        <div className="flex-1 flex flex-col min-w-0 border-l border-border/40">
+        <FileDropzone
+          files={pendingFiles}
+          onChange={setPendingFiles}
+          limits={chatLimits}
+          disabled={isStreaming}
+          variant="overlay"
+          showChips={false}
+          enablePaste={false}
+          hint="Suelta archivos para adjuntar al chat"
+          className="flex-1 flex flex-col min-w-0 border-l border-border/40"
+        >
           <div className="surface-toolbar shrink-0 border-b border-border/50 px-3 py-2.5 sm:px-4 sm:py-3">
             <div className="flex flex-col gap-2 min-w-0">
               <div className="flex items-start gap-2 min-w-0">
@@ -865,7 +877,7 @@ const AsistenteIA = () => {
               el mensaje. Kawiil AI puede cometer errores.
             </p>
           </div>
-        </div>
+        </FileDropzone>
 
         {/* Right knowledge panel */}
         {showKnowledge && activeProject && (

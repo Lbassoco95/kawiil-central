@@ -2,6 +2,8 @@ import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen } from "lucide-react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { documentsLimits, withLimits } from "@/lib/fileIntake/limits";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,8 +40,9 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [deleteDoc, setDeleteDoc] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showDropboxPicker, setShowDropboxPicker] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
+  const [pendingLocalFiles, setPendingLocalFiles] = useState<File[]>([]);
+  const localUploadLimits = withLimits(documentsLimits, { accept: ACCEPTED_DOCUMENT_EXTENSIONS });
 
   const createDropboxDoc = useMutation({
     mutationFn: async ({ docType, docName, folderPath }: { docType: string; docName: string; folderPath: string }) => {
@@ -133,39 +136,56 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     }
   };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
+  const uploadOneLocal = async (file: File): Promise<string | null> => {
+    if (!user) return null;
+    const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+    const safeName = sanitizeStorageFileName(file.name);
+    const path = `${orgId}/${projectId}/${Date.now()}_${safeName}`;
+    const { error: upErr } = await supabase.storage.from("documents").upload(path, file);
+    if (upErr) throw upErr;
+    const { data: doc, error: docErr } = await supabase
+      .from("documents")
+      .insert({
+        name: file.name,
+        file_path: path,
+        mime_type: file.type,
+        file_size: file.size,
+        organization_id: orgId!,
+        project_id: projectId,
+        uploaded_by: user.id,
+        source: "supabase" as const,
+      })
+      .select()
+      .single();
+    if (docErr) throw docErr;
+    logActivity({ entityType: "document", entityId: doc.id, action: "file_uploaded", details: { name: file.name } });
+    return doc.id as string;
+  };
+
+  const handleLocalDropzoneChange = async (files: File[]) => {
+    if (files.length === 0 || !user) return;
+    setPendingLocalFiles(files);
     setUploading(true);
+    const addedIds: string[] = [];
+    let failed = 0;
     try {
-      const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
-      const safeName = sanitizeStorageFileName(file.name);
-      const path = `${orgId}/${projectId}/${Date.now()}_${safeName}`;
-      const { error: upErr } = await supabase.storage.from("documents").upload(path, file);
-      if (upErr) throw upErr;
-      const { data: doc, error: docErr } = await supabase
-        .from("documents")
-        .insert({
-          name: file.name,
-          file_path: path,
-          mime_type: file.type,
-          file_size: file.size,
-          organization_id: orgId!,
-          project_id: projectId,
-          uploaded_by: user.id,
-          source: "supabase" as const,
-        })
-        .select()
-        .single();
-      if (docErr) throw docErr;
-      onDocumentAdded([...documentIds, doc.id]);
-      logActivity({ entityType: "document", entityId: doc.id, action: "file_uploaded", details: { name: file.name } });
-      toast.success(`"${file.name}" subido`);
-    } catch (err: any) {
-      toast.error("Error: " + err.message);
+      for (const f of files) {
+        try {
+          const id = await uploadOneLocal(f);
+          if (id) addedIds.push(id);
+        } catch (err: any) {
+          failed += 1;
+          console.error("[StepFileManager] upload local fallo", f.name, err);
+        }
+      }
+      if (addedIds.length > 0) {
+        onDocumentAdded([...documentIds, ...addedIds]);
+        toast.success(`${addedIds.length} archivo(s) subidos`);
+      }
+      if (failed > 0) toast.error(`${failed} archivo(s) fallaron`);
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
+      setPendingLocalFiles([]);
     }
   };
 
@@ -265,18 +285,19 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
           >
             <Link2 className="h-3 w-3" />
           </Button>
-          {/* Upload to local storage */}
-          <input ref={fileRef} type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleUpload} />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1"
+          {/* Upload to local storage (multi + drag + ZIP) */}
+          <FileDropzone
+            files={pendingLocalFiles}
+            onChange={handleLocalDropzoneChange}
+            limits={localUploadLimits}
+            variant="button"
             disabled={uploading || disabled}
-            onClick={() => fileRef.current?.click()}
-          >
-            {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
-            Local
-          </Button>
+            showChips={false}
+            buttonLabel="Local"
+            buttonSize="sm"
+            buttonVariant="ghost"
+            className="shrink-0"
+          />
           {/* Create Office doc in Dropbox */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

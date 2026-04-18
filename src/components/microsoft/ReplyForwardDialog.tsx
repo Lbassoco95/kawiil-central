@@ -17,8 +17,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useCancelScheduledMailJob, usePendingScheduledMailJobs } from "@/hooks/useMicrosoft";
-import { Loader2, Send, Sparkles, Paperclip, X, CalendarClock, ChevronDown } from "lucide-react";
-import type { ComposerAttachment } from "@/lib/emailComposer";
+import { Loader2, Send, Sparkles, CalendarClock, ChevronDown } from "lucide-react";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { Switch } from "@/components/ui/switch";
+import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -53,7 +55,8 @@ export interface ReplyForwardDialogProps {
   setDraftHtml: (v: string | ((prev: string) => string)) => void;
   forwardTo: string;
   setForwardTo: (v: string) => void;
-  replyAttachments: ComposerAttachment[];
+  replyFiles: File[];
+  onReplyFilesChange: (files: File[]) => void;
   showFullAI: boolean;
   setShowFullAI: (v: boolean) => void;
   createReplyDraftPending: boolean;
@@ -64,8 +67,6 @@ export interface ReplyForwardDialogProps {
   onSend: () => void;
   /** Programar envío (solo con borrador Graph). `scheduledAt` en ISO 8601. */
   onScheduleMail?: (scheduledAtIso: string) => void | Promise<void>;
-  onAttachmentPick: (files: FileList | null) => void;
-  onRemoveAttachment: (file: ComposerAttachment) => void;
 }
 
 export function ReplyForwardDialog({
@@ -79,7 +80,8 @@ export function ReplyForwardDialog({
   setDraftHtml,
   forwardTo,
   setForwardTo,
-  replyAttachments,
+  replyFiles,
+  onReplyFilesChange,
   showFullAI,
   setShowFullAI,
   createReplyDraftPending,
@@ -89,11 +91,10 @@ export function ReplyForwardDialog({
   onCancel,
   onSend,
   onScheduleMail,
-  onAttachmentPick,
-  onRemoveAttachment,
 }: ReplyForwardDialogProps) {
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduledOpen, setScheduledOpen] = useState(false);
+  const [keepZips, setKeepZips] = useState(true);
   const { data: pendingJobs = [], isLoading: pendingLoading } = usePendingScheduledMailJobs(
     open && !!onScheduleMail,
   );
@@ -215,39 +216,26 @@ export function ReplyForwardDialog({
                     />
                   </div>
                 </div>
-                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs">Adjuntos</span>
-                    <label className="inline-flex cursor-pointer items-center rounded-md border px-2 py-1 text-xs">
-                      <Paperclip className="mr-1 h-3.5 w-3.5" />
-                      Adjuntar
-                      <input
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => onAttachmentPick(e.target.files)}
-                      />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>Adjuntos</span>
+                    <label className="inline-flex items-center gap-2 shrink-0">
+                      <Switch checked={keepZips} onCheckedChange={setKeepZips} />
+                      <span className="text-xs">Mantener .zip</span>
                     </label>
                   </div>
-                  {replyAttachments.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {replyAttachments.map((file) => (
-                        <div
-                          key={`${file.name}-${file.size}`}
-                          className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs"
-                        >
-                          <span className="max-w-[200px] truncate">{file.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => onRemoveAttachment(file)}
-                            aria-label={`Quitar ${file.name}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <FileDropzone
+                    files={replyFiles}
+                    onChange={onReplyFilesChange}
+                    limits={withLimits(emailLimits, {
+                      accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar,.7z,.msg,.eml",
+                      zipMode: keepZips ? "keep" : "auto",
+                    })}
+                    variant="area"
+                    hint="Arrastra archivos o haz click"
+                    subhint={keepZips ? "Los .zip se envían tal cual" : "Los .zip se expanden y se envían como archivos"}
+                    showSize
+                  />
                 </div>
 
                 {onScheduleMail && draftId && (

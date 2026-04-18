@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
 import {
   Dialog,
   DialogContent,
@@ -314,10 +316,19 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
             <DialogTitle>Subir nueva versión</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div>
+            <div className="space-y-1.5">
               <Label>Archivo *</Label>
-              <Input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*" onChange={(e) => setNewVersionFile(e.target.files?.[0] ?? null)} />
-              {newVersionFile && <p className="text-xs text-muted-foreground mt-1">{newVersionFile.name}</p>}
+              <FileDropzone
+                files={newVersionFile ? [newVersionFile] : []}
+                onChange={(files) => setNewVersionFile(files[0] ?? null)}
+                limits={withLimits(singleFileLimits, {
+                  accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*",
+                })}
+                variant="area"
+                hint="Arrastra el archivo o haz click"
+                subhint="PDF, Office, texto o imagen"
+                showSize
+              />
             </div>
             <div>
               <Label>Notas del cambio (opcional)</Label>

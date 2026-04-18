@@ -343,7 +343,7 @@ export function EmailView() {
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreviewState | null>(null);
-  const [replyAttachments, setReplyAttachments] = useState<ComposerAttachment[]>([]);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
   const [showFolders, setShowFolders] = useState(false);
   /** Escritorio: panel de carpetas estrecho solo con iconos */
   const [foldersCollapsed, setFoldersCollapsed] = useState(readFoldersCollapsedPref);
@@ -520,7 +520,7 @@ export function EmailView() {
     setShowFullAI(false);
     setDraftId(null);
     setDraftHtml("");
-    setReplyAttachments([]);
+    setReplyFiles([]);
     if (action === "forward") {
       try {
         const draft = await createForwardDraft.mutateAsync({ messageId: selectedEmailId });
@@ -571,7 +571,15 @@ export function EmailView() {
         return;
       }
     }
-    let attachments = replyAttachments;
+    let attachments: ComposerAttachment[] = [];
+    if (replyFiles.length > 0) {
+      try {
+        attachments = await filesToComposerAttachments(replyFiles);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
+        return;
+      }
+    }
     const attBytes = attachments.reduce((n, a) => n + (a.contentBytes?.length || 0), 0);
     if (attBytes > 3 * 1024 * 1024) {
       toast.warning("Adjuntos omitidos del envío programado (superan 3 MB en base64).");
@@ -637,12 +645,21 @@ export function EmailView() {
         toast.error(error);
         return;
       }
+      let attachments: ComposerAttachment[] = [];
+      if (replyFiles.length > 0) {
+        try {
+          attachments = await filesToComposerAttachments(replyFiles);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "No se pudieron adjuntar archivos");
+          return;
+        }
+      }
       if (draftId) {
         sendDraft.mutate(
           {
             draftId,
             body: { contentType: "HTML", content: draftHtml },
-            attachments: replyAttachments,
+            attachments,
             toRecipients: forwardRecipients.map((email) => ({ emailAddress: { address: email } })),
           },
           { onSuccess: resetAction }
@@ -653,7 +670,7 @@ export function EmailView() {
             messageId: selectedEmailId,
             comment: stripTags(draftHtml),
             toRecipients: forwardRecipients,
-            attachments: replyAttachments,
+            attachments,
           },
           { onSuccess: resetAction }
         );
@@ -661,8 +678,17 @@ export function EmailView() {
       return;
     }
     if (draftId) {
+      let attachments: ComposerAttachment[] = [];
+      if (replyFiles.length > 0) {
+        try {
+          attachments = await filesToComposerAttachments(replyFiles);
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : "No se pudieron adjuntar archivos");
+          return;
+        }
+      }
       sendDraft.mutate(
-        { draftId, body: { contentType: "HTML", content: draftHtml }, attachments: replyAttachments },
+        { draftId, body: { contentType: "HTML", content: draftHtml }, attachments },
         { onSuccess: resetAction }
       );
     } else {
@@ -679,30 +705,8 @@ export function EmailView() {
     setDraftId(null);
     setForwardTo("");
     setShowFullAI(false);
-    setReplyAttachments([]);
+    setReplyFiles([]);
   };
-
-  const handleReplyAttachmentPick = async (files: FileList | null) => {
-    if (!files?.length) return;
-    try {
-      const parsed = await filesToComposerAttachments(files);
-      setReplyAttachments((prev) => {
-        const merged = [...prev];
-        for (const item of parsed) {
-          if (!merged.some((existing) => existing.name === item.name && existing.size === item.size)) {
-            merged.push(item);
-          }
-        }
-        return merged;
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudieron adjuntar archivos");
-    }
-  };
-
-  const removeReplyAttachment = useCallback((file: ComposerAttachment) => {
-    setReplyAttachments((prev) => prev.filter((f) => !(f.name === file.name && f.size === file.size)));
-  }, []);
 
   const handleArchive = useCallback((emailId: string) => {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
@@ -880,7 +884,7 @@ export function EmailView() {
     draftHtml,
     draftId,
     forwardTo,
-    replyAttachments,
+    replyFiles,
     handleSendReply,
     handleStartReply,
     markUnread,
@@ -2012,7 +2016,8 @@ export function EmailView() {
           setDraftHtml={setDraftHtml}
           forwardTo={forwardTo}
           setForwardTo={setForwardTo}
-          replyAttachments={replyAttachments}
+          replyFiles={replyFiles}
+          onReplyFilesChange={setReplyFiles}
           showFullAI={showFullAI}
           setShowFullAI={setShowFullAI}
           createReplyDraftPending={createReplyDraft.isPending}
@@ -2022,8 +2027,6 @@ export function EmailView() {
           onCancel={resetAction}
           onSend={handleSendReply}
           onScheduleMail={handleScheduleMail}
-          onAttachmentPick={(files) => void handleReplyAttachmentPick(files)}
-          onRemoveAttachment={removeReplyAttachment}
         />
       )}
       <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} />
