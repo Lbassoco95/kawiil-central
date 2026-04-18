@@ -9,6 +9,17 @@ type SendWebPushArgs = {
   requireInteraction?: boolean;
 };
 
+export type WebPushDeliveryReport = {
+  userId: string;
+  subId: string;
+  endpointPrefix: string;
+  userAgent?: string | null;
+  /** 200/201 si entregó, 404/410 si stale (se borra), otros códigos si error. */
+  statusCode: number | null;
+  status: "ok" | "stale_removed" | "error" | "skipped_no_subs" | "skipped_toggle_off";
+  errorMessage?: string;
+};
+
 let webpushClient: {
   setVapidDetails: (subject: string, publicKey: string, privateKey: string) => void;
   sendNotification: (
@@ -48,12 +59,13 @@ export async function sendWebPushToUsers(
     };
   },
   args: SendWebPushArgs,
-) {
+): Promise<WebPushDeliveryReport[]> {
+  const report: WebPushDeliveryReport[] = [];
   const client = await getWebPushClient();
-  if (!client) return;
+  if (!client) return report;
 
   const uniqueUserIds = [...new Set(args.userIds.filter((uid) => typeof uid === "string" && uid.trim()))];
-  if (uniqueUserIds.length === 0) return;
+  if (uniqueUserIds.length === 0) return report;
 
   for (const uid of uniqueUserIds) {
     if (!args.force) {
@@ -64,25 +76,29 @@ export async function sendWebPushToUsers(
         .maybeSingle();
       if (prof?.desktop_push_notifications !== true) {
         console.log("[webpush] saltado (toggle desktop_push_notifications off)", { uid });
+        report.push({ userId: uid, subId: "", endpointPrefix: "", statusCode: null, status: "skipped_toggle_off" });
         continue;
       }
     }
 
     const { data: subs } = await supabase
       .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth")
+      .select("id, endpoint, p256dh, auth, user_agent")
       .eq("user_id", uid);
 
     if (!subs || subs.length === 0) {
       console.warn("[webpush] sin suscripciones activas para user", { uid, tag: args.tag });
+      report.push({ userId: uid, subId: "", endpointPrefix: "", statusCode: null, status: "skipped_no_subs" });
       continue;
     }
 
     for (const sub of subs) {
+      const endpoint = sub.endpoint as string;
+      const endpointPrefix = typeof endpoint === "string" ? endpoint.slice(0, 70) : "";
       try {
-        await client.sendNotification(
+        const resp = (await client.sendNotification(
           {
-            endpoint: sub.endpoint as string,
+            endpoint,
             keys: { p256dh: sub.p256dh as string, auth: sub.auth as string },
           },
           JSON.stringify({
@@ -92,16 +108,43 @@ export async function sendWebPushToUsers(
             tag: args.tag || `kawiil-${Date.now()}`,
             requireInteraction: args.requireInteraction === true,
           }),
-        );
+        )) as { statusCode?: number } | undefined;
+        report.push({
+          userId: uid,
+          subId: sub.id as string,
+          endpointPrefix,
+          userAgent: (sub as { user_agent?: string | null }).user_agent ?? null,
+          statusCode: resp?.statusCode ?? 201,
+          status: "ok",
+        });
       } catch (e: unknown) {
-        const code = (e as { statusCode?: number })?.statusCode;
+        const code = (e as { statusCode?: number })?.statusCode ?? null;
+        const msg = (e as Error)?.message;
         if (code === 404 || code === 410) {
           await supabase.from("push_subscriptions").delete().eq("id", sub.id);
           console.warn("[webpush] suscripción stale eliminada", { uid, subId: sub.id, code });
+          report.push({
+            userId: uid,
+            subId: sub.id as string,
+            endpointPrefix,
+            userAgent: (sub as { user_agent?: string | null }).user_agent ?? null,
+            statusCode: code,
+            status: "stale_removed",
+          });
         } else {
-          console.error("[webpush] error de entrega", { uid, subId: sub.id, code });
+          console.error("[webpush] error de entrega", { uid, subId: sub.id, code, msg });
+          report.push({
+            userId: uid,
+            subId: sub.id as string,
+            endpointPrefix,
+            userAgent: (sub as { user_agent?: string | null }).user_agent ?? null,
+            statusCode: code,
+            status: "error",
+            errorMessage: msg,
+          });
         }
       }
     }
   }
+  return report;
 }

@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       ? body.body.trim()
       : "Si ves este aviso fuera de la pestaña, el pipeline funciona.";
 
-    await sendWebPushToUsers(serviceClient, {
+    const report = await sendWebPushToUsers(serviceClient, {
       userIds: [user.id],
       title: customTitle,
       body: customBody,
@@ -102,11 +102,32 @@ Deno.serve(async (req) => {
       requireInteraction: true,
     });
 
+    const okCount = report.filter((r) => r.status === "ok").length;
+    const staleCount = report.filter((r) => r.status === "stale_removed").length;
+    const errorCount = report.filter((r) => r.status === "error").length;
+
     return new Response(
       JSON.stringify({
         ok: true,
         subsCount,
-        message: `Push enviado a ${subsCount} suscripción(es). Revisa el banner del sistema.`,
+        okCount,
+        staleCount,
+        errorCount,
+        report: report.map((r) => ({
+          subId: r.subId,
+          endpointPrefix: r.endpointPrefix,
+          userAgent: r.userAgent ?? null,
+          statusCode: r.statusCode,
+          status: r.status,
+          errorMessage: r.errorMessage ?? null,
+        })),
+        message:
+          okCount > 0
+            ? `Push aceptado por el proveedor en ${okCount}/${subsCount} suscripción(es).` +
+              (staleCount ? ` ${staleCount} obsoleta(s) eliminada(s).` : "") +
+              (errorCount ? ` ${errorCount} con error.` : "") +
+              " Si no ves banner del sistema: revisa Configuración → Notificaciones del SO / Chrome, Focus mode y recarga Kawiil."
+            : `El push no se aceptó (${okCount}/${subsCount}). ${staleCount} eliminadas por obsoletas, ${errorCount} errores. Usa «Limpiar y re-registrar push».`,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

@@ -221,21 +221,49 @@ function NotificationDeliveryPreferences() {
     onError: (e: Error) => toast.error(formatPushRegistrationUserMessage(e)),
   });
 
-  const sendTestPush = useMutation({
+  type PushTestReportItem = {
+    subId: string;
+    endpointPrefix: string;
+    userAgent: string | null;
+    statusCode: number | null;
+    status: "ok" | "stale_removed" | "error" | "skipped_no_subs" | "skipped_toggle_off";
+    errorMessage: string | null;
+  };
+  type PushTestResponse = {
+    ok: boolean;
+    reason?: string;
+    subsCount?: number;
+    okCount?: number;
+    staleCount?: number;
+    errorCount?: number;
+    report?: PushTestReportItem[];
+    message?: string;
+  };
+  const sendTestPush = useMutation<PushTestResponse>({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke<{
-        ok: boolean;
-        reason?: string;
-        subsCount?: number;
-        message?: string;
-      }>("push-test", { body: {} });
+      const { data, error } = await supabase.functions.invoke<PushTestResponse>("push-test", { body: {} });
       if (error) throw error;
       if (!data) throw new Error("Sin respuesta de push-test");
       return data;
     },
     onSuccess: (data) => {
       if (data.ok) {
-        toast.success(data.message || "Push de prueba enviado");
+        toast.success(data.message || "Push de prueba enviado", {
+          description:
+            data.report && data.report.length
+              ? data.report
+                  .map(
+                    (r) =>
+                      `• ${r.status.toUpperCase()} ${r.statusCode ?? "-"} · ${
+                        r.userAgent?.includes("Chrome")
+                          ? `Chrome${(/Chrome\/(\d+)/.exec(r.userAgent)?.[1]) || ""}`
+                          : "desconocido"
+                      }`,
+                  )
+                  .join("\n")
+              : undefined,
+          duration: 15000,
+        });
       } else if (data.reason === "no_subscriptions") {
         toast.message("No hay suscripciones push", {
           description:
@@ -247,8 +275,46 @@ function NotificationDeliveryPreferences() {
       } else {
         toast.message(data.message || "Push de prueba: resultado inesperado");
       }
+      qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo enviar el push de prueba"),
+  });
+
+  const cleanAndReregister = useMutation({
+    mutationFn: async () => {
+      if (!vapid?.trim()) throw new Error("VAPID no configurado (VITE_VAPID_PUBLIC_KEY).");
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        throw new Error("Push solo funciona en HTTPS. Abre Kawiil desde la URL publicada.");
+      }
+      if (typeof Notification !== "undefined" && Notification.permission !== "granted") {
+        const p = await Notification.requestPermission();
+        setNotifPerm(Notification.permission);
+        if (p !== "granted") {
+          throw new Error(
+            "Permiso de notificaciones denegado. Concédelo en el candado del sitio y vuelve a intentarlo.",
+          );
+        }
+      }
+      try {
+        await unregisterWebPushSubscription();
+      } catch (e) {
+        console.warn("unregister previo fallo, continuamos:", e);
+      }
+      await registerWebPushSubscription();
+      const { error } = await supabase
+        .from("profiles")
+        .update({ desktop_push_notifications: true })
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-notification-prefs", user?.id] });
+      qc.invalidateQueries({ queryKey: ["comunicacion-push-setup", user?.id] });
+      toast.success(
+        "Push re-registrado. Ahora deberías tener solo la suscripción de este navegador. Pulsa «Enviar push de prueba».",
+      );
+    },
+    onError: (e: Error) => toast.error(formatPushRegistrationUserMessage(e)),
   });
 
   const toggleDesktopPush = useMutation({
@@ -545,6 +611,18 @@ function NotificationDeliveryPreferences() {
           >
             Enviar push de prueba
           </Button>
+          {vapid?.trim() ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => cleanAndReregister.mutate()}
+              disabled={cleanAndReregister.isPending}
+              title="Elimina todas tus suscripciones push (incluidas pestañas/equipos viejos) y registra solo este navegador."
+            >
+              Limpiar y re-registrar push
+            </Button>
+          ) : null}
         </div>
         <p className="text-xs text-muted-foreground">
           Por defecto recibes avisos de los canales en los que participas; usa la campana en la lista de Comunicación
