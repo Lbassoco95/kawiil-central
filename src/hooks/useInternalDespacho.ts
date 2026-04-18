@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { logEntityActivity } from "@/lib/activityLog";
+import { sanitizeStorageFileName } from "@/lib/storageFilename";
 
 const INTERNAL_PROCEDURES_PATH = "internal/procedures";
 
@@ -68,7 +69,8 @@ export function useCreateInternalProcedure() {
         .single();
       if (!profile?.organization_id) throw new Error("Sin organización");
 
-      const filePath = `${INTERNAL_PROCEDURES_PATH}/${Date.now()}_${input.file.name}`;
+      const safeName = sanitizeStorageFileName(input.file.name);
+      const filePath = `${INTERNAL_PROCEDURES_PATH}/${Date.now()}_${safeName}`;
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(filePath, input.file);
@@ -126,7 +128,8 @@ export function useUploadNewVersion() {
   return useMutation({
     mutationFn: async (input: { procedureId: string; file: File; changeNotes?: string; currentVersion: number }) => {
       const newVersion = input.currentVersion + 1;
-      const filePath = `${INTERNAL_PROCEDURES_PATH}/${Date.now()}_v${newVersion}_${input.file.name}`;
+      const safeName = sanitizeStorageFileName(input.file.name);
+      const filePath = `${INTERNAL_PROCEDURES_PATH}/${Date.now()}_v${newVersion}_${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("documents")

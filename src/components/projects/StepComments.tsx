@@ -13,6 +13,7 @@ import {
 import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
 import { DropboxFilePicker } from "./DropboxFilePicker";
+import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
@@ -78,7 +79,8 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
           toast.error(`${file.name} excede 25MB`);
           continue;
         }
-        const path = `comment-attachments/${Date.now()}_${file.name}`;
+        const safeName = sanitizeStorageFileName(file.name);
+        const path = `comment-attachments/${Date.now()}_${safeName}`;
         const { error } = await supabase.storage.from("documents").upload(path, file);
         if (error) throw error;
         const { data: urlData } = await supabase.storage.from("documents").createSignedUrl(path, 60 * 60 * 24 * 365);

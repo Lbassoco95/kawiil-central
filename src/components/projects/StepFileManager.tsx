@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { formatDateMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { logActivity } from "@/lib/activityLog";
+import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
@@ -138,7 +139,8 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     setUploading(true);
     try {
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
-      const path = `${orgId}/${projectId}/${Date.now()}_${file.name}`;
+      const safeName = sanitizeStorageFileName(file.name);
+      const path = `${orgId}/${projectId}/${Date.now()}_${safeName}`;
       const { error: upErr } = await supabase.storage.from("documents").upload(path, file);
       if (upErr) throw upErr;
       const { data: doc, error: docErr } = await supabase

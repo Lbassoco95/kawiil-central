@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { sanitizeStorageFileName } from "@/lib/storageFilename";
 
 export function useProjectDocumentUpload(aiProjectId: string | null) {
   const { user } = useAuth();
@@ -23,7 +24,8 @@ export function useProjectDocumentUpload(aiProjectId: string | null) {
       const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user.id });
       const orgId = orgRes.data;
 
-      const filePath = `${orgId}/${aiProjectId}/${Date.now()}_${file.name}`;
+      const safeName = sanitizeStorageFileName(file.name);
+      const filePath = `${orgId}/${aiProjectId}/${Date.now()}_${safeName}`;
       const { error: storageErr } = await supabase.storage
         .from("documents")
         .upload(filePath, file, { upsert: true });

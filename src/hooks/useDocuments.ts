@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { sanitizeStorageFileName } from "@/lib/storageFilename";
 
 export type Document = Tables<"documents"> & {
   clients?: { name: string } | null;
@@ -78,7 +79,8 @@ export function useCreateDocument() {
       let mimeType: string | null = null;
 
       if (input.source === "supabase" && input.file) {
-        filePath = `documents/${Date.now()}_${input.file.name}`;
+        const safeName = sanitizeStorageFileName(input.file.name);
+        filePath = `documents/${Date.now()}_${safeName}`;
         fileSize = input.file.size;
         mimeType = input.file.type;
 

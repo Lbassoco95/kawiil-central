@@ -3,12 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { createNotifications, getFinanceCelulaUserIds } from "@/lib/notificationHelpers";
+import { sanitizeStorageFileName } from "@/lib/storageFilename";
 
 export type ExpenseAttachment = { path: string; name: string };
-
-function sanitizeFileSegment(name: string): string {
-  return name.replace(/[^\w.\-()+ ]/g, "_").slice(0, 180) || "archivo";
-}
 
 export function parseExpenseAttachments(expense: Expense): ExpenseAttachment[] {
   const raw = expense.attachments;
@@ -108,7 +105,7 @@ export function useCreateExpense() {
       const uploaded: ExpenseAttachment[] = [];
 
       for (const file of files) {
-        const safe = sanitizeFileSegment(file.name);
+        const safe = sanitizeStorageFileName(file.name);
         const objectPath = `expenses/${orgId}/${batchId}/${crypto.randomUUID()}_${safe}`;
         const { error: upErr } = await supabase.storage
           .from("documents")

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
+import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import { MentionTextarea } from "./MentionTextarea";
 import { useProfiles } from "@/hooks/useTasks";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
@@ -384,7 +385,8 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     try {
       for (const file of Array.from(files)) {
         if (file.size > 25 * 1024 * 1024) { toast.error(`${file.name} excede 25MB`); continue; }
-        const path = `comment-attachments/${Date.now()}_${file.name}`;
+        const safeName = sanitizeStorageFileName(file.name);
+        const path = `comment-attachments/${Date.now()}_${safeName}`;
         const { error } = await supabase.storage.from("documents").upload(path, file);
         if (error) throw error;
         const { data: urlData } = await supabase.storage.from("documents").createSignedUrl(path, 60 * 60 * 24 * 365);
@@ -455,7 +457,8 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     if (!file || !user) return;
     setUploading(true);
     try {
-      const filePath = `tasks/${taskId}/${Date.now()}_${file.name}`;
+      const safeName = sanitizeStorageFileName(file.name);
+      const filePath = `tasks/${taskId}/${Date.now()}_${safeName}`;
       const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
       if (uploadError) throw uploadError;
       const { data: profile } = await supabase.from("profiles").select("organization_id").eq("user_id", user.id).single();
