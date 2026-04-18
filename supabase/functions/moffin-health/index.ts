@@ -27,14 +27,38 @@ function ciecEncryptionSecretOk(): boolean {
   return a.length >= 32 || b.length >= 32;
 }
 
-/** Credencial Bearer para solutions-api (OAuth, BEARER explícito o JWT vía MOFFIN_API_KEY). */
+function solutionsTokenSchemeForced(): boolean {
+  return (Deno.env.get("MOFFIN_SOLUTIONS_AUTH_SCHEME") ?? "").trim().toLowerCase() === "token";
+}
+
+function solutionsTokenSchemeKeyPresent(): boolean {
+  const a = (Deno.env.get("MOFFIN_SOLUTIONS_API_KEY") ?? "").trim();
+  const b = (Deno.env.get("MOFFIN_SOLUTIONS_BEARER") ?? "").trim();
+  const c = (Deno.env.get("MOFFIN_API_KEY") ?? "").trim();
+  return a.length > 0 || b.length > 0 || c.length > 0;
+}
+
+/** Credencial para solutions-api (scheme Token, OAuth, BEARER explícito o JWT vía MOFFIN_API_KEY). */
 function solutionsAuthConfigured(): boolean {
+  if (solutionsTokenSchemeForced()) return solutionsTokenSchemeKeyPresent();
   const id = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
   const sec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
   if (id && sec) return true;
   if ((Deno.env.get("MOFFIN_SOLUTIONS_BEARER") ?? "").trim().length > 0) return true;
   const staticT = moffinSolutionsBearerToken();
   return staticT.length > 0 && looksLikeOauthAccessJwt(staticT);
+}
+
+function solutionsAuthMode(): "token-scheme" | "oauth" | "static-bearer" | "none" {
+  if (solutionsTokenSchemeForced()) {
+    return solutionsTokenSchemeKeyPresent() ? "token-scheme" : "none";
+  }
+  const id = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
+  const sec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
+  if (id && sec) return "oauth";
+  const staticT = moffinSolutionsBearerToken();
+  if (staticT.length > 0) return "static-bearer";
+  return "none";
 }
 
 Deno.serve(async (req) => {
@@ -101,18 +125,26 @@ Deno.serve(async (req) => {
     solutionsBaseHost = solBase ? hostPreview(solBase.startsWith("http") ? solBase : `https://${solBase}`) : null;
     looksLikeSandbox = /sandbox/i.test(solBase);
 
-    const oid = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
-    const osec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
-    if ((oid && !osec) || (!oid && osec)) {
-      missing.push(
-        "OAuth incompleto: MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET deben existir los dos; si solo uno está definido, Kawiil no usa OAuth y puede fallar el perfil SAT",
-      );
-    }
+    if (solutionsTokenSchemeForced()) {
+      if (!solutionsTokenSchemeKeyPresent()) {
+        missing.push(
+          "MOFFIN_SOLUTIONS_AUTH_SCHEME=token requiere una API key: define MOFFIN_SOLUTIONS_API_KEY (recomendado), o reutiliza MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY.",
+        );
+      }
+    } else {
+      const oid = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID") ?? "").trim();
+      const osec = (Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET") ?? "").trim();
+      if ((oid && !osec) || (!oid && osec)) {
+        missing.push(
+          "OAuth incompleto: MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET deben existir los dos; si solo uno está definido, Kawiil no usa OAuth y puede fallar el perfil SAT",
+        );
+      }
 
-    if (!solutionsAuthConfigured()) {
-      missing.push(
-        "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER (accessToken de POST …/oauth/token) o MOFFIN_API_KEY solo si es JWT de ese OAuth (no el token corto de app.moffin)",
-      );
+      if (!solutionsAuthConfigured()) {
+        missing.push(
+          "MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth) o MOFFIN_SOLUTIONS_BEARER (accessToken de POST …/oauth/token), o define MOFFIN_SOLUTIONS_AUTH_SCHEME=token + MOFFIN_SOLUTIONS_API_KEY para el esquema Token (API key legacy en Solutions).",
+        );
+      }
     }
     if (!ciecEncryptionSecretOk()) {
       missing.push("MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (mínimo 32 caracteres; cifrado CIEC en moffin-sat-ciec)");
@@ -150,6 +182,7 @@ Deno.serve(async (req) => {
       ciecEncryptionOk: ciecEncryptionSecretOk(),
       legacyApiKeyConfigured: !!moffinLegacyApiKey(),
       solutionsAuthConfigured: flavor === "solutions" ? solutionsAuthConfigured() : null,
+      solutionsAuthMode: flavor === "solutions" ? solutionsAuthMode() : null,
       baseUrlHost,
       solutionsBaseHost,
       looksLikeSandbox,

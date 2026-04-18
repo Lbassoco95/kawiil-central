@@ -3,14 +3,59 @@
  * @see https://solutions-docs.moffin.mx/apis/authentication
  */
 import { moffinSolutionsBearerToken } from "./moffinApiFlavor.ts";
-import { moffinSolutionsFetchSignal } from "./moffinSolutionsClient.ts";
+import {
+  moffinSolutionsFetchSignal,
+  type MoffinSolutionsAuthScheme,
+} from "./moffinSolutionsClient.ts";
 
-export type SolutionsStaticBearerSource = "solutions_bearer_env" | "api_key_env";
+export type SolutionsStaticBearerSource =
+  | "solutions_bearer_env"
+  | "api_key_env"
+  | "solutions_api_key_env";
 
 export type ResolveMoffinSolutionsBearerResult =
-  | { ok: true; bearer: string; via: "oauth" }
-  | { ok: true; bearer: string; via: "static"; staticSource: SolutionsStaticBearerSource }
+  | { ok: true; bearer: string; scheme: MoffinSolutionsAuthScheme; via: "oauth" }
+  | {
+      ok: true;
+      bearer: string;
+      scheme: MoffinSolutionsAuthScheme;
+      via: "static";
+      staticSource: SolutionsStaticBearerSource;
+    }
   | { ok: false; message: string; code?: "oauth_incomplete" };
+
+/**
+ * Esquema de auth forzado por env. `token` usa `Authorization: Token <key>` (confirmado por Moffin
+ * para CSF/32D cuando no se usa OAuth). Default/empty/`bearer` mantiene JWT Bearer.
+ */
+function getConfiguredAuthScheme(): MoffinSolutionsAuthScheme | null {
+  const raw = Deno.env.get("MOFFIN_SOLUTIONS_AUTH_SCHEME")?.trim().toLowerCase() ?? "";
+  if (!raw) return null;
+  if (raw === "token") return "Token";
+  if (raw === "bearer") return "Bearer";
+  return null;
+}
+
+function normalizeKey(value: string): string {
+  let v = value.trim().replace(/\r?\n/g, "").replace(/\s+/g, " ");
+  if (/^bearer\s+/i.test(v)) v = v.replace(/^bearer\s+/i, "").trim();
+  if (/^token\s+/i.test(v)) v = v.replace(/^token\s+/i, "").trim();
+  return v;
+}
+
+/**
+ * Resolución para scheme=Token: usa MOFFIN_SOLUTIONS_API_KEY (preferido), o cae en
+ * MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY. No valida forma JWT porque es una API key legacy.
+ */
+function resolveTokenSchemeKey(): { key: string; source: SolutionsStaticBearerSource } | null {
+  const solApi = normalizeKey(Deno.env.get("MOFFIN_SOLUTIONS_API_KEY")?.trim() ?? "");
+  if (solApi) return { key: solApi, source: "solutions_api_key_env" };
+  const solBearer = normalizeKey(Deno.env.get("MOFFIN_SOLUTIONS_BEARER")?.trim() ?? "");
+  if (solBearer) return { key: solBearer, source: "solutions_bearer_env" };
+  const apiKey = normalizeKey(Deno.env.get("MOFFIN_API_KEY")?.trim() ?? "");
+  if (apiKey) return { key: apiKey, source: "api_key_env" };
+  return null;
+}
 
 /**
  * El accessToken de POST …/oauth/token (Solutions) suele ser JWT (tres segmentos base64url).
@@ -167,7 +212,7 @@ async function fetchOAuthAccessToken(baseUrl: string): Promise<ResolveMoffinSolu
         const now = Math.floor(Date.now() / 1000);
         const expiresAtSec = parseExpiresAt(r.json, now + 3600);
         oauthCache = { accessToken, expiresAtSec };
-        return { ok: true, bearer: accessToken, via: "oauth" };
+        return { ok: true, bearer: accessToken, scheme: "Bearer", via: "oauth" };
       }
       errors.push(`${url} · ${att.label}: ${r.message}`);
       oauthCache = null;
@@ -183,12 +228,36 @@ async function fetchOAuthAccessToken(baseUrl: string): Promise<ResolveMoffinSolu
 }
 
 /**
- * JWT de acceso para `Authorization: Bearer` en solutions-api.
- * Prioridad: OAuth con MOFFIN_SOLUTIONS_CLIENT_ID + SECRET; si no, MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY.
+ * Credencial para `Authorization: <scheme> <token>` en solutions-api.
+ * Prioridad:
+ *   1. `MOFFIN_SOLUTIONS_AUTH_SCHEME=token` → API key con scheme "Token" (sin validación JWT).
+ *      Fuente: MOFFIN_SOLUTIONS_API_KEY → MOFFIN_SOLUTIONS_BEARER → MOFFIN_API_KEY.
+ *   2. OAuth con MOFFIN_SOLUTIONS_CLIENT_ID + SECRET → JWT Bearer.
+ *   3. MOFFIN_SOLUTIONS_BEARER estático (o MOFFIN_API_KEY con forma JWT) → Bearer.
  */
 export async function resolveMoffinSolutionsBearer(
   solutionsBaseUrl: string,
 ): Promise<ResolveMoffinSolutionsBearerResult> {
+  const forcedScheme = getConfiguredAuthScheme();
+
+  if (forcedScheme === "Token") {
+    const resolved = resolveTokenSchemeKey();
+    if (!resolved) {
+      return {
+        ok: false,
+        message:
+          "MOFFIN_SOLUTIONS_AUTH_SCHEME=token requiere una API key: define MOFFIN_SOLUTIONS_API_KEY (recomendado), o reutiliza MOFFIN_SOLUTIONS_BEARER / MOFFIN_API_KEY.",
+      };
+    }
+    return {
+      ok: true,
+      bearer: resolved.key,
+      scheme: "Token",
+      via: "static",
+      staticSource: resolved.source,
+    };
+  }
+
   const clientId = Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_ID")?.trim() ?? "";
   const clientSecret = Deno.env.get("MOFFIN_SOLUTIONS_CLIENT_SECRET")?.trim() ?? "";
 
@@ -204,7 +273,7 @@ export async function resolveMoffinSolutionsBearer(
   if (clientId && clientSecret) {
     const now = Math.floor(Date.now() / 1000);
     if (oauthCache && oauthCache.expiresAtSec > now + EXPIRY_BUFFER_SEC) {
-      return { ok: true, bearer: oauthCache.accessToken, via: "oauth" };
+      return { ok: true, bearer: oauthCache.accessToken, scheme: "Bearer", via: "oauth" };
     }
     return await fetchOAuthAccessToken(solutionsBaseUrl);
   }
@@ -214,7 +283,7 @@ export async function resolveMoffinSolutionsBearer(
     return {
       ok: false,
       message:
-        "Solutions sin credencial: define MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth; Moffin Solutions) o MOFFIN_SOLUTIONS_BEARER con el JWT devuelto por POST /oauth/token. El token de «Configuración → API» de app.moffin no sirve como Bearer en solutions-api.",
+        "Solutions sin credencial: define MOFFIN_SOLUTIONS_CLIENT_ID + MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth; Moffin Solutions), MOFFIN_SOLUTIONS_BEARER con el JWT devuelto por POST /oauth/token, o MOFFIN_SOLUTIONS_AUTH_SCHEME=token + MOFFIN_SOLUTIONS_API_KEY (esquema API key legacy).",
     };
   }
   // Solo validar forma JWT cuando el Bearer sale de MOFFIN_API_KEY (suele ser token legacy corto).
@@ -224,11 +293,11 @@ export async function resolveMoffinSolutionsBearer(
     return {
       ok: false,
       message:
-        "MOFFIN_API_KEY es la clave legacy de app.moffin (lista 69-B); no sirve como Bearer en solutions-api. En Supabase → Edge Functions → Secrets añade MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth), o MOFFIN_SOLUTIONS_BEARER con el accessToken que devuelve POST …/oauth/token (campo accessToken / access_token en la respuesta JSON).",
+        "MOFFIN_API_KEY es la clave legacy de app.moffin (lista 69-B); no sirve como Bearer en solutions-api. En Supabase → Edge Functions → Secrets añade MOFFIN_SOLUTIONS_CLIENT_ID y MOFFIN_SOLUTIONS_CLIENT_SECRET (OAuth), o define MOFFIN_SOLUTIONS_AUTH_SCHEME=token + MOFFIN_SOLUTIONS_API_KEY para el esquema Token (API key legacy en Solutions), o MOFFIN_SOLUTIONS_BEARER con el accessToken que devuelve POST …/oauth/token.",
     };
   }
   const staticSource: SolutionsStaticBearerSource = usedExplicitSolutionsBearer
     ? "solutions_bearer_env"
     : "api_key_env";
-  return { ok: true, bearer: staticBearer, via: "static", staticSource };
+  return { ok: true, bearer: staticBearer, scheme: "Bearer", via: "static", staticSource };
 }

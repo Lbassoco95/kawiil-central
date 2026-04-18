@@ -21,7 +21,11 @@ import {
 } from "../_shared/moffinApiFlavor.ts";
 import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
 import { mapMoffinStatus, moffinMessageImpliesSatStillProcessing } from "../_shared/moffinReportStatus.ts";
-import { extractSolutionsQueryId, moffinSolutionsGetJson } from "../_shared/moffinSolutionsClient.ts";
+import {
+  extractSolutionsQueryId,
+  moffinSolutionsGetJson,
+  type MoffinSolutionsAuthScheme,
+} from "../_shared/moffinSolutionsClient.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
 import { Webhook } from "npm:svix";
@@ -121,10 +125,16 @@ async function fetchMoffinReportJson(
   key: string,
   queryId: string,
   solutionsBearer: string,
+  solutionsAuthScheme: MoffinSolutionsAuthScheme,
 ): Promise<Record<string, unknown> | null> {
   if (webhookRowUsesSolutions(row)) {
     if (!solutionsBearer.trim()) return null;
-    const r = await moffinSolutionsGetJson(moffinSolutionsBaseUrl(), solutionsBearer, queryId);
+    const r = await moffinSolutionsGetJson(
+      moffinSolutionsBaseUrl(),
+      solutionsBearer,
+      queryId,
+      solutionsAuthScheme,
+    );
     return r.ok ? r.json : null;
   }
   const legacyBase = getMoffinApiFlavor() === "solutions" ? moffinLegacyBaseUrl() : base.replace(/\/$/, "");
@@ -267,10 +277,15 @@ Deno.serve(async (req) => {
 
   const solutionsBaseUrl = moffinSolutionsBaseUrl();
   let solutionsBearerForWebhook = "";
+  let solutionsAuthSchemeForWebhook: MoffinSolutionsAuthScheme = "Bearer";
   if (getMoffinApiFlavor() === "solutions") {
     const solAuth = await resolveMoffinSolutionsBearer(solutionsBaseUrl);
-    if (solAuth.ok) solutionsBearerForWebhook = solAuth.bearer;
-    else console.error("moffin-webhook: auth Solutions omitida:", solAuth.message);
+    if (solAuth.ok) {
+      solutionsBearerForWebhook = solAuth.bearer;
+      solutionsAuthSchemeForWebhook = solAuth.scheme;
+    } else {
+      console.error("moffin-webhook: auth Solutions omitida:", solAuth.message);
+    }
   }
 
   const moffinReport = extractMoffinReport(data) ?? extractMoffinReport(verified);
@@ -400,7 +415,9 @@ Deno.serve(async (req) => {
       uploadedBy: row.requested_by,
       moffinBase: useSol ? solutionsBaseUrl : moffinBase,
       moffinApiKey: useSol ? solutionsBearerForWebhook : moffinApiKey,
-      moffinPdfAuthMode: useSol ? ("bearer" as const) : ("token" as const),
+      moffinPdfAuthMode: useSol
+        ? (solutionsAuthSchemeForWebhook === "Token" ? ("token" as const) : ("bearer" as const))
+        : ("token" as const),
       skipServiceQueries: useSol,
       rfc: row.rfc,
       externalId: extForPdf,
@@ -417,6 +434,7 @@ Deno.serve(async (req) => {
         moffinApiKey,
         queryId,
         solutionsBearerForWebhook,
+        solutionsAuthSchemeForWebhook,
       );
       if (refreshed) {
         up = await tryUploadSatRfcPdf({ ...uploadOpts, report: refreshed });

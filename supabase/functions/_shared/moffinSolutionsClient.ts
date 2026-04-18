@@ -25,9 +25,17 @@ export function moffinSolutionsFetchSignal(): AbortSignal {
   return c.signal;
 }
 
-function bearerHeaders(token: string): HeadersInit {
+/**
+ * Esquema de autorización para Solutions:
+ * - "Bearer" (default): JWT obtenido vía OAuth /oauth/token o MOFFIN_SOLUTIONS_BEARER estático.
+ * - "Token": API key tipo `Authorization: Token <key>` (mismo patrón que legacy; confirmado por Moffin
+ *   para CSF cuando no se usa OAuth).
+ */
+export type MoffinSolutionsAuthScheme = "Bearer" | "Token";
+
+function authHeaders(token: string, scheme: MoffinSolutionsAuthScheme): HeadersInit {
   return {
-    Authorization: `Bearer ${token.trim()}`,
+    Authorization: `${scheme} ${token.trim()}`,
     "Content-Type": "application/json",
     Accept: "application/json",
   };
@@ -38,6 +46,7 @@ export async function moffinSolutionsPostJson(
   bearerToken: string,
   path: string,
   body: Record<string, unknown>,
+  scheme: MoffinSolutionsAuthScheme = "Bearer",
 ): Promise<MoffinSolutionsJson> {
   const base = baseUrl.replace(/\/$/, "");
   const p = path.startsWith("/") ? path : `/${path}`;
@@ -46,7 +55,7 @@ export async function moffinSolutionsPostJson(
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: bearerHeaders(bearerToken),
+      headers: authHeaders(bearerToken, scheme),
       body: JSON.stringify(body),
       signal: moffinSolutionsFetchSignal(),
     });
@@ -87,6 +96,7 @@ export async function moffinSolutionsGetJson(
   baseUrl: string,
   bearerToken: string,
   queryId: string,
+  scheme: MoffinSolutionsAuthScheme = "Bearer",
 ): Promise<MoffinSolutionsJson> {
   const base = baseUrl.replace(/\/$/, "");
   const id = encodeURIComponent(queryId.trim());
@@ -96,7 +106,7 @@ export async function moffinSolutionsGetJson(
     res = await fetch(url, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${bearerToken.trim()}`,
+        Authorization: `${scheme} ${bearerToken.trim()}`,
         Accept: "application/json",
       },
       signal: moffinSolutionsFetchSignal(),

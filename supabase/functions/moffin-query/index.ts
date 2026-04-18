@@ -20,6 +20,7 @@ import {
   extractSolutionsQueryId,
   moffinSolutionsGetJson,
   moffinSolutionsPostJson,
+  type MoffinSolutionsAuthScheme,
 } from "../_shared/moffinSolutionsClient.ts";
 import {
   moffinQueryPathForConsult,
@@ -182,12 +183,13 @@ function persistUploadForRow(
   solutionsBearer: string,
   legacyBase: string,
   legacyToken: string,
+  solutionsAuthScheme: MoffinSolutionsAuthScheme,
 ): MoffinPersistUploadOpts {
   if (rowUsesSolutionsSnapshot(row)) {
     return {
       moffinBase: solutionsBase,
       moffinApiKey: solutionsBearer,
-      pdfAuthMode: "bearer",
+      pdfAuthMode: solutionsAuthScheme === "Token" ? "token" : "bearer",
       skipServiceQueries: true,
     };
   }
@@ -205,6 +207,7 @@ async function fetchMoffinReportSnapshotForRow(
   legacyToken: string,
   solutionsBase: string,
   solutionsBearer: string,
+  solutionsAuthScheme: MoffinSolutionsAuthScheme,
 ): Promise<
   { ok: true; json: Record<string, unknown> } | { ok: false; message: string; status: number }
 > {
@@ -213,7 +216,7 @@ async function fetchMoffinReportSnapshotForRow(
     return { ok: false, message: "sin moffin_query_id", status: 400 };
   }
   if (rowUsesSolutionsSnapshot(row)) {
-    const r = await moffinSolutionsGetJson(solutionsBase, solutionsBearer, qid);
+    const r = await moffinSolutionsGetJson(solutionsBase, solutionsBearer, qid, solutionsAuthScheme);
     if (!r.ok) return { ok: false, message: r.message, status: r.status };
     return { ok: true, json: r.json };
   }
@@ -366,6 +369,7 @@ async function refreshPendingConsultRows(
   legacyToken: string,
   solutionsBase: string,
   solutionsBearer: string,
+  solutionsAuthScheme: MoffinSolutionsAuthScheme,
   userId: string,
 ): Promise<Array<{ id: string; ok: boolean; error?: string; newStatus?: string }>> {
   const list = rows ?? [];
@@ -378,6 +382,7 @@ async function refreshPendingConsultRows(
         legacyToken,
         solutionsBase,
         solutionsBearer,
+        solutionsAuthScheme,
       );
       if (!fr.ok) {
         return { id: row.id, ok: false, error: fr.message };
@@ -387,7 +392,14 @@ async function refreshPendingConsultRows(
         rowTyped,
         fr.json,
         userId,
-        persistUploadForRow(rowTyped, solutionsBase, solutionsBearer, legacyBase, legacyToken),
+        persistUploadForRow(
+          rowTyped,
+          solutionsBase,
+          solutionsBearer,
+          legacyBase,
+          legacyToken,
+          solutionsAuthScheme,
+        ),
       );
       if (pe.error) {
         return { id: row.id, ok: false, error: pe.error };
@@ -443,6 +455,7 @@ Deno.serve(async (req) => {
   let solutionsAuthVia: "oauth" | "static" | null = null;
   /** Si auth es static, de qué variable salió el Bearer (para mensajes 401). */
   let solutionsStaticSource: SolutionsStaticBearerSource | null = null;
+  let solutionsAuthScheme: MoffinSolutionsAuthScheme = "Bearer";
   if (flavor === "solutions") {
     const solAuth = await resolveMoffinSolutionsBearer(solutionsBase);
     if (!solAuth.ok) {
@@ -460,6 +473,7 @@ Deno.serve(async (req) => {
     }
     solutionsBearer = solAuth.bearer;
     solutionsAuthVia = solAuth.via;
+    solutionsAuthScheme = solAuth.scheme;
     if (solAuth.via === "static") {
       solutionsStaticSource = solAuth.staticSource;
     }
@@ -499,6 +513,7 @@ Deno.serve(async (req) => {
         legacyToken,
         solutionsBase,
         solutionsBearer,
+        solutionsAuthScheme,
         "cron-system",
       );
       return new Response(
@@ -613,6 +628,7 @@ Deno.serve(async (req) => {
       legacyToken,
       solutionsBase,
       solutionsBearer,
+      solutionsAuthScheme,
       user.id,
     );
     return new Response(
@@ -660,6 +676,7 @@ Deno.serve(async (req) => {
       legacyToken,
       solutionsBase,
       solutionsBearer,
+      solutionsAuthScheme,
       user.id,
     );
     return new Response(
@@ -784,6 +801,7 @@ Deno.serve(async (req) => {
         solutionsBearer,
         moffinSolutionsProfilePath(),
         { rfc: rfcRaw, ciec: ciecPlain },
+        solutionsAuthScheme,
       );
       if (!profRes.ok) {
         const hint401 =
@@ -827,9 +845,13 @@ Deno.serve(async (req) => {
 
     const satPath = moffinSolutionsQueryPathForConsult(consultType);
     const moffinServiceName = moffinQueryServiceSegment(satPath);
-    const satRes = await moffinSolutionsPostJson(solutionsBase, solutionsBearer, satPath, {
-      rfc: rfcRaw,
-    });
+    const satRes = await moffinSolutionsPostJson(
+      solutionsBase,
+      solutionsBearer,
+      satPath,
+      { rfc: rfcRaw },
+      solutionsAuthScheme,
+    );
     if (!satRes.ok) {
       const { data: rowErr } = await admin
         .from("moffin_consults")
@@ -893,7 +915,7 @@ Deno.serve(async (req) => {
     const solUpload = {
       moffinBase: solutionsBase,
       moffinApiKey: solutionsBearer,
-      pdfAuthMode: "bearer" as const,
+      pdfAuthMode: (solutionsAuthScheme === "Token" ? "token" : "bearer") as "token" | "bearer",
       skipServiceQueries: true,
     };
     const runSolUpload = async (report: Record<string, unknown>) => {
@@ -926,7 +948,12 @@ Deno.serve(async (req) => {
       await runSolUpload(json);
     }
     if (!documentId && moffinQueryIdStr) {
-      const fr = await moffinSolutionsGetJson(solutionsBase, solutionsBearer, moffinQueryIdStr);
+      const fr = await moffinSolutionsGetJson(
+        solutionsBase,
+        solutionsBearer,
+        moffinQueryIdStr,
+        solutionsAuthScheme,
+      );
       if (fr.ok) await runSolUpload(fr.json);
     }
 
