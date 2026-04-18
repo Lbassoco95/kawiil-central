@@ -208,7 +208,15 @@ export function AccountingTemplatePicker({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[400px] max-h-[75vh] overflow-y-auto p-4 space-y-3"
+        side="bottom"
+        sideOffset={6}
+        collisionPadding={12}
+        avoidCollisions
+        className="w-[400px] overflow-y-auto p-4 space-y-3"
+        style={{
+          maxHeight:
+            "min(var(--radix-popover-content-available-height, 75vh), 75vh)",
+        }}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <div className="flex items-center gap-2 text-sm font-medium">
