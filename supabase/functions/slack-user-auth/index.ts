@@ -30,6 +30,9 @@ const DEFAULT_USER_SCOPES = [
   "chat:write",
   "files:write",
   "files:read",
+  // Reacciones (emoji) con token de usuario: añadir/quitar como el propio usuario.
+  "reactions:write",
+  "reactions:read",
 ].join(",");
 
 Deno.serve(async (req) => {
