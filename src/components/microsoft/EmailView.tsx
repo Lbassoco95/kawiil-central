@@ -65,7 +65,7 @@ import {
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, RefreshCw,
-  Eye, Download, CalendarClock,
+  Eye, Download, CalendarClock, Copy,
 } from "lucide-react";
 import DOMPurify from "dompurify";
 import {
@@ -83,6 +83,7 @@ import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { ReplyForwardDialog } from "./ReplyForwardDialog";
+import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { buildThreadContextForAi } from "@/lib/emailThreadContext";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -333,6 +334,7 @@ export function EmailView() {
   const [detailAiPanel, setDetailAiPanel] = useState<null | "summarize" | "translate">(null);
   const [detailAiLoading, setDetailAiLoading] = useState(false);
   const [detailAiText, setDetailAiText] = useState("");
+  const [detailAiTranslateTarget, setDetailAiTranslateTarget] = useState<"en" | "es" | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [draftHtml, setDraftHtml] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -726,7 +728,18 @@ export function EmailView() {
     setDetailAiPanel(null);
     setDetailAiLoading(false);
     setDetailAiText("");
+    setDetailAiTranslateTarget(null);
   }, []);
+
+  const copyDetailAiText = useCallback(async () => {
+    if (!detailAiText?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(detailAiText);
+      toast.success("Copiado al portapapeles");
+    } catch {
+      toast.error("No se pudo copiar");
+    }
+  }, [detailAiText]);
 
   useEffect(() => {
     closeDetailAiPanel();
@@ -743,6 +756,7 @@ export function EmailView() {
     setDetailAiPanel("summarize");
     setDetailAiLoading(true);
     setDetailAiText("");
+    setDetailAiTranslateTarget(null);
     try {
       const { data, error } = await supabase.functions.invoke("ai-email-draft", {
         body: {
@@ -771,6 +785,7 @@ export function EmailView() {
       return;
     }
     const targetLanguage = inferTranslationTarget(plain);
+    setDetailAiTranslateTarget(targetLanguage);
     setDetailAiPanel("translate");
     setDetailAiLoading(true);
     setDetailAiText("");
@@ -966,12 +981,14 @@ export function EmailView() {
                 </>
               )}
             </Button>
-            <span
-              className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums"
-              title="Si no cambia tras deploy, Lovable aún muestra un bundle antiguo."
-            >
-              {EMAIL_VIEW_LAYOUT_VERSION}
-            </span>
+            {import.meta.env.DEV && (
+              <span
+                className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums"
+                title="Si no cambia tras deploy, Lovable aún muestra un bundle antiguo."
+              >
+                {EMAIL_VIEW_LAYOUT_VERSION}
+              </span>
+            )}
         </div>
         <div className="flex min-h-0 min-w-0 w-full flex-1 flex-row overflow-hidden bg-background">
       {/* Folder sidebar — móvil: overlay; escritorio: expandible o riel de iconos */}
@@ -1475,10 +1492,10 @@ export function EmailView() {
         {!selectedEmailId ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="max-w-md text-center px-2">
-              <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-muted/40 mb-4">
-                <Mail className="h-9 w-9 text-muted-foreground/30" />
+              <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-primary/10 ring-1 ring-primary/20 mb-4">
+                <Mail className="h-9 w-9 text-primary/60" />
               </div>
-              <p className="text-base font-medium text-muted-foreground mb-2">Selecciona un correo</p>
+              <p className="text-base font-semibold text-foreground/80 mb-2">Selecciona un correo</p>
               <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">j</kbd><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">k</kbd> navegar</span>
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">c</kbd> redactar</span>
@@ -1552,7 +1569,10 @@ export function EmailView() {
                   )}
                 </div>
               )}
-              <h2 className="text-lg font-semibold text-foreground leading-tight mb-3">
+              <h2
+                className="text-lg font-semibold text-foreground leading-tight mb-3 line-clamp-2 break-words"
+                title={emailDetail.subject || "(sin asunto)"}
+              >
                 {emailDetail.subject || "(sin asunto)"}
               </h2>
               <div className="flex items-start gap-3">
@@ -1573,14 +1593,16 @@ export function EmailView() {
                       "—"}
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-1.5 shrink-0 pt-0.5">
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/10 text-primary tracking-tight"
-                    title="Si no ves esta etiqueta, el navegador o Lovable están sirviendo un bundle antiguo."
-                  >
-                    {EMAIL_VIEW_LAYOUT_VERSION}
-                  </Badge>
+                <div className="flex flex-col items-end gap-1.5 shrink-0 pt-0.5 sm:text-right">
+                  {import.meta.env.DEV && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/10 text-primary tracking-tight"
+                      title="Si no ves esta etiqueta, el navegador o Lovable están sirviendo un bundle antiguo."
+                    >
+                      {EMAIL_VIEW_LAYOUT_VERSION}
+                    </Badge>
+                  )}
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {emailDetail.receivedDateTime
                       ? format(parseISO(emailDetail.receivedDateTime), "d MMM yyyy, HH:mm", { locale: es })
@@ -1605,7 +1627,10 @@ export function EmailView() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    Responder
+                    <span className="inline-flex items-center gap-1.5">
+                      Responder
+                      <kbd className="px-1 py-[1px] bg-muted/40 text-muted-foreground rounded text-[10px] font-mono">r</kbd>
+                    </span>
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
@@ -1622,7 +1647,10 @@ export function EmailView() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    Todos
+                    <span className="inline-flex items-center gap-1.5">
+                      Todos
+                      <kbd className="px-1 py-[1px] bg-muted/40 text-muted-foreground rounded text-[10px] font-mono">a</kbd>
+                    </span>
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
@@ -1639,7 +1667,10 @@ export function EmailView() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    Reenviar
+                    <span className="inline-flex items-center gap-1.5">
+                      Reenviar
+                      <kbd className="px-1 py-[1px] bg-muted/40 text-muted-foreground rounded text-[10px] font-mono">f</kbd>
+                    </span>
                   </TooltipContent>
                 </Tooltip>
 
@@ -1657,7 +1688,10 @@ export function EmailView() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    Archivar
+                    <span className="inline-flex items-center gap-1.5">
+                      Archivar
+                      <kbd className="px-1 py-[1px] bg-muted/40 text-muted-foreground rounded text-[10px] font-mono">e</kbd>
+                    </span>
                   </TooltipContent>
                 </Tooltip>
 
@@ -1708,7 +1742,10 @@ export function EmailView() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    No leído
+                    <span className="inline-flex items-center gap-1.5">
+                      No leído
+                      <kbd className="px-1 py-[1px] bg-muted/40 text-muted-foreground rounded text-[10px] font-mono">u</kbd>
+                    </span>
                   </TooltipContent>
                 </Tooltip>
 
@@ -1724,73 +1761,118 @@ export function EmailView() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs">
-                    Eliminar
+                    <span className="inline-flex items-center gap-1.5">
+                      Eliminar
+                      <kbd className="px-1 py-[1px] bg-muted/40 text-muted-foreground rounded text-[10px] font-mono">#</kbd>
+                    </span>
                   </TooltipContent>
                 </Tooltip>
 
-                <div className="w-px h-5 bg-border shrink-0 mx-0.5" aria-hidden />
+                <div
+                  className="ml-auto flex items-center gap-0.5 shrink-0 rounded-md bg-primary/5 px-1 py-0.5 ring-1 ring-primary/10"
+                  aria-label="Acciones inteligentes"
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        onClick={() => void runDetailSummarize()}
+                        disabled={detailAiLoading}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Resumir con IA
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        onClick={() => void runDetailTranslate()}
+                        disabled={detailAiLoading}
+                      >
+                        <Languages className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Traducir con IA
+                    </TooltipContent>
+                  </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                      onClick={() => void runDetailSummarize()}
-                      disabled={detailAiLoading}
-                    >
-                      <Sparkles className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">
-                    Resumir
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                      onClick={() => void runDetailTranslate()}
-                      disabled={detailAiLoading}
-                    >
-                      <Languages className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">
-                    Traducir
-                  </TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0 text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                      onClick={() => setCreateTaskOpen(true)}
-                    >
-                      <ListTodo className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">
-                    Crear tarea
-                  </TooltipContent>
-                </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        onClick={() => setCreateTaskOpen(true)}
+                      >
+                        <ListTodo className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Crear tarea desde el correo
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
             </TooltipProvider>
 
             {detailAiPanel && (
               <div className="px-3 sm:px-6 py-3 border-b border-border/50 shrink-0">
                 <div className="rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/30 p-4 space-y-3 shadow-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
-                      {detailAiPanel === "summarize" ? "Resumen" : "Traducción"}
-                    </span>
-                    <Button type="button" variant="outline" size="sm" onClick={closeDetailAiPanel}>
-                      Cerrar
-                    </Button>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                        {detailAiPanel === "summarize" ? (
+                          <>
+                            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                            Resumen
+                          </>
+                        ) : (
+                          <>
+                            <Languages className="h-3.5 w-3.5" aria-hidden />
+                            Traducción
+                          </>
+                        )}
+                      </span>
+                      {detailAiPanel === "translate" && detailAiTranslateTarget && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] font-semibold tracking-wide border-blue-300/70 bg-blue-100/70 text-blue-700 dark:border-blue-700/60 dark:bg-blue-900/40 dark:text-blue-200"
+                        >
+                          {detailAiTranslateTarget === "en" ? "ES → EN" : "EN → ES"}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={() => void copyDetailAiText()}
+                        disabled={detailAiLoading || !detailAiText?.trim()}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copiar
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={closeDetailAiPanel}
+                      >
+                        Cerrar
+                      </Button>
+                    </div>
                   </div>
                   {detailAiLoading ? (
                     <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-2">
@@ -1800,9 +1882,13 @@ export function EmailView() {
                       </span>
                     </div>
                   ) : (
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-                      {detailAiText || "Sin resultado."}
-                    </p>
+                    <div className="max-h-[40vh] overflow-y-auto pr-1 rounded-md bg-background/40 dark:bg-background/20 border border-blue-100/70 dark:border-blue-900/30 p-3">
+                      {detailAiText?.trim() ? (
+                        <KawiilAiMarkdown>{detailAiText}</KawiilAiMarkdown>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">Sin resultado.</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
