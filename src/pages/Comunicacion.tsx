@@ -1259,6 +1259,53 @@ export default function Comunicacion() {
             )}
             Actualizar permisos Slack
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full h-7 text-[10px] text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60"
+            title="Consulta a Slack qué permisos tiene tu token actual y muestra si faltan reactions:write o reactions:read"
+            onClick={async () => {
+              try {
+                const data = await invokeSlackApi<{
+                  ok?: boolean;
+                  error?: string;
+                  team?: string;
+                  user?: string;
+                  _kawiil?: {
+                    scopes: string[];
+                    has_reactions_write: boolean;
+                    has_reactions_read: boolean;
+                  };
+                }>("auth.test", {});
+                const kw = data?._kawiil;
+                if (!data?.ok) {
+                  toast.error(`Slack rechazó auth.test: ${data?.error || "desconocido"}`, {
+                    duration: 9000,
+                  });
+                  return;
+                }
+                if (!kw) {
+                  toast.info("Slack respondió OK pero sin detalle de scopes.", { duration: 6000 });
+                  return;
+                }
+                const okReact = kw.has_reactions_write && kw.has_reactions_read;
+                toast[okReact ? "success" : "warning"](
+                  okReact
+                    ? `Tu token tiene reactions:write y reactions:read (${kw.scopes.length} scopes)`
+                    : `Faltan permisos de reacciones. Scopes actuales (${kw.scopes.length}): ${kw.scopes.join(", ") || "(ninguno)"}`,
+                  { duration: 14000 },
+                );
+                console.log("[slack auth.test]", data);
+              } catch (err) {
+                toast.error(`Error llamando auth.test: ${(err as Error).message}`, {
+                  duration: 8000,
+                });
+              }
+            }}
+          >
+            Verificar permisos actuales
+          </Button>
         </div>
       }
     />

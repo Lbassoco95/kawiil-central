@@ -63,7 +63,8 @@ type SlackMethod =
   | "reactions.add"
   | "reactions.remove"
   | "users.info"
-  | "users.list";
+  | "users.list"
+  | "auth.test";
 
 const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
 const MAX_PRIVATE_FILE_FETCH_BYTES = 20 * 1024 * 1024;
@@ -682,6 +683,34 @@ Deno.serve(async (req) => {
         thread_ts: json.thread_ts as string | undefined,
       });
       return jsonOk(data);
+    }
+
+    if (action === "auth.test") {
+      // Diagnóstico: devuelve identidad + scopes del token de usuario actual.
+      // Slack devuelve los scopes efectivos en el header `x-oauth-scopes` de la respuesta.
+      const res = await fetch("https://slack.com/api/auth.test", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${conn.access_token}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "",
+      });
+      const data = await res.json().catch(() => ({ ok: false, error: "parse_error" }));
+      const scopesHeader =
+        res.headers.get("x-oauth-scopes") || res.headers.get("X-OAuth-Scopes") || "";
+      const scopes = scopesHeader
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return jsonOk({
+        ...data,
+        _kawiil: {
+          scopes,
+          has_reactions_write: scopes.includes("reactions:write"),
+          has_reactions_read: scopes.includes("reactions:read"),
+        },
+      });
     }
 
     if (action === "reactions.add" || action === "reactions.remove") {
