@@ -42,12 +42,40 @@ export const ACCOUNTING_TEMPLATE_CATEGORIES: AccountingTemplateCategory[] = [
 
 export type AccountingVariableType = "text" | "currency" | "date";
 
+/**
+ * Para variables monetarias que soportan varios modos:
+ * - `pago`: monto normal (comportamiento por defecto).
+ * - `favor`: saldo a favor; se formatea igual que pago pero se anexa un
+ *   sufijo (`favorText`, default "(saldo a favor)").
+ * - `perdida`: no aplica / pérdida; se omite la línea (cualquier elemento
+ *   con `data-kvt-var="<name>"`) del cuerpo del correo.
+ */
+export type CurrencyMode = "pago" | "favor" | "perdida";
+
+export const DEFAULT_CURRENCY_MODE: CurrencyMode = "pago";
+export const DEFAULT_FAVOR_TEXT = "(saldo a favor)";
+
 export interface AccountingTemplateVariable {
   name: string;
   label: string;
   type: AccountingVariableType;
   bold: boolean;
   required: boolean;
+  /**
+   * Si `true`, el formulario permitirá elegir entre "monto a pagar",
+   * "saldo a favor" y "pérdida / no aplica". Las plantillas deben envolver
+   * la línea condicional con `data-kvt-var="<name>"` para que el modo
+   * `perdida` pueda eliminarla.
+   */
+  modeSupport?: boolean;
+  /** Texto que se anexa cuando el modo es `favor`. */
+  favorText?: string;
+}
+
+export function supportsCurrencyMode(
+  v: Pick<AccountingTemplateVariable, "type" | "modeSupport">,
+): boolean {
+  return Boolean(v.modeSupport) && v.type === "currency";
 }
 
 export const DEFAULT_VARIABLES_BY_CATEGORY: Record<
@@ -65,14 +93,14 @@ export const DEFAULT_VARIABLES_BY_CATEGORY: Record<
   ],
   pagos_provisionales: [
     { name: "razon_social", label: "Razón social", type: "text", bold: false, required: true },
-    { name: "monto_isr", label: "ISR (Impuesto Sobre la Renta)", type: "currency", bold: true, required: true },
-    { name: "monto_iva", label: "IVA (Impuesto al Valor Agregado)", type: "currency", bold: true, required: true },
-    { name: "ret_sueldos", label: "Retenciones por sueldos", type: "currency", bold: true, required: true },
-    { name: "ret_asimilados", label: "Retenciones asimiladas a salarios", type: "currency", bold: true, required: true },
-    { name: "ret_iva", label: "Retenciones de IVA", type: "currency", bold: true, required: true },
-    { name: "ret_isr", label: "Retenciones de ISR", type: "currency", bold: true, required: true },
-    { name: "monto_ieps", label: "IEPS", type: "currency", bold: true, required: true },
-    { name: "isr_arrendamiento", label: "ISR Arrendamiento", type: "currency", bold: true, required: true },
+    { name: "monto_isr", label: "ISR (Impuesto Sobre la Renta)", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "monto_iva", label: "IVA (Impuesto al Valor Agregado)", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "ret_sueldos", label: "Retenciones por sueldos", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "ret_asimilados", label: "Retenciones asimiladas a salarios", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "ret_iva", label: "Retenciones de IVA", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "ret_isr", label: "Retenciones de ISR", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "monto_ieps", label: "IEPS", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "isr_arrendamiento", label: "ISR Arrendamiento", type: "currency", bold: true, required: true, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
     { name: "fecha_limite", label: "Fecha límite de pago", type: "date", bold: true, required: true },
   ],
   declaracion_ceros: [
@@ -84,8 +112,8 @@ export const DEFAULT_VARIABLES_BY_CATEGORY: Record<
   ],
   envio_anuales: [
     { name: "razon_social", label: "Razón social", type: "text", bold: false, required: true },
-    { name: "saldo_favor", label: "Saldo a favor", type: "currency", bold: true, required: false },
-    { name: "a_pagar", label: "Monto a pagar", type: "currency", bold: true, required: false },
+    { name: "saldo_favor", label: "Saldo a favor", type: "currency", bold: true, required: false, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
+    { name: "a_pagar", label: "Monto a pagar", type: "currency", bold: true, required: false, modeSupport: true, favorText: DEFAULT_FAVOR_TEXT },
     { name: "clabe", label: "CLABE bancaria para devolución", type: "text", bold: true, required: false },
   ],
 };
@@ -111,12 +139,23 @@ export function parseTemplateVariables(
     if (!name || !label) continue;
     const type: AccountingVariableType =
       o.type === "currency" || o.type === "date" ? o.type : "text";
+    // Acepta tanto snake_case (jsonb) como camelCase por compatibilidad.
+    const modeSupportRaw =
+      o.mode_support !== undefined ? o.mode_support : o.modeSupport;
+    const favorTextRaw =
+      typeof o.favor_text === "string"
+        ? o.favor_text
+        : typeof o.favorText === "string"
+          ? o.favorText
+          : undefined;
     result.push({
       name,
       label,
       type,
       bold: Boolean(o.bold),
       required: o.required === undefined ? true : Boolean(o.required),
+      modeSupport: modeSupportRaw === undefined ? false : Boolean(modeSupportRaw),
+      favorText: favorTextRaw,
     });
   }
   return result;
@@ -170,6 +209,11 @@ export interface ApplyTemplateInput {
   bodyHtml: string;
   variables: AccountingTemplateVariable[];
   values: Record<string, string>;
+  /**
+   * Modo por variable. Solo se toma en cuenta para variables con
+   * `modeSupport: true`. Default = "pago".
+   */
+  modes?: Record<string, CurrencyMode>;
 }
 
 export interface ApplyTemplateResult {
@@ -179,9 +223,32 @@ export interface ApplyTemplateResult {
 }
 
 /**
+ * Remueve del HTML cualquier elemento (`<li>`, `<p>`, `<div>`, etc.) que
+ * tenga el atributo `data-kvt-var="<name>"`. Multiline-safe y tolera
+ * comillas simples.
+ */
+function stripLineForVar(html: string, name: string): string {
+  const escaped = name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+  const pattern = new RegExp(
+    `<(\\w+)\\b[^>]*\\bdata-kvt-var\\s*=\\s*["']${escaped}["'][^>]*>[\\s\\S]*?<\\/\\1>`,
+    "gi",
+  );
+  return html.replace(pattern, "");
+}
+
+/**
  * Reemplaza los `{{name}}` del `subject` y `bodyHtml` por los valores
  * formateados. Para asunto se retira cualquier `<strong>` (los clientes de
  * correo no soportan HTML en subject).
+ *
+ * Soporta 3 modos por variable (cuando `modeSupport` es true):
+ *  - `pago` (default): monto normal.
+ *  - `favor`: formatea como monto y añade el sufijo `favorText`.
+ *  - `perdida`: remueve cualquier `<elem data-kvt-var="name">...</elem>`
+ *    del body y deja el placeholder en blanco.
+ *
+ * Además, para variables NO requeridas cuyo valor quedó vacío, también se
+ * elimina su línea envuelta (si existe), evitando dejar texto colgando.
  */
 export function applyAccountingTemplate(
   input: ApplyTemplateInput,
@@ -189,23 +256,44 @@ export function applyAccountingTemplate(
   const missing: AccountingTemplateVariable[] = [];
   let subject = input.subject;
   let body = input.bodyHtml;
+  const modes = input.modes ?? {};
 
   for (const variable of input.variables) {
+    const rawMode = modes[variable.name];
+    const mode: CurrencyMode =
+      supportsCurrencyMode(variable) && rawMode ? rawMode : "pago";
     const raw = input.values[variable.name] ?? "";
-    const formatted = formatValue(raw, variable.type);
-    if (variable.required && !formatted) missing.push(variable);
+    const formatted = mode === "perdida" ? "" : formatValue(raw, variable.type);
 
-    const bodyReplacement = formatted
-      ? variable.bold
-        ? `<strong>${escapeHtml(formatted)}</strong>`
-        : escapeHtml(formatted)
-      : "";
-    const subjectReplacement = formatted;
+    const isRequired = variable.required && mode !== "perdida";
+    if (isRequired && !formatted) missing.push(variable);
+
+    const favorSuffix =
+      mode === "favor" ? ` ${variable.favorText ?? DEFAULT_FAVOR_TEXT}` : "";
+
+    let bodyReplacement = "";
+    if (formatted) {
+      const safe = escapeHtml(formatted);
+      bodyReplacement = variable.bold
+        ? `<strong>${safe}${escapeHtml(favorSuffix)}</strong>`
+        : `${safe}${escapeHtml(favorSuffix)}`;
+    }
+    const subjectReplacement = formatted ? `${formatted}${favorSuffix}` : "";
 
     const placeholder = new RegExp(`\\{\\{\\s*${variable.name}\\s*\\}\\}`, "g");
-
     body = body.replace(placeholder, bodyReplacement);
     subject = subject.replace(placeholder, subjectReplacement);
+
+    // Modo pérdida: remueve el <li>/<p>/... envolvente con data-kvt-var.
+    if (mode === "perdida") {
+      body = stripLineForVar(body, variable.name);
+    }
+
+    // Variable opcional vacía: también removemos la línea envuelta (si existe)
+    // para no dejar texto colgando tipo "Esta es la CLABE bancaria ...".
+    if (!variable.required && !formatted && mode !== "perdida") {
+      body = stripLineForVar(body, variable.name);
+    }
   }
 
   // Evitar que queden `<strong><strong>x</strong></strong>` si la plantilla ya

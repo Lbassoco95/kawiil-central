@@ -225,12 +225,20 @@ export default function EmailTemplatesContabilidad() {
                 </p>
                 <ul className="text-xs text-muted-foreground space-y-1">
                   {variablesForCategory.map((v) => (
-                    <li key={v.name} className="flex items-center gap-2">
+                    <li key={v.name} className="flex items-center gap-2 flex-wrap">
                       <code className="text-[11px] bg-background border rounded px-1 py-0.5">{`{{${v.name}}}`}</code>
                       <span>{v.label}</span>
                       {v.bold ? (
                         <Badge variant="secondary" className="text-[10px]">
                           negritas
+                        </Badge>
+                      ) : null}
+                      {v.modeSupport ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] border-blue-300 text-blue-700"
+                        >
+                          modos: pago / favor / pérdida
                         </Badge>
                       ) : null}
                       <span className="text-[10px] uppercase tracking-wide">
@@ -242,6 +250,19 @@ export default function EmailTemplatesContabilidad() {
                 <p className="text-[11px] text-muted-foreground mt-2">
                   Los valores en negritas se aplican automáticamente al insertar
                   la plantilla desde el compositor.
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Para variables con <em>modos</em>, envuelve la línea
+                  condicional en el HTML con{" "}
+                  <code className="text-[11px]">
+                    data-kvt-var=&quot;nombre&quot;
+                  </code>{" "}
+                  (por ejemplo{" "}
+                  <code className="text-[11px]">
+                    &lt;li data-kvt-var=&quot;monto_isr&quot;&gt;…&lt;/li&gt;
+                  </code>
+                  ). Si el usuario elige «Pérdida / No aplica», la línea se
+                  eliminará del correo.
                 </p>
               </div>
             </div>

@@ -367,6 +367,9 @@ export function ComposeEmailDialog({
         <AccountingTemplatePicker
           onApply={applyAccountingTemplate}
           defaults={defaultTemplateContext as Record<string, string> | undefined}
+          onClientSelected={(client) => {
+            if (!to.trim() && client.email) setTo(client.email);
+          }}
         />
       ) : null}
       <Button
