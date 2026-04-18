@@ -15,7 +15,8 @@ self.addEventListener("push", (event) => {
     renotify: true,
     vibrate: [120, 80, 120],
     silent: false,
-    requireInteraction: false,
+    // DMs y menciones lo envían con requireInteraction=true → el banner queda visible hasta que el usuario lo atienda.
+    requireInteraction: data.requireInteraction === true,
     data: { url: data.url || "/" },
   };
   event.waitUntil(self.registration.showNotification(title, options));

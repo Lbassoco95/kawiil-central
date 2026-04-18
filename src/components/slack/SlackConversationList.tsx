@@ -190,7 +190,7 @@ function ConvRow({
             : highlightUnread || unreadInEmbed
               ? "font-semibold text-zinc-900"
               : hasUnread
-                ? "font-semibold text-zinc-50"
+                ? "font-bold text-white"
                 : "text-zinc-200",
         )}
         title={
@@ -203,6 +203,12 @@ function ConvRow({
       >
         {selected && (
           <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-primary" aria-hidden />
+        )}
+        {hasUnread && !selected && (
+          <span
+            className="h-2 w-2 rounded-full bg-sky-400 shrink-0 shadow-[0_0_6px_rgba(56,189,248,0.8)]"
+            aria-hidden
+          />
         )}
         {c.is_im ? (
           <MessageCircle className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />

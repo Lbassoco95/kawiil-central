@@ -183,6 +183,34 @@ async function slackConversationDisplayName(
   return undefined;
 }
 
+/** Nombre visible del remitente Slack para poner en el título de la notificación. */
+async function slackUserDisplayName(
+  slackUserId: string,
+  botToken: string,
+): Promise<string | undefined> {
+  const u = new URL("https://slack.com/api/users.info");
+  u.searchParams.set("user", slackUserId);
+  const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${botToken}` } });
+  const j = (await res.json()) as {
+    ok?: boolean;
+    error?: string;
+    user?: {
+      real_name?: string;
+      profile?: { display_name?: string; real_name?: string; real_name_normalized?: string };
+      name?: string;
+    };
+  };
+  if (!j.ok || !j.user) {
+    console.warn("users.info:", j.error || "unknown");
+    return undefined;
+  }
+  const p = j.user.profile || {};
+  const cand = [p.display_name, p.real_name, p.real_name_normalized, j.user.real_name, j.user.name]
+    .map((x) => (typeof x === "string" ? x.trim() : ""))
+    .find((x) => x.length > 0);
+  return cand || undefined;
+}
+
 const SLACK_DM_PROBE_MAX = 100;
 
 /**
@@ -264,22 +292,45 @@ function mergeSlackTarget(
   targets.set(userId, cur);
 }
 
+/**
+ * Título descriptivo estilo Slack nativo:
+ * - DM 1:1: nombre del remitente (o "Mensaje directo" si no lo resolvimos).
+ * - Grupo privado (mpim): "Grupo · {sender}".
+ * - Canal: "#canal — {sender}" (o solo "#canal" si no hay sender).
+ * - Mención: "Te mencionaron en #canal" (el body prefija el nombre del remitente).
+ * - VIP / watch: conservan matiz pero incluyen sender y canal cuando están disponibles.
+ */
 function slackNotificationTitle(
   flags: SlackTargetFlags,
   channelType: string,
   channelDisplay?: string,
+  senderName?: string,
 ): string {
-  const ch = channelDisplay ? ` · ${channelDisplay}` : "";
-  if (flags.mention) return `Slack · Te mencionaron${ch}`;
-  if (flags.dm) {
-    return channelType === "im" ? `Slack · Mensaje directo${ch}` : `Slack · Grupo privado${ch}`;
+  const chSuffix = channelDisplay ? ` ${channelDisplay}` : "";
+  const senderPart = senderName ? ` — ${senderName}` : "";
+
+  if (flags.mention) {
+    return channelDisplay ? `Te mencionaron en ${channelDisplay}` : "Te mencionaron en Slack";
   }
-  if (flags.vip) return `Slack · Conversación destacada · Nuevo mensaje${ch}`;
-  if (flags.watch) return `Slack · Canal en seguimiento${ch}`;
-  if (flags.channel) return `Slack · Nuevo mensaje${ch}`;
-  if (channelType === "im") return `Slack · Mensaje directo${ch}`;
-  if (channelType === "mpim") return `Slack · Grupo privado${ch}`;
-  return `Slack · Canal${ch}`;
+  if (flags.dm) {
+    if (channelType === "im") return senderName || "Mensaje directo (Slack)";
+    return senderName ? `Grupo · ${senderName}` : "Grupo privado (Slack)";
+  }
+  if (flags.vip) {
+    const base = channelDisplay ? `Destacado · ${channelDisplay}` : "Destacado (Slack)";
+    return senderName ? `${base} — ${senderName}` : base;
+  }
+  if (flags.watch) {
+    const base = channelDisplay ? `Seguimiento · ${channelDisplay}` : "Seguimiento (Slack)";
+    return senderName ? `${base} — ${senderName}` : base;
+  }
+  if (flags.channel) {
+    if (channelDisplay) return `${channelDisplay}${senderPart}`;
+    return senderName ? `Slack — ${senderName}` : "Slack · Nuevo mensaje";
+  }
+  if (channelType === "im") return senderName || "Mensaje directo (Slack)";
+  if (channelType === "mpim") return senderName ? `Grupo · ${senderName}` : "Grupo privado (Slack)";
+  return channelDisplay ? `Canal${chSuffix}${senderPart}` : "Slack · Canal";
 }
 
 function slackNotificationType(flags: SlackTargetFlags): string {
@@ -590,24 +641,37 @@ async function handleMessageNotificationEvent(
   }
 
   let channelDisplay: string | undefined;
+  let senderName: string | undefined;
   const botForInfo = Deno.env.get("SLACK_BOT_TOKEN");
   if (botForInfo) {
     channelDisplay = await slackConversationDisplayName(channel, botForInfo);
+    if (senderSlackId) {
+      senderName = await slackUserDisplayName(senderSlackId, botForInfo);
+    }
   }
 
   const preview = text.replace(/<@[A-Z0-9]+>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 200);
 
-  const rows = [...targets.entries()].map(([user_id, flags]) => ({
-    user_id,
-    organization_id: flags.organization_id,
-    type: slackNotificationType(flags),
-    title: slackNotificationTitle(flags, channelType, channelDisplay),
-    body: preview || "(sin texto)",
-    entity_type: "slack",
-    entity_id: null as string | null,
-    entity_ref: `${channel}|${ts}`,
-    source_user_id: null as string | null,
-  }));
+  const rows = [...targets.entries()].map(([user_id, flags]) => {
+    const baseType = slackNotificationType(flags);
+    const title = slackNotificationTitle(flags, channelType, channelDisplay, senderName);
+    // En menciones, prefijar el body con el remitente para que se lea "Juan: {mensaje}".
+    const bodyForRow =
+      flags.mention && senderName && preview
+        ? `${senderName}: ${preview}`
+        : preview || "(sin texto)";
+    return {
+      user_id,
+      organization_id: flags.organization_id,
+      type: baseType,
+      title,
+      body: bodyForRow,
+      entity_type: "slack",
+      entity_id: null as string | null,
+      entity_ref: `${channel}|${ts}`,
+      source_user_id: null as string | null,
+    };
+  });
 
   const entityRef = `${channel}|${ts}`;
   const userIds = rows.map((r) => r.user_id);
@@ -649,16 +713,21 @@ async function handleMessageNotificationEvent(
   }
 
   const deepUrl = `/comunicacion?channel=${encodeURIComponent(channel)}&ts=${encodeURIComponent(ts)}`;
-  const bodyPush = preview || "Nuevo mensaje";
   const pushTag = `slack-${channel}-${ts}`.replace(/\s/g, "");
+  const isDmConversation = channelType === "im" || channelType === "mpim";
   for (const row of dedupedRows) {
+    const isMention = row.type === "slack_mention";
     await sendWebPushToUsers(supabase, {
       userIds: [row.user_id],
       title: row.title,
-      body: bodyPush,
+      body: row.body || preview || "Nuevo mensaje",
       url: deepUrl,
       tag: pushTag,
-      force: row.type === "slack_mention",
+      // DM/mpim y menciones entregan aunque el usuario no tenga "push con app cerrada" encendido:
+      // son mensajes que esperamos interrumpir al usuario.
+      force: isMention || isDmConversation,
+      // Banner persistente en DMs y menciones: no se auto-cierra hasta que el usuario lo atienda.
+      requireInteraction: isMention || isDmConversation,
     });
   }
 }

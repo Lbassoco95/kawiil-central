@@ -5,6 +5,8 @@ type SendWebPushArgs = {
   url: string;
   tag?: string;
   force?: boolean;
+  /** Si true, el banner del SO permanece hasta que el usuario lo atienda (DMs, menciones). */
+  requireInteraction?: boolean;
 };
 
 let webpushClient: {
@@ -15,10 +17,20 @@ let webpushClient: {
   ) => Promise<unknown>;
 } | null = null;
 
+let vapidMissingLogged = false;
+
 async function getWebPushClient() {
   const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
   const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-  if (!publicKey || !privateKey) return null;
+  if (!publicKey || !privateKey) {
+    if (!vapidMissingLogged) {
+      console.warn(
+        "[webpush] Deshabilitado: faltan VAPID_PUBLIC_KEY y/o VAPID_PRIVATE_KEY en Edge Function Secrets. No se enviará ninguna push.",
+      );
+      vapidMissingLogged = true;
+    }
+    return null;
+  }
   if (!webpushClient) {
     const imported = await import("npm:web-push@3.6.6");
     webpushClient = imported.default;
@@ -50,7 +62,10 @@ export async function sendWebPushToUsers(
         .select("desktop_push_notifications")
         .eq("user_id", uid)
         .maybeSingle();
-      if (prof?.desktop_push_notifications !== true) continue;
+      if (prof?.desktop_push_notifications !== true) {
+        console.log("[webpush] saltado (toggle desktop_push_notifications off)", { uid });
+        continue;
+      }
     }
 
     const { data: subs } = await supabase
@@ -58,7 +73,12 @@ export async function sendWebPushToUsers(
       .select("id, endpoint, p256dh, auth")
       .eq("user_id", uid);
 
-    for (const sub of subs || []) {
+    if (!subs || subs.length === 0) {
+      console.warn("[webpush] sin suscripciones activas para user", { uid, tag: args.tag });
+      continue;
+    }
+
+    for (const sub of subs) {
       try {
         await client.sendNotification(
           {
@@ -70,14 +90,17 @@ export async function sendWebPushToUsers(
             body: args.body,
             url: args.url,
             tag: args.tag || `kawiil-${Date.now()}`,
+            requireInteraction: args.requireInteraction === true,
           }),
         );
       } catch (e: unknown) {
         const code = (e as { statusCode?: number })?.statusCode;
         if (code === 404 || code === 410) {
           await supabase.from("push_subscriptions").delete().eq("id", sub.id);
+          console.warn("[webpush] suscripción stale eliminada", { uid, subId: sub.id, code });
+        } else {
+          console.error("[webpush] error de entrega", { uid, subId: sub.id, code });
         }
-        console.error("webpush delivery error:", code);
       }
     }
   }
