@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { PersonalDashboard } from "@/components/dashboard/PersonalDashboard";
 import { TeamDashboard } from "@/components/dashboard/TeamDashboard";
+import { DashboardOverview } from "@/components/dashboard/DashboardOverview";
 import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEntryButton";
 
 const Dashboard = () => {
@@ -47,7 +48,14 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {view === "personal" ? <PersonalDashboard /> : <TeamDashboard />}
+        {view === "personal" ? (
+          <>
+            <DashboardOverview />
+            <PersonalDashboard />
+          </>
+        ) : (
+          <TeamDashboard />
+        )}
       </div>
     </AppLayout>
   );
