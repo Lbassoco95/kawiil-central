@@ -182,7 +182,7 @@ export function AppSidebar() {
             {visibleGroups.map((group, gi) => (
               <div key={group.label}>
                 {gi > 0 && <div className="h-px bg-sidebar-border/30 mx-2 my-2" />}
-                <p className="text-[10px] font-medium text-sidebar-foreground/40 uppercase tracking-wider px-2.5 mb-1 mt-1">{group.label}</p>
+                <p className="text-[10px] font-semibold text-sidebar-foreground/50 uppercase tracking-[0.12em] px-2.5 mb-1 mt-1">{group.label}</p>
                 <div className="space-y-0.5">
                   {group.items.map((item) => (
                     <NavLink
@@ -190,8 +190,8 @@ export function AppSidebar() {
                       to={item.url}
                       end={item.url === "/"}
                       title={item.tooltip || item.title}
-                      className="relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-all text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-sidebar-primary"
+                      className="relative flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-all text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-full before:bg-sidebar-primary"
                       onClick={() => setMobileOpen(false)}
                     >
                       <item.icon className="h-4 w-4 shrink-0 opacity-70" />
@@ -212,7 +212,7 @@ export function AppSidebar() {
             )}
             <button
               onClick={() => { signOut(); setMobileOpen(false); }}
-              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] w-full transition-colors text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
             >
               <LogOut className="h-4 w-4 shrink-0 opacity-70" />
               <span>Cerrar sesión</span>
@@ -245,7 +245,7 @@ export function AppSidebar() {
             <div key={group.label}>
               {gi > 0 && <div className="h-px bg-sidebar-border/30 mx-1.5 my-2" />}
               {!collapsed && (
-                <p className="text-[10px] font-medium text-sidebar-foreground/40 uppercase tracking-wider px-2.5 mb-1 mt-1">{group.label}</p>
+                <p className="text-[10px] font-semibold text-sidebar-foreground/50 uppercase tracking-[0.12em] px-2.5 mb-1 mt-1">{group.label}</p>
               )}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
