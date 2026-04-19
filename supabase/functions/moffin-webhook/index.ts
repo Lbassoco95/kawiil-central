@@ -20,7 +20,12 @@ import {
   moffinSolutionsBaseUrl,
 } from "../_shared/moffinApiFlavor.ts";
 import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
-import { mapMoffinStatus, moffinMessageImpliesSatStillProcessing } from "../_shared/moffinReportStatus.ts";
+import {
+  extractMoffinErrorMessage,
+  mapMoffinReportStatus,
+  mapMoffinStatus,
+  moffinMessageImpliesSatStillProcessing,
+} from "../_shared/moffinReportStatus.ts";
 import {
   extractSolutionsQueryId,
   moffinSolutionsGetJson,
@@ -372,7 +377,7 @@ Deno.serve(async (req) => {
   }
 
   const mr = moffinReport as Record<string, unknown> | null;
-  let st = moffinReport ? mapMoffinStatus(String(moffinReport.status ?? "")) : "pending";
+  let st: "success" | "fail" | "pending" | "error" = mr ? mapMoffinReportStatus(mr) : "pending";
   if (
     mr &&
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") &&
@@ -383,11 +388,12 @@ Deno.serve(async (req) => {
   const errMsg =
     st === "fail" || st === "error"
       ? String(
-          mr?.message ??
+          (mr ? extractMoffinErrorMessage(mr) : null) ??
+            mr?.message ??
             mr?.error ??
             (typeof mr?.response === "object" && mr?.response && (mr.response as Record<string, unknown>)?.message) ??
             "Consulta Moffin fallida",
-        )
+        ).slice(0, 500)
       : null;
 
   let documentId = row.document_id;

@@ -60,13 +60,77 @@ export function moffinMessageImpliesQueuedProcessing(json: Record<string, unknow
 }
 
 /**
+ * Extrae el status real del reporte. Moffin Solutions suele envolver la consulta en
+ * `serviceQuery.status` cuando el GET usa `/query/{id}`; el status a nivel raíz puede estar vacío.
+ */
+export function extractMoffinReportStatus(json: Record<string, unknown>): string {
+  const rootStatus = typeof json.status === "string" ? json.status.trim() : "";
+  if (rootStatus) return rootStatus;
+  const sq = json.serviceQuery;
+  if (sq && typeof sq === "object" && !Array.isArray(sq)) {
+    const inner = (sq as Record<string, unknown>).status;
+    if (typeof inner === "string" && inner.trim()) return inner.trim();
+  }
+  const data = json.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const inner = (data as Record<string, unknown>).status;
+    if (typeof inner === "string" && inner.trim()) return inner.trim();
+  }
+  return "";
+}
+
+/** Status mapeado a UI priorizando `serviceQuery.status` cuando el GET devuelve el envelope. */
+export function mapMoffinReportStatus(json: Record<string, unknown>): MoffinConsultUiStatus {
+  return mapMoffinStatus(extractMoffinReportStatus(json));
+}
+
+/**
  * Incluye cola + respuestas meta de Moffin (p. ej. GET service_queries) sin cuerpo SAT/PDF todavía.
- * Ej.: "Service query fetched successfully".
+ * Ej.: "Service query fetched successfully". Nunca fuerza pending si el `serviceQuery.status`
+ * (o raíz) ya es terminal (SUCCESS/FAIL).
  */
 export function moffinMessageImpliesSatStillProcessing(json: Record<string, unknown>): boolean {
+  const explicit = extractMoffinReportStatus(json).toUpperCase();
+  if (
+    explicit === "SUCCESS" ||
+    explicit === "COMPLETED" ||
+    explicit === "DONE" ||
+    explicit === "SUCCEEDED" ||
+    explicit === "FAIL" ||
+    explicit === "FAILED" ||
+    explicit === "FAILURE"
+  ) {
+    return false;
+  }
   if (moffinMessageImpliesQueuedProcessing(json)) return true;
   const msg = moffinResponseMessagesFlattened(json).toLowerCase();
   return /service query fetched successfully|service query[\s\w]*successfully|query fetched successfully/i.test(
     msg,
   );
+}
+
+/** Mensaje de error anidado (p. ej. `serviceQuery.response.errorMessage`) cuando el status es FAIL. */
+export function extractMoffinErrorMessage(json: Record<string, unknown>): string | null {
+  const pick = (o: unknown): string | null => {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const r = o as Record<string, unknown>;
+    for (const k of ["errorMessage", "error_message", "message", "error", "description"]) {
+      const v = r[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return null;
+  };
+  const sq = json.serviceQuery;
+  if (sq && typeof sq === "object" && !Array.isArray(sq)) {
+    const r = sq as Record<string, unknown>;
+    const innerResp = pick(r.response);
+    if (innerResp) return innerResp;
+    const innerState = pick(r.state);
+    if (innerState) return innerState;
+    const top = pick(r);
+    if (top) return top;
+  }
+  const resp = pick(json.response);
+  if (resp) return resp;
+  return pick(json);
 }

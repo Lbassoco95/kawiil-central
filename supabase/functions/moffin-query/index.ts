@@ -29,6 +29,9 @@ import {
   moffinSolutionsQueryPathForConsult,
 } from "../_shared/moffinQueryPaths.ts";
 import {
+  extractMoffinErrorMessage,
+  extractMoffinReportStatus,
+  mapMoffinReportStatus,
   mapMoffinStatus,
   moffinMessageImpliesSatStillProcessing,
 } from "../_shared/moffinReportStatus.ts";
@@ -257,7 +260,7 @@ function resolvedMoffinConsultUiStatus(
   consultType: ConsultType,
   report: Record<string, unknown>,
 ): "success" | "fail" | "pending" | "error" {
-  let st = mapMoffinStatus(String(report.status ?? ""));
+  let st = mapMoffinReportStatus(report);
   if (
     (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento") &&
     moffinMessageImpliesSatStillProcessing(report)
@@ -286,7 +289,12 @@ async function persistMoffinReportToConsult(
 
   const errMsg =
     st === "fail" || st === "error"
-      ? String(report.message ?? report.error ?? "Moffin reportó un fallo")
+      ? String(
+          extractMoffinErrorMessage(report) ??
+            report.message ??
+            report.error ??
+            "Moffin reportó un fallo",
+        ).slice(0, 500)
       : null;
 
   const uploadUid = row.requested_by ?? fallbackUserId;
@@ -385,6 +393,28 @@ async function refreshPendingConsultRows(
         solutionsAuthScheme,
       );
       if (!fr.ok) {
+        const isQueryNotFound =
+          fr.status === 404 || /service query not found|query not found|not found/i.test(fr.message);
+        if (isQueryNotFound) {
+          const prev = rowTyped.raw_response;
+          const prevObj =
+            prev && typeof prev === "object" && !Array.isArray(prev)
+              ? (prev as Record<string, unknown>)
+              : {};
+          await admin
+            .from("moffin_consults")
+            .update({
+              status: "error",
+              error_message: `Moffin ya no tiene registrada la consulta (${fr.status}): ${fr.message}`.slice(0, 500),
+              raw_response: {
+                ...prevObj,
+                _refreshError: { status: fr.status, message: fr.message },
+                _refreshedAt: new Date().toISOString(),
+              },
+            })
+            .eq("id", row.id);
+          return { id: row.id, ok: true, newStatus: "error" };
+        }
         return { id: row.id, ok: false, error: fr.message };
       }
       const pe = await persistMoffinReportToConsult(
