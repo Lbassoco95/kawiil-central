@@ -1,71 +1,34 @@
-import { AppSidebar } from "@/components/AppSidebar";
-import { FloatingAIChat } from "@/components/FloatingAIChat";
-import { GlobalAISearch } from "@/components/shared/GlobalAISearch";
+import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { EmailView } from "@/components/microsoft/EmailView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
-import { nowMX } from "@/lib/dateUtils";
-import { Clock } from "lucide-react";
-import { useState, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { Mail } from "lucide-react";
 
 const Microsoft365Correo = () => {
   const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
-  const isMobile = useIsMobile();
   useTasksRealtime();
 
-  const [currentTime, setCurrentTime] = useState(() => nowMX());
-  useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(nowMX()), 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Full-bleed layout — no AppLayout wrapper to avoid max-w-7xl and padding
   return (
-    <div className="flex min-h-screen w-full bg-background relative">
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
-        <div className="absolute -top-1/4 -right-1/4 w-[600px] h-[600px] rounded-full bg-primary/[0.03] blur-3xl" />
-        <div className="absolute -bottom-1/4 -left-1/4 w-[500px] h-[500px] rounded-full bg-accent/[0.03] blur-3xl" />
-      </div>
-      <AppSidebar />
-      <main className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden w-full h-screen">
-        {/* Cabecera: búsqueda en bloque aparte para alinear con el área de correo */}
-        <div
-          className={cn(
-            "shrink-0 border-b border-border/70 bg-card shadow-sm backdrop-blur-md",
-            isMobile ? "px-4 pt-12 pb-2" : "px-4 py-3",
-          )}
-        >
-          {!isMobile && (
-            <div className="mb-2 w-full max-w-2xl">
-              <GlobalAISearch className="w-full max-w-full shrink-0 flex-none" />
+    <AppLayout contentMaxWidth="full">
+      <div className="flex flex-col h-full min-h-0 min-w-0 bg-card">
+        <div className="shrink-0 border-b border-border/70 bg-card px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
+              <Mail className="h-4 w-4" />
             </div>
-          )}
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold tracking-tight gradient-text">Correo</h1>
+            <div className="min-w-0">
+              <h1 className="text-sm font-semibold tracking-tight text-foreground">Correo</h1>
               {profile && (
-                <span className="truncate text-xs text-muted-foreground">
-                  · {profile.displayName || profile.mail || ""}
-                </span>
+                <p className="truncate text-[11px] text-muted-foreground -mt-0.5">
+                  {profile.displayName || profile.mail || ""}
+                </p>
               )}
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-              <Clock className="hidden h-3.5 w-3.5 text-muted-foreground sm:block" />
-              <p className="hidden text-xs font-medium capitalize text-foreground sm:block">
-                {currentTime.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" })}
-              </p>
-              <span className="text-xs text-muted-foreground">
-                {currentTime.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false })} hrs
-              </span>
             </div>
           </div>
         </div>
 
-        {/* Content — fills remaining space */}
         <div className="flex-1 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
@@ -93,9 +56,8 @@ const Microsoft365Correo = () => {
             </ErrorBoundary>
           )}
         </div>
-      </main>
-      <FloatingAIChat />
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 

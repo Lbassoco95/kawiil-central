@@ -37,6 +37,7 @@ import {
   useDeleteEmail,
   useEmailAttachments,
   useUnreadEmailCount,
+  useOutlookCategories,
   INBOX_UNREAD_QUERY_KEY,
   SCHEDULED_MAIL_JOBS_QUERY_KEY,
 } from "@/hooks/useMicrosoft";
@@ -65,8 +66,9 @@ import {
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, RefreshCw,
-  Eye, Download, CalendarClock, Copy,
+  Eye, Download, CalendarClock, Copy, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import DOMPurify from "dompurify";
 import {
   formatDistanceToNow,
@@ -352,6 +354,17 @@ export function EmailView() {
   const listRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+
+  const { data: outlookCategories = [] } = useOutlookCategories();
+  const categoryColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of outlookCategories as any[]) {
+      const name = c?.displayName;
+      if (!name) continue;
+      m.set(name, outlookCategoryColorToHsl(c?.color));
+    }
+    return m;
+  }, [outlookCategories]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -942,49 +955,44 @@ export function EmailView() {
           className="hidden shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/50 px-3 py-2 md:flex"
           data-kawiil-email-toolbar="1"
         >
-            <span className="text-xs font-medium text-muted-foreground">Paneles</span>
-            <Button
-              type="button"
-              variant={foldersCollapsed ? "default" : "outline"}
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Paneles</span>
+            <ToggleGroup
+              type="multiple"
               size="sm"
-              className="h-8 gap-1.5 text-xs font-medium shadow-sm"
-              onClick={() => setFoldersCollapsed((c) => !c)}
-            >
-              {foldersCollapsed ? (
-                <>
-                  <ChevronsRight className="h-3.5 w-3.5" />
-                  Ver carpetas
-                </>
-              ) : (
-                <>
-                  <ChevronsLeft className="h-3.5 w-3.5" />
-                  Solo iconos
-                </>
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant={listPaneCollapsed ? "default" : "outline"}
-              size="sm"
-              className="h-8 gap-1.5 text-xs font-medium shadow-sm"
-              disabled={!selectedEmailId}
-              title={!selectedEmailId ? "Abre un correo para usar esta opción" : undefined}
-              onClick={() => {
-                if (selectedEmailId) setListPaneCollapsed((c) => !c);
+              value={[
+                ...(foldersCollapsed ? [] : ["folders"]),
+                ...(listPaneCollapsed ? [] : ["list"]),
+              ]}
+              onValueChange={(values: string[]) => {
+                setFoldersCollapsed(!values.includes("folders"));
+                if (selectedEmailId) {
+                  setListPaneCollapsed(!values.includes("list"));
+                }
               }}
+              className="rounded-lg border border-border/60 bg-background"
             >
-              {listPaneCollapsed ? (
-                <>
-                  <List className="h-3.5 w-3.5" />
-                  Mostrar lista
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="h-3.5 w-3.5" />
-                  Ampliar lector
-                </>
-              )}
-            </Button>
+              <ToggleGroupItem value="folders" aria-label="Mostrar carpetas">
+                {foldersCollapsed ? (
+                  <PanelLeftOpen className="h-3.5 w-3.5" />
+                ) : (
+                  <PanelLeftClose className="h-3.5 w-3.5" />
+                )}
+                <span className="ml-1.5 hidden md:inline text-[11px]">Carpetas</span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="list"
+                aria-label="Mostrar lista"
+                disabled={!selectedEmailId}
+                title={!selectedEmailId ? "Abre un correo para usar esta opción" : undefined}
+              >
+                {listPaneCollapsed ? (
+                  <PanelRightOpen className="h-3.5 w-3.5" />
+                ) : (
+                  <PanelRightClose className="h-3.5 w-3.5" />
+                )}
+                <span className="ml-1.5 hidden md:inline text-[11px]">Lista</span>
+              </ToggleGroupItem>
+            </ToggleGroup>
             {import.meta.env.DEV && (
               <span
                 className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums"
@@ -1274,7 +1282,14 @@ export function EmailView() {
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">Actualizar correos</TooltipContent>
               </Tooltip>
-              <Button size="sm" className="h-9 shrink-0 gap-2 px-4" onClick={() => setComposeOpen(true)}>
+              <Button
+                size="sm"
+                className="h-9 shrink-0 gap-2 px-4 text-white shadow-md hover:shadow-lg border-0"
+                style={{
+                  background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))",
+                }}
+                onClick={() => setComposeOpen(true)}
+              >
                 <Send className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Redactar</span>
               </Button>
@@ -1445,6 +1460,34 @@ export function EmailView() {
                             <span className="text-muted-foreground font-normal"> - {bodyPreview}</span>
                           </p>
                         </div>
+                        {Array.isArray(email.categories) && email.categories.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {email.categories.slice(0, 3).map((cat: string) => {
+                              const c = categoryColorMap.get(cat) || "hsl(var(--primary))";
+                              return (
+                                <span
+                                  key={cat}
+                                  className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium border"
+                                  style={{
+                                    background: `${c.replace(")", " / 0.12)")}`,
+                                    color: c,
+                                    borderColor: `${c.replace(")", " / 0.3)")}`,
+                                  }}
+                                  title={cat}
+                                >
+                                  <span
+                                    className="inline-block h-1.5 w-1.5 rounded-full"
+                                    style={{ background: c }}
+                                  />
+                                  <span className="truncate max-w-[120px]">{cat}</span>
+                                </span>
+                              );
+                            })}
+                            {email.categories.length > 3 && (
+                              <span className="text-[10px] text-muted-foreground">+{email.categories.length - 3}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2615,6 +2658,20 @@ function emailBodyToPlain(content: string, contentType?: string): string {
   const ct = (contentType || "").toLowerCase();
   if (ct.includes("html")) return stripTags(content).replace(/\s+/g, " ").trim();
   return content.trim();
+}
+
+const OUTLOOK_CATEGORY_HUE: Record<string, number> = {
+  preset0: 0, preset1: 30, preset2: 50, preset3: 75, preset4: 100,
+  preset5: 130, preset6: 165, preset7: 195, preset8: 220, preset9: 250,
+  preset10: 270, preset11: 295, preset12: 320, preset13: 340, preset14: 350,
+  preset15: 25, preset16: 45, preset17: 55, preset18: 110, preset19: 145,
+  preset20: 190, preset21: 230, preset22: 285, preset23: 310, preset24: 215,
+};
+
+function outlookCategoryColorToHsl(color?: string | null): string {
+  if (!color) return "hsl(var(--primary))";
+  const hue = OUTLOOK_CATEGORY_HUE[color] ?? 220;
+  return `hsl(${hue} 70% 50%)`;
 }
 
 /** Heurística: si parece español → traducir al inglés (en); si no → al español (es) */
