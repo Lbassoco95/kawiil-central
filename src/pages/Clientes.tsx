@@ -77,6 +77,18 @@ function clientInitials(name: string): string {
     .join("");
 }
 
+const SERVICE_AREA_COLOR_VAR: Partial<Record<ServiceArea, string>> = {
+  contabilidad: "var(--area-contabilidad)",
+  legal: "var(--area-legal)",
+  softlanding: "var(--area-softlanding)",
+  pld_ft: "var(--area-pld)",
+};
+
+function serviceAreaDotColor(area: ServiceArea | string): string {
+  const v = SERVICE_AREA_COLOR_VAR[area as ServiceArea];
+  return v ? `hsl(${v})` : "hsl(var(--primary))";
+}
+
 const Clientes = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -93,6 +105,7 @@ const Clientes = () => {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [groupMode, setGroupMode] = useState<GroupMode>("area");
   const [clientTypeFilter, setClientTypeFilter] = useState<ClientTypeFilter>("all");
+  const [areaFilter, setAreaFilter] = useState<"all" | ServiceArea | "sin_servicio">("all");
   const { data: clients, isLoading } = useClients();
   const { data: clientGroups } = useClientGroups();
   const deleteClient = useDeleteClient();
@@ -217,7 +230,20 @@ const Clientes = () => {
     return result;
   }, [filtered, clientGroups, allGroupMembers, groupedByArea]);
 
-  const grouped = groupMode === "area" ? groupedByArea : groupedByEmpresa;
+  const groupedRaw = groupMode === "area" ? groupedByArea : groupedByEmpresa;
+  const grouped = useMemo(() => {
+    if (groupMode !== "area" || areaFilter === "all") return groupedRaw;
+    return groupedRaw.filter((g) => g.key === areaFilter);
+  }, [groupedRaw, groupMode, areaFilter]);
+
+  const typeCounts = useMemo(() => {
+    const base = clients ?? [];
+    return {
+      all: base.length,
+      persona_fisica: base.filter((c) => c.client_type === "persona_fisica").length,
+      persona_moral: base.filter((c) => c.client_type === "persona_moral").length,
+    };
+  }, [clients]);
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -231,7 +257,8 @@ const Clientes = () => {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
-          variant="minimal"
+          variant="hero"
+          icon={<Users />}
           title="Clientes"
           description="Gestión de clientes y empresas"
           actions={
@@ -275,33 +302,97 @@ const Clientes = () => {
           </div>
 
           <div
-            className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
-            role="group"
+            className="flex flex-wrap items-center gap-1.5"
+            role="tablist"
             aria-label="Filtrar por tipo de persona"
           >
-            <span className="text-xs font-medium text-muted-foreground shrink-0">Tipo de cliente</span>
-            <div className="flex flex-wrap gap-1.5">
-              {(
-                [
-                  { value: "all" as const, label: "Todos" },
-                  { value: "persona_fisica" as const, label: "Persona Física" },
-                  { value: "persona_moral" as const, label: "Persona Moral" },
-                ] as const
-              ).map(({ value, label }) => (
-                <Button
+            {(
+              [
+                { value: "all" as const, label: "Todos", count: typeCounts.all },
+                { value: "persona_fisica" as const, label: "Persona Física", count: typeCounts.persona_fisica },
+                { value: "persona_moral" as const, label: "Persona Moral", count: typeCounts.persona_moral },
+              ] as const
+            ).map(({ value, label, count }) => {
+              const active = clientTypeFilter === value;
+              return (
+                <button
                   key={value}
                   type="button"
-                  size="sm"
-                  variant={clientTypeFilter === value ? "default" : "outline"}
-                  className="h-8 text-xs"
+                  role="tab"
+                  aria-selected={active}
                   onClick={() => setClientTypeFilter(value)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    active
+                      ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
+                      : "border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground",
+                  )}
                 >
                   {label}
-                </Button>
-              ))}
-            </div>
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0 text-[10px] tabular-nums",
+                      active ? "bg-primary/15" : "bg-muted/60",
+                    )}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
+
+        {groupMode === "area" && groupedRaw.length > 0 && (
+          <nav
+            aria-label="Navegación por área"
+            className="surface-toolbar -mx-1 flex gap-1.5 overflow-x-auto px-3 py-2 sm:mx-0 sm:px-3"
+          >
+            <button
+              type="button"
+              onClick={() => setAreaFilter("all")}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                areaFilter === "all"
+                  ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
+                  : "border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground",
+              )}
+            >
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+                aria-hidden
+              />
+              Todas
+              <span className={cn("rounded-full px-1.5 py-0 text-[10px] tabular-nums", areaFilter === "all" ? "bg-primary/15" : "bg-muted/60")}>
+                {filtered.length}
+              </span>
+            </button>
+            {groupedRaw.map((g) => {
+              const active = areaFilter === g.key;
+              const dot = serviceAreaDotColor(g.key);
+              return (
+                <button
+                  key={g.key}
+                  type="button"
+                  onClick={() => setAreaFilter(g.key as ServiceArea | "sin_servicio")}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    active
+                      ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
+                      : "border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground",
+                  )}
+                >
+                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: dot }} aria-hidden />
+                  {g.label}
+                  <span className={cn("rounded-full px-1.5 py-0 text-[10px] tabular-nums", active ? "bg-primary/15" : "bg-muted/60")}>
+                    {g.clients.length}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
         {isLoading ? (
           <div className="space-y-2">
@@ -372,12 +463,22 @@ const Clientes = () => {
                                 <h3 className="text-sm font-medium text-foreground truncate group-hover/card:text-primary transition-colors">
                                   {client.name}
                                 </h3>
-                                <Badge
-                                  variant="outline"
-                                  className={cn("text-[10px] border-0 px-1.5 py-0 shrink-0", STATUS_STYLES[client.status])}
-                                >
-                                  {STATUS_LABELS[client.status]}
-                                </Badge>
+                                {client.status === "activo" ? (
+                                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                                    <span className="relative inline-flex h-1.5 w-1.5">
+                                      <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/60" />
+                                      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                    </span>
+                                    Activo
+                                  </span>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className={cn("text-[10px] border-0 px-1.5 py-0 shrink-0", STATUS_STYLES[client.status])}
+                                  >
+                                    {STATUS_LABELS[client.status]}
+                                  </Badge>
+                                )}
                                 {savioBadgeForClient(client)}
                               </div>
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
@@ -401,8 +502,13 @@ const Clientes = () => {
                               {visibleServices.map((s) => (
                                 <span
                                   key={s}
-                                  className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded"
+                                  className="inline-flex items-center gap-1.5 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground"
                                 >
+                                  <span
+                                    className="inline-block h-1.5 w-1.5 rounded-full"
+                                    style={{ background: serviceAreaDotColor(s as ServiceArea) }}
+                                    aria-hidden
+                                  />
                                   {SERVICE_LABELS[s as ServiceArea] || s}
                                 </span>
                               ))}
