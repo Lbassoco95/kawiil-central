@@ -53,6 +53,11 @@ const Tareas = () => {
   const { data: assignedSteps = [] } = useAssignedSteps();
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
+  const areaColorMap = useMemo(() => {
+    const m = new Map<string, string | undefined>();
+    for (const o of areaOptions) m.set(o.value, (o as any).color || undefined);
+    return m;
+  }, [areaOptions]);
 
   const [vistaTareas, setVistaTareas] = useState<"activas" | "historial">(() => {
     if (typeof window === "undefined") return "activas";
@@ -329,7 +334,13 @@ INSTRUCCIONES:
                             {statusLabels[task.status]?.label}
                           </Badge>
                           {task.area && (
-                            <span className="text-[10px] text-muted-foreground bg-secondary/50 px-1.5 py-0 rounded">{getCelulaLabel(task.area)}</span>
+                            <span className="inline-flex items-center gap-1.5 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              <span
+                                className="inline-block h-1.5 w-1.5 rounded-full"
+                                style={{ background: areaColorMap.get(task.area) || "hsl(var(--primary))" }}
+                              />
+                              {getCelulaLabel(task.area)}
+                            </span>
                           )}
                           {(task as any).clients?.name && (
                             <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{(task as any).clients.name}</span>
@@ -539,7 +550,13 @@ INSTRUCCIONES:
                         {statusLabels[task.status]?.label}
                       </Badge>
                       {task.area && (
-                        <span className="text-xs text-muted-foreground">{getCelulaLabel(task.area)}</span>
+                        <span className="inline-flex items-center gap-1.5 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          <span
+                            className="inline-block h-1.5 w-1.5 rounded-full"
+                            style={{ background: areaColorMap.get(task.area) || "hsl(var(--primary))" }}
+                          />
+                          {getCelulaLabel(task.area)}
+                        </span>
                       )}
                       {task.assigned_to && profileMap.get(task.assigned_to) ? (
                         <span className="flex items-center gap-1 text-xs text-muted-foreground">
