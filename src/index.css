@@ -497,6 +497,172 @@ div[id*="lovable" i] {
 }
 .kw-sb-iconbtn:hover { background: var(--sb-active-bg); color: var(--sb-fg); }
 
+/* ─── TOPBAR WIDGETS (weather / clock / timezones) ─── */
+.kw-tb-weather {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 10px 6px 8px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, hsl(210 80% 55% / 0.10), hsl(260 70% 60% / 0.08));
+  border: 1px solid hsl(var(--border));
+  min-width: 168px;
+  position: relative;
+  overflow: hidden;
+}
+.kw-tb-weather::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 80% at 110% -20%, hsl(38 95% 65% / 0.10), transparent 55%);
+}
+.kw-tb-weather-ico {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: hsl(210 60% 55%);
+  position: relative;
+  z-index: 1;
+}
+[data-theme="dark"] .kw-tb-weather-ico { color: hsl(210 70% 70%); }
+.kw-tb-weather-body {
+  position: relative;
+  z-index: 1;
+  line-height: 1.15;
+}
+.kw-tb-weather-temp {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+}
+.kw-tb-weather-unit {
+  font-size: 10px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  margin-left: 2px;
+}
+.kw-tb-weather-cond {
+  font-size: 10.5px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 1px;
+  max-width: 110px;
+}
+.kw-tb-weather-city {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  opacity: .8;
+  max-width: 110px;
+}
+.kw-tb-weather-refresh {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: hsl(var(--muted-foreground));
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  transition: all .15s;
+  position: relative;
+  z-index: 1;
+}
+.kw-tb-weather-refresh:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+.kw-tb-weather-refresh:disabled { cursor: wait; opacity: 0.6; }
+
+/* Clock */
+.kw-tb-clock {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.1;
+  min-width: 80px;
+  padding-left: 12px;
+  border-left: 1px solid hsl(var(--border));
+}
+.kw-tb-clock-time {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: hsl(var(--foreground));
+}
+.kw-tb-clock-ampm {
+  font-size: 10px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  margin-left: 4px;
+}
+.kw-tb-clock-date {
+  font-size: 10.5px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 2px;
+  text-transform: capitalize;
+}
+
+/* Timezones strip */
+.kw-tb-tz {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 12px;
+  border-left: 1px solid hsl(var(--border));
+}
+.kw-tb-tz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: hsl(var(--muted) / 0.5);
+  border: 1px solid hsl(var(--border));
+  font-size: 10.5px;
+  color: hsl(var(--foreground));
+  line-height: 1.4;
+  transition: background .12s;
+  position: relative;
+}
+.kw-tb-tz-chip:hover { background: hsl(var(--muted)); }
+.kw-tb-tz-chip-flag { font-size: 11px; line-height: 1; }
+.kw-tb-tz-chip-code { font-weight: 700; letter-spacing: .02em; }
+.kw-tb-tz-chip-time { color: hsl(var(--muted-foreground)); font-weight: 500; margin-left: 2px; }
+.kw-tb-tz-chip-x {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  margin-left: 1px;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  border-radius: 999px;
+  cursor: pointer;
+}
+.kw-tb-tz-chip:hover .kw-tb-tz-chip-x { display: inline-flex; }
+.kw-tb-tz-chip-x:hover { color: hsl(var(--foreground)); background: hsl(var(--muted)); }
+.kw-tb-tz-add {
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1px dashed hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.kw-tb-tz-add:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+
 /* Mobile responsive overrides */
 @media (max-width: 640px) {
   /* Ensure tables and wide content scroll horizontally */

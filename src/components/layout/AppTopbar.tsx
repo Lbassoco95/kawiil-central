@@ -4,6 +4,7 @@ import { useCurrentProfile, getFirstName, getGreeting } from "@/hooks/useCurrent
 import { useIsMobile } from "@/hooks/use-mobile";
 import { openCommandPalette } from "@/lib/openCommandPalette";
 import { cn } from "@/lib/utils";
+import { TopbarWidgets } from "./TopbarWidgets";
 
 interface AppTopbarProps {
   isFullWidth?: boolean;
@@ -64,6 +65,8 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
             </kbd>
           )}
         </button>
+
+        <TopbarWidgets />
       </div>
     </div>
   );
