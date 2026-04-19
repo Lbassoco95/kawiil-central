@@ -682,9 +682,10 @@ const AsistenteIA = () => {
                       key={`sg-${si}-${s.slice(0, 24)}`}
                       type="button"
                       onClick={() => { setInput(s); textareaRef.current?.focus(); }}
-                      className="text-left rounded-xl bg-secondary/40 hover:bg-secondary/70 px-4 py-3 text-[13px] text-foreground transition-colors"
+                      className="group flex items-start gap-2 text-left rounded-xl border border-border/50 bg-card hover:border-primary/40 hover:bg-secondary/30 px-4 py-3 text-[13px] text-foreground transition-colors"
                     >
-                      {s}
+                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/60 group-hover:text-primary" />
+                      <span className="leading-snug">{s}</span>
                     </button>
                   ))}
                 </div>

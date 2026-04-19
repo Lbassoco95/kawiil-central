@@ -163,6 +163,21 @@ export function ProjectSidebar({
 
   return (
     <div className="w-64 shrink-0 border-r border-border/40 flex flex-col bg-secondary/10">
+      {/* New conversation CTA */}
+      <div className="p-2 border-b border-border/30">
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="group flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-medium text-white shadow-sm transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          style={{
+            background:
+              "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%)",
+          }}
+        >
+          <Plus className="h-3.5 w-3.5" /> Nueva conversación
+        </button>
+      </div>
+
       {/* Project header or project list */}
       {activeProject ? (
         <div className="border-b border-border/30 p-3 space-y-2">
