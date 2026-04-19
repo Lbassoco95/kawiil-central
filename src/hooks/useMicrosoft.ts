@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   useQuery,
   useInfiniteQuery,
@@ -8,6 +9,7 @@ import {
 import { FunctionsHttpError } from "@supabase/functions-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { toast } from "sonner";
 import type { ComposerAttachment } from "@/lib/emailComposer";
 
@@ -138,9 +140,18 @@ export function useMicrosoftConnection() {
         });
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["microsoft-connection"] });
       toast.success("Microsoft 365 conectado exitosamente");
+      // Sync silenciosa de la foto de perfil al conectar.
+      try {
+        await supabase.functions.invoke("microsoft-api", {
+          body: { action: "sync-profile-photo" },
+        });
+        queryClient.invalidateQueries({ queryKey: ["current-profile"] });
+      } catch {
+        /* silencioso: no bloquear el flujo de conexion si Graph no devuelve foto */
+      }
     },
     onError: (err: Error) => {
       toast.error("Error al conectar: " + err.message);
@@ -154,6 +165,76 @@ export function useMicrosoftConnection() {
     connect: connectMutation.mutate,
     isConnecting: connectMutation.isPending,
   };
+}
+
+/**
+ * Sincroniza la foto de perfil de Microsoft 365 (Graph /me/photo/$value) hacia
+ * el bucket `avatars` de Supabase y actualiza profiles.avatar_url. Si la cuenta
+ * no tiene foto cargada en Microsoft, no muta profiles y muestra info.
+ */
+export function useSyncMicrosoftPhoto() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "sync-profile-photo" },
+      });
+      if (error) throw error;
+      if (data?.error && data?.code !== "NO_PHOTO") throw new Error(String(data.error));
+      return data as { url?: string; code?: string; source?: string };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["current-profile"] });
+      if (data?.code === "NO_PHOTO") {
+        toast.info("No tienes foto de perfil en Microsoft 365.");
+      } else if (data?.url) {
+        toast.success("Foto de perfil sincronizada desde Microsoft 365");
+      }
+    },
+    onError: (err: Error) => {
+      toast.error("No se pudo sincronizar la foto: " + err.message);
+    },
+  });
+}
+
+const AUTO_SYNC_PHOTO_FLAG = "kawiil:ms-photo-auto-sync";
+
+/**
+ * Auto-sync silenciosa para usuarios ya conectados a Microsoft que aun no
+ * tienen `profiles.avatar_url`. Se ejecuta una sola vez por sesion (flag en
+ * sessionStorage) para no spamear Graph al navegar.
+ */
+export function useAutoSyncMicrosoftPhoto() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { isConnected, isLoading: isMsLoading } = useMicrosoftConnection();
+  const { data: profile, isLoading: isProfileLoading } = useCurrentProfile();
+
+  useEffect(() => {
+    if (!user || isMsLoading || isProfileLoading) return;
+    if (!isConnected) return;
+    if (profile?.avatar_url) return;
+    if (typeof window === "undefined") return;
+    try {
+      if (sessionStorage.getItem(AUTO_SYNC_PHOTO_FLAG) === "1") return;
+      sessionStorage.setItem(AUTO_SYNC_PHOTO_FLAG, "1");
+    } catch {
+      /* sessionStorage no disponible: seguimos sin flag (peor caso: 1 sync extra) */
+    }
+    void (async () => {
+      try {
+        const { data } = await supabase.functions.invoke("microsoft-api", {
+          body: { action: "sync-profile-photo" },
+        });
+        if (data && typeof data === "object" && (data as { url?: string }).url) {
+          queryClient.invalidateQueries({ queryKey: ["current-profile"] });
+        }
+      } catch {
+        /* silencioso */
+      }
+    })();
+  }, [user, isConnected, isMsLoading, isProfileLoading, profile?.avatar_url, queryClient]);
 }
 
 export function useCalendarEvents(start?: string, end?: string) {

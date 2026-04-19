@@ -9,6 +9,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import { useNotificationDelivery } from "@/hooks/useNotificationDelivery";
+import { useAutoSyncMicrosoftPhoto } from "@/hooks/useMicrosoft";
 import { OPEN_NEW_TASK_MODAL_EVENT, openNewTaskModal } from "@/lib/openNewTaskModal";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
   useTasksRealtime();
   useActivityTracker();
   useNotificationDelivery();
+  useAutoSyncMicrosoftPhoto();
 
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const newTaskModalValue = useMemo(() => ({ openNewTask: openNewTaskModal }), []);

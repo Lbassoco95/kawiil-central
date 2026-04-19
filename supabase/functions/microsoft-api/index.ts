@@ -1215,6 +1215,73 @@ Deno.serve(async (req) => {
         break;
       }
 
+      /**
+       * Descarga la foto de perfil de Microsoft 365 (Graph /me/photo/$value),
+       * la sube al bucket `avatars` (carpeta {userId}/) y guarda la URL en
+       * profiles.avatar_url. Si el usuario no tiene foto en Microsoft, devuelve
+       * { code: "NO_PHOTO" } sin tocar profiles.
+       */
+      case "sync-profile-photo": {
+        let photoRes: Response;
+        try {
+          photoRes = await graphMailFetchWithRetry(accessToken, "/me/photo/$value", {
+            headers: { Accept: "image/*" },
+          });
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          const lower = m.toLowerCase();
+          if (
+            /\[404\]/.test(m) ||
+            lower.includes("imagenotfound") ||
+            lower.includes("resourcenotfound") ||
+            lower.includes("itemnotfound")
+          ) {
+            result = { code: "NO_PHOTO" };
+            break;
+          }
+          throw e;
+        }
+
+        const contentType = photoRes.headers.get("content-type") || "image/jpeg";
+        const bytes = new Uint8Array(await photoRes.arrayBuffer());
+        if (bytes.length === 0) {
+          result = { code: "NO_PHOTO" };
+          break;
+        }
+
+        const ext = contentType.toLowerCase().includes("png")
+          ? "png"
+          : contentType.toLowerCase().includes("gif")
+            ? "gif"
+            : "jpg";
+        const path = `${userId}/microsoft.${ext}`;
+
+        const { error: upErr } = await supabaseAdmin.storage
+          .from("avatars")
+          .upload(path, bytes, {
+            contentType,
+            upsert: true,
+            cacheControl: "3600",
+          });
+        if (upErr) {
+          throw new Error(`Avatar upload failed: ${upErr.message || String(upErr)}`);
+        }
+
+        const { data: pub } = supabaseAdmin.storage.from("avatars").getPublicUrl(path);
+        const url = `${pub.publicUrl}?v=${Date.now()}`;
+
+        const { error: profileErr } = await supabaseAdmin
+          .from("profiles")
+          .update({ avatar_url: url })
+          .eq("user_id", userId);
+        if (profileErr) {
+          throw new Error(`Profile update failed: ${profileErr.message || String(profileErr)}`);
+        }
+
+        result = { url, source: "microsoft", contentType };
+        break;
+      }
+
       case "create-mail-folder": {
         const displayName = params?.displayName;
         if (!displayName) throw new Error("displayName required");
