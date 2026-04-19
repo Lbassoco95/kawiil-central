@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,12 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
 import { PersonalRendimientoMetrics } from "@/components/dashboard/PersonalRendimientoMetrics";
 import { PersonalProjectsProgress } from "@/components/dashboard/PersonalProjectsProgress";
-import { DailyBriefing } from "@/components/dashboard/DailyBriefing";
+import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { useMyActiveProjectsProgress } from "@/hooks/useMyActiveProjectsProgress";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
@@ -32,8 +31,6 @@ import {
   CalendarRange,
   CheckCircle2,
   Sun,
-  Moon,
-  Sunrise,
   BarChart3,
   X,
   MessageSquare,
@@ -52,9 +49,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-
-const PHRASE_FALLBACK =
-  "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results";
 
 const SECTION_LABELS: Record<string, string> = {
   inicio: "Inicio",
@@ -131,9 +125,6 @@ export function PersonalDashboard() {
   };
 
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  
-  const [personalPhrase, setPersonalPhrase] = useState<string | null>(null);
-  const [phraseLoading, setPhraseLoading] = useState(false);
 
   // Check if user has completed questionnaire
   const { data: userPrefs, refetch: refetchPrefs } = useQuery({
@@ -195,57 +186,6 @@ export function PersonalDashboard() {
       qc.invalidateQueries({ queryKey: ["dashboard-ai-proactive-tip", user?.id] });
     },
   });
-
-  // Fetch personalized phrase (backend aplica reglas de actualización/caché)
-  const fetchPhrase = useCallback(async (moodScore?: number, forceRegenerate?: boolean) => {
-    if (!user) return;
-    setPhraseLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("generate-phrase", {
-        body: { mood_score: moodScore ?? null, time_of_day: "morning", force_regenerate: forceRegenerate ?? false },
-      });
-      const payload = data as { phrase?: string; error?: string; message?: string } | null;
-
-      if (error || payload?.error) {
-        const code = payload?.error;
-        const desc = payload?.message;
-        if (code === "ai_not_configured" || code === "ai_auth_error" || code === "ai_provider_error") {
-          toast({
-            title: "Frase del día",
-            description:
-              desc ||
-              "Configura ANTHROPIC_API_KEY en Supabase (Project Settings → Edge Functions → Secrets) y vuelve a desplegar generate-phrase.",
-            variant: "destructive",
-          });
-        } else {
-          console.error("Phrase error:", error, data);
-        }
-        setPersonalPhrase(PHRASE_FALLBACK);
-        return;
-      }
-
-      if (payload?.phrase) {
-        setPersonalPhrase(payload.phrase);
-      }
-    } catch (e: any) {
-      console.error("Phrase error:", e);
-      setPersonalPhrase(PHRASE_FALLBACK);
-    } finally {
-      setPhraseLoading(false);
-    }
-  }, [user]);
-
-  // Auto-refresh periódico para evitar frases pegadas cuando la sesión queda abierta
-  useEffect(() => {
-    if (!user) return;
-
-    void fetchPhrase();
-    const interval = setInterval(() => {
-      void fetchPhrase();
-    }, 30 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, [user, fetchPhrase]);
 
   const todayYmd = toDateStringMX(today);
   const weekBounds = useMemo(() => mexicoWeekRangeISOContaining(todayYmd), [todayYmd]);
@@ -471,7 +411,6 @@ export function PersonalDashboard() {
       const d = t.due_date.slice(0, 10);
       return d === todayYmd;
     }).length ?? 0;
-  const firstName = profile?.full_name?.split(" ")[0] || "";
 
   const priorityDot = (p: string) => {
     switch (p) {
@@ -480,13 +419,6 @@ export function PersonalDashboard() {
       case "media": return "bg-primary";
       default: return "bg-muted-foreground/30";
     }
-  };
-
-  const greetingByHour = () => {
-    const h = today.getHours();
-    if (h < 12) return "Buenos días";
-    if (h < 19) return "Buenas tardes";
-    return "Buenas noches";
   };
 
   const dueThisWeek =
@@ -565,13 +497,6 @@ ${lines || "(ninguno)"}
 Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su rendimiento, celebre avances reales en proyectos o tareas si existen, y deje 1 recomendación prioritaria si hay atrasos; tono motivador sin demagogia. Markdown permitido (**negritas**). Sin saludo formal ni firma.`;
   }, [myProjectProgress, totalPending, overdueTasks, completedToday, dueTodayPending]);
 
-  const TimeIcon = (() => {
-    const h = today.getHours();
-    if (h < 12) return Sunrise;
-    if (h < 19) return Sun;
-    return Moon;
-  })();
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(280px,340px)] gap-6 min-w-0">
       {/* ═══ LEFT COLUMN ═══ */}
@@ -602,22 +527,15 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           </Alert>
         )}
 
-        {/* Hero greeting */}
+        {/* AI Hero · briefing + quote + mood */}
         <div className="animate-fade-in">
-          <div className="flex items-center gap-2 mb-1">
-            <TimeIcon className="h-5 w-5 text-primary/60 animate-float" />
-            <span className="text-xs text-muted-foreground font-medium">{formatDateMX(today)}</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight gradient-text">
-            {greetingByHour()}, {firstName || "Kawiiler"}
-          </h1>
-          {personalPhrase ? (
-            <p className="text-sm text-muted-foreground italic border-l-2 border-primary/30 pl-3 mt-3 animate-fade-in leading-relaxed max-w-prose whitespace-pre-line break-words">
-              {personalPhrase}
-            </p>
-          ) : phraseLoading ? (
-            <div className="mt-3 h-5 w-3/4 rounded-md shimmer-overlay" />
-          ) : null}
+          <AiHeroGrid
+            tasksCount={totalPending}
+            completedToday={completedToday ?? 0}
+            overdueCount={overdueTasks}
+            remindersCount={pendingReminders.length}
+            userCelula={userCelula}
+          />
         </div>
 
         {/* KPI grid */}
@@ -766,13 +684,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
 
         {/* Resumen */}
         <TabsContent value="resumen" className="mt-4 space-y-4 animate-fade-in">
-          <DailyBriefing
-            tasksCount={totalPending}
-            completedToday={completedToday ?? 0}
-            overdueCount={overdueTasks}
-            remindersCount={pendingReminders.length}
-          />
-
           {myTasks && myTasks.length > 0 && (
             <div>
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Próximas tareas</h3>
@@ -1141,11 +1052,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           </p>
         </div>
 
-        {/* Mood check-in */}
-        <div className="animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
-          <MoodCheckin userCelula={userCelula} />
-        </div>
-
         {/* Questionnaire reminder */}
         {showQuestionnaireReminder && (
           <div className="glass-card p-4 animate-scale-in">
@@ -1202,7 +1108,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         onClose={() => setShowQuestionnaire(false)}
         onCompleted={() => {
           refetchPrefs();
-          fetchPhrase(undefined, true);
+          qc.invalidateQueries({ queryKey: ["ai-hero-phrase"] });
         }}
       />
     </div>

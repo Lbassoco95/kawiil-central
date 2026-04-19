@@ -13,9 +13,20 @@ interface DailyBriefingProps {
   completedToday: number;
   overdueCount: number;
   remindersCount: number;
+  /** "compact" reduces padding/typography for use inside hero grids */
+  variant?: "default" | "compact";
+  /** Hide the wrapper section header (when used inside another card with own eyebrow) */
+  hideHeader?: boolean;
 }
 
-export function DailyBriefing({ tasksCount, completedToday, overdueCount, remindersCount }: DailyBriefingProps) {
+export function DailyBriefing({
+  tasksCount,
+  completedToday,
+  overdueCount,
+  remindersCount,
+  variant = "default",
+  hideHeader = false,
+}: DailyBriefingProps) {
   const { user } = useAuth();
   const [briefing, setBriefing] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -132,22 +143,28 @@ INSTRUCCIONES:
     // eslint-disable-next-line react-hooks/exhaustive-deps -- regenerar si cambia el día civil
   }, [user?.id, taskDetails !== undefined, todayKey]);
 
+  const isCompact = variant === "compact";
+
   return (
     <section>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors w-full text-left"
-      >
-        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <Sparkles className="h-3.5 w-3.5 text-primary" />
-        <span>Briefing del día</span>
-        {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />}
-      </button>
+      {!hideHeader && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors w-full text-left"
+        >
+          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <span>Briefing del día</span>
+          {loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />}
+        </button>
+      )}
 
-      {expanded && (
-        <div className="mt-3 pl-7">
+      {(hideHeader || expanded) && (
+        <div className={hideHeader ? "" : "mt-3 pl-7"}>
           {loading && !briefing && (
-            <p className="text-sm text-muted-foreground">Generando...</p>
+            <p className={isCompact ? "text-xs text-muted-foreground" : "text-sm text-muted-foreground"}>
+              Generando...
+            </p>
           )}
 
           {error && !loading && (
