@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { SavioFinanceWriteActions } from "@/components/finanzas/SavioFinanceWriteActions";
 import { KpiTile } from "@/components/finanzas/KpiTile";
+import { TrendIndicator } from "@/components/finanzas/TrendIndicator";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Expense } from "@/hooks/useExpenses";
@@ -133,6 +134,19 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
       })),
     [trendBars, trendMonths],
   );
+
+  const monthDeltas = useMemo(() => {
+    const idx = trendMonths.findIndex((m) => m.year === selectedYm.year && m.month === selectedYm.month);
+    const prevIdx = idx > 0 ? idx - 1 : -1;
+    const cur = idx >= 0 ? trendBars[idx] : null;
+    const prev = prevIdx >= 0 ? trendBars[prevIdx] : null;
+    return {
+      ingresosCur: cur?.ingresos ?? NaN,
+      ingresosPrev: prev?.ingresos ?? NaN,
+      gastosCur: cur?.gastos ?? NaN,
+      gastosPrev: prev?.gastos ?? NaN,
+    };
+  }, [trendBars, trendMonths, selectedYm]);
 
   const invoiceViews = useMemo(
     () => invoiceRows.map((raw, i) => toInvoiceRowView(raw, i)),
@@ -290,18 +304,24 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
             <KpiTile
               title="Ingresos cobrados"
               subtitle="Mes seleccionado, según fecha de pago registrada."
-              accentClass="before:bg-teal-600"
+              accentClass="before:bg-emerald-600"
               icon={<Landmark className="h-4 w-4" />}
               footer={
-                <p className="text-[11px] text-muted-foreground">
-                  {kpis.cobradoMes.count} pago{kpis.cobradoMes.count === 1 ? "" : "s"} en el periodo
-                </p>
+                <div className="flex flex-col gap-1">
+                  <TrendIndicator
+                    current={monthDeltas.ingresosCur}
+                    previous={monthDeltas.ingresosPrev}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {kpis.cobradoMes.count} pago{kpis.cobradoMes.count === 1 ? "" : "s"} en el periodo
+                  </p>
+                </div>
               }
             >
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
               ) : (
-                <p className="text-2xl font-semibold tabular-nums tracking-tight text-teal-700 dark:text-teal-400">
+                <p className="text-2xl font-semibold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
                   {formatMoney(kpis.cobradoMes.sum)}
                 </p>
               )}
@@ -312,9 +332,16 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
               accentClass="before:bg-violet-600"
               icon={<Wallet className="h-4 w-4" />}
               footer={
-                <p className="text-[11px] text-muted-foreground">
-                  {kpis.gastosMes.count} movimiento{kpis.gastosMes.count === 1 ? "" : "s"}
-                </p>
+                <div className="flex flex-col gap-1">
+                  <TrendIndicator
+                    current={monthDeltas.gastosCur}
+                    previous={monthDeltas.gastosPrev}
+                    invertGood
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    {kpis.gastosMes.count} movimiento{kpis.gastosMes.count === 1 ? "" : "s"}
+                  </p>
+                </div>
               }
             >
               <p className="text-2xl font-semibold tabular-nums tracking-tight text-violet-700 dark:text-violet-400">

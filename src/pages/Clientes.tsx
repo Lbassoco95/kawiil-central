@@ -24,6 +24,7 @@ import { useFinanceAccess } from "@/hooks/useFinanceAccess";
 import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
 import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
 import { clientSavioLinkStatus } from "@/lib/clientSavioLink";
+import { avatarGradient } from "@/lib/avatarGradient";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
@@ -50,23 +51,6 @@ const AREA_ORDER: ServiceArea[] = [
 ];
 
 type GroupMode = "area" | "grupo";
-
-const AVATAR_PALETTE = [
-  "hsl(210 100% 47%)",
-  "hsl(157 72% 36%)",
-  "hsl(25 95% 53%)",
-  "hsl(280 65% 45%)",
-  "hsl(340 75% 45%)",
-  "hsl(240 100% 32%)",
-  "hsl(160 70% 35%)",
-  "hsl(200 85% 40%)",
-];
-
-function avatarColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
-}
 
 function clientInitials(name: string): string {
   return (name || "?")
@@ -450,8 +434,8 @@ const Clientes = () => {
                           >
                             {/* Avatar */}
                             <div
-                              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
-                              style={{ background: avatarColor(client.name) }}
+                              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white shadow-sm ring-1 ring-white/30 dark:ring-white/10"
+                              style={{ background: avatarGradient(client.name) }}
                               aria-hidden
                             >
                               {clientInitials(client.name)}
