@@ -9,7 +9,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Search, Users, Mail, Phone, Trash2, ChevronDown, ChevronRight, Building2, Layers } from "lucide-react";
+import { Plus, Search, Users, Mail, Trash2, ChevronDown, ChevronRight, Building2, Layers } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useClients, useDeleteClient } from "@/hooks/useClients";
@@ -49,6 +50,32 @@ const AREA_ORDER: ServiceArea[] = [
 ];
 
 type GroupMode = "area" | "grupo";
+
+const AVATAR_PALETTE = [
+  "hsl(210 100% 47%)",
+  "hsl(157 72% 36%)",
+  "hsl(25 95% 53%)",
+  "hsl(280 65% 45%)",
+  "hsl(340 75% 45%)",
+  "hsl(240 100% 32%)",
+  "hsl(160 70% 35%)",
+  "hsl(200 85% 40%)",
+];
+
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function clientInitials(name: string): string {
+  return (name || "?")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
 const Clientes = () => {
   const navigate = useNavigate();
@@ -277,9 +304,9 @@ const Clientes = () => {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="space-y-2">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-28 rounded-2xl bg-secondary/30 animate-pulse" />
+              <div key={i} className="h-16 rounded-2xl bg-secondary/30 animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -318,54 +345,89 @@ const Clientes = () => {
                     <span className="text-[10px] bg-secondary/60 text-muted-foreground px-1.5 py-0.5 rounded-full">{group.clients.length}</span>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
-                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {group.clients.map((client, i) => (
-                        <div
-                          key={client.id}
-                          className="page-list-card p-4 cursor-pointer animate-fade-in group/card"
-                          style={{ animationDelay: `${Math.min(i, 8) * 40}ms`, animationFillMode: "both" }}
-                          onClick={() => navigate(`/clientes/${client.id}`)}
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <h3 className="text-sm font-medium text-foreground truncate group-hover/card:text-primary transition-colors">
-                              {client.name}
-                            </h3>
-                            <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[min(100%,11rem)]">
-                              {savioBadgeForClient(client)}
-                              <Badge variant="outline" className={`text-[10px] border-0 px-1.5 py-0 shrink-0 ${STATUS_STYLES[client.status]}`}>
-                                {STATUS_LABELS[client.status]}
-                              </Badge>
+                    <div className="mt-2 space-y-2">
+                      {group.clients.map((client, i) => {
+                        const services = (client.services || []).filter((s) => s !== group.key);
+                        const visibleServices = services.slice(0, 3);
+                        const extraServices = services.length - visibleServices.length;
+                        return (
+                          <div
+                            key={client.id}
+                            className="page-list-card flex items-center gap-3 px-4 py-3 cursor-pointer animate-fade-in group/card"
+                            style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
+                            onClick={() => navigate(`/clientes/${client.id}`)}
+                          >
+                            {/* Avatar */}
+                            <div
+                              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white"
+                              style={{ background: avatarColor(client.name) }}
+                              aria-hidden
+                            >
+                              {clientInitials(client.name)}
                             </div>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">
-                              {client.client_type === "persona_moral" ? "Persona Moral" : "Persona Física"}
-                              {client.rfc && ` · ${client.rfc}`}
-                            </p>
-                            {client.email && (
-                              <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                                <Mail className="h-3 w-3 shrink-0" />
-                                {client.email}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                            {client.services?.filter((s) => s !== group.key).map((s) => (
-                              <span key={s} className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
-                                {SERVICE_LABELS[s as ServiceArea] || s}
-                              </span>
-                            ))}
+
+                            {/* Name + meta */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <h3 className="text-sm font-medium text-foreground truncate group-hover/card:text-primary transition-colors">
+                                  {client.name}
+                                </h3>
+                                <Badge
+                                  variant="outline"
+                                  className={cn("text-[10px] border-0 px-1.5 py-0 shrink-0", STATUS_STYLES[client.status])}
+                                >
+                                  {STATUS_LABELS[client.status]}
+                                </Badge>
+                                {savioBadgeForClient(client)}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                                <span>
+                                  {client.client_type === "persona_moral" ? "Persona Moral" : "Persona Física"}
+                                </span>
+                                {client.rfc && (
+                                  <span className="font-mono tabular-nums">RFC · {client.rfc}</span>
+                                )}
+                                {client.email && (
+                                  <span className="hidden md:inline-flex items-center gap-1 truncate max-w-[220px]">
+                                    <Mail className="h-3 w-3 shrink-0" />
+                                    {client.email}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Service area chips */}
+                            <div className="hidden lg:flex items-center gap-1 shrink-0">
+                              {visibleServices.map((s) => (
+                                <span
+                                  key={s}
+                                  className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded"
+                                >
+                                  {SERVICE_LABELS[s as ServiceArea] || s}
+                                </span>
+                              ))}
+                              {extraServices > 0 && (
+                                <span className="text-[10px] text-muted-foreground bg-secondary/40 px-1.5 py-0.5 rounded">
+                                  +{extraServices}
+                                </span>
+                              )}
+                            </div>
+
                             {isAdminOrManager && (
                               <button
-                                className="ml-auto p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
-                                onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: client.id, name: client.name }); }}
+                                className="p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors shrink-0"
+                                aria-label={`Eliminar ${client.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteTarget({ id: client.id, name: client.name });
+                                }}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
