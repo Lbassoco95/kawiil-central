@@ -4,8 +4,8 @@ import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Landmark, PieChart as PieChartIcon, Receipt, Wallet } from "lucide-react";
 import type { TooltipProps } from "recharts";
 import {
-  Bar,
-  BarChart,
+  Area,
+  AreaChart,
   CartesianGrid,
   Cell,
   Legend,
@@ -465,20 +465,18 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
         ) : (
           <div className="h-[300px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
+              <AreaChart
                 data={chartData}
                 margin={{ top: 12, right: 12, left: 4, bottom: 8 }}
-                barCategoryGap="18%"
-                barGap={4}
               >
                 <defs>
                   <linearGradient id={ingGrad} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#14b8a6" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#0d9488" stopOpacity={0.85} />
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.55} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.05} />
                   </linearGradient>
                   <linearGradient id={gastosGrad} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#a78bfa" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#7c3aed" stopOpacity={0.88} />
+                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.55} />
+                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
@@ -503,7 +501,7 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
                 />
                 <Tooltip
                   content={<TrendTooltip />}
-                  cursor={{ fill: "hsl(var(--muted) / 0.25)" }}
+                  cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
                   animationDuration={200}
                 />
                 <Legend
@@ -511,28 +509,30 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
                   formatter={(value) => <span className="text-xs text-foreground">{value}</span>}
                 />
                 {savioEnabled && (
-                  <Bar
+                  <Area
+                    type="monotone"
                     dataKey="ingresos"
                     name="Ingresos cobrados"
+                    stroke="#10b981"
+                    strokeWidth={2.25}
                     fill={`url(#${ingGrad})`}
-                    radius={[6, 6, 0, 0]}
-                    maxBarSize={36}
+                    activeDot={{ r: 4, stroke: "#047857", strokeWidth: 2 }}
                     animationDuration={900}
                     animationEasing="ease-out"
-                    activeBar={{ fill: "#2dd4bf", opacity: 0.92, stroke: "#0f766e", strokeWidth: 1 }}
                   />
                 )}
-                <Bar
+                <Area
+                  type="monotone"
                   dataKey="gastos"
                   name="Gastos pagados"
+                  stroke="#8b5cf6"
+                  strokeWidth={2.25}
                   fill={`url(#${gastosGrad})`}
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={36}
+                  activeDot={{ r: 4, stroke: "#6d28d9", strokeWidth: 2 }}
                   animationDuration={900}
                   animationEasing="ease-out"
-                  activeBar={{ fill: "#c4b5fd", opacity: 0.95, stroke: "#6d28d9", strokeWidth: 1 }}
                 />
-              </BarChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         )}
