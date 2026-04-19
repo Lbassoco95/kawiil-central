@@ -25,15 +25,20 @@ import {
 } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { documentsLimits } from "@/lib/fileIntake/limits";
+import { DocumentTile, extensionAccent, inferExtension } from "@/components/documentos/DocumentTile";
+import { DocumentsTreeNav, type TreeNode } from "@/components/documentos/DocumentsTreeNav";
+import { cn } from "@/lib/utils";
 
 // ─── File icon helper ─────────────────────────────────────────
 function getFileIcon(name: string, source?: string) {
   if (source === "dropbox") return <Link className="h-4 w-4 text-blue-500" />;
   const ext = name.split(".").pop()?.toLowerCase() || "";
   if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext))
-    return <Image className="h-4 w-4 text-emerald-500" />;
+    return <Image className="h-4 w-4 text-violet-500" />;
   if (["xls", "xlsx", "csv"].includes(ext))
     return <FileSpreadsheet className="h-4 w-4 text-green-600" />;
+  if (["doc", "docx"].includes(ext))
+    return <FileText className="h-4 w-4 text-blue-600" />;
   if (["pdf"].includes(ext))
     return <FileText className="h-4 w-4 text-red-500" />;
   if (["xml", "json"].includes(ext))
@@ -546,13 +551,16 @@ function OrganizedView({
   isLoading,
   search,
   onFormOpen,
+  currentFolder,
+  setCurrentFolder,
 }: {
   documents: any[] | undefined;
   isLoading: boolean;
   search: string;
   onFormOpen: () => void;
+  currentFolder: string | null;
+  setCurrentFolder: (key: string | null) => void;
 }) {
-  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; source: string; file_path: string | null } | null>(null);
   const deleteDocument = useDeleteDocument();
@@ -672,29 +680,50 @@ function OrganizedView({
       )}
 
       {search ? (
-        <div className="border rounded-lg divide-y">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {documents.map((doc) => (
-            <FileRow key={doc.id} doc={doc} onPreview={() => setPreviewDoc(doc)}
-              onDelete={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })} />
+            <DocumentTileForRow
+              key={doc.id}
+              doc={doc}
+              onPreview={() => setPreviewDoc(doc)}
+              onDelete={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })}
+            />
           ))}
         </div>
       ) : (
-        <div className="border rounded-lg divide-y">
-          {currentSubfolders.length === 0 && currentDocs.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">Carpeta vacía</p>
+        <div className="space-y-3">
+          {currentSubfolders.length > 0 && (
+            <div className="rounded-2xl border border-border/60 bg-card/40 divide-y divide-border/40">
+              {currentSubfolders.map((folder) => (
+                <button
+                  key={folder.key}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left first:rounded-t-2xl last:rounded-b-2xl"
+                  onClick={() => goToFolder(folder.key)}
+                >
+                  <Folder className="h-5 w-5 text-primary shrink-0" />
+                  <span className="text-sm font-medium truncate flex-1">{folder.label}</span>
+                  <Badge variant="secondary" className="text-xs shrink-0">
+                    {folder.count} {folder.count === 1 ? "doc" : "docs"}
+                  </Badge>
+                </button>
+              ))}
+            </div>
           )}
-          {currentSubfolders.map((folder) => (
-            <button key={folder.key} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-              onClick={() => goToFolder(folder.key)}>
-              <Folder className="h-5 w-5 text-primary shrink-0" />
-              <span className="text-sm font-medium truncate flex-1">{folder.label}</span>
-              <Badge variant="secondary" className="text-xs shrink-0">{folder.count} {folder.count === 1 ? "doc" : "docs"}</Badge>
-            </button>
-          ))}
-          {currentDocs.map((doc) => (
-            <FileRow key={doc.id} doc={doc} onPreview={() => setPreviewDoc(doc)}
-              onDelete={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })} />
-          ))}
+          {currentDocs.length > 0 && (
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+              {currentDocs.map((doc) => (
+                <DocumentTileForRow
+                  key={doc.id}
+                  doc={doc}
+                  onPreview={() => setPreviewDoc(doc)}
+                  onDelete={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })}
+                />
+              ))}
+            </div>
+          )}
+          {currentSubfolders.length === 0 && currentDocs.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground py-12">Carpeta vacía</p>
+          )}
         </div>
       )}
 
@@ -707,7 +736,80 @@ function OrganizedView({
   );
 }
 
-// ─── File row component ───────────────────────────────────────
+// ─── Tile-based row for OrganizedView grid ────────────────────
+function DocumentTileForRow({
+  doc,
+  onPreview,
+  onDelete,
+}: {
+  doc: any;
+  onPreview: () => void;
+  onDelete: () => void;
+}) {
+  const ext = inferExtension(doc.name);
+  const accent = doc.source === "dropbox" ? "hsl(217 91% 60%)" : extensionAccent(ext);
+  return (
+    <DocumentTile
+      name={doc.name}
+      extension={ext}
+      icon={getFileIcon(doc.name, doc.source)}
+      accentColor={accent}
+      onClick={onPreview}
+      meta={
+        <>
+          {doc.document_type && <span>{doc.document_type}</span>}
+          <span>{formatMX(doc.created_at, "dd MMM yyyy")}</span>
+          {doc.file_size ? <span>{formatFileSize(doc.file_size)}</span> : null}
+          {doc.uploader_profile && <span className="truncate max-w-[120px]">{doc.uploader_profile.full_name}</span>}
+        </>
+      }
+      trailing={
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPreview();
+            }}
+            aria-label="Vista previa"
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+          {doc.source === "dropbox" && doc.external_path && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(doc.external_path, "_blank");
+              }}
+              aria-label="Abrir en Dropbox"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            aria-label="Eliminar"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+// ─── File row component (mantenido para retrocompat) ──────────
 function FileRow({ doc, onPreview, onDelete }: { doc: any; onPreview: () => void; onDelete: () => void }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 hover:shadow-sm transition-all duration-150 cursor-pointer group rounded-lg" onClick={onPreview}>
@@ -742,25 +844,98 @@ function FileRow({ doc, onPreview, onDelete }: { doc: any; onPreview: () => void
 }
 
 // ─── Main page ────────────────────────────────────────────────
+function buildOrganizedTree(documents: any[] | undefined): TreeNode[] {
+  const docs = documents || [];
+  if (docs.length === 0) return [];
+  const byClient = new Map<
+    string,
+    { name: string; id: string; total: number; byProject: Map<string, { name: string; id: string; count: number }>; unassigned: number }
+  >();
+  let unassigned = 0;
+  for (const doc of docs) {
+    const clientId = doc.client_id;
+    const clientName = (doc as any).clients?.name;
+    if (!clientId || !clientName) {
+      unassigned += 1;
+      continue;
+    }
+    if (!byClient.has(clientId)) {
+      byClient.set(clientId, {
+        id: clientId,
+        name: clientName,
+        total: 0,
+        byProject: new Map(),
+        unassigned: 0,
+      });
+    }
+    const ent = byClient.get(clientId)!;
+    ent.total += 1;
+    const projectId = doc.project_id;
+    const projectName = (doc as any).projects?.name;
+    if (projectId && projectName) {
+      if (!ent.byProject.has(projectId)) {
+        ent.byProject.set(projectId, { id: projectId, name: projectName, count: 0 });
+      }
+      ent.byProject.get(projectId)!.count += 1;
+    } else {
+      ent.unassigned += 1;
+    }
+  }
+
+  const nodes: TreeNode[] = [...byClient.values()]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => {
+      const projectChildren: TreeNode[] = [...c.byProject.values()]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((p) => ({
+          key: `client:${c.id}/project:${p.id}`,
+          label: p.name,
+          count: p.count,
+        }));
+      return {
+        key: `client:${c.id}`,
+        label: c.name,
+        count: c.total,
+        children: projectChildren.length > 0 ? projectChildren : undefined,
+      };
+    });
+
+  if (unassigned > 0) {
+    nodes.push({
+      key: "unassigned",
+      label: "Sin cliente",
+      count: unassigned,
+    });
+  }
+  return nodes;
+}
+
 const Documentos = () => {
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"dropbox" | "organized">("dropbox");
+  const [organizedFolder, setOrganizedFolder] = useState<string | null>(null);
 
   const { data: documents, isLoading } = useDocuments({ search, source: sourceFilter });
+
+  const tree = useMemo(
+    () => (viewMode === "organized" ? buildOrganizedTree(documents) : []),
+    [documents, viewMode],
+  );
 
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="hero"
           title="Documentos"
           description={
             viewMode === "dropbox"
               ? "Explorador de archivos en Dropbox"
               : "Documentos registrados en la aplicación"
           }
-          icon={<FileText className="h-6 w-6" />}
+          icon={<FileText />}
           actions={
             <Button size="sm" onClick={() => setFormOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -808,13 +983,36 @@ const Documentos = () => {
           )}
         </div>
 
-        <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">
-          {viewMode === "dropbox" ? (
+        {viewMode === "organized" ? (
+          <div
+            className={cn(
+              "grid gap-4",
+              "lg:grid-cols-[220px_1fr]",
+            )}
+          >
+            <DocumentsTreeNav
+              nodes={tree}
+              selectedKey={organizedFolder}
+              onSelect={setOrganizedFolder}
+              rootLabel="Todo"
+              className="hidden lg:block"
+            />
+            <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">
+              <OrganizedView
+                documents={documents}
+                isLoading={isLoading}
+                search={search}
+                onFormOpen={() => setFormOpen(true)}
+                currentFolder={organizedFolder}
+                setCurrentFolder={setOrganizedFolder}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">
             <DropboxLiveBrowser />
-          ) : (
-            <OrganizedView documents={documents} isLoading={isLoading} search={search} onFormOpen={() => setFormOpen(true)} />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <DocumentFormDialog open={formOpen} onOpenChange={setFormOpen} />
