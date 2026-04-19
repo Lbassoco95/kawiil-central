@@ -364,7 +364,17 @@ INSTRUCCIONES:
   const currentCriticality = CRITICALITY_OPTIONS.find(c => c.value === ((project as any).criticality_level || "normal"));
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-4">
+      {/* AI Project Summary — siempre arriba para que la lectura inicie en la IA */}
+      <AISummaryCard
+        cacheKey={`project-${project.id}`}
+        contextPrompt={projectSummaryPrompt}
+        title="Resumen del proyecto — Kawiil AI"
+        ready={!!projectTasks}
+        userId={user?.id}
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base">Detalles del proyecto</CardTitle>
@@ -563,17 +573,6 @@ INSTRUCCIONES:
         </Card>
       )}
 
-      {/* AI Project Summary */}
-      <div className="md:col-span-2">
-        <AISummaryCard
-          cacheKey={`project-${project.id}`}
-          contextPrompt={projectSummaryPrompt}
-          title="Resumen del proyecto — Kawiil AI"
-          ready={!!projectTasks}
-          userId={user?.id}
-        />
-      </div>
-
       {/* Save as Template - show for completed or advanced projects */}
       {(project.status === "completado" || project.status === "activo") && (
         <div className="md:col-span-2">
@@ -631,6 +630,7 @@ INSTRUCCIONES:
         area={project.area}
         projectName={project.name}
       />
+      </div>{/* end grid 2 cols */}
     </div>
   );
 }

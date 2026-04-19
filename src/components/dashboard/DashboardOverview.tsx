@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Sparkles,
   CheckSquare,
   FolderKanban,
   Users,
@@ -89,11 +88,6 @@ export function DashboardOverview() {
     return map;
   }, [celulaOptions]);
 
-  const dateStr = useMemo(
-    () => today.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" }),
-    [today],
-  );
-
   const stats = useMemo(() => {
     const openTasks = myTasks.filter((t) => t.status !== "completada" && t.status !== "cancelada");
     const todayTasks = openTasks.filter((t) => t.due_date && t.due_date === todayKey);
@@ -109,14 +103,6 @@ export function DashboardOverview() {
       waitingClient: waitingClient.length,
     };
   }, [myTasks, clients, myProjects, todayKey]);
-
-  const insightTaskTitles = useMemo(() => {
-    const overdue = myTasks
-      .filter((t) => t.status !== "completada" && t.status !== "cancelada" && t.due_date && t.due_date < todayKey)
-      .slice(0, 3)
-      .map((t) => `"${t.title}"`);
-    return overdue;
-  }, [myTasks, todayKey]);
 
   const topTasks = useMemo(() => {
     const order: Record<string, number> = { urgente: 0, alta: 1, media: 2, baja: 3 };
@@ -153,60 +139,6 @@ export function DashboardOverview() {
 
   return (
     <div className="space-y-6">
-      {/* AI Briefing — panorama del día */}
-      <div
-        className="surface-toolbar relative overflow-hidden p-5"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, hsl(var(--primary) / 0.04), hsl(var(--accent) / 0.04))",
-        }}
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white"
-            style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
-            aria-hidden
-          >
-            <Sparkles className="h-[18px] w-[18px]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-semibold">Panorama — Kawiil AI</h2>
-              <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium capitalize text-primary">
-                {dateStr}
-              </span>
-            </div>
-            <p className="mt-2 text-sm leading-relaxed text-foreground">
-              {stats.overdueCount > 0 ? (
-                <>
-                  <span className="text-destructive">●</span>{" "}
-                  <b>
-                    {stats.overdueCount} {stats.overdueCount === 1 ? "tarea vencida" : "tareas vencidas"}
-                  </b>{" "}
-                  hoy{insightTaskTitles.length ? `: ${insightTaskTitles.join(", ")}` : ""}.{" "}
-                </>
-              ) : (
-                <>Sin tareas vencidas. </>
-              )}
-              {stats.tasksToday > 0 && (
-                <>
-                  <span className="text-[hsl(var(--warning))]">●</span> Hoy vencen{" "}
-                  <b>{stats.tasksToday}</b>{" "}
-                  {stats.tasksToday === 1 ? "tarea" : "tareas"}.{" "}
-                </>
-              )}
-              {stats.waitingClient > 0 && (
-                <>
-                  Hay <b>{stats.waitingClient}</b> en espera del cliente.{" "}
-                </>
-              )}
-              <span className="text-primary">✨</span>{" "}
-              Sugerencia: prioriza por urgencia y agrupa por cliente para reducir cambios de contexto.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard

@@ -689,6 +689,16 @@ export function AccountingDashboard({
 
   return (
     <div className="space-y-4">
+      {/* AI Summary — siempre arriba para que la lectura inicie en la IA */}
+      {periods && periods.length > 0 && (
+        <AISummaryCard
+          cacheKey={`accounting-general-${projectId}`}
+          contextPrompt={generalPrompt}
+          title="Reporte General Kawiil AI — Contabilidad"
+          ready={periods.length > 0}
+        />
+      )}
+
       {clientId ? (
         <div className="flex items-center justify-end">
           <Button
@@ -1018,14 +1028,6 @@ export function AccountingDashboard({
       <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
         Cada periodo mensual tiene su propia fase en el tab <strong className="text-foreground font-medium">Tareas</strong>: puedes crear varias tareas por mes y arrastrarlas entre fases allí.
       </div>
-      {periods && periods.length > 0 && (
-        <AISummaryCard
-          cacheKey={`accounting-general-${projectId}`}
-          contextPrompt={generalPrompt}
-          title="Reporte General Kawiil AI — Contabilidad"
-          ready={periods.length > 0}
-        />
-      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Card>

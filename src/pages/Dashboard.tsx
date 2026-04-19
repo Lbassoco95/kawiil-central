@@ -50,8 +50,8 @@ const Dashboard = () => {
 
         {view === "personal" ? (
           <>
-            <DashboardOverview />
             <PersonalDashboard />
+            <DashboardOverview />
           </>
         ) : (
           <TeamDashboard />

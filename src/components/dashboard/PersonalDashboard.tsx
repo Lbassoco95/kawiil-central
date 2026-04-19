@@ -498,45 +498,46 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
   }, [myProjectProgress, totalPending, overdueTasks, completedToday, dueTodayPending]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(280px,340px)] gap-6 min-w-0">
-      {/* ═══ LEFT COLUMN ═══ */}
-      <div className="space-y-4 min-w-0">
+    <div className="space-y-6 min-w-0">
+      {/* AI Hero · briefing + quote + mood — siempre arriba, full-width */}
+      <div className="animate-fade-in">
+        <AiHeroGrid
+          tasksCount={totalPending}
+          completedToday={completedToday ?? 0}
+          overdueCount={overdueTasks}
+          remindersCount={pendingReminders.length}
+          userCelula={userCelula}
+        />
+      </div>
 
-        {proactiveTip?.id && (
-          <Alert className="border-primary/25 bg-primary/[0.04] pr-10 relative">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <AlertTitle className="text-sm">{proactiveTip.title || "Sugerencia del día"}</AlertTitle>
-            <AlertDescription className="text-xs mt-1">
-              {proactiveTip.body}
-              <button
-                type="button"
-                className="block mt-2 text-primary font-medium hover:underline"
-                onClick={() => navigate("/notificaciones?tab=sistema")}
-              >
-                Ver notificaciones
-              </button>
-            </AlertDescription>
+      {proactiveTip?.id && (
+        <Alert className="border-primary/25 bg-primary/[0.04] pr-10 relative">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <AlertTitle className="text-sm">{proactiveTip.title || "Sugerencia del día"}</AlertTitle>
+          <AlertDescription className="text-xs mt-1">
+            {proactiveTip.body}
             <button
               type="button"
-              className="absolute right-3 top-3 p-1 rounded-md text-muted-foreground hover:bg-secondary"
-              aria-label="Cerrar"
-              onClick={() => dismissProactive.mutate(proactiveTip.id)}
+              className="block mt-2 text-primary font-medium hover:underline"
+              onClick={() => navigate("/notificaciones?tab=sistema")}
             >
-              <X className="h-4 w-4" />
+              Ver notificaciones
             </button>
-          </Alert>
-        )}
+          </AlertDescription>
+          <button
+            type="button"
+            className="absolute right-3 top-3 p-1 rounded-md text-muted-foreground hover:bg-secondary"
+            aria-label="Cerrar"
+            onClick={() => dismissProactive.mutate(proactiveTip.id)}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </Alert>
+      )}
 
-        {/* AI Hero · briefing + quote + mood */}
-        <div className="animate-fade-in">
-          <AiHeroGrid
-            tasksCount={totalPending}
-            completedToday={completedToday ?? 0}
-            overdueCount={overdueTasks}
-            remindersCount={pendingReminders.length}
-            userCelula={userCelula}
-          />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_minmax(280px,340px)] gap-6 min-w-0">
+        {/* ═══ LEFT COLUMN ═══ */}
+        <div className="space-y-4 min-w-0">
 
         {/* KPI grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
@@ -1100,7 +1101,8 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             </div>
           </div>
         )}
-      </div>{/* end right column */}
+        </div>{/* end right column */}
+      </div>{/* end grid 2 cols */}
 
       {/* Questionnaire Dialog */}
       <PreferenceQuestionnaire
