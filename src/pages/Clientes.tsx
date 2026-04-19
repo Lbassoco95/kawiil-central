@@ -252,7 +252,11 @@ const Clientes = () => {
         : undefined;
     const pctOk =
       totalActivos > 0 && stats.alCorriente != null
-        ? `${Math.round((stats.alCorriente / totalActivos) * 100)}% de la cartera`
+        ? `${Math.round((stats.alCorriente / totalActivos) * 100)}% de la cartera${
+            stats.alCorrienteConSavio != null && stats.alCorrienteConSavio > 0
+              ? ` · ${stats.alCorrienteConSavio} con Savio`
+              : ""
+          }`
         : undefined;
     const ingresosFmt =
       stats.ingresosMes != null

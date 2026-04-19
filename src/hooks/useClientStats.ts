@@ -17,6 +17,8 @@ export interface ClientStats {
   facturasEmitidas: number | null;
   /** Lista corta de clientes que requieren atención (para el AI brief). */
   attentionList: Array<{ id: string; name: string; reason: string }>;
+  /** De los `alCorriente`, cuántos ya están enlazados con Savio (informativo). */
+  alCorrienteConSavio: number | null;
   isLoading: boolean;
 }
 
@@ -105,6 +107,7 @@ export function useClientStats(): ClientStats {
       activosFisicas: null,
       facturasEmitidas: null,
       attentionList: [],
+      alCorrienteConSavio: null,
       isLoading: true,
     };
   }
@@ -132,6 +135,7 @@ export function useClientStats(): ClientStats {
 
   let alCorriente: number | null = null;
   let requierenAtencion: number | null = null;
+  let conSavioOk = 0;
   if (overdueMap) {
     let ok = 0;
     let warn = 0;
@@ -143,8 +147,9 @@ export function useClientStats(): ClientStats {
       const needsAttention = overdue > 0 || stale;
       if (needsAttention) {
         warn += 1;
-      } else if (c.savio_customer_id) {
+      } else {
         ok += 1;
+        if (c.savio_customer_id) conSavioOk += 1;
       }
     }
     alCorriente = ok;
@@ -164,6 +169,7 @@ export function useClientStats(): ClientStats {
     activosFisicas,
     facturasEmitidas: ingresosData?.count ?? null,
     attentionList,
+    alCorrienteConSavio: overdueMap ? conSavioOk : null,
     isLoading: false,
   };
 }

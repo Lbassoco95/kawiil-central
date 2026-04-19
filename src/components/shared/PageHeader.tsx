@@ -90,7 +90,7 @@ export function PageHeader({
           {cleanCrumbs.length > 0 ? (
             <nav
               aria-label="Migajas"
-              className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-muted-foreground"
+              className="flex flex-wrap items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground"
             >
               <Home className="h-3 w-3 opacity-70" aria-hidden />
               {cleanCrumbs.map((c, i) => {
@@ -169,7 +169,7 @@ export function PageHeader({
           {cleanStats.length > 0 ? (
             <div
               className={cn(
-                "mt-1 grid gap-3 border-t border-border/50 pt-3",
+                "mt-2 grid gap-x-6 gap-y-3",
                 "grid-cols-2 sm:grid-cols-3",
                 cleanStats.length >= 4 && "lg:grid-cols-4",
                 cleanStats.length >= 5 && "xl:grid-cols-5",

@@ -19,9 +19,13 @@ type PhraseRequest = {
 };
 
 /** Devuelve la cache key (`time_of_day` extendido) para que módulos distintos no
- * compartan la misma frase del día sin necesidad de migrar el unique index. */
+ * compartan la misma frase del día sin necesidad de migrar el unique index.
+ * El sufijo `-v2` invalida frases del módulo `clientes` previamente cacheadas
+ * con prompts antiguos que devolvían citas fuera de eje (e.g. Marx). */
 function moduleCacheSlot(timeOfDay: "morning" | "afternoon", module: PhraseModule): string {
-  return module === "tareas" ? timeOfDay : `${timeOfDay}-${module}`;
+  if (module === "tareas") return timeOfDay;
+  if (module === "clientes") return `${timeOfDay}-clientes-v2`;
+  return `${timeOfDay}-${module}`;
 }
 
 /**
@@ -376,13 +380,18 @@ La cita DEBE estar conectada de forma evidente con esta preferencia: provenir de
 
     const moduleInstruction =
       moduleName === "clientes"
-        ? `\nMÓDULO: Clientes (cartera). La cita debe girar en torno a relaciones humanas, confianza, atención al cliente, servicio, escucha activa o reputación. Evita motivación genérica de productividad.`
+        ? `\n\nMÓDULO PRIORITARIO (manda sobre cualquier otra preferencia): Clientes / cartera.
+La cita DEBE girar en torno a UNO de estos ejes: relaciones humanas, confianza, atención al cliente, servicio, escucha activa, reputación, fidelidad, vínculo a largo plazo. Evita citas de:
+- productividad personal o gestión del tiempo
+- política, lucha de clases, sociología macro
+- guerra, conflicto o competencia
+Si la PREFERENCIA FOCAL del usuario no encaja con esos ejes para el módulo Clientes, IGNÓRALA y elige otra cita auténtica del eje del módulo.`
         : "";
 
     const basePrompt = `Selecciona UNA frase o cita REAL y EXISTENTE para ${firstName}.
 Momento del día: ${timeOfDay === "afternoon" ? "tarde" : "mañana"}.
-Fecha objetivo de frase (CDMX): ${phraseDate}.${moodContext}${journeyContext}${moduleInstruction}
-${personalContext}${focusInstruction}
+Fecha objetivo de frase (CDMX): ${phraseDate}.${moodContext}${journeyContext}
+${personalContext}${focusInstruction}${moduleInstruction}
 
 INSTRUCCIONES:
 1. La frase DEBE SER una cita real, verificable, de un personaje, autor, músico, película, serie, libro o figura pública.
