@@ -304,7 +304,7 @@ const Proyectos = () => {
                 <div
                   key={project.id}
                   className={cn(
-                    "grid grid-cols-12 gap-4 items-center py-4 px-4 page-list-card cursor-pointer animate-fade-in",
+                    "grid grid-cols-12 gap-4 items-center py-3 px-4 page-list-card cursor-pointer animate-fade-in",
                     (project as any).delay_category && "bg-warning/[0.03] border-warning/20",
                   )}
                   style={{ animationDelay: `${Math.min(i, 10) * 30}ms`, animationFillMode: "both" }}
@@ -353,12 +353,11 @@ const Proyectos = () => {
                   </div>
 
                   {/* Col 7-10: progreso con label */}
-                  <div className="col-span-8 md:col-span-4 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-[10px] font-medium text-muted-foreground">
-                      <span className="uppercase tracking-wider">Progreso</span>
-                      <span className="tabular-nums text-foreground">{pct}%</span>
+                  <div className="col-span-8 md:col-span-4">
+                    <div className="text-[10px] font-semibold tracking-[0.12em] uppercase text-muted-foreground mb-1">
+                      Progreso <span className="tabular-nums text-foreground">{pct}%</span>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
                       <div
                         className={cn("h-full rounded-full transition-all duration-500", barColor)}
                         style={{ width: `${pct}%` }}
@@ -367,7 +366,7 @@ const Proyectos = () => {
                   </div>
 
                   {/* Col 11-12: status + trash */}
-                  <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-2 shrink-0">
+                  <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-2">
                     <Badge
                       variant="outline"
                       className={cn("text-[10px] border-0 px-1.5 py-0", STATUS_STYLES[project.status])}

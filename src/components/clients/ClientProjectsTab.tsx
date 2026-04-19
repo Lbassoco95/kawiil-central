@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { FolderKanban, Plus, Zap } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -26,20 +27,15 @@ type Client = Tables<"clients">;
 type Project = Tables<"projects">;
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { PROJECT_STATUS_CONFIG } from "@/lib/statusStyles";
 
-const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = {
-  activo: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  pausado: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  completado: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  cancelado: "bg-muted text-muted-foreground",
-};
+const PROJECT_STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
+) as Record<ProjectStatus, string>;
 
-const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  activo: "Activo",
-  pausado: "Pausado",
-  completado: "Completado",
-  cancelado: "Cancelado",
-};
+const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = Object.fromEntries(
+  Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+) as Record<ProjectStatus, string>;
 
 /**
  * Maps contracted services to the projects that should be auto-created.
@@ -100,6 +96,34 @@ export function ClientProjectsTab({ client, projects }: ClientProjectsTabProps) 
   const missingProjects = expectedProjects.filter(
     (ep) => !projects.some((p) => p.area === ep.area && p.status !== "cancelado")
   );
+
+  const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
+  const projectIdsKey = projectIds.slice().sort().join(",");
+
+  const { data: taskRows = [] } = useQuery({
+    queryKey: ["client-projects-task-stats", client.id, projectIdsKey],
+    enabled: projectIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("project_id, status")
+        .in("project_id", projectIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const statsByProject = useMemo(() => {
+    const m = new Map<string, { total: number; pending: number }>();
+    for (const row of taskRows) {
+      if (!row.project_id) continue;
+      const cur = m.get(row.project_id) ?? { total: 0, pending: 0 };
+      cur.total += 1;
+      if (row.status !== "completada") cur.pending += 1;
+      m.set(row.project_id, cur);
+    }
+    return m;
+  }, [taskRows]);
 
   const createServiceProjects = useMutation({
     mutationFn: async () => {
@@ -206,37 +230,79 @@ export function ClientProjectsTab({ client, projects }: ClientProjectsTabProps) 
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3">
-          {projects.map((p) => (
-            <Card
-              key={p.id}
-              className="hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => navigate(`/proyectos/${p.id}`)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="font-medium text-foreground truncate">{p.name}</h4>
-                    {p.description && (
-                      <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">
-                        {p.description}
-                      </p>
+        <div className="space-y-2">
+          {projects.map((p, i) => {
+            const stats = statsByProject.get(p.id);
+            const pct = p.status === "completado"
+              ? 100
+              : !stats || stats.total === 0
+                ? 0
+                : Math.round(((stats.total - stats.pending) / stats.total) * 100);
+            const barColor =
+              p.status === "completado"
+                ? "bg-green-600"
+                : p.status === "pausado"
+                  ? "bg-amber-500"
+                  : p.status === "cancelado"
+                    ? "bg-muted-foreground/40"
+                    : "bg-accent";
+            return (
+              <div
+                key={p.id}
+                className="grid grid-cols-12 gap-4 items-center py-3 px-4 page-list-card cursor-pointer animate-fade-in"
+                style={{ animationDelay: `${Math.min(i, 10) * 30}ms`, animationFillMode: "both" }}
+                onClick={() => navigate(`/proyectos/${p.id}`)}
+              >
+                {/* Col 1-6: nombre + descripción + meta */}
+                <div className="col-span-12 md:col-span-6 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    {p.area && (
+                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                        {SERVICE_LABELS[p.area]}
+                      </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {p.area && (
-                      <Badge variant="secondary" className="text-xs">
-                        {SERVICE_LABELS[p.area]}
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className={PROJECT_STATUS_STYLES[p.status]}>
-                      {PROJECT_STATUS_LABELS[p.status]}
-                    </Badge>
+                  <h4 className="text-sm font-medium text-foreground truncate">{p.name}</h4>
+                  {p.description && (
+                    <p className="mt-1 text-[11px] text-muted-foreground line-clamp-1">
+                      {p.description}
+                    </p>
+                  )}
+                  {stats && stats.total > 0 && (
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Tareas:{" "}
+                      <span className="text-foreground font-medium">
+                        {stats.pending}/{stats.total} pend.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Col 7-10: progreso con label */}
+                <div className="col-span-8 md:col-span-4">
+                  <div className="text-[10px] font-semibold tracking-[0.12em] uppercase text-muted-foreground mb-1">
+                    Progreso <span className="tabular-nums text-foreground">{pct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full transition-all duration-500", barColor)}
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                {/* Col 11-12: status */}
+                <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-2">
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[10px] border-0 px-1.5 py-0", PROJECT_STATUS_STYLES[p.status])}
+                  >
+                    {PROJECT_STATUS_LABELS[p.status]}
+                  </Badge>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
