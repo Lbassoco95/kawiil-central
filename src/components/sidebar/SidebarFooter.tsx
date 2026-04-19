@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 
@@ -45,15 +46,22 @@ export function SidebarFooter({ collapsed }: SidebarFooterProps) {
               collapsed && "justify-center",
             )}
           >
-            <div
-              className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full text-[11px] font-bold text-white"
-              style={{
-                background: "linear-gradient(135deg, hsl(260 70% 60%), hsl(210 80% 55%))",
-                boxShadow: "0 0 0 2px var(--sb-bg)",
-              }}
+            <Avatar
+              className="h-7 w-7 flex-shrink-0"
+              style={{ boxShadow: "0 0 0 2px var(--sb-bg)" }}
             >
-              {initials}
-            </div>
+              {profile?.avatar_url ? (
+                <AvatarImage src={profile.avatar_url} alt={profile?.full_name || "Avatar"} />
+              ) : null}
+              <AvatarFallback
+                className="text-[11px] font-bold text-white"
+                style={{
+                  background: "linear-gradient(135deg, hsl(260 70% 60%), hsl(210 80% 55%))",
+                }}
+              >
+                {initials}
+              </AvatarFallback>
+            </Avatar>
             {!collapsed && (
               <div className="min-w-0 leading-tight">
                 <div

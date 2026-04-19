@@ -101,6 +101,22 @@ function getCategoryClasses(name?: string | null) {
   return CATEGORY_COLORS[hash % CATEGORY_COLORS.length];
 }
 
+const CATEGORY_DOT_COLORS = [
+  "bg-blue-500 border-blue-600/40",
+  "bg-emerald-500 border-emerald-600/40",
+  "bg-amber-500 border-amber-600/40",
+  "bg-purple-500 border-purple-600/40",
+  "bg-pink-500 border-pink-600/40",
+  "bg-sky-500 border-sky-600/40",
+];
+
+function catColorPreview(name?: string | null) {
+  if (!name) return CATEGORY_DOT_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % 2147483647;
+  return CATEGORY_DOT_COLORS[hash % CATEGORY_DOT_COLORS.length];
+}
+
 function taskDetailHref(taskId: string) {
   return `/tareas?taskId=${encodeURIComponent(taskId)}`;
 }
@@ -124,10 +140,38 @@ export function CalendarView() {
   const [showCreate, setShowCreate] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [showKawiilTasks, setShowKawiilTasks] = useState(true);
+  const [activeCategoryFilters, setActiveCategoryFilters] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("kawiil-cal-cat-filters");
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { window.localStorage.setItem("kawiil-cal-cat-filters", JSON.stringify(activeCategoryFilters)); } catch { /* ignore */ }
+  }, [activeCategoryFilters]);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isMobile) setViewMode("day");
   }, [isMobile]);
+
+  // Persist & restore scroll position of the calendar area
+  useEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el || typeof window === "undefined") return;
+    const key = `kawiil-cal-scroll-${viewMode}`;
+    try {
+      const saved = window.sessionStorage.getItem(key);
+      if (saved) el.scrollTop = parseInt(saved, 10) || 0;
+    } catch { /* ignore */ }
+    const onScroll = () => {
+      try { window.sessionStorage.setItem(key, String(el.scrollTop)); } catch { /* ignore */ }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [viewMode]);
   const [newEvent, setNewEvent] = useState({
     subject: "", startTime: "09:00", endTime: "10:00", attendees: "",
     location: "", description: "", isOnlineMeeting: true, isAllDay: false, categories: [] as string[],
@@ -209,7 +253,15 @@ export function CalendarView() {
   const rangeEndISO = useMemo(() => `${rangeEnd}T23:59:59.999Z`, [rangeEnd]);
 
   const { data: eventsData, isLoading } = useCalendarEvents(rangeStartISO, rangeEndISO);
-  const events = Array.isArray(eventsData) ? eventsData : [];
+  const allEvents = Array.isArray(eventsData) ? eventsData : [];
+  const events = useMemo(() => {
+    if (activeCategoryFilters.length === 0) return allEvents;
+    return allEvents.filter((e: any) => {
+      const cats: string[] = Array.isArray(e.categories) ? e.categories : [];
+      if (cats.length === 0) return false;
+      return cats.some((c) => activeCategoryFilters.includes(c));
+    });
+  }, [allEvents, activeCategoryFilters]);
   const createEvent = useCreateCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
 
@@ -454,7 +506,7 @@ export function CalendarView() {
   return (
     <div className="flex gap-4 animate-fade-in h-full">
       {/* Main calendar area */}
-      <div className="flex-1 min-w-0 space-y-4 overflow-y-auto pb-4">
+      <div ref={scrollAreaRef} className="flex-1 min-w-0 space-y-4 overflow-y-auto pb-4">
         {isMobile && (
           <div className="space-y-3">
             {todayAgendaCard}
@@ -687,9 +739,127 @@ export function CalendarView() {
         )}
       </div>
 
-      {/* Right sidebar — Agenda / Kawiil tasks */}
+      {/* Right sidebar — Mini cal + Filters + Agenda / Kawiil tasks */}
       {!isMobile && (
         <div className="w-72 shrink-0 space-y-4 overflow-y-auto pb-4">
+          <Card>
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-foreground capitalize">
+                  {format(currentDate, "MMMM yyyy", { locale: es })}
+                </p>
+                <div className="flex gap-0.5">
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-accent text-muted-foreground"
+                    onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+                    aria-label="Mes anterior"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-accent text-muted-foreground"
+                    onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+                    aria-label="Mes siguiente"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-7 gap-0.5 text-center">
+                {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
+                  <span key={d} className="text-[10px] font-semibold text-muted-foreground py-1">
+                    {d}
+                  </span>
+                ))}
+                {eachDayOfInterval({
+                  start: startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 }),
+                  end: endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 }),
+                }).map((d) => {
+                  const inMonth = isSameMonth(d, currentDate);
+                  const today = isToday(d);
+                  const selected = isSameDay(d, currentDate);
+                  const hasEvents = (allEvents as any[]).some((e: any) =>
+                    isSameDay(parseEventTime(e.start?.dateTime || e.start?.date), d),
+                  );
+                  return (
+                    <button
+                      key={d.toISOString()}
+                      type="button"
+                      onClick={() => setCurrentDate(d)}
+                      className={cn(
+                        "relative h-7 text-[11px] rounded-md transition-colors",
+                        !inMonth && "text-muted-foreground/40",
+                        inMonth && !today && !selected && "hover:bg-accent text-foreground",
+                        today && "ring-1 ring-primary/40 text-primary font-semibold",
+                        selected && "bg-primary text-primary-foreground font-semibold",
+                      )}
+                    >
+                      {format(d, "d")}
+                      {hasEvents && !selected && (
+                        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {outlookCategories.length > 0 && (
+            <Card>
+              <CardContent className="p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-foreground">Filtros por categoría</p>
+                  {activeCategoryFilters.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategoryFilters([])}
+                      className="text-[10px] text-primary hover:underline"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {(outlookCategories as any[]).map((cat: any) => {
+                    const name: string = cat.displayName;
+                    const active = activeCategoryFilters.includes(name);
+                    const dot = catColorPreview(name);
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() =>
+                          setActiveCategoryFilters((prev) =>
+                            prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name],
+                          )
+                        }
+                        className={cn(
+                          "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors",
+                          active ? "bg-primary/10 text-foreground" : "hover:bg-accent/50 text-muted-foreground",
+                        )}
+                      >
+                        <span
+                          className={cn("inline-block h-2.5 w-2.5 rounded-full border", dot)}
+                          aria-hidden
+                        />
+                        <span className="truncate flex-1">{name}</span>
+                        {active && <span className="text-primary text-[10px]">●</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {activeCategoryFilters.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                    Mostrando {events.length} de {allEvents.length} eventos
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {todayAgendaCard}
           {upcomingTasksCard}
         </div>
