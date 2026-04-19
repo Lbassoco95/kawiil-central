@@ -19,6 +19,7 @@ import { ExpenseReviewDialog } from "@/components/finanzas/ExpenseReviewDialog";
 import { SavioFinanceDashboard } from "@/components/finanzas/SavioFinanceDashboard";
 import { FinanceExecutiveSummary } from "@/components/finanzas/FinanceExecutiveSummary";
 import { FinanceIntelligenceBoards } from "@/components/finanzas/FinanceIntelligenceBoards";
+import { KpiTile } from "@/components/finanzas/KpiTile";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { useClients } from "@/hooks/useClients";
 
@@ -124,37 +125,56 @@ export default function Finanzas() {
     return "Resumen mensual de gastos, aprobaciones y pagos del despacho.";
   }, [hasFinanceAccess, canViewSavioIncome]);
 
+  const fmtMoney = (n: number) =>
+    `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
+
   const gastosSection = (
     <div className="space-y-4 mt-0">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="stat-card animate-fade-in stagger-1" style={{ animationFillMode: "both" }}>
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <Clock className="h-3.5 w-3.5" /> Pendientes
-          </div>
-          <p className="text-lg font-semibold">${totals.pending.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-muted-foreground">{totals.pendingCount} solicitudes</p>
-        </div>
-        <div className="stat-card animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <CheckCircle className="h-3.5 w-3.5" /> Aprobados
-          </div>
-          <p className="text-lg font-semibold text-green-600">${totals.approved.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-muted-foreground">{totals.approvedCount} por pagar</p>
-        </div>
-        <div className="stat-card animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <DollarSign className="h-3.5 w-3.5" /> Pagados
-          </div>
-          <p className="text-lg font-semibold text-purple-600">${totals.paid.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-muted-foreground">{totals.paidCount} pagos</p>
-        </div>
-        <div className="stat-card animate-fade-in stagger-4" style={{ animationFillMode: "both" }}>
-          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-            <XCircle className="h-3.5 w-3.5" /> Rechazados
-          </div>
-          <p className="text-lg font-semibold text-destructive">{totals.rejected}</p>
-          <p className="text-xs text-muted-foreground">solicitudes</p>
-        </div>
+        <KpiTile
+          title="Pendientes"
+          subtitle="Solicitudes en revisión / por aprobar."
+          accentClass="before:bg-amber-500"
+          icon={<Clock className="h-4 w-4" />}
+          footer={<p className="text-[11px] text-muted-foreground">{totals.pendingCount} solicitudes</p>}
+        >
+          <p className="text-2xl font-semibold tabular-nums tracking-tight text-amber-700 dark:text-amber-400">
+            {fmtMoney(totals.pending)}
+          </p>
+        </KpiTile>
+        <KpiTile
+          title="Aprobados"
+          subtitle="Listos para pago."
+          accentClass="before:bg-emerald-600"
+          icon={<CheckCircle className="h-4 w-4" />}
+          footer={<p className="text-[11px] text-muted-foreground">{totals.approvedCount} por pagar</p>}
+        >
+          <p className="text-2xl font-semibold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
+            {fmtMoney(totals.approved)}
+          </p>
+        </KpiTile>
+        <KpiTile
+          title="Pagados"
+          subtitle="Egresos realizados en el periodo."
+          accentClass="before:bg-violet-600"
+          icon={<DollarSign className="h-4 w-4" />}
+          footer={<p className="text-[11px] text-muted-foreground">{totals.paidCount} pagos</p>}
+        >
+          <p className="text-2xl font-semibold tabular-nums tracking-tight text-violet-700 dark:text-violet-400">
+            {fmtMoney(totals.paid)}
+          </p>
+        </KpiTile>
+        <KpiTile
+          title="Rechazados"
+          subtitle="Solicitudes descartadas."
+          accentClass="before:bg-destructive"
+          icon={<XCircle className="h-4 w-4" />}
+          footer={<p className="text-[11px] text-muted-foreground">solicitudes</p>}
+        >
+          <p className="text-2xl font-semibold tabular-nums tracking-tight text-destructive">
+            {totals.rejected}
+          </p>
+        </KpiTile>
       </div>
 
       <div className="surface-toolbar flex flex-wrap items-center gap-2 p-3 md:p-4">
@@ -200,10 +220,10 @@ export default function Finanzas() {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
-          variant="minimal"
+          variant="hero"
           title="Finanzas"
           description={pageDescription}
-          icon={<Wallet className="h-6 w-6" />}
+          icon={<Wallet />}
           actions={
             <Button size="sm" onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4 mr-1" /> Nueva solicitud

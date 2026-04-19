@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Landmark, PieChart as PieChartIcon, Receipt, Wallet } from "lucide-react";
@@ -17,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import { SavioFinanceWriteActions } from "@/components/finanzas/SavioFinanceWriteActions";
+import { KpiTile } from "@/components/finanzas/KpiTile";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Expense } from "@/hooks/useExpenses";
@@ -31,7 +32,6 @@ import { computeSavioIncomeBuckets, toInvoiceRowView } from "@/lib/savioApiNorma
 import { savioFinanceApiFailureHint } from "@/lib/savioFinanceApiHints";
 import { getSavioAppPanelUrl } from "@/lib/savioAppUrl";
 import { SAVIO_FINANCE_PAGE_BOOST_STEP } from "@/lib/savioFinancePagedFetch";
-import { cn } from "@/lib/utils";
 
 const PIE_COLORS = {
   cobrado: "#0d9488",
@@ -80,40 +80,6 @@ function TrendTooltip({
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-interface KpiTileProps {
-  title: string;
-  subtitle: string;
-  accentClass: string;
-  icon: ReactNode;
-  children: ReactNode;
-  footer: ReactNode;
-}
-
-function KpiTile({ title, subtitle, accentClass, icon, children, footer }: KpiTileProps) {
-  return (
-    <div
-      className={cn(
-        "group relative overflow-hidden rounded-2xl border border-border/50 bg-card/90 p-4 shadow-sm transition-all duration-300",
-        "hover:-translate-y-0.5 hover:border-border hover:shadow-lg",
-        "before:absolute before:inset-x-0 before:top-0 before:h-1 before:rounded-t-2xl",
-        accentClass,
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground/90">{subtitle}</p>
-        </div>
-        <div className="rounded-lg bg-muted/50 p-2 text-muted-foreground transition-colors group-hover:bg-muted">
-          {icon}
-        </div>
-      </div>
-      <div className="mt-3">{children}</div>
-      <div className="mt-2 border-t border-border/40 pt-2">{footer}</div>
     </div>
   );
 }
@@ -373,7 +339,7 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
             <KpiTile
               title="Facturación del mes"
               subtitle="Por fecha de emisión; no se incluyen facturas canceladas."
-              accentClass="before:bg-emerald-600"
+              accentClass="before:bg-orange-500"
               icon={<Receipt className="h-4 w-4" />}
               footer={
                 <p className="text-[11px] text-muted-foreground">
@@ -385,7 +351,7 @@ export function FinanceExecutiveSummary({ expenses, savioEnabled = true, onGoToS
               {isLoading ? (
                 <Skeleton className="h-8 w-32" />
               ) : (
-                <p className="text-2xl font-semibold tabular-nums tracking-tight text-emerald-700 dark:text-emerald-400">
+                <p className="text-2xl font-semibold tabular-nums tracking-tight text-orange-700 dark:text-orange-400">
                   {formatMoney(kpis.facturadoMes.sum)}
                 </p>
               )}
