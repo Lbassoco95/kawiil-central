@@ -77,6 +77,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.ai-proactive-notifications]
     verify_jwt = false
+  [functions.refresh-weekday-phrases]
+    verify_jwt = false
   [functions.render-office-document]
     verify_jwt = true
   [functions.process-scheduled-mail]

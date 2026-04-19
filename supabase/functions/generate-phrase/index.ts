@@ -242,21 +242,40 @@ serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const requesterClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    // Las invocaciones desde un cron interno pasan SERVICE_ROLE_KEY como Bearer.
+    // En ese caso saltamos getUser() y exigimos `user_id` explícito en el body.
+    const bearerToken = authHeader.slice("Bearer ".length).trim();
+    const isServiceCall = !!serviceRoleKey && bearerToken === serviceRoleKey;
+
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: { user }, error: userErr } = await requesterClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    let userId: string;
+    let dbClient: ReturnType<typeof createClient>;
 
-    const userId = user.id;
-    const dbClient = requesterClient;
+    if (isServiceCall) {
+      const explicitUserId = (payload.user_id || "").trim();
+      if (!explicitUserId) {
+        return new Response(JSON.stringify({ error: "user_id_required_for_service_call" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = explicitUserId;
+      dbClient = adminClient;
+    } else {
+      const requesterClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: userErr } = await requesterClient.auth.getUser();
+      if (userErr || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
+      dbClient = requesterClient;
+    }
     const moodScore = payload.mood_score ?? null;
     const forceRegenerate = payload.force_regenerate ?? false;
     const timeOfDay = payload.time_of_day === "afternoon" ? "afternoon" : "morning";
