@@ -1,8 +1,7 @@
 import { useRef } from "react";
-import { Calendar, User, Trash2, MessageSquare, Paperclip } from "lucide-react";
+import { Calendar, Trash2, MessageSquare, Paperclip } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Progress } from "@/components/ui/progress";
 import { useUpdateTask } from "@/hooks/useTasks";
 import { TASK_STATUS_CONFIG } from "@/lib/statusStyles";
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
@@ -35,15 +34,40 @@ function priorityBarClass(priority: string) {
   }
 }
 
-function getDateColor(dateStr: string) {
+type DueKind = "overdue" | "today" | "soon" | "future" | null;
+
+function classifyDue(dateStr?: string | null): DueKind {
+  if (!dateStr) return null;
   const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
   const now = new Date();
-  const weekFromNow = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const weekFromNow = new Date(todayStart);
   weekFromNow.setDate(weekFromNow.getDate() + 7);
-  if (d < now) return "text-destructive font-medium";
-  if (d <= weekFromNow) return "text-amber-600 dark:text-amber-400 font-medium";
-  return "text-muted-foreground";
+
+  if (isPastDueCalendarMX(dateStr)) return "overdue";
+  if (d >= todayStart && d < tomorrowStart) return "today";
+  if (d <= weekFromNow) return "soon";
+  return "future";
 }
+
+const DUE_PILL_STYLES: Record<Exclude<DueKind, null>, string> = {
+  overdue:
+    "bg-destructive/12 text-destructive ring-1 ring-destructive/25 font-semibold",
+  today:
+    "bg-warning/15 text-warning-foreground ring-1 ring-warning/30 font-medium",
+  soon: "bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/25 dark:text-amber-300",
+  future: "bg-muted/50 text-muted-foreground",
+};
+
+const DUE_LABEL: Record<Exclude<DueKind, null>, string | null> = {
+  overdue: "Vencida",
+  today: "Hoy",
+  soon: null,
+  future: null,
+};
 
 function checklistProgress(task: Task): { done: number; total: number; pct: number } | null {
   const checklist = (task as any).checklist as Array<{ completed?: boolean }> | undefined;
@@ -52,6 +76,35 @@ function checklistProgress(task: Task): { done: number; total: number; pct: numb
   const done = checklist.filter((i) => i?.completed).length;
   const pct = Math.round((done / total) * 100);
   return { done, total, pct };
+}
+
+function initialsOf(name?: string | null): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function avatarGradient(seed?: string | null): string {
+  // Pequeño hash para variar el gradient por persona, manteniendo paleta de marca.
+  const palette = [
+    ["hsl(var(--primary))", "hsl(var(--accent))"],
+    ["hsl(var(--accent))", "hsl(var(--primary))"],
+    ["hsl(217 91% 60%)", "hsl(262 83% 58%)"],
+    ["hsl(157 72% 36%)", "hsl(199 89% 48%)"],
+    ["hsl(38 92% 50%)", "hsl(25 95% 53%)"],
+  ];
+  let idx = 0;
+  if (seed) {
+    let h = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+      h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+    }
+    idx = h % palette.length;
+  }
+  const [from, to] = palette[idx];
+  return `linear-gradient(135deg, ${from}, ${to})`;
 }
 
 export function TaskRow({
@@ -95,7 +148,8 @@ export function TaskRow({
   };
 
   const progress = checklistProgress(task);
-  const overdue = task.due_date ? isPastDueCalendarMX(task.due_date) : false;
+  const dueKind = classifyDue(task.due_date);
+  const overdue = dueKind === "overdue";
   const status = statusLabels[task.status];
 
   const commentsCount = (task as any).comments_count;
@@ -173,9 +227,18 @@ export function TaskRow({
             </span>
           )}
           {assigneeName ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              <User className="h-3 w-3" />
-              {assigneeName}
+            <span
+              className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
+              title={assigneeName}
+            >
+              <span
+                className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-semibold uppercase text-white shadow-sm ring-1 ring-border/40"
+                style={{ background: avatarGradient(assigneeName) }}
+                aria-hidden
+              >
+                {initialsOf(assigneeName)}
+              </span>
+              <span className="truncate max-w-[120px]">{assigneeName}</span>
             </span>
           ) : (
             <span className="text-[11px] font-medium text-destructive/70">Sin responsable</span>
@@ -196,19 +259,42 @@ export function TaskRow({
 
         {progress && (
           <div className="mt-2 flex items-center gap-2">
-            <Progress value={progress.pct} className="h-1.5 flex-1 max-w-[160px]" />
+            <div
+              className="relative h-1 w-[80px] overflow-hidden rounded-full bg-muted/60"
+              role="progressbar"
+              aria-valuenow={progress.pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Progreso de subtareas"
+            >
+              <div
+                className="absolute inset-y-0 left-0 rounded-full"
+                style={{
+                  width: `${progress.pct}%`,
+                  background:
+                    "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))",
+                }}
+              />
+            </div>
             <span className="text-[10px] tabular-nums text-muted-foreground">
-              {progress.done}/{progress.total} subtareas
+              {progress.done}/{progress.total} subtareas · {progress.pct}%
             </span>
           </div>
         )}
       </div>
 
       <div className="flex items-center gap-2 shrink-0 self-center">
-        {task.due_date && (
-          <span className={cn("inline-flex items-center gap-1 text-xs", getDateColor(task.due_date))}>
+        {task.due_date && dueKind && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
+              DUE_PILL_STYLES[dueKind],
+            )}
+          >
             <Calendar className="h-3 w-3" />
-            {formatMX(task.due_date, "dd MMM")}
+            {DUE_LABEL[dueKind]
+              ? `${DUE_LABEL[dueKind]} · ${formatMX(task.due_date, "dd MMM")}`
+              : formatMX(task.due_date, "dd MMM")}
           </span>
         )}
         {canDelete && onDelete && (

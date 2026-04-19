@@ -13,7 +13,7 @@ import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
-import { AISummaryCard } from "@/components/shared/AISummaryCard";
+import { TasksAIPanoramaCard } from "@/components/tareas/TasksAIPanoramaCard";
 import { QuickCreateInput } from "@/components/tareas/QuickCreateInput";
 import { TaskStatusTabs, type TaskStatusFilter, type TaskViewMode } from "@/components/tareas/TaskStatusTabs";
 import {
@@ -288,7 +288,8 @@ INSTRUCCIONES:
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
-          variant="minimal"
+          variant="hero"
+          icon={<CheckSquare />}
           title="Tareas"
           description="Gestión de tareas y actividades internas"
           actions={
@@ -325,11 +326,11 @@ INSTRUCCIONES:
           </p>
         </div>
 
-        <AISummaryCard
+        <TasksAIPanoramaCard
+          tasks={tasks}
+          getCelulaLabel={getCelulaLabel}
           cacheKey={`tasks-${user?.id}-${area}`}
           contextPrompt={tasksSummaryPrompt}
-          title="Panorama de tareas — Kawiil AI"
-          ready={!!tasks && tasks.length > 0}
           userId={user?.id}
         />
 
