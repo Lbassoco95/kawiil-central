@@ -285,101 +285,111 @@ const Proyectos = () => {
           </div>
         ) : (
           <div className="space-y-2">
-            {filtered.map((project, i) => (
-              <div
-                key={project.id}
-                className={cn(
-                  "flex items-center gap-4 py-3 px-4 page-list-card cursor-pointer animate-fade-in",
-                  (project as any).delay_category && "bg-warning/[0.03] border-warning/20"
-                )}
-                style={{ animationDelay: `${Math.min(i, 10) * 30}ms`, animationFillMode: "both" }}
-                onClick={() => navigate(`/proyectos/${project.id}`)}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {(project as any).clients?.name ?? "Interno"}
-                    </span>
-                    {selectedArea === "all" && project.area && (
-                      <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
-                        {getAreaLabel(project.area)}
+            {filtered.map((project, i) => {
+              const stats = statsByProject.get(project.id);
+              const pct = project.status === "completado"
+                ? 100
+                : !stats || stats.total === 0
+                  ? 0
+                  : Math.round(((stats.total - stats.pending) / stats.total) * 100);
+              const barColor =
+                project.status === "completado"
+                  ? "bg-green-600"
+                  : project.status === "pausado"
+                    ? "bg-amber-500"
+                    : project.status === "cancelado"
+                      ? "bg-muted-foreground/40"
+                      : "bg-accent";
+              return (
+                <div
+                  key={project.id}
+                  className={cn(
+                    "grid grid-cols-12 gap-4 items-center py-4 px-4 page-list-card cursor-pointer animate-fade-in",
+                    (project as any).delay_category && "bg-warning/[0.03] border-warning/20",
+                  )}
+                  style={{ animationDelay: `${Math.min(i, 10) * 30}ms`, animationFillMode: "both" }}
+                  onClick={() => navigate(`/proyectos/${project.id}`)}
+                >
+                  {/* Col 1-6: cliente + nombre + meta */}
+                  <div className="col-span-12 md:col-span-6 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {(project as any).clients?.name ?? "Interno"}
                       </span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-medium text-foreground truncate">{project.name}</h3>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    {project.responsible_user_id ? (
-                      <span>
-                        Resp.:{" "}
-                        <span className="text-foreground font-medium">
-                          {profileName.get(project.responsible_user_id) ?? "—"}
+                      {selectedArea === "all" && project.area && (
+                        <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
+                          {getAreaLabel(project.area)}
                         </span>
-                      </span>
-                    ) : null}
-                    {project.end_date ? (
-                      <span>
-                        Límite:{" "}
-                        <span className="text-foreground">{formatDateMX(project.end_date)}</span>
-                      </span>
-                    ) : null}
-                    {(() => {
-                      const s = statsByProject.get(project.id);
-                      if (!s || s.total === 0) return <span>Sin tareas</span>;
-                      return (
+                      )}
+                      {(project as any).criticality_level === "critico" && <span title="Crítico" className="text-[10px]">🔴</span>}
+                      {(project as any).criticality_level === "atencion" && <span title="Atención" className="text-[10px]">🟡</span>}
+                    </div>
+                    <h3 className="text-sm font-medium text-foreground truncate">{project.name}</h3>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                      {project.responsible_user_id ? (
+                        <span>
+                          Resp.:{" "}
+                          <span className="text-foreground font-medium">
+                            {profileName.get(project.responsible_user_id) ?? "—"}
+                          </span>
+                        </span>
+                      ) : null}
+                      {project.end_date ? (
+                        <span>
+                          Límite: <span className="text-foreground">{formatDateMX(project.end_date)}</span>
+                        </span>
+                      ) : null}
+                      {!stats || stats.total === 0 ? (
+                        <span>Sin tareas</span>
+                      ) : (
                         <span>
                           Tareas:{" "}
                           <span className="text-foreground font-medium">
-                            {s.pending}/{s.total} pend.
+                            {stats.pending}/{stats.total} pend.
                           </span>
                         </span>
-                      );
-                    })()}
+                      )}
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden max-w-[200px]">
+
+                  {/* Col 7-10: progreso con label */}
+                  <div className="col-span-8 md:col-span-4 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+                      <span className="uppercase tracking-wider">Progreso</span>
+                      <span className="tabular-nums text-foreground">{pct}%</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                       <div
-                        className={cn(
-                          "h-full rounded-full transition-all duration-500",
-                          project.status === "completado"
-                            ? "bg-green-600"
-                            : project.status === "pausado"
-                              ? "bg-amber-500"
-                              : project.status === "cancelado"
-                                ? "bg-muted-foreground/40"
-                                : "bg-accent",
-                        )}
-                        style={{
-                          width: `${
-                            project.status === "completado"
-                              ? 100
-                              : (() => {
-                                  const s = statsByProject.get(project.id);
-                                  if (!s || s.total === 0) return 8;
-                                  return Math.round(((s.total - s.pending) / s.total) * 100);
-                                })()
-                          }%`,
-                        }}
+                        className={cn("h-full rounded-full transition-all duration-500", barColor)}
+                        style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <Badge variant="outline" className={cn("text-[10px] border-0 px-1.5 py-0", STATUS_STYLES[project.status])}>
+                  </div>
+
+                  {/* Col 11-12: status + trash */}
+                  <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-2 shrink-0">
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[10px] border-0 px-1.5 py-0", STATUS_STYLES[project.status])}
+                    >
                       {STATUS_LABELS[project.status]}
                     </Badge>
+                    {isAdminOrManager && (
+                      <button
+                        className="p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
+                        aria-label={`Eliminar ${project.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({ id: project.id, name: project.name });
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {(project as any).criticality_level === "critico" && <span title="Crítico">🔴</span>}
-                  {(project as any).criticality_level === "atencion" && <span title="Atención">🟡</span>}
-                  {isAdminOrManager && (
-                    <button
-                      className="p-1 rounded text-muted-foreground/30 hover:text-destructive transition-colors"
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget({ id: project.id, name: project.name }); }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
