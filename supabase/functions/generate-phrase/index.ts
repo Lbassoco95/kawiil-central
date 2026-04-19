@@ -1,12 +1,54 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+type PhraseModule = "tareas" | "clientes";
+
 type PhraseRequest = {
   force_regenerate?: boolean;
   mood_score?: number | null;
   time_of_day?: "morning" | "afternoon";
   user_id?: string;
+  /** Tareas (default — mantiene compatibilidad con dashboard). */
+  tasks_pending?: number | null;
+  completed_today?: number | null;
+  overdue_count?: number | null;
+  /** Módulo del que se pide la frase. Default `tareas`. */
+  module?: PhraseModule;
+  /** Contexto específico del módulo (e.g. para `clientes`: activos, al_corriente, requieren_atencion, onboarding). */
+  module_context?: Record<string, unknown>;
 };
+
+/** Devuelve la cache key (`time_of_day` extendido) para que módulos distintos no
+ * compartan la misma frase del día sin necesidad de migrar el unique index. */
+function moduleCacheSlot(timeOfDay: "morning" | "afternoon", module: PhraseModule): string {
+  return module === "tareas" ? timeOfDay : `${timeOfDay}-${module}`;
+}
+
+/**
+ * Lista de "citas demasiado obvias" que la IA tiende a repetir cuando hay perfil
+ * cultural disponible. Las bloqueamos para forzar conexión real con preferencias.
+ */
+const GENERIC_QUOTES_BLOCKLIST = [
+  "los problemas no pueden resolverse en el mismo nivel de conciencia en el que fueron creados",
+  "la mejor manera de predecir el futuro es creandolo",
+  "la mejor manera de predecir el futuro es crearlo",
+  "se el cambio que quieres ver en el mundo",
+  "el unico modo de hacer un gran trabajo es amar lo que haces",
+  "la vida es lo que te pasa mientras estas ocupado haciendo otros planes",
+  "no cuentes los dias haz que los dias cuenten",
+  "lo unico que tenemos que temer es al miedo mismo",
+];
+
+/** Campos del cuestionario sobre los que rotamos el foco diario para evitar elegir siempre lo mismo. */
+const PREFERENCE_FOCUS_KEYS = [
+  "personaje_inspirador",
+  "libro_favorito",
+  "musica_artista",
+  "tv_favorita",
+  "valor_importante",
+  "hobby",
+  "motivacion",
+] as const;
 
 const MX_TZ = "America/Mexico_City";
 const DAILY_REFRESH_HOUR = 8;
@@ -112,10 +154,68 @@ function normalizePhrase(value: string): string {
 }
 
 function parsePhrase(rawPhrase: string): string {
-  if (rawPhrase.startsWith("FRASE:")) {
-    return rawPhrase.replace(/^FRASE:\s*/i, "").trim();
+  let cleaned = rawPhrase.trim();
+  if (cleaned.startsWith("FRASE:")) {
+    cleaned = cleaned.replace(/^FRASE:\s*/i, "").trim();
   }
-  return rawPhrase.trim();
+  // Removemos la línea de auditoría "Conecta con: ..." que pedimos al modelo;
+  // sirve solo para forzarlo a anclarse en una preferencia, no se muestra al usuario.
+  cleaned = cleaned.replace(/\n\s*Conecta con:[^\n]*$/i, "").trim();
+  return cleaned;
+}
+
+/**
+ * Selecciona un campo del cuestionario disponible para usar como "foco" del día.
+ * Rotamos por fecha para que la cita no termine siempre apoyándose en el mismo gusto.
+ */
+function pickPreferenceFocus(
+  answers: Record<string, string>,
+  phraseDate: string,
+): { key: string; value: string } | null {
+  const available = PREFERENCE_FOCUS_KEYS.filter((k) => {
+    const v = answers[k];
+    return typeof v === "string" && v.trim().length > 0 && !/no especificado|no leo|no tengo|otro$/i.test(v);
+  });
+  if (available.length === 0) return null;
+  const seed = phraseDate.split("-").reduce((acc, part) => acc + Number(part || 0), 0);
+  const key = available[seed % available.length];
+  return { key, value: answers[key] };
+}
+
+function describeMood(score: number): string {
+  if (score <= 2) return "bajo — necesita apoyo y empatía, evita exigirle más";
+  if (score <= 3) return "neutral — motivar suavemente, sin presión";
+  return "alto — reforzar energía positiva y celebrar";
+}
+
+function buildJourneyContext(payload: PhraseRequest): string {
+  const module: PhraseModule = payload.module === "clientes" ? "clientes" : "tareas";
+
+  if (module === "clientes") {
+    const ctx = (payload.module_context ?? {}) as Record<string, unknown>;
+    const parts: string[] = [];
+    const num = (k: string): number | null => {
+      const v = ctx[k];
+      return typeof v === "number" ? v : null;
+    };
+    const activos = num("activos");
+    const alCorriente = num("al_corriente");
+    const requieren = num("requieren_atencion");
+    const onboarding = num("onboarding");
+    if (activos != null) parts.push(`Clientes activos en cartera: ${activos}`);
+    if (alCorriente != null) parts.push(`Al corriente: ${alCorriente}`);
+    if (requieren != null) parts.push(`Requieren atención: ${requieren}`);
+    if (onboarding != null) parts.push(`Onboarding nuevo este mes: ${onboarding}`);
+    if (parts.length === 0) return "";
+    return `\nCARTERA DE CLIENTES:\n- ${parts.join("\n- ")}\n(Usa este contexto para elegir una cita sobre relaciones, confianza, servicio o atención al cliente. Si hay clientes en alerta, evita citas eufóricas; si todo está al corriente, refuerza el cuidado.)`;
+  }
+
+  const parts: string[] = [];
+  if (payload.tasks_pending != null) parts.push(`Tareas pendientes asignadas: ${payload.tasks_pending}`);
+  if (payload.completed_today != null) parts.push(`Tareas completadas hoy: ${payload.completed_today}`);
+  if (payload.overdue_count != null) parts.push(`Tareas vencidas: ${payload.overdue_count}`);
+  if (parts.length === 0) return "";
+  return `\nJORNADA ACTUAL:\n- ${parts.join("\n- ")}\n(Usa este contexto para ajustar el TONO de la cita: si hay vencidas u overload, evita eufóricas; si hay logros, celebra; si todo está en cero, motiva con suavidad.)`;
 }
 
 serve(async (req) => {
@@ -156,24 +256,41 @@ serve(async (req) => {
     const moodScore = payload.mood_score ?? null;
     const forceRegenerate = payload.force_regenerate ?? false;
     const timeOfDay = payload.time_of_day === "afternoon" ? "afternoon" : "morning";
+    const moduleName: PhraseModule = payload.module === "clientes" ? "clientes" : "tareas";
+    const cacheSlot = moduleCacheSlot(timeOfDay, moduleName);
     const phraseDate = resolvePhraseDateForSchedule(new Date());
 
     if (!forceRegenerate) {
       const { data: existing } = await dbClient
         .from("personalized_phrases")
-        .select("phrase")
+        .select("phrase, created_at")
         .eq("user_id", userId)
         .eq("phrase_date", phraseDate)
-        .eq("time_of_day", timeOfDay)
+        .eq("time_of_day", cacheSlot)
         .maybeSingle();
 
-      if (existing?.phrase) {
+      // Si las preferencias del usuario se actualizaron DESPUÉS de generar la frase
+      // de hoy, la cache está desfasada (caso típico: completó el cuestionario hoy
+      // pero ya se le había generado una frase genérica antes). Forzamos regenerar.
+      const { data: prefMeta } = await dbClient
+        .from("user_preferences")
+        .select("updated_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const prefsAreNewer =
+        !!prefMeta?.updated_at &&
+        !!existing?.created_at &&
+        new Date(prefMeta.updated_at).getTime() > new Date(existing.created_at).getTime();
+
+      if (existing?.phrase && !prefsAreNewer) {
         return new Response(
           JSON.stringify({
             cached: true,
             phrase: existing.phrase,
             phrase_date: phraseDate,
             time_of_day: timeOfDay,
+            module: moduleName,
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -203,14 +320,22 @@ serve(async (req) => {
 
     const firstName = profile?.full_name?.split(" ")[0] || "compañero";
     const answers = (prefs?.answers ?? {}) as Record<string, string>;
+    const hasProfile = Object.keys(answers).length > 0;
 
     const recentPhraseList = (recentPhrases ?? [])
       .map((entry) => entry.phrase)
       .filter(Boolean);
     const recentPhraseSet = new Set(recentPhraseList.map(normalizePhrase));
 
+    // Cuando ya hay perfil cultural, bloqueamos también las citas demasiado obvias
+    // (Einstein de la conciencia, Drucker, Gandhi, etc.) para forzar otra elección.
+    const blockedGeneric = hasProfile ? GENERIC_QUOTES_BLOCKLIST : [];
+    const blockedSet = new Set([...recentPhraseSet, ...blockedGeneric]);
+
+    const focus = hasProfile ? pickPreferenceFocus(answers, phraseDate) : null;
+
     let personalContext = "";
-    if (Object.keys(answers).length > 0) {
+    if (hasProfile) {
       personalContext = `
 PERFIL CULTURAL DEL USUARIO:
 - Género literario favorito: ${answers.libro_genero || "no especificado"}
@@ -224,37 +349,58 @@ PERFIL CULTURAL DEL USUARIO:
 - Tipo de humor: ${answers.humor || "no especificado"}
 - Personaje inspirador: ${answers.personaje_inspirador || "no especificado"}
 - Lugar favorito: ${answers.lugar_favorito || "no especificado"}
-- Valor más importante: ${answers.valor_importante || "no especificado"}
-
-Usa estas preferencias para personalizar la frase con referencias sutiles a sus gustos.`;
+- Valor más importante: ${answers.valor_importante || "no especificado"}`;
     }
 
     const moodContext =
       moodScore != null
-        ? `\nÁNIMO ACTUAL: ${moodScore}/5 (${moodScore <= 2 ? "bajo — necesita apoyo y empatía" : moodScore <= 3 ? "neutral — motivar suavemente" : "alto — reforzar energía positiva"})`
+        ? `\nÁNIMO ACTUAL: ${moodScore}/5 (${describeMood(moodScore)})`
         : "";
 
+    const journeyContext = buildJourneyContext(payload);
+
     const blockedQuotes =
-      recentPhraseList.length > 0
-        ? recentPhraseList.map((phrase, index) => `${index + 1}. ${phrase.replace(/\s+/g, " ").slice(0, 220)}`).join("\n")
+      recentPhraseList.length > 0 || blockedGeneric.length > 0
+        ? [
+            ...recentPhraseList.map((phrase) => phrase.replace(/\s+/g, " ").slice(0, 220)),
+            ...blockedGeneric.map((q) => `(genérica) ${q}`),
+          ]
+            .map((line, idx) => `${idx + 1}. ${line}`)
+            .join("\n")
         : "Sin citas previas recientes.";
 
-    const basePrompt = `Selecciona UNA frase o cita REAL y EXISTENTE que motive a ${firstName}, basándote en sus gustos culturales.
+    const focusInstruction = focus
+      ? `\nPREFERENCIA FOCAL DE HOY: "${focus.value}" (campo: ${focus.key}).
+La cita DEBE estar conectada de forma evidente con esta preferencia: provenir de esa persona/obra/banda, ser un personaje de ese universo, o tratar el tema central que esa preferencia representa para ${firstName}.`
+      : "";
+
+    const moduleInstruction =
+      moduleName === "clientes"
+        ? `\nMÓDULO: Clientes (cartera). La cita debe girar en torno a relaciones humanas, confianza, atención al cliente, servicio, escucha activa o reputación. Evita motivación genérica de productividad.`
+        : "";
+
+    const basePrompt = `Selecciona UNA frase o cita REAL y EXISTENTE para ${firstName}.
 Momento del día: ${timeOfDay === "afternoon" ? "tarde" : "mañana"}.
-Fecha objetivo de frase (CDMX): ${phraseDate}.
-${moodContext}
-${personalContext}
+Fecha objetivo de frase (CDMX): ${phraseDate}.${moodContext}${journeyContext}${moduleInstruction}
+${personalContext}${focusInstruction}
 
 INSTRUCCIONES:
-1. La frase DEBE SER una cita real de un personaje, autor, músico, película, serie, libro o figura pública.
-2. ${Object.keys(answers).length > 0 ? "Elige citas relacionadas con sus gustos." : "Elige una cita célebre motivacional de alguna figura reconocida."}
+1. La frase DEBE SER una cita real, verificable, de un personaje, autor, músico, película, serie, libro o figura pública.
+2. ${
+      hasProfile
+        ? "OBLIGATORIO: ancla la cita en la PREFERENCIA FOCAL DE HOY indicada arriba. Si no encuentras una cita auténtica de esa fuente, usa otra preferencia del PERFIL CULTURAL, NUNCA una cita genérica de motivación universal."
+        : "Elige una cita célebre motivacional de alguna figura reconocida."
+    }
 3. Máximo 2 líneas la cita.
-4. Incluye atribución: quién lo dijo y de dónde viene.
-5. NO inventes frases.
-6. Evita repetir textualmente cualquiera de estas citas recientes:\n${blockedQuotes}
-7. Formato EXACTO:
+4. Incluye atribución completa: quién lo dijo y de dónde viene (obra, álbum, película, entrevista).
+5. NO inventes frases ni atribuciones.
+6. Ajusta el TONO al ánimo y la jornada actual (no celebres si hay overload, no exijas si el ánimo es bajo).
+7. Evita repetir textualmente cualquiera de estas citas (recientes o genéricas vetadas):
+${blockedQuotes}
+8. Formato EXACTO (sin texto adicional fuera de estas líneas):
 FRASE: [la cita textual]
-— [Autor/Personaje], [Fuente/Obra]`;
+— [Autor/Personaje], [Fuente/Obra]
+Conecta con: [campo del perfil que inspiró la elección, o "general" si no hay perfil]`;
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
@@ -332,12 +478,14 @@ FRASE: [la cita textual]
         const attemptPrompt =
           attempt === 0
             ? basePrompt
-            : `${basePrompt}\n\nIMPORTANTE: En tu intento anterior repetiste una cita del historial. Elige otra diferente.`;
+            : `${basePrompt}\n\nIMPORTANTE: En tu intento anterior elegiste una cita repetida o demasiado genérica. Elige otra distinta y, si hay PREFERENCIA FOCAL, ánclala ahí.`;
 
         const rawPhrase = await requestAiPhrase(attemptPrompt);
         const parsedPhrase = parsePhrase(rawPhrase);
+        const normalized = normalizePhrase(parsedPhrase);
 
-        if (!recentPhraseSet.has(normalizePhrase(parsedPhrase))) {
+        const isBlockedGeneric = blockedGeneric.some((g) => normalized.includes(g));
+        if (!blockedSet.has(normalized) && !isBlockedGeneric) {
           phrase = parsedPhrase;
           generated = true;
           break;
@@ -352,7 +500,7 @@ FRASE: [la cita textual]
         /overload/i.test(msg.slice("AI_PROVIDER_ERROR|".length));
       if (overload) {
         const nonRepeatedFallback = FALLBACK_QUOTES.find(
-          (candidate) => !recentPhraseSet.has(normalizePhrase(candidate))
+          (candidate) => !blockedSet.has(normalizePhrase(candidate))
         );
         phrase = nonRepeatedFallback ?? FALLBACK_QUOTES[0] ?? phrase;
         generated = true;
@@ -363,7 +511,7 @@ FRASE: [la cita textual]
 
     if (!generated) {
       const nonRepeatedFallback = FALLBACK_QUOTES.find(
-        (candidate) => !recentPhraseSet.has(normalizePhrase(candidate))
+        (candidate) => !blockedSet.has(normalizePhrase(candidate))
       );
       phrase = nonRepeatedFallback ?? phrase;
     }
@@ -374,7 +522,7 @@ FRASE: [la cita textual]
         organization_id: profile?.organization_id,
         phrase,
         phrase_date: phraseDate,
-        time_of_day: timeOfDay,
+        time_of_day: cacheSlot,
         mood_score: moodScore,
       },
       { onConflict: "user_id,phrase_date,time_of_day" }
@@ -386,6 +534,7 @@ FRASE: [la cita textual]
         phrase,
         phrase_date: phraseDate,
         time_of_day: timeOfDay,
+        module: moduleName,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

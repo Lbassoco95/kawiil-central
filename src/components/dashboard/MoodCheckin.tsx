@@ -102,12 +102,25 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
         reason: null,
       } as any);
       if (error) throw error;
+      return mood;
     },
-    onSuccess: () => {
+    onSuccess: async (mood) => {
       qc.invalidateQueries({ queryKey: ["mood-checkin"] });
       qc.invalidateQueries({ queryKey: ["mood-history"] });
       qc.invalidateQueries({ queryKey: ["mood-streak"] });
       qc.invalidateQueries({ queryKey: ["personal-week-moods"] });
+      qc.invalidateQueries({ queryKey: ["ai-hero-mood"] });
+
+      // Regenera la frase de hoy para que el tono se ajuste al ánimo recién registrado.
+      try {
+        await supabase.functions.invoke("generate-phrase", {
+          body: { time_of_day: timeOfDay, mood_score: mood, force_regenerate: true },
+        });
+      } catch {
+        /* no bloquear el flujo si la regeneración falla */
+      }
+      qc.invalidateQueries({ queryKey: ["ai-hero-phrase"] });
+
       toast.success("Registrado");
       setSelectedMood(null);
     },
