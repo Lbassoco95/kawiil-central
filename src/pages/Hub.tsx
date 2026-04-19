@@ -30,6 +30,9 @@ import {
   Trash2,
   Pin,
   Loader2,
+  Library,
+  Shield,
+  Search,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -37,7 +40,10 @@ import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
 
 export default function Hub() {
   const { isAdminOrManager } = useUserRole();
-  const [tab, setTab] = useState<"procedimientos" | "comunicados">("procedimientos");
+  const [tab, setTab] = useState<"procedimientos" | "comunicados" | "biblioteca" | "admin">(
+    "procedimientos",
+  );
+  const [librarySearch, setLibrarySearch] = useState("");
   const [procedureDialogOpen, setProcedureDialogOpen] = useState(false);
   const [comunicadoDialogOpen, setComunicadoDialogOpen] = useState(false);
   const [procedureTitle, setProcedureTitle] = useState("");
@@ -81,10 +87,14 @@ export default function Hub() {
         />
 
         {/* Tab pills */}
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {[
             { key: "procedimientos" as const, label: "Procedimientos", icon: FileText },
             { key: "comunicados" as const, label: "Comunicados", icon: Megaphone },
+            { key: "biblioteca" as const, label: "Mi biblioteca", icon: Library },
+            ...(isAdminOrManager
+              ? [{ key: "admin" as const, label: "Admin", icon: Shield }]
+              : []),
           ].map((t) => (
             <button
               key={t.key}
@@ -218,6 +228,120 @@ export default function Hub() {
                 ))}
               </div>
             )}
+          </section>
+        )}
+
+        {tab === "biblioteca" && (
+          <section className="space-y-4">
+            <div className="surface-toolbar flex items-center gap-2 p-3">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <input
+                value={librarySearch}
+                onChange={(e) => setLibrarySearch(e.target.value)}
+                placeholder="Buscar en mi biblioteca…"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            {(() => {
+              const q = librarySearch.trim().toLowerCase();
+              const filtered = procedures.filter((p: any) =>
+                !q ||
+                p.title?.toLowerCase().includes(q) ||
+                p.description?.toLowerCase().includes(q),
+              );
+              if (proceduresLoading) {
+                return (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="h-16 animate-pulse rounded-xl bg-secondary/30" />
+                    ))}
+                  </div>
+                );
+              }
+              if (filtered.length === 0) {
+                return (
+                  <div className="py-12 text-center">
+                    <Library className="mx-auto h-8 w-8 text-muted-foreground/40" />
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      {q ? "Sin resultados para tu búsqueda." : "Sin procedimientos guardados."}
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {filtered.map((proc: any) => (
+                    <button
+                      key={proc.id}
+                      type="button"
+                      onClick={() => setSelectedProcedure(proc)}
+                      className="page-list-card flex items-start gap-3 p-4 text-left"
+                    >
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate text-sm font-medium">{proc.title}</h3>
+                        {proc.description && (
+                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                            {proc.description}
+                          </p>
+                        )}
+                        <p className="mt-2 text-[11px] text-muted-foreground">
+                          v{proc.current_version || 1} · {formatMX(proc.updated_at || proc.created_at, "dd MMM yyyy")}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+          </section>
+        )}
+
+        {tab === "admin" && isAdminOrManager && (
+          <section className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="stat-card border-l-[3px] border-l-primary">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Procedimientos publicados
+                </p>
+                <p className="mt-1 text-3xl font-bold tabular-nums">{procedures.length}</p>
+                <Button
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    setTab("procedimientos");
+                    setProcedureDialogOpen(true);
+                  }}
+                >
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  Subir nuevo
+                </Button>
+              </div>
+              <div className="stat-card border-l-[3px] border-l-accent">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Comunicados publicados
+                </p>
+                <p className="mt-1 text-3xl font-bold tabular-nums">{comunicados.length}</p>
+                <Button
+                  size="sm"
+                  className="mt-3"
+                  variant="secondary"
+                  onClick={() => {
+                    setTab("comunicados");
+                    setComunicadoDialogOpen(true);
+                  }}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Nuevo comunicado
+                </Button>
+              </div>
+            </div>
+            <div className="surface-toolbar p-4">
+              <h3 className="text-sm font-semibold">Próximamente</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Métricas de adopción del Hub, asignación por grado y plantillas.
+              </p>
+            </div>
           </section>
         )}
       </div>

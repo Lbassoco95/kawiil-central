@@ -11,21 +11,21 @@ const Dashboard = () => {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Header with toggle */}
-        <div className="surface-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4">
+        {/* Header con toggle (saludo va en el AppTopbar) */}
+        <div className="surface-toolbar flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight gradient-text">Dashboard</h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-1">
+            <h1 className="gradient-text text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1>
+            <p className="mt-1 text-sm text-muted-foreground sm:text-base">
               {view === "personal" ? "Tu espacio personal" : "Vista colaborativa del equipo"}
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {view === "personal" ? <RecordatoriosEntryButton /> : null}
             <div className="flex items-center rounded-full border border-border/40 bg-background/60 p-1 backdrop-blur-sm">
               <button
                 type="button"
                 onClick={() => setView("personal")}
-                className={`px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 ${
                   view === "personal"
                     ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
                     : "text-muted-foreground hover:text-foreground"
@@ -36,7 +36,7 @@ const Dashboard = () => {
               <button
                 type="button"
                 onClick={() => setView("equipo")}
-                className={`px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 ${
                   view === "equipo"
                     ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
                     : "text-muted-foreground hover:text-foreground"

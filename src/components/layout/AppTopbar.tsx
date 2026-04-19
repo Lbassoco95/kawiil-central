@@ -1,0 +1,70 @@
+import { Search } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCurrentProfile, getFirstName, getGreeting } from "@/hooks/useCurrentProfile";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { openCommandPalette } from "@/lib/openCommandPalette";
+import { cn } from "@/lib/utils";
+
+interface AppTopbarProps {
+  isFullWidth?: boolean;
+}
+
+export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
+  const { user } = useAuth();
+  const { data: profile } = useCurrentProfile();
+  const isMobile = useIsMobile();
+
+  const firstName = getFirstName(profile, user?.email);
+  const greeting = getGreeting();
+
+  const isMac =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+  const modKey = isMac ? "⌘" : "Ctrl";
+
+  return (
+    <div
+      className={cn(
+        "sticky top-0 z-30 shrink-0 border-b border-border/50 bg-background/85 backdrop-blur-md",
+        isMobile ? "px-4 pt-12 pb-2" : "px-6 py-2.5",
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center gap-3",
+          isFullWidth ? "w-full max-w-none px-0" : "max-w-7xl mx-auto",
+        )}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            {greeting}
+          </p>
+          <h1 className="truncate text-base font-semibold leading-tight text-foreground sm:text-[15px]">
+            {firstName}
+            <span className="ml-1.5 text-muted-foreground font-normal">·</span>
+            <span className="ml-1.5 font-normal text-muted-foreground">¿qué quieres avanzar hoy?</span>
+          </h1>
+        </div>
+
+        <button
+          type="button"
+          onClick={openCommandPalette}
+          aria-label="Abrir buscador global"
+          className={cn(
+            "group relative inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground transition hover:bg-muted",
+            isMobile ? "h-8 w-8 justify-center px-0" : "min-w-[260px] justify-between",
+          )}
+        >
+          <span className="flex items-center gap-2">
+            <Search className="h-3.5 w-3.5" />
+            {!isMobile && <span>Buscar en Kawiil…</span>}
+          </span>
+          {!isMobile && (
+            <kbd className="ml-2 rounded border border-border/60 bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {modKey}K
+            </kbd>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}

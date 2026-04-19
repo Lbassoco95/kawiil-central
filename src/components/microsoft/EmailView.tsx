@@ -2512,17 +2512,17 @@ function ThreadEmailItem({
   );
 }
 
-/** Tema oscuro según clase `dark` en &lt;html&gt; (shadcn sin ThemeProvider). */
+/** Tema oscuro según atributo `data-theme="dark"` en &lt;html&gt; (next-themes). */
 function useDocumentDarkClass(): boolean {
   const [dark, setDark] = useState(() =>
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+    typeof document !== "undefined" && document.documentElement.dataset.theme === "dark",
   );
   useEffect(() => {
     const el = document.documentElement;
-    const sync = () => setDark(el.classList.contains("dark"));
+    const sync = () => setDark(el.dataset.theme === "dark");
     sync();
     const mo = new MutationObserver(sync);
-    mo.observe(el, { attributes: true, attributeFilter: ["class"] });
+    mo.observe(el, { attributes: true, attributeFilter: ["data-theme"] });
     return () => mo.disconnect();
   }, []);
   return dark;

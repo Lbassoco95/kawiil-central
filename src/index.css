@@ -85,34 +85,35 @@ div[id*="lovable" i] {
     --area-pld: 25 95% 53%;
   }
 
-  .dark {
-    --background: 228 18% 7%;
-    --foreground: 220 14% 92%;
-    --card: 228 16% 10%;
-    --card-foreground: 220 14% 92%;
-    --popover: 228 16% 10%;
-    --popover-foreground: 220 14% 92%;
-    --primary: 210 100% 52%;
+  [data-theme="dark"] {
+    /* Aligned with design_handoff_kawiil_os/designs/colors_and_type.css */
+    --background: 224 20% 8%;
+    --foreground: 220 15% 92%;
+    --card: 224 18% 11%;
+    --card-foreground: 220 15% 92%;
+    --popover: 224 18% 11%;
+    --popover-foreground: 220 15% 92%;
+    --primary: 210 100% 58%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 228 14% 14%;
-    --secondary-foreground: 220 14% 92%;
-    --muted: 228 14% 14%;
-    --muted-foreground: 220 9% 55%;
-    --accent: 157 72% 40%;
+    --secondary: 224 16% 16%;
+    --secondary-foreground: 220 15% 92%;
+    --muted: 224 16% 16%;
+    --muted-foreground: 220 12% 64%;
+    --accent: 157 65% 48%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 62% 30%;
+    --destructive: 0 72% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 228 12% 16%;
-    --input: 228 12% 16%;
-    --ring: 210 100% 47%;
-    --sidebar-background: 228 20% 7%;
-    --sidebar-foreground: 220 14% 60%;
-    --sidebar-primary: 210 100% 52%;
+    --border: 224 14% 20%;
+    --input: 224 14% 20%;
+    --ring: 210 100% 58%;
+    --sidebar-background: 226 24% 6%;
+    --sidebar-foreground: 220 15% 75%;
+    --sidebar-primary: 210 100% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 228 14% 14%;
-    --sidebar-accent-foreground: 220 14% 92%;
-    --sidebar-border: 228 12% 14%;
-    --sidebar-ring: 210 100% 47%;
+    --sidebar-accent: 226 20% 12%;
+    --sidebar-accent-foreground: 220 15% 95%;
+    --sidebar-border: 226 16% 14%;
+    --sidebar-ring: 210 100% 58%;
   }
 }
 
@@ -146,7 +147,7 @@ div[id*="lovable" i] {
     @apply rounded-xl border border-border/60 shadow-sm backdrop-blur-md;
     background: hsl(var(--card) / 0.98);
   }
-  .dark .glass-card {
+  [data-theme="dark"] .glass-card {
     @apply border-border/50 shadow-black/25;
     background: hsl(var(--card) / 0.72);
   }
@@ -162,14 +163,14 @@ div[id*="lovable" i] {
       0 1px 2px rgb(15 23 42 / 0.04),
       0 4px 16px -2px rgb(15 23 42 / 0.07);
   }
-  .dark .surface-toolbar {
+  [data-theme="dark"] .surface-toolbar {
     @apply border-border/60 bg-card/90 shadow-lg;
   }
 
   .surface-glass-subtle {
     @apply rounded-xl border border-border/60 bg-card/95 shadow-sm backdrop-blur-sm;
   }
-  .dark .surface-glass-subtle {
+  [data-theme="dark"] .surface-glass-subtle {
     @apply border-border/50 bg-card/70;
   }
 
@@ -254,7 +255,247 @@ div[id*="lovable" i] {
   .tab-pill-inactive {
     @apply text-muted-foreground hover:text-foreground hover:bg-secondary/60;
   }
+
+  /* ── Status pills (alineadas con design_handoff/colors_and_type.css) ── */
+  .pill { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.125rem 0.5rem; border-radius: 9999px; font-size: 11px; font-weight: 500; line-height: 1.4; }
+  .pill-pendiente  { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+  .pill-progreso   { background: hsl(210 100% 95%); color: hsl(210 100% 30%); }
+  .pill-revision   { background: hsl(48 100% 92%); color: hsl(40 85% 30%); }
+  .pill-completada { background: hsl(142 70% 92%); color: hsl(142 72% 26%); }
+  .pill-cancelada  { background: hsl(0 90% 94%); color: hsl(0 72% 40%); }
 }
+
+/* Pill overrides en modo oscuro */
+[data-theme="dark"] .pill-progreso   { background: hsl(210 70% 18%); color: hsl(210 100% 80%); }
+[data-theme="dark"] .pill-revision   { background: hsl(40 70% 14%); color: hsl(48 95% 75%); }
+[data-theme="dark"] .pill-completada { background: hsl(142 60% 14%); color: hsl(142 70% 70%); }
+[data-theme="dark"] .pill-cancelada  { background: hsl(0 60% 18%); color: hsl(0 90% 82%); }
+
+/* ============================================================================
+   Sidebar v2 — Kawiil OS (rediseño handoff)
+   Variables locales para la sidebar (no afectan al resto de la app).
+   ============================================================================ */
+.kw-sidebar {
+  --sb-bg: #0f1222;
+  --sb-bg-top: #1a1f3a;
+  --sb-bg-bot: #0a0d1c;
+  --sb-fg: rgba(255, 255, 255, 0.88);
+  --sb-fg-dim: rgba(255, 255, 255, 0.58);
+  --sb-fg-faint: rgba(255, 255, 255, 0.35);
+  --sb-border: rgba(255, 255, 255, 0.08);
+  --sb-hover: rgba(255, 255, 255, 0.06);
+  --sb-active-bg: rgba(255, 255, 255, 0.10);
+  --sb-active-fg: #ffffff;
+  --sb-accent: 260 85% 68%;
+  background: linear-gradient(180deg, var(--sb-bg-top) 0%, var(--sb-bg) 40%, var(--sb-bg-bot) 100%);
+  color: var(--sb-fg);
+  border-right: 1px solid var(--sb-border);
+}
+
+[data-theme="dark"] .kw-sidebar {
+  --sb-bg: hsl(var(--sidebar-background));
+  --sb-bg-top: hsl(226 26% 8%);
+  --sb-bg-bot: hsl(226 26% 4%);
+}
+
+.kw-sb-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 10px;
+  margin: 1px 0;
+  border-radius: 8px;
+  color: var(--sb-fg);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background .12s, color .12s;
+}
+.kw-sb-link:hover { background: var(--sb-hover); }
+.kw-sb-link.kw-sb-link-active,
+.kw-sb-link[data-active="true"] {
+  background: var(--sb-active-bg);
+  color: var(--sb-active-fg);
+  font-weight: 600;
+}
+.kw-sb-link.kw-sb-link-active::before,
+.kw-sb-link[data-active="true"]::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background: hsl(var(--item-color, var(--sb-accent)));
+  box-shadow: 0 0 8px hsl(var(--item-color, var(--sb-accent)) / 0.6);
+}
+.kw-sb-link svg.kw-ico {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  color: hsl(var(--item-color, 230 20% 70%));
+}
+.kw-sb-link.kw-sb-link-active svg.kw-ico,
+.kw-sb-link[data-active="true"] svg.kw-ico {
+  color: hsl(var(--item-color, var(--sb-accent)));
+  filter: drop-shadow(0 0 4px hsl(var(--item-color) / 0.4));
+}
+
+/* Color por módulo */
+.kw-sb-link[data-view-link="dashboard"]      { --item-color: 260 85% 68%; }
+.kw-sb-link[data-view-link="tareas"]         { --item-color: 210 85% 60%; }
+.kw-sb-link[data-view-link="proyectos"]      { --item-color: 145 65% 48%; }
+.kw-sb-link[data-view-link="clientes"]       { --item-color:  38 90% 58%; }
+.kw-sb-link[data-view-link="documentos"]     { --item-color: 200 75% 55%; }
+.kw-sb-link[data-view-link="finanzas"]       { --item-color: 145 65% 48%; }
+.kw-sb-link[data-view-link="pipeline"]       { --item-color:  32 85% 56%; }
+.kw-sb-link[data-view-link="conocimiento"]   { --item-color: 180 65% 45%; }
+.kw-sb-link[data-view-link="hub"]            { --item-color:   0 75% 60%; }
+.kw-sb-link[data-view-link="config"]         { --item-color: 230 20% 60%; }
+.kw-sb-link[data-view-link="calendario"]     { --item-color:  14 90% 60%; }
+.kw-sb-link[data-view-link="correo"]         { --item-color: 210 85% 55%; }
+.kw-sb-link[data-view-link="notificaciones"] { --item-color:  38 90% 58%; }
+.kw-sb-link[data-view-link="slack"]          { --item-color: 305 75% 55%; }
+.kw-sb-link[data-view-link="asistente"]      { --item-color: 280 80% 65%; }
+.kw-sb-link[data-view-link="plantillas"]     { --item-color: 200 70% 55%; }
+
+/* Badges */
+.kw-sb-badge {
+  margin-left: auto;
+  background: hsl(0 75% 60%);
+  color: #fff;
+  border-radius: 9999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 18px;
+  text-align: center;
+}
+.kw-sb-badge.ok { background: hsl(142 71% 45%); }
+.kw-sb-badge.ai {
+  background: linear-gradient(135deg, hsl(280 80% 60%), hsl(217 91% 60%));
+  padding: 1px 7px;
+  font-size: 9px;
+  letter-spacing: .4px;
+}
+
+/* Group label */
+.kw-sb-group {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  color: var(--sb-fg-faint);
+  padding: 14px 10px 6px;
+  font-weight: 600;
+}
+
+/* Brand mark */
+.kw-sb-brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, hsl(260 85% 68%), hsl(217 91% 60%) 55%, hsl(38 95% 60%));
+  box-shadow: 0 2px 10px hsl(260 85% 68% / 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  position: relative;
+}
+.kw-sb-brand-mark::after {
+  content: "K";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Search pill */
+.kw-sb-search {
+  width: 100%;
+  background: var(--sb-hover);
+  border: 1px solid var(--sb-border);
+  color: var(--sb-fg);
+  padding: 7px 10px 7px 30px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  outline: none;
+  transition: all .15s;
+  text-align: left;
+}
+.kw-sb-search:hover { background: var(--sb-active-bg); }
+.kw-sb-search::placeholder { color: var(--sb-fg-faint); }
+
+/* Footer dock */
+.kw-sb-weather {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, hsl(210 80% 50% / 0.18), hsl(260 70% 55% / 0.12));
+  border: 1px solid var(--sb-border);
+  position: relative;
+  overflow: hidden;
+}
+.kw-sb-weather::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 80% at 110% -20%, hsl(38 95% 65% / 0.2), transparent 50%);
+  pointer-events: none;
+}
+
+.kw-sb-tz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  background: var(--sb-hover);
+  border: 1px solid var(--sb-border);
+  border-radius: 6px;
+  font-size: 10px;
+  color: var(--sb-fg-dim);
+  font-variant-numeric: tabular-nums;
+  transition: background .12s;
+}
+.kw-sb-tz-chip:hover { background: var(--sb-active-bg); }
+
+/* Collapsed badge dot */
+.kw-sb-link[data-has-badge="true"][data-collapsed="true"]::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: hsl(0 75% 60%);
+  box-shadow: 0 0 0 2px var(--sb-bg);
+}
+
+/* Icon button */
+.kw-sb-iconbtn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--sb-border);
+  background: var(--sb-hover);
+  color: var(--sb-fg-dim);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all .15s;
+}
+.kw-sb-iconbtn:hover { background: var(--sb-active-bg); color: var(--sb-fg); }
 
 /* Mobile responsive overrides */
 @media (max-width: 640px) {

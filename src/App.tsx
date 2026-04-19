@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -13,7 +14,7 @@ import Clientes from "./pages/Clientes";
 import Proyectos from "./pages/Proyectos";
 import Tareas from "./pages/Tareas";
 import Documentos from "./pages/Documentos";
-import Admin from "./pages/Admin";
+import Configuracion from "./pages/Admin";
 import ClienteDetalle from "./pages/ClienteDetalle";
 import ProyectoDetalle from "./pages/ProyectoDetalle";
 import CambiarContrasena from "./pages/CambiarContrasena";
@@ -41,6 +42,13 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <ThemeProvider
+      attribute="data-theme"
+      defaultTheme="light"
+      enableSystem={false}
+      storageKey="kawiil-sb-theme"
+      disableTransitionOnChange
+    >
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -108,13 +116,15 @@ const App = () => (
                 <Route path="settings" element={<PipelineSettings />} />
               </Route>
               <Route path="/contabilidad/plantillas" element={<ProtectedRoute><EmailTemplatesContabilidad /></ProtectedRoute>} />
-              <Route path="/admin" element={<ProtectedRoute><ModuleGate moduleKey="admin"><Admin /></ModuleGate></ProtectedRoute>} />
+              <Route path="/configuracion" element={<ProtectedRoute><ModuleGate moduleKey="admin"><Configuracion /></ModuleGate></ProtectedRoute>} />
+              <Route path="/admin" element={<Navigate to="/configuracion" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
         </BrowserRouter>
       </ErrorBoundary>
     </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 
