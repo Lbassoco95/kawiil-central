@@ -44,6 +44,7 @@ import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { conversationTitle, slackUserDisplayName } from "@/components/slack/slackGrouping";
 import { Bell, Layers, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -1413,11 +1414,61 @@ export default function Comunicacion() {
           />
         </div>
       ) : (
-        <div className="flex flex-1 min-h-[min(480px,70vh)] flex-col items-center justify-center px-6 py-20 text-center">
-          <p className="text-sm font-medium text-foreground">Elige una conversación</p>
-          <p className="text-xs text-muted-foreground mt-2 max-w-sm">
-            Usa la lista a la izquierda{isMobile ? " (botón de menú arriba)" : ""} para abrir un canal o un mensaje directo.
+        <div className="flex flex-1 min-h-[min(480px,70vh)] flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary mb-4">
+            <MessageSquarePlus className="h-7 w-7" />
+          </div>
+          <p className="text-base font-semibold text-foreground">Elige una conversación</p>
+          <p className="text-xs text-muted-foreground mt-1.5 max-w-sm">
+            Usa la lista a la izquierda{isMobile ? " (botón de menú arriba)" : ""} para abrir un canal o un mensaje directo, o crea uno nuevo.
           </p>
+          <div className="flex flex-wrap gap-2 justify-center mt-5">
+            <Button type="button" size="sm" onClick={() => setNewDmOpen(true)}>
+              <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5" />
+              Redactar mensaje directo
+            </Button>
+            {isMobile && (
+              <Button type="button" size="sm" variant="outline" onClick={() => setMobileListOpen(true)}>
+                Abrir canales
+              </Button>
+            )}
+          </div>
+          {(() => {
+            const suggestions = conversations
+              .map((c) => ({ c, unread: displayUnreadByChannel[c.id] || 0 }))
+              .filter((x) => x.unread > 0)
+              .sort((a, b) => b.unread - a.unread)
+              .slice(0, 5);
+            if (suggestions.length === 0) return null;
+            return (
+              <div className="mt-8 w-full max-w-md">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  Pendientes ({suggestions.length})
+                </p>
+                <div className="space-y-1.5">
+                  {suggestions.map(({ c, unread }) => {
+                    const t = conversationTitle(c, userMap, titleOpts);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => selectChannel(c.id)}
+                        className="w-full flex items-center gap-2 rounded-lg border border-border/60 bg-background/60 hover:bg-accent/50 px-3 py-2 text-left transition-colors"
+                      >
+                        <span className="grid h-7 w-7 place-items-center rounded-md bg-primary/10 text-primary text-xs font-semibold">
+                          {c.is_im ? "DM" : c.is_mpim ? "G" : "#"}
+                        </span>
+                        <span className="flex-1 min-w-0 truncate text-sm font-medium text-foreground">{t}</span>
+                        <Badge variant="secondary" className="bg-destructive/15 text-destructive border-0 text-[10px]">
+                          {unread}
+                        </Badge>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </>
