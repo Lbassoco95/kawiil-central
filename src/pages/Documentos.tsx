@@ -21,12 +21,13 @@ import {
   Plus, Search, FileText, Link, ExternalLink, Trash2,
   Eye, Folder, FolderOpen, ChevronLeft, Image,
   FileSpreadsheet, File, FileCode, Loader2, HardDrive, Cloud,
-  FolderPlus, Pencil
+  FolderPlus, Pencil, Clock, Star
 } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { documentsLimits } from "@/lib/fileIntake/limits";
 import { DocumentTile, extensionAccent, inferExtension } from "@/components/documentos/DocumentTile";
 import { DocumentsTreeNav, type TreeNode } from "@/components/documentos/DocumentsTreeNav";
+import { useDocumentFavorites, useToggleDocumentFavorite } from "@/hooks/useDocumentFavorites";
 import { cn } from "@/lib/utils";
 
 // ─── File icon helper ─────────────────────────────────────────
@@ -553,6 +554,8 @@ function OrganizedView({
   onFormOpen,
   currentFolder,
   setCurrentFolder,
+  favorites,
+  onToggleFavorite,
 }: {
   documents: any[] | undefined;
   isLoading: boolean;
@@ -560,6 +563,8 @@ function OrganizedView({
   onFormOpen: () => void;
   currentFolder: string | null;
   setCurrentFolder: (key: string | null) => void;
+  favorites?: Set<string>;
+  onToggleFavorite?: (docId: string, current: boolean) => void;
 }) {
   const [previewDoc, setPreviewDoc] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; source: string; file_path: string | null } | null>(null);
@@ -687,6 +692,8 @@ function OrganizedView({
               doc={doc}
               onPreview={() => setPreviewDoc(doc)}
               onDelete={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })}
+              isFavorite={favorites?.has(doc.id)}
+              onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(doc.id, !!favorites?.has(doc.id)) : undefined}
             />
           ))}
         </div>
@@ -717,6 +724,8 @@ function OrganizedView({
                   doc={doc}
                   onPreview={() => setPreviewDoc(doc)}
                   onDelete={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })}
+                  isFavorite={favorites?.has(doc.id)}
+                  onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(doc.id, !!favorites?.has(doc.id)) : undefined}
                 />
               ))}
             </div>
@@ -741,10 +750,14 @@ function DocumentTileForRow({
   doc,
   onPreview,
   onDelete,
+  isFavorite,
+  onToggleFavorite,
 }: {
   doc: any;
   onPreview: () => void;
   onDelete: () => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }) {
   const ext = inferExtension(doc.name);
   const accent = doc.source === "dropbox" ? "hsl(217 91% 60%)" : extensionAccent(ext);
@@ -755,6 +768,8 @@ function DocumentTileForRow({
       icon={getFileIcon(doc.name, doc.source)}
       accentColor={accent}
       onClick={onPreview}
+      isFavorite={isFavorite}
+      onToggleFavorite={onToggleFavorite}
       meta={
         <>
           {doc.document_type && <span>{doc.document_type}</span>}
@@ -843,6 +858,68 @@ function FileRow({ doc, onPreview, onDelete }: { doc: any; onPreview: () => void
   );
 }
 
+// ─── Flat grid for Recientes / Favoritos ──────────────────────
+function FlatGridView({
+  documents,
+  emptyTitle,
+  emptyDescription,
+  emptyIcon,
+  favorites,
+  onToggleFavorite,
+}: {
+  documents: any[];
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyIcon: React.ReactNode;
+  favorites?: Set<string>;
+  onToggleFavorite?: (docId: string, current: boolean) => void;
+}) {
+  const [previewDoc, setPreviewDoc] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; source: string; file_path: string | null } | null>(null);
+  const deleteDocument = useDeleteDocument();
+
+  if (documents.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border/60 bg-muted/20 px-6 py-12 text-center">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+          {emptyIcon}
+        </div>
+        <p className="text-sm font-medium text-foreground">{emptyTitle}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{emptyDescription}</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {documents.map((doc) => (
+          <DocumentTileForRow
+            key={doc.id}
+            doc={doc}
+            onPreview={() => setPreviewDoc(doc)}
+            onDelete={() => setDeleteTarget({ id: doc.id, source: doc.source, file_path: doc.file_path })}
+            isFavorite={favorites?.has(doc.id)}
+            onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(doc.id, !!favorites?.has(doc.id)) : undefined}
+          />
+        ))}
+      </div>
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={() => { if (deleteTarget) { deleteDocument.mutate(deleteTarget); setDeleteTarget(null); } }}
+        title="Eliminar documento"
+        description="¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer."
+      />
+      <DocumentPreviewDialog
+        open={!!previewDoc}
+        onOpenChange={(o) => { if (!o) setPreviewDoc(null); }}
+        document={previewDoc}
+      />
+    </>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────
 function buildOrganizedTree(documents: any[] | undefined): TreeNode[] {
   const docs = documents || [];
@@ -914,15 +991,37 @@ const Documentos = () => {
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"dropbox" | "organized">("dropbox");
+  const [viewMode, setViewMode] = useState<"dropbox" | "organized" | "recientes" | "favoritos">("dropbox");
   const [organizedFolder, setOrganizedFolder] = useState<string | null>(null);
 
   const { data: documents, isLoading } = useDocuments({ search, source: sourceFilter });
+  const { data: favorites } = useDocumentFavorites();
+  const toggleFavorite = useToggleDocumentFavorite();
+
+  const handleToggleFavorite = (documentId: string, isFavorite: boolean) => {
+    toggleFavorite.mutate({ documentId, isFavorite });
+  };
 
   const tree = useMemo(
     () => (viewMode === "organized" ? buildOrganizedTree(documents) : []),
     [documents, viewMode],
   );
+
+  const recentDocs = useMemo(() => {
+    if (viewMode !== "recientes" || !documents) return [];
+    return [...documents]
+      .sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return tb - ta;
+      })
+      .slice(0, 30);
+  }, [documents, viewMode]);
+
+  const favoriteDocs = useMemo(() => {
+    if (viewMode !== "favoritos" || !documents || !favorites) return [];
+    return documents.filter((d: any) => favorites.has(d.id));
+  }, [documents, favorites, viewMode]);
 
   return (
     <AppLayout>
@@ -933,7 +1032,11 @@ const Documentos = () => {
           description={
             viewMode === "dropbox"
               ? "Explorador de archivos en Dropbox"
-              : "Documentos registrados en la aplicación"
+              : viewMode === "recientes"
+                ? "Últimos 30 documentos por fecha de creación"
+                : viewMode === "favoritos"
+                  ? "Tus documentos marcados con estrella"
+                  : "Documentos registrados en la aplicación"
           }
           icon={<FileText />}
           actions={
@@ -946,22 +1049,37 @@ const Documentos = () => {
 
         {/* View toggle + filters */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap gap-1.5">
             {[
               { key: "dropbox" as const, label: "Dropbox", icon: Cloud },
               { key: "organized" as const, label: "Aplicación", icon: HardDrive },
-            ].map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setViewMode(t.key)}
-                className={`tab-pill inline-flex items-center gap-1.5 ${
-                  viewMode === t.key ? "tab-pill-active" : "tab-pill-inactive"
-                }`}
-              >
-                <t.icon className="h-3 w-3" />
-                {t.label}
-              </button>
-            ))}
+              { key: "recientes" as const, label: "Recientes", icon: Clock },
+              { key: "favoritos" as const, label: "Favoritos", icon: Star },
+            ].map((t) => {
+              const count =
+                t.key === "favoritos"
+                  ? favorites?.size ?? 0
+                  : t.key === "recientes"
+                    ? Math.min(30, documents?.length ?? 0)
+                    : null;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setViewMode(t.key)}
+                  className={`tab-pill inline-flex items-center gap-1.5 ${
+                    viewMode === t.key ? "tab-pill-active" : "tab-pill-inactive"
+                  }`}
+                >
+                  <t.icon className="h-3 w-3" />
+                  {t.label}
+                  {count !== null && count > 0 ? (
+                    <span className="ml-0.5 rounded-full bg-background/60 px-1 text-[10px] font-semibold tabular-nums">
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
 
           {viewMode === "organized" && (
@@ -1005,8 +1123,40 @@ const Documentos = () => {
                 onFormOpen={() => setFormOpen(true)}
                 currentFolder={organizedFolder}
                 setCurrentFolder={setOrganizedFolder}
+                favorites={favorites}
+                onToggleFavorite={handleToggleFavorite}
               />
             </div>
+          </div>
+        ) : viewMode === "recientes" ? (
+          <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">
+            {isLoading ? (
+              <div className="text-center py-12 text-muted-foreground">Cargando...</div>
+            ) : (
+              <FlatGridView
+                documents={recentDocs}
+                emptyTitle="Sin documentos recientes"
+                emptyDescription="Aún no hay documentos registrados en la aplicación."
+                emptyIcon={<Clock className="h-6 w-6" />}
+                favorites={favorites}
+                onToggleFavorite={handleToggleFavorite}
+              />
+            )}
+          </div>
+        ) : viewMode === "favoritos" ? (
+          <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">
+            {isLoading ? (
+              <div className="text-center py-12 text-muted-foreground">Cargando...</div>
+            ) : (
+              <FlatGridView
+                documents={favoriteDocs}
+                emptyTitle="Sin documentos favoritos"
+                emptyDescription="Marca documentos con la estrella para verlos aquí."
+                emptyIcon={<Star className="h-6 w-6" />}
+                favorites={favorites}
+                onToggleFavorite={handleToggleFavorite}
+              />
+            )}
           </div>
         ) : (
           <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">

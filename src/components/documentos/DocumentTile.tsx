@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface DocumentTileProps {
@@ -13,6 +14,9 @@ export interface DocumentTileProps {
   onClick?: () => void;
   trailing?: ReactNode;
   className?: string;
+  /** Si se proporciona, muestra una estrella siempre visible en la esquina superior derecha. */
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
 }
 
 export function inferExtension(name: string): string {
@@ -47,6 +51,8 @@ export function DocumentTile({
   onClick,
   trailing,
   className,
+  isFavorite,
+  onToggleFavorite,
 }: DocumentTileProps) {
   const ext = extension ?? inferExtension(name);
   const accent = accentColor ?? extensionAccent(ext);
@@ -101,6 +107,29 @@ export function DocumentTile({
         <div className="mt-auto flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           {trailing}
         </div>
+      ) : null}
+      {onToggleFavorite ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite();
+          }}
+          className={cn(
+            "absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full transition-all",
+            isFavorite
+              ? "text-amber-500"
+              : "text-muted-foreground/40 hover:text-amber-500 opacity-0 group-hover:opacity-100",
+            isFavorite && "opacity-100",
+          )}
+          aria-label={isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
+          aria-pressed={isFavorite}
+        >
+          <Star
+            className={cn("h-4 w-4", isFavorite && "fill-amber-400")}
+            strokeWidth={isFavorite ? 1.5 : 2}
+          />
+        </button>
       ) : null}
     </div>
   );
