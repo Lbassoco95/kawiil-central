@@ -97,15 +97,10 @@ export function TaskStatusTabs({
             </TooltipTrigger>
             <TooltipContent>Próximamente</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <ToggleGroupItem value="timeline" disabled aria-label="Vista timeline" className="h-8 px-2.5 opacity-50">
-                <GanttChartSquare className="h-3.5 w-3.5" />
-                <span className="ml-1.5 hidden sm:inline text-[11px]">Timeline</span>
-              </ToggleGroupItem>
-            </TooltipTrigger>
-            <TooltipContent>Próximamente</TooltipContent>
-          </Tooltip>
+          <ToggleGroupItem value="timeline" aria-label="Vista timeline" className="h-8 px-2.5 data-[state=on]:bg-muted">
+            <GanttChartSquare className="h-3.5 w-3.5" />
+            <span className="ml-1.5 hidden sm:inline text-[11px]">Timeline</span>
+          </ToggleGroupItem>
         </ToggleGroup>
       </div>
     </TooltipProvider>

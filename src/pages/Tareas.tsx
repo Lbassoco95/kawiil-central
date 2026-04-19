@@ -28,6 +28,7 @@ import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEn
 import { useAuth } from "@/contexts/AuthContext";
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { TaskKanbanBoard } from "@/components/tareas/TaskKanbanBoard";
+import { TaskTimelineView } from "@/components/tareas/TaskTimelineView";
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import {
@@ -69,7 +70,10 @@ const Tareas = () => {
   const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
     if (typeof window === "undefined") return "lista";
     const v = window.localStorage.getItem("kawiil-tareas-view");
-    return (v === "kanban" ? "kanban" : "lista") as TaskViewMode;
+    if (v === "kanban" || v === "timeline" || v === "calendario" || v === "lista") {
+      return v as TaskViewMode;
+    }
+    return "lista";
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -600,6 +604,12 @@ INSTRUCCIONES:
                 areaColorMap={areaColorMap}
                 profileMap={profileMap}
                 getCelulaLabel={getCelulaLabel}
+                onOpen={openTask}
+              />
+            ) : viewMode === "timeline" ? (
+              <TaskTimelineView
+                tasks={filteredOpenTasks}
+                profileMap={profileMap}
                 onOpen={openTask}
               />
             ) : (
