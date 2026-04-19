@@ -19,6 +19,8 @@ import {
   ListChecks,
   Download as DownloadIcon,
 } from "lucide-react";
+// La "frase del día" solo aplica al dashboard personal (tareas).
+// En módulos como Clientes mostramos únicamente el briefing operativo.
 import { cn } from "@/lib/utils";
 import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 
@@ -50,12 +52,8 @@ interface AiHeroGridProps {
   clientes?: AiHeroClientesContext;
 }
 
-const PHRASE_FALLBACK_BY_MODULE: Record<AiHeroModule, string> = {
-  tareas:
-    "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results",
-  clientes:
-    "La confianza se construye en gotas y se pierde en litros.\n— Jean-Paul Sartre, Las palabras",
-};
+const PHRASE_FALLBACK =
+  "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results";
 
 function splitPhrase(raw: string, fallback: string): { quote: string; author: string | null } {
   if (!raw) {
@@ -95,8 +93,8 @@ export function AiHeroGrid({
   const eyebrowDate = today
     .toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short" })
     .replace(/\./g, "");
-  const eyebrow =
-    module === "clientes" ? "Briefing · tu cartera" : `Briefing · ${eyebrowDate}`;
+  const isClientes = module === "clientes";
+  const eyebrow = isClientes ? "Briefing · tu cartera" : `Briefing · ${eyebrowDate}`;
 
   const { timeOfDay, todayYmd } = useMemo(() => {
     const now = nowMX();
@@ -120,56 +118,34 @@ export function AiHeroGrid({
       if (error) throw error;
       return (data as { mood?: number } | null)?.mood ?? null;
     },
-    enabled: !!user && module === "tareas",
+    enabled: !!user && !isClientes,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  const phraseBody = useMemo(() => {
-    if (module === "clientes") {
-      return {
-        module: "clientes" as const,
-        time_of_day: timeOfDay,
-        module_context: {
-          activos: clientes?.activos ?? null,
-          al_corriente: clientes?.alCorriente ?? null,
-          requieren_atencion: clientes?.requierenAtencion ?? null,
-          onboarding: clientes?.onboarding ?? null,
-        },
-      };
-    }
-    return {
+  const phraseBody = useMemo(
+    () => ({
       module: "tareas" as const,
       time_of_day: timeOfDay,
       mood_score: todayMood ?? null,
       tasks_pending: tasksCount,
       completed_today: completedToday,
       overdue_count: overdueCount,
-    };
-  }, [
-    module,
-    timeOfDay,
-    todayMood,
-    tasksCount,
-    completedToday,
-    overdueCount,
-    clientes?.activos,
-    clientes?.alCorriente,
-    clientes?.requierenAtencion,
-    clientes?.onboarding,
-  ]);
+    }),
+    [timeOfDay, todayMood, tasksCount, completedToday, overdueCount],
+  );
 
   const phraseQuery = useQuery({
-    queryKey: ["ai-hero-phrase", module, user?.id, todayYmd, timeOfDay],
+    queryKey: ["ai-hero-phrase", "tareas", user?.id, todayYmd, timeOfDay],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("generate-phrase", {
         body: phraseBody,
       });
       if (error) throw error;
       const payload = data as { phrase?: string } | null;
-      return payload?.phrase || PHRASE_FALLBACK_BY_MODULE[module];
+      return payload?.phrase || PHRASE_FALLBACK;
     },
-    enabled: !!user,
+    enabled: !!user && !isClientes,
     staleTime: 8 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,
@@ -190,15 +166,16 @@ export function AiHeroGrid({
     [navigate],
   );
 
-  const phrase = splitPhrase(
-    phraseQuery.data || PHRASE_FALLBACK_BY_MODULE[module],
-    PHRASE_FALLBACK_BY_MODULE[module],
-  );
-
-  const isClientes = module === "clientes";
+  const phrase = splitPhrase(phraseQuery.data || PHRASE_FALLBACK, PHRASE_FALLBACK);
 
   return (
-    <div className={cn("kw-ai-hero-grid", isClientes && "kw-ai-hero-grid--compact", className)}>
+    <div
+      className={cn(
+        "kw-ai-hero-grid",
+        isClientes && "kw-ai-hero-grid--brief-only",
+        className,
+      )}
+    >
       <div className="kw-ai-card kw-ai-brief">
         <div className="kw-ai-eyebrow">
           {isClientes ? <UsersIcon className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
@@ -309,36 +286,36 @@ export function AiHeroGrid({
         </div>
       </div>
 
-      <div className="kw-ai-right">
-        <div className="kw-ai-card kw-ai-quote">
-          <div className="kw-ai-eyebrow kw-ai-eyebrow-accent">
-            <Quote className="h-3 w-3" />
-            <span>{isClientes ? "Tu frase · clientes" : "Tu frase de hoy"}</span>
+      {!isClientes && (
+        <div className="kw-ai-right">
+          <div className="kw-ai-card kw-ai-quote">
+            <div className="kw-ai-eyebrow kw-ai-eyebrow-accent">
+              <Quote className="h-3 w-3" />
+              <span>Tu frase de hoy</span>
+            </div>
+            <blockquote className="kw-ai-quote-text">
+              «{phrase.quote.replace(/^[«"]|[»"]$/g, "").trim()}»
+            </blockquote>
+            <div className="kw-ai-quote-foot">
+              <span className="truncate">{phrase.author ? `— ${phrase.author}` : "Curada para ti"}</span>
+              <button
+                type="button"
+                onClick={regeneratePhrase}
+                disabled={phraseQuery.isFetching}
+                className="kw-ai-quote-refresh"
+                aria-label="Otra frase"
+                title="Otra frase"
+              >
+                <RotateCw className={cn("h-3 w-3", phraseQuery.isFetching && "animate-spin")} />
+              </button>
+            </div>
           </div>
-          <blockquote className="kw-ai-quote-text">
-            «{phrase.quote.replace(/^[«"]|[»"]$/g, "").trim()}»
-          </blockquote>
-          <div className="kw-ai-quote-foot">
-            <span className="truncate">{phrase.author ? `— ${phrase.author}` : "Curada para ti"}</span>
-            <button
-              type="button"
-              onClick={regeneratePhrase}
-              disabled={phraseQuery.isFetching}
-              className="kw-ai-quote-refresh"
-              aria-label="Otra frase"
-              title="Otra frase"
-            >
-              <RotateCw className={cn("h-3 w-3", phraseQuery.isFetching && "animate-spin")} />
-            </button>
-          </div>
-        </div>
 
-        {!isClientes ? (
           <div className="kw-ai-mood">
             <MoodCheckin userCelula={userCelula ?? null} />
           </div>
-        ) : null}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

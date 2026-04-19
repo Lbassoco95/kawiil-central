@@ -674,22 +674,9 @@ div[id*="lovable" i] {
   .kw-ai-hero-grid { grid-template-columns: 1fr; }
 }
 
-/* Variante compacta: hero AI en módulos sin MoodCheckin (e.g. Clientes).
-   La columna derecha solo tiene la card de la frase, así que la estiramos
-   a 100% de la altura del brief para que ambas se vean balanceadas. */
-.kw-ai-hero-grid--compact { grid-template-columns: 1.5fr 1fr; }
-.kw-ai-hero-grid--compact .kw-ai-right { gap: 0; }
-.kw-ai-hero-grid--compact .kw-ai-quote {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-.kw-ai-hero-grid--compact .kw-ai-quote-text {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  margin-bottom: 12px;
-}
+/* Variante "solo briefing": módulos donde no aplica la frase del día
+   (e.g. Clientes). El briefing toma todo el ancho disponible. */
+.kw-ai-hero-grid--brief-only { grid-template-columns: 1fr; }
 .kw-ai-right { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .kw-ai-card {
   position: relative;
