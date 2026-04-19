@@ -50,6 +50,30 @@ type SortKey = "activity" | "name" | "created_at" | "progress";
 
 const CHUNK = 90;
 
+/**
+ * Devuelve el background del progress bar:
+ * - Override por estado (pausado/cancelado/completado).
+ * - Sin estado especial: gradient por umbrales <33 / 33-66 / >66 (handoff v3).
+ */
+function progressBarBackground(pct: number, status: ProjectStatus): string {
+  if (status === "completado") {
+    return "linear-gradient(90deg, hsl(var(--success)), hsl(var(--priority-low)))";
+  }
+  if (status === "pausado") {
+    return "linear-gradient(90deg, hsl(var(--warning)), hsl(var(--priority-medium)))";
+  }
+  if (status === "cancelado") {
+    return "hsl(var(--muted-foreground) / 0.4)";
+  }
+  if (pct < 33) {
+    return "linear-gradient(90deg, hsl(var(--destructive)), hsl(var(--priority-high)))";
+  }
+  if (pct < 67) {
+    return "linear-gradient(90deg, hsl(var(--priority-medium)), hsl(var(--warning)))";
+  }
+  return "linear-gradient(90deg, hsl(var(--accent)), hsl(var(--success)))";
+}
+
 const Proyectos = () => {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useProjects();
@@ -178,7 +202,8 @@ const Proyectos = () => {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
-          variant="minimal"
+          variant="hero"
+          icon={<FolderKanban />}
           title="Proyectos"
           description="Proyectos por cliente o internos"
           actions={
@@ -292,14 +317,7 @@ const Proyectos = () => {
                 : !stats || stats.total === 0
                   ? 0
                   : Math.round(((stats.total - stats.pending) / stats.total) * 100);
-              const barColor =
-                project.status === "completado"
-                  ? "bg-green-600"
-                  : project.status === "pausado"
-                    ? "bg-amber-500"
-                    : project.status === "cancelado"
-                      ? "bg-muted-foreground/40"
-                      : "bg-accent";
+              const barBackground = progressBarBackground(pct, project.status);
               return (
                 <div
                   key={project.id}
@@ -357,10 +375,10 @@ const Proyectos = () => {
                     <div className="text-[10px] font-semibold tracking-[0.12em] uppercase text-muted-foreground mb-1">
                       Progreso <span className="tabular-nums text-foreground">{pct}%</span>
                     </div>
-                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-1.5 bg-secondary/70 rounded-full overflow-hidden">
                       <div
-                        className={cn("h-full rounded-full transition-all duration-500", barColor)}
-                        style={{ width: `${pct}%` }}
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%`, background: barBackground }}
                       />
                     </div>
                   </div>
