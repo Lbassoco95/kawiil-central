@@ -9,7 +9,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Search, Users, Mail, Trash2, ChevronDown, ChevronRight, Building2, Layers } from "lucide-react";
+import { Plus, Search, Users, Mail, Trash2, ChevronDown, ChevronRight, Building2, Layers, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +25,11 @@ import { useSavioIncomeAccess } from "@/hooks/useSavioIncomeAccess";
 import { useSavioFinanceApiData } from "@/hooks/useSavioFinanceApi";
 import { clientSavioLinkStatus } from "@/lib/clientSavioLink";
 import { avatarGradient } from "@/lib/avatarGradient";
+import { useClientStats } from "@/hooks/useClientStats";
+import { exportClientsCsv } from "@/lib/exportClients";
+import { toast } from "sonner";
+import type { PageHeaderStat } from "@/components/shared/PageHeader";
+import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
@@ -237,20 +242,109 @@ const Clientes = () => {
     });
   };
 
+  const stats = useClientStats();
+
+  const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
+    const totalActivos = stats.activos ?? 0;
+    const subActivos =
+      stats.activosMorales != null && stats.activosFisicas != null
+        ? `${stats.activosMorales} morales · ${stats.activosFisicas} físicas`
+        : undefined;
+    const pctOk =
+      totalActivos > 0 && stats.alCorriente != null
+        ? `${Math.round((stats.alCorriente / totalActivos) * 100)}% de la cartera`
+        : undefined;
+    const ingresosFmt =
+      stats.ingresosMes != null
+        ? new Intl.NumberFormat("es-MX", {
+            style: "currency",
+            currency: "MXN",
+            maximumFractionDigits: 0,
+          }).format(stats.ingresosMes)
+        : null;
+    const facturasSub =
+      stats.facturasEmitidas != null
+        ? `${stats.facturasEmitidas} factura${stats.facturasEmitidas === 1 ? "" : "s"} emitida${stats.facturasEmitidas === 1 ? "" : "s"}`
+        : undefined;
+
+    return [
+      stats.activos != null && {
+        label: "Activos",
+        value: stats.activos,
+        sub: subActivos,
+        tone: "default" as const,
+      },
+      stats.alCorriente != null && {
+        label: "Al corriente",
+        value: stats.alCorriente,
+        sub: pctOk,
+        tone: "success" as const,
+      },
+      stats.requierenAtencion != null && {
+        label: "Requieren atención",
+        value: stats.requierenAtencion,
+        sub: "CSF, 32-D, contrato",
+        tone: "warning" as const,
+      },
+      stats.onboarding != null && {
+        label: "Onboarding",
+        value: stats.onboarding,
+        sub: "Altas nuevas este mes",
+        tone: "primary" as const,
+      },
+      ingresosFmt != null && {
+        label: "Ingresos mes",
+        value: ingresosFmt,
+        sub: facturasSub,
+        tone: "default" as const,
+      },
+    ];
+  }, [stats]);
+
+  const handleExport = () => {
+    if (!filtered.length) {
+      toast.error("Sin clientes que exportar con los filtros actuales.");
+      return;
+    }
+    exportClientsCsv(filtered);
+    toast.success(`Exportados ${filtered.length} cliente${filtered.length === 1 ? "" : "s"} a CSV.`);
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
+          breadcrumb={["Kawiil OS", "Trabajo", "Clientes"]}
           icon={<Users />}
+          iconAccent="linear-gradient(135deg, hsl(340 80% 55%), hsl(15 85% 60%))"
           title="Clientes"
-          description="Gestión de clientes y empresas"
+          description="Tu cartera completa: empresas, personas físicas y prospectos. Conectados con Moffin, Savio y el SAT."
+          stats={heroStats}
           actions={
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Nuevo cliente
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={handleExport}>
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Exportar
+              </Button>
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Nuevo cliente
+              </Button>
+            </>
           }
+        />
+
+        <AiHeroGrid
+          module="clientes"
+          clientes={{
+            activos: stats.activos,
+            alCorriente: stats.alCorriente,
+            requierenAtencion: stats.requierenAtencion,
+            onboarding: stats.onboarding,
+            attentionList: stats.attentionList,
+            onExport: handleExport,
+          }}
         />
 
         <div className="surface-toolbar space-y-3 p-4">
