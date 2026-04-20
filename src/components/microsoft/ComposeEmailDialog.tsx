@@ -4,8 +4,6 @@ import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +14,8 @@ import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection } f
 import { useOrgUsers, type OrgUser } from "@/hooks/useOrgUsers";
 import { useMailDirectoryContacts, useSyncMailDirectory, type MailDirectoryContact } from "@/hooks/useMailDirectory";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, BookUser } from "lucide-react";
+import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, BookUser, Pencil, X, Wand2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   filesToComposerAttachments,
@@ -25,6 +24,12 @@ import {
   type ComposerAttachment,
 } from "@/lib/emailComposer";
 import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
+
+const KAWIIL_AI_GRADIENT = "linear-gradient(135deg, hsl(200 100% 50%), hsl(220 100% 55%))";
+const KAWIIL_AI_HEADER_BG =
+  "linear-gradient(135deg, hsl(220 100% 55%) 0%, hsl(210 100% 45%) 100%)";
+
+type ImproveMode = "improve" | "shorter" | "formal" | "friendly";
 
 export interface ComposeDefaultTemplateContext {
   razon_social?: string;
@@ -200,6 +205,7 @@ export function ComposeEmailDialog({
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [hasAiDraft, setHasAiDraft] = useState(false);
+  const [improveBusy, setImproveBusy] = useState<ImproveMode | null>(null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [keepZips, setKeepZips] = useState(true);
   const lastInstructionRef = useRef("");
@@ -346,6 +352,55 @@ export function ComposeEmailDialog({
     onOpenChange(false);
   };
 
+  const runImproveBody = useCallback(
+    async (mode: ImproveMode) => {
+      const currentHtml = (bodyRef.current || "").trim();
+      if (!currentHtml) {
+        toast.error("Escribe primero un borrador o genera uno con IA");
+        return;
+      }
+      setImproveBusy(mode);
+      try {
+        const { data, error } = await supabase.functions.invoke<{
+          improvedHtml?: string;
+          error?: string;
+          message?: string;
+        }>("email-ai-improve", {
+          body: {
+            bodyHtml: currentHtml,
+            mode,
+            subject: subject.trim(),
+            to: to.trim(),
+            locale: "es",
+          },
+        });
+        if (error) throw new Error(error.message || "Error AI");
+        if (!data || data.error) {
+          throw new Error(data?.message || data?.error || "Sin sugerencia");
+        }
+        const next = (data.improvedHtml || "").trim();
+        if (!next) throw new Error("La IA no devolvió HTML");
+        editorRef.current?.setHtml(next);
+        bodyRef.current = next;
+        setHasAiDraft(true);
+        toast.success(
+          mode === "shorter"
+            ? "Versión más corta lista"
+            : mode === "formal"
+              ? "Versión más formal lista"
+              : mode === "friendly"
+                ? "Versión más amigable lista"
+                : "Borrador mejorado",
+        );
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Error mejorando con IA");
+      } finally {
+        setImproveBusy(null);
+      }
+    },
+    [subject, to],
+  );
+
   const applyAccountingTemplate = useCallback(
     (result: { subject: string; bodyHtml: string }) => {
       setSubject(result.subject);
@@ -382,10 +437,28 @@ export function ComposeEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] w-[min(100vw-1.5rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
-        <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left sm:px-6">
-          <DialogTitle>Nuevo correo</DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        className="flex max-h-[92vh] w-[min(100vw-1.5rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl rounded-2xl border-sky-200/40 dark:border-sky-900/40 [&>button.absolute]:hidden"
+      >
+        <header
+          className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-3 text-white"
+          style={{ background: KAWIIL_AI_HEADER_BG }}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/15 backdrop-blur-sm">
+              <Pencil className="h-3.5 w-3.5" />
+            </span>
+            <p className="truncate text-sm font-semibold">Nuevo mensaje</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-white/90 hover:bg-white/15"
+            onClick={() => onOpenChange(false)}
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
         <div
           className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6"
           onKeyDown={(e) => {
@@ -497,7 +570,7 @@ export function ComposeEmailDialog({
 
             <div className="flex min-h-0 flex-1 flex-col space-y-2">
               {aiPanelOpen && (
-                <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2 shadow-sm shrink-0">
+                <div className="rounded-xl border border-sky-200/60 bg-gradient-to-r from-sky-50 to-blue-50 p-3 space-y-2 shadow-sm shrink-0 dark:border-sky-800/40 dark:from-sky-950/30 dark:to-blue-950/20">
                   <Input
                     placeholder="¿Qué quieres decir? Ej: confirma la reunión del martes"
                     value={aiInstruction}
@@ -517,29 +590,65 @@ export function ComposeEmailDialog({
                       size="sm"
                       disabled={aiLoading}
                       onClick={() => void runAiDraft(aiInstruction)}
-                      className="gap-1.5"
+                      className="gap-1.5 text-white shadow-sm"
+                      style={{ background: KAWIIL_AI_GRADIENT }}
                     >
-                      {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : null}
-                      Generar
+                      {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      Generar borrador
                     </Button>
-                    {hasAiDraft && lastInstructionRef.current ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={aiLoading}
-                        onClick={() => void runAiDraft(lastInstructionRef.current)}
-                        className="gap-1"
-                      >
-                        {aiLoading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                        Regenerar
-                      </Button>
-                    ) : null}
                   </div>
+                </div>
+              )}
+
+              {hasAiDraft && (
+                <div
+                  className={cn(
+                    "shrink-0 flex flex-wrap items-center gap-2 rounded-xl border border-sky-200/60 bg-gradient-to-r from-sky-50 to-blue-50 px-3 py-2 text-[12px] text-sky-800 shadow-sm",
+                    "dark:border-sky-800/40 dark:from-sky-950/30 dark:to-blue-950/20 dark:text-sky-200",
+                  )}
+                >
+                  <span className="inline-flex items-center gap-1.5 text-sky-700 dark:text-sky-300">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Borrador generado por Kawiil AI basado en tu estilo de respuesta
+                  </span>
+                  <span className="text-sky-300">·</span>
+                  {lastInstructionRef.current ? (
+                    <button
+                      type="button"
+                      className="font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+                      disabled={aiLoading}
+                      onClick={() => void runAiDraft(lastInstructionRef.current)}
+                    >
+                      {aiLoading ? "Regenerando…" : "Regenerar"}
+                    </button>
+                  ) : null}
+                  <span className="text-sky-300">·</span>
+                  <button
+                    type="button"
+                    className="font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+                    disabled={!!improveBusy}
+                    onClick={() => void runImproveBody("formal")}
+                  >
+                    {improveBusy === "formal" ? "Aplicando…" : "Más formal"}
+                  </button>
+                  <span className="text-sky-300">·</span>
+                  <button
+                    type="button"
+                    className="font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+                    disabled={!!improveBusy}
+                    onClick={() => void runImproveBody("shorter")}
+                  >
+                    {improveBusy === "shorter" ? "Aplicando…" : "Más corto"}
+                  </button>
+                  <span className="text-sky-300">·</span>
+                  <button
+                    type="button"
+                    className="font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+                    disabled={!!improveBusy}
+                    onClick={() => void runImproveBody("friendly")}
+                  >
+                    {improveBusy === "friendly" ? "Aplicando…" : "Más amigable"}
+                  </button>
                 </div>
               )}
 
@@ -580,18 +689,36 @@ export function ComposeEmailDialog({
           </div>
         </div>
 
-        <div className="flex shrink-0 justify-end gap-2 border-t border-border px-4 py-3 sm:px-6">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-3 sm:px-6">
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-muted-foreground">
             Cancelar
           </Button>
-          <Button onClick={() => void handleSend()} disabled={sendEmail.isPending || !to.trim()}>
-            {sendEmail.isPending ? (
-              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4 mr-1.5" />
-            )}
-            Enviar
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="gap-1.5 text-white shadow-sm hover:opacity-90 disabled:opacity-60"
+              style={{ background: KAWIIL_AI_GRADIENT }}
+              disabled={!!improveBusy || aiLoading}
+              onClick={() => void runImproveBody("improve")}
+              title="Mejorar el cuerpo del correo con Kawiil AI"
+            >
+              {improveBusy === "improve" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+              Mejorar con AI
+            </Button>
+            <Button onClick={() => void handleSend()} disabled={sendEmail.isPending || !to.trim()}>
+              {sendEmail.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 mr-1.5" />
+              )}
+              Enviar
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

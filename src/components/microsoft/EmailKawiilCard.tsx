@@ -51,6 +51,11 @@ interface Props {
   onUseReply?: (body: string) => void;
   /** Atajo a "crear tarea desde correo". */
   onCreateTask?: (suggestedTitle?: string | null) => void;
+  /**
+   * Se llama cuando el resumen ya está disponible. Permite a la vista padre
+   * reusar el resumen (ej. compartir en Slack).
+   */
+  onSummaryReady?: (summary: SummaryResult) => void;
   className?: string;
 }
 
@@ -63,11 +68,13 @@ const TAB_DEFS = [
 type TabId = typeof TAB_DEFS[number]["id"];
 
 const TONE_STYLE: Record<QuickReply["tone"], string> = {
-  professional: "border-violet-200/70 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/30 dark:text-violet-300",
+  professional: "border-blue-200/70 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800/40 dark:bg-blue-950/30 dark:text-blue-300",
   short: "border-sky-200/70 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300",
   affirmative: "border-emerald-200/70 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300",
   declining: "border-amber-200/70 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300",
 };
+
+const KAWIIL_AI_GRADIENT = "linear-gradient(135deg, hsl(200 100% 50%), hsl(220 100% 55%))";
 
 export function EmailKawiilCard({
   emailId,
@@ -79,6 +86,7 @@ export function EmailKawiilCard({
   userName,
   onUseReply,
   onCreateTask,
+  onSummaryReady,
   className,
 }: Props) {
   const [tab, setTab] = useState<TabId>("summary");
@@ -105,17 +113,19 @@ export function EmailKawiilCard({
       if (!data || (data as any).error) {
         throw new Error((data as any)?.message || (data as any)?.error || "Sin resumen");
       }
-      setSummary({
+      const next: SummaryResult = {
         summary: data.summary || "",
         keyPoints: Array.isArray(data.keyPoints) ? data.keyPoints : [],
         suggestedAction: data.suggestedAction ?? null,
-      });
+      };
+      setSummary(next);
+      onSummaryReady?.(next);
     } catch (e) {
       setSummaryError(e instanceof Error ? e.message : "Error desconocido");
     } finally {
       setSummaryLoading(false);
     }
-  }, [subject, senderName, senderEmail, body, thread]);
+  }, [subject, senderName, senderEmail, body, thread, onSummaryReady]);
 
   const fetchQuickReplies = useCallback(async () => {
     setRepliesLoading(true);
@@ -157,16 +167,16 @@ export function EmailKawiilCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50 via-white to-sky-50 shadow-sm",
-        "dark:border-violet-900/40 dark:from-violet-950/30 dark:via-background dark:to-sky-950/20",
+        "rounded-2xl border border-sky-200/60 bg-gradient-to-br from-sky-50 via-white to-blue-50 shadow-sm",
+        "dark:border-sky-900/40 dark:from-sky-950/30 dark:via-background dark:to-blue-950/20",
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-violet-200/50 px-3 py-2 dark:border-violet-900/30">
+      <div className="flex items-center justify-between gap-2 border-b border-sky-200/50 px-3 py-2 dark:border-sky-900/30">
         <div className="flex min-w-0 items-center gap-2">
           <span
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ring-1 ring-violet-300/40"
-            style={{ background: "linear-gradient(135deg, hsl(270 70% 55%), hsl(310 70% 55%))" }}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ring-1 ring-sky-300/40"
+            style={{ background: KAWIIL_AI_GRADIENT }}
           >
             <Sparkles className="h-3.5 w-3.5 text-white" />
           </span>
@@ -197,7 +207,7 @@ export function EmailKawiilCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 border-b border-violet-200/40 px-3 pt-2 dark:border-violet-900/30">
+      <div className="flex items-center gap-1 border-b border-sky-200/40 px-3 pt-2 dark:border-sky-900/30">
         {TAB_DEFS.map((t) => {
           const active = tab === t.id;
           const Icon = t.icon;
@@ -209,7 +219,7 @@ export function EmailKawiilCard({
               className={cn(
                 "flex items-center gap-1.5 rounded-t-md border-b-2 px-2 py-1.5 text-[11px] font-medium transition-colors",
                 active
-                  ? "border-violet-500 text-violet-700 dark:text-violet-300"
+                  ? "border-sky-500 text-sky-700 dark:text-sky-300"
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
@@ -246,7 +256,7 @@ export function EmailKawiilCard({
             <ul className="space-y-1.5">
               {summary.keyPoints.map((kp, idx) => (
                 <li key={idx} className="flex gap-2 text-[13px] leading-relaxed">
-                  <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+                  <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
                   <span>{kp}</span>
                 </li>
               ))}
@@ -276,7 +286,7 @@ export function EmailKawiilCard({
         )}
       </div>
 
-      <div className="border-t border-violet-200/40 px-3 py-2.5 dark:border-violet-900/30">
+      <div className="border-t border-sky-200/40 px-3 py-2.5 dark:border-sky-900/30">
         <div className="mb-1.5 flex items-center justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Respuesta rápida
@@ -327,7 +337,7 @@ export function EmailKawiilCard({
                     className={cn(
                       "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
                       TONE_STYLE[qr.tone],
-                      expanded && "ring-1 ring-offset-1 ring-violet-400/50 dark:ring-offset-background",
+                      expanded && "ring-1 ring-offset-1 ring-sky-400/50 dark:ring-offset-background",
                     )}
                   >
                     {qr.label}
@@ -355,10 +365,7 @@ export function EmailKawiilCard({
                       <Button
                         size="sm"
                         className="h-6 gap-1 text-[11px] text-white shadow-sm"
-                        style={{
-                          background:
-                            "linear-gradient(135deg, hsl(270 70% 55%), hsl(310 70% 55%))",
-                        }}
+                        style={{ background: KAWIIL_AI_GRADIENT }}
                         onClick={() => {
                           onUseReply(qr.body);
                           toast.success("Borrador insertado");

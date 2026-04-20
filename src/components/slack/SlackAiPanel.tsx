@@ -84,7 +84,7 @@ type TabId = typeof TAB_DEFS[number]["id"];
 
 const TONE_STYLE: Record<QuickReply["tone"], string> = {
   professional:
-    "border-violet-200/70 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/30 dark:text-violet-300",
+    "border-blue-200/70 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800/40 dark:bg-blue-950/30 dark:text-blue-300",
   short:
     "border-sky-200/70 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300",
   affirmative:
@@ -92,6 +92,10 @@ const TONE_STYLE: Record<QuickReply["tone"], string> = {
   declining:
     "border-amber-200/70 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300",
 };
+
+const KAWIIL_AI_GRADIENT = "linear-gradient(135deg, hsl(200 100% 50%), hsl(220 100% 55%))";
+const KAWIIL_AI_HEADER_BG =
+  "linear-gradient(135deg, hsl(200 100% 96%) 0%, hsl(220 100% 96%) 100%)";
 
 const MENTION_RE = /<@([UW][A-Z0-9]+)(?:\|[^>]+)?>/g;
 
@@ -308,20 +312,15 @@ export function SlackAiPanel({
         "w-full sm:w-[380px] lg:w-[400px] min-w-0",
       )}
     >
-      {/* Header con gradiente Kawiil AI */}
+      {/* Header con gradiente Kawiil AI (azul) */}
       <div
-        className="shrink-0 flex items-center justify-between border-b border-violet-200/40 dark:border-violet-800/30 px-4 py-3"
-        style={{
-          background:
-            "linear-gradient(135deg, hsl(280 80% 97%) 0%, hsl(220 90% 97%) 100%)",
-        }}
+        className="shrink-0 flex items-center justify-between border-b border-sky-200/40 dark:border-sky-800/30 px-4 py-3"
+        style={{ background: KAWIIL_AI_HEADER_BG }}
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             className="grid h-8 w-8 place-items-center rounded-xl text-white shadow-sm shrink-0"
-            style={{
-              background: "linear-gradient(135deg, hsl(280 70% 55%), hsl(220 90% 55%))",
-            }}
+            style={{ background: KAWIIL_AI_GRADIENT }}
           >
             <Sparkles className="h-4 w-4" />
           </span>
@@ -349,7 +348,7 @@ export function SlackAiPanel({
       <ScrollArea className="flex-1 min-h-0">
         <div className="p-4 space-y-5">
           {/* Tabs */}
-          <div className="rounded-xl border border-violet-200/60 dark:border-violet-800/30 bg-gradient-to-br from-violet-50/80 via-white to-sky-50/60 dark:from-violet-950/20 dark:via-card dark:to-sky-950/20 p-3 shadow-sm">
+          <div className="rounded-xl border border-sky-200/60 dark:border-sky-800/30 bg-gradient-to-br from-sky-50/80 via-white to-blue-50/60 dark:from-sky-950/20 dark:via-card dark:to-blue-950/20 p-3 shadow-sm">
             <div className="flex items-center justify-between mb-2">
               <div className="flex gap-1">
                 {TAB_DEFS.map((tab) => {
@@ -363,8 +362,8 @@ export function SlackAiPanel({
                       className={cn(
                         "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-semibold uppercase tracking-wider transition-colors",
                         active
-                          ? "bg-violet-600 text-white shadow-sm"
-                          : "text-muted-foreground hover:bg-violet-100 dark:hover:bg-violet-900/20",
+                          ? "bg-sky-600 text-white shadow-sm"
+                          : "text-muted-foreground hover:bg-sky-100 dark:hover:bg-sky-900/20",
                       )}
                     >
                       <Icon className="h-3 w-3" />
@@ -435,11 +434,11 @@ export function SlackAiPanel({
             </div>
 
             {summary?.suggestedAction ? (
-              <div className="mt-3 rounded-lg border border-violet-300/40 dark:border-violet-700/40 bg-white/70 dark:bg-violet-950/20 px-3 py-2">
+              <div className="mt-3 rounded-lg border border-sky-300/40 dark:border-sky-700/40 bg-white/70 dark:bg-sky-950/20 px-3 py-2">
                 <div className="flex items-start gap-2">
-                  <ArrowRight className="h-3.5 w-3.5 mt-0.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                  <ArrowRight className="h-3.5 w-3.5 mt-0.5 text-sky-600 dark:text-sky-400 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10.5px] font-semibold uppercase tracking-wider text-violet-700 dark:text-violet-300">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">
                       Acción sugerida
                     </p>
                     <p className="mt-0.5 text-sm text-foreground leading-snug">
@@ -450,7 +449,7 @@ export function SlackAiPanel({
                         type="button"
                         size="sm"
                         variant="ghost"
-                        className="mt-1 h-7 px-2 text-[11px] text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/30"
+                        className="mt-1 h-7 px-2 text-[11px] text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/30"
                         onClick={() => onCreateTask(summary.suggestedAction)}
                       >
                         <Wand2 className="h-3 w-3 mr-1" />

@@ -26,6 +26,9 @@ backups/
 scripts/
 supabase/.temp/
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Deno cache
 .deno/
 .deno_cache/

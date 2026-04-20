@@ -153,7 +153,7 @@ export function SlackChannelHeader({
                 "h-8 px-2.5 gap-1.5 text-[11px] transition-all",
                 aiPanelOpen
                   ? "shadow-sm"
-                  : "border-violet-300/40 dark:border-violet-700/40 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10",
+                  : "border-sky-300/40 dark:border-sky-700/40 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-500/10",
               )}
               onClick={onToggleAiPanel}
               title={aiPanelOpen ? "Cerrar asistente IA del canal" : "Abrir asistente IA del canal"}

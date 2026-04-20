@@ -47,6 +47,9 @@ import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
+const KAWIIL_AI_GRADIENT =
+  "linear-gradient(135deg, hsl(220 100% 55%) 0%, hsl(210 100% 45%) 100%)";
+
 const FALLBACK_SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
   "No sé cómo hacer una declaración anual, ¿me guías?",
@@ -600,10 +603,21 @@ const AsistenteIA = () => {
                 </Button>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Sparkles className="h-5 w-5 shrink-0 text-primary" />
-                    <h1 className="text-lg sm:text-2xl font-bold tracking-tight gradient-text">Kawiil AI</h1>
+                    <span
+                      className="grid h-7 w-7 place-items-center rounded-lg text-white shadow-sm shrink-0"
+                      style={{ background: KAWIIL_AI_GRADIENT }}
+                      aria-hidden
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </span>
+                    <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">
+                      Kawiil <span className="bg-clip-text text-transparent" style={{ backgroundImage: KAWIIL_AI_GRADIENT }}>AI</span>
+                    </h1>
+                    <span className="hidden sm:inline-flex items-center rounded-full border border-blue-200/70 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-300">
+                      v2.4
+                    </span>
                     {activeProject ? (
-                      <span className="text-[10px] sm:text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full flex items-center gap-1 max-w-[min(100%,14rem)] truncate">
+                      <span className="text-[10px] sm:text-xs text-blue-700 bg-blue-50 ring-1 ring-blue-200/70 dark:text-blue-300 dark:bg-blue-950/40 dark:ring-blue-900/40 px-2 py-0.5 rounded-full flex items-center gap-1 max-w-[min(100%,14rem)] truncate">
                         <BrainCircuit className="h-3 w-3 shrink-0" /> <span className="truncate">{activeProject.name}</span>
                       </span>
                     ) : (
@@ -621,7 +635,12 @@ const AsistenteIA = () => {
                     size="sm"
                     variant={showKnowledge ? "secondary" : "ghost"}
                     onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
-                    className="h-8 shrink-0 text-xs gap-1.5 self-start"
+                    className={cn(
+                      "h-8 shrink-0 text-xs gap-1.5 self-start",
+                      showKnowledge
+                        ? "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300"
+                        : "",
+                    )}
                   >
                     {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
                     <span className="hidden sm:inline">Conocimiento</span>
@@ -635,16 +654,19 @@ const AsistenteIA = () => {
           <div className="flex-1 overflow-y-auto px-4 py-6">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full max-w-lg mx-auto">
-                <div className="rounded-2xl bg-primary/5 p-4 mb-6">
+                <div
+                  className="rounded-2xl p-4 mb-6 text-white shadow-lg shadow-blue-500/20"
+                  style={{ background: KAWIIL_AI_GRADIENT }}
+                >
                   {activeProject ? (
-                    <BrainCircuit className="h-8 w-8 text-primary" />
+                    <BrainCircuit className="h-8 w-8" />
                   ) : (
-                    <Sparkles className="h-8 w-8 text-primary" />
+                    <Sparkles className="h-8 w-8" />
                   )}
                 </div>
                 {activeProject ? (
                   <>
-                    <h2 className="text-lg font-bold tracking-tight gradient-text mb-1 text-center">{activeProject.name}</h2>
+                    <h2 className="text-lg font-bold tracking-tight bg-clip-text text-transparent mb-1 text-center" style={{ backgroundImage: KAWIIL_AI_GRADIENT }}>{activeProject.name}</h2>
                     {activeProject.description && (
                       <p className="text-sm text-muted-foreground text-center mb-2">{activeProject.description}</p>
                     )}
@@ -662,13 +684,13 @@ const AsistenteIA = () => {
                   </>
                 ) : (
                   <>
-                    <h2 className="text-lg font-bold tracking-tight gradient-text mb-1 text-center">¿En qué te puedo ayudar?</h2>
+                    <h2 className="text-lg font-bold tracking-tight bg-clip-text text-transparent mb-1 text-center" style={{ backgroundImage: KAWIIL_AI_GRADIENT }}>¿En qué te puedo ayudar?</h2>
                     <p className="text-sm text-muted-foreground text-center mb-6">
                       Puedo ayudarte con redacción de correos, documentos, consultas fiscales y priorización de tareas.
                     </p>
                     {proactiveChatHint && (
-                      <div className="w-full max-w-md mb-6 rounded-xl border border-primary/20 bg-primary/[0.06] px-4 py-3 text-left">
-                        <p className="text-[11px] font-medium text-primary mb-1 flex items-center gap-1">
+                      <div className="w-full max-w-md mb-6 rounded-xl border border-blue-200/70 bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-950/30 dark:to-blue-950/20 dark:border-blue-900/40 px-4 py-3 text-left">
+                        <p className="text-[11px] font-medium text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
                           <Sparkles className="h-3 w-3" /> Sugerencia del día
                         </p>
                         <p className="text-xs text-foreground/90 leading-relaxed">{proactiveChatHint}</p>
@@ -682,9 +704,9 @@ const AsistenteIA = () => {
                       key={`sg-${si}-${s.slice(0, 24)}`}
                       type="button"
                       onClick={() => { setInput(s); textareaRef.current?.focus(); }}
-                      className="group flex items-start gap-2 text-left rounded-xl border border-border/50 bg-card hover:border-primary/40 hover:bg-secondary/30 px-4 py-3 text-[13px] text-foreground transition-colors"
+                      className="group flex items-start gap-2 text-left rounded-xl border border-border/50 bg-card hover:border-blue-300/70 hover:bg-blue-50/40 dark:hover:border-blue-900/50 dark:hover:bg-blue-950/20 px-4 py-3 text-[13px] text-foreground transition-colors"
                     >
-                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary/60 group-hover:text-primary" />
+                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500/70 group-hover:text-blue-600" />
                       <span className="leading-snug">{s}</span>
                     </button>
                   ))}
@@ -709,8 +731,11 @@ const AsistenteIA = () => {
                     <Fragment key={msg.id || `m-${i}`}>
                       {showProgressBeforeAssistant && (
                         <div className="flex gap-3 justify-start">
-                          <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                            <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                          <div
+                            className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-white shadow-sm"
+                            style={{ background: KAWIIL_AI_GRADIENT }}
+                          >
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           </div>
                           <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0" />
                         </div>
@@ -719,8 +744,11 @@ const AsistenteIA = () => {
                         className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
                       >
                         {msg.role === "assistant" && (
-                          <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                            <Sparkles className="h-3.5 w-3.5 text-primary" />
+                          <div
+                            className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-white shadow-sm"
+                            style={{ background: KAWIIL_AI_GRADIENT }}
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
                           </div>
                         )}
                         <div className="flex flex-col min-w-0 max-w-[85%]">
@@ -764,15 +792,21 @@ const AsistenteIA = () => {
                   messages[messages.length - 1]?.role === "user" &&
                   (streamProgressSteps.length > 0 ? (
                     <div className="flex gap-3 justify-start">
-                      <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                      <div
+                        className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 text-white shadow-sm"
+                        style={{ background: KAWIIL_AI_GRADIENT }}
+                      >
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       </div>
                       <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0" />
                     </div>
                   ) : (
                     <div className="flex gap-3">
-                      <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                      <div
+                        className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 text-white shadow-sm"
+                        style={{ background: KAWIIL_AI_GRADIENT }}
+                      >
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       </div>
                       <div className="rounded-2xl bg-secondary/40 px-4 py-3">
                         <div className="flex gap-1">
@@ -847,7 +881,8 @@ const AsistenteIA = () => {
                   size="sm"
                   onClick={handleSend}
                   disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
-                  className="h-[42px] w-[42px] rounded-xl shrink-0"
+                  className="h-[42px] w-[42px] rounded-xl shrink-0 text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                  style={{ background: KAWIIL_AI_GRADIENT }}
                 >
                   {isStreaming ? (
                     <Loader2 className="h-4 w-4 animate-spin" />

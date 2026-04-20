@@ -1444,6 +1444,37 @@ export default function Comunicacion() {
               onRestoreDraft={() => {
                 if (storedDraftForRestore?.text) setDraft(storedDraftForRestore.text);
               }}
+              onImproveWithAi={async (draft, mode) => {
+                const channelType = selectedMeta?.is_im
+                  ? "im"
+                  : selectedMeta?.is_mpim
+                    ? "mpim"
+                    : selectedMeta?.is_private
+                      ? "private"
+                      : "channel";
+                const { data, error } = await supabase.functions.invoke<{
+                  improved?: string;
+                  error?: string;
+                  message?: string;
+                }>("slack-ai-improve", {
+                  body: {
+                    draft,
+                    mode,
+                    channelTitle: headerTitle,
+                    channelType,
+                    userName:
+                      (user?.user_metadata as { full_name?: string } | undefined)?.full_name ||
+                      user?.email ||
+                      "",
+                    locale: "es",
+                  },
+                });
+                if (error) throw new Error(error.message || "Error invocando slack-ai-improve");
+                if (!data || data.error) {
+                  throw new Error(data?.message || data?.error || "Sin sugerencia");
+                }
+                return (data.improved || "").trim();
+              }}
             />
           </div>
           <SlackThreadPanel

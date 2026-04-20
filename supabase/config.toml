@@ -97,3 +97,11 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.slack-ai-quick-reply]
     verify_jwt = true
+  [functions.calendar-ai-summary]
+    verify_jwt = true
+  [functions.slack-ai-improve]
+    verify_jwt = true
+  [functions.email-ai-improve]
+    verify_jwt = true
+  [functions.email-ai-task-suggest]
+    verify_jwt = true

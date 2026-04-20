@@ -3,6 +3,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CalendarView } from "@/components/microsoft/CalendarView";
+import { CalendarKawiilCard } from "@/components/microsoft/CalendarKawiilCard";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection, useCalendarEvents } from "@/hooks/useMicrosoft";
 import { useTasksForCalendar } from "@/hooks/useTasks";
@@ -122,6 +123,63 @@ const Microsoft365Calendario = () => {
     ];
   }, [todayEvents, weekEvents, tasksWithDueInWeek, dueIn48h, nextEvent]);
 
+  const aiEvents = useMemo(() => {
+    return weekEvents
+      .map((e: any) => {
+        const start: string | undefined = e?.start?.dateTime;
+        const end: string | undefined = e?.end?.dateTime;
+        if (!start) return null;
+        const attendees: any[] = Array.isArray(e?.attendees) ? e.attendees : [];
+        const subject: string = e?.subject || "(sin título)";
+        const location: string | null = e?.location?.displayName || null;
+        const isOnline: boolean = Boolean(e?.isOnlineMeeting);
+        const importance: "low" | "normal" | "high" = (e?.importance as "low" | "normal" | "high") || "normal";
+        const categories: string[] = Array.isArray(e?.categories) ? e.categories : [];
+        return {
+          subject,
+          start,
+          end: end ?? null,
+          location,
+          attendeesCount: attendees.length,
+          isOnline,
+          importance,
+          categories,
+        };
+      })
+      .filter(Boolean) as Array<{
+      subject: string;
+      start: string;
+      end: string | null;
+      location: string | null;
+      attendeesCount: number;
+      isOnline: boolean;
+      importance: "low" | "normal" | "high";
+      categories: string[];
+    }>;
+  }, [weekEvents]);
+
+  const aiTasksDue = useMemo(() => {
+    if (!Array.isArray(weekTasks)) return [];
+    return weekTasks
+      .map((t: any) => {
+        const due: string | undefined = t?.due_date || t?.due_at || t?.dueDate;
+        if (!due) return null;
+        return {
+          title: (t?.title || "(sin título)") as string,
+          due,
+          status: (t?.status || undefined) as string | undefined,
+          priority: (t?.priority ?? null) as string | null,
+        };
+      })
+      .filter(Boolean) as Array<{ title: string; due: string; status?: string; priority: string | null }>;
+  }, [weekTasks]);
+
+  const aiPeriodLabel = useMemo(() => {
+    const start = formatMX(new Date(monYmd + "T00:00:00"), "EEE d MMM");
+    const end = formatMX(new Date(sunYmd + "T00:00:00"), "EEE d MMM");
+    return `Semana ${start} – ${end}`;
+  }, [monYmd, sunYmd]);
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -160,6 +218,13 @@ const Microsoft365Calendario = () => {
             title="Calendario"
             description={`Outlook · ${profile?.displayName || profile?.mail || "Conectado"} — sincronizado con Microsoft 365, superpuesto con tareas y vencimientos de Kawiil.`}
             stats={heroStats}
+          />
+          <CalendarKawiilCard
+            scope="week"
+            periodLabel={aiPeriodLabel}
+            events={aiEvents}
+            tasksDue={aiTasksDue}
+            cacheKey={`${monYmd}_${sunYmd}`}
           />
           <div className="min-h-0 flex-1">
             <CalendarView />

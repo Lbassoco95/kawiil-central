@@ -82,6 +82,8 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
+import { SendEmailToSlackDialog } from "./SendEmailToSlackDialog";
+import { MessageSquare } from "lucide-react";
 import { EmailAIAssistant } from "./EmailAIAssistant";
 import { EmailInboxAiPanel } from "./EmailInboxAiPanel";
 import { EmailKawiilCard } from "./EmailKawiilCard";
@@ -345,7 +347,7 @@ const INFERRED_CHIP_STYLES: Record<InferredChipTone, string> = {
   factura: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200/60 dark:border-amber-800/40",
   cliente: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200/60 dark:border-sky-800/40",
   interno: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/40",
-  ai: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200/60 dark:border-violet-800/40",
+  ai: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200/60 dark:border-sky-800/40",
 };
 
 // ─── Date buckets (Hoy · Ayer · Semana pasada · …) ────────────
@@ -420,6 +422,11 @@ export function EmailView() {
   const [emailAction, setEmailAction] = useState<EmailAction>(null);
   const [forwardTo, setForwardTo] = useState("");
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [sendToSlackOpen, setSendToSlackOpen] = useState(false);
+  const [emailAiSummary, setEmailAiSummary] = useState<{
+    summary: string;
+    suggestedAction: string | null;
+  } | null>(null);
   const [showFullAI, setShowFullAI] = useState(false);
   const [quickAIPrompt, setQuickAIPrompt] = useState<string | null>(null);
   const [detailAiPanel, setDetailAiPanel] = useState<null | "summarize" | "translate">(null);
@@ -473,6 +480,7 @@ export function EmailView() {
 
   useEffect(() => {
     if (!selectedEmailId) setListPaneCollapsed(false);
+    setEmailAiSummary(null);
   }, [selectedEmailId]);
 
   const { data: folders = [] } = useMailFolders();
@@ -1298,7 +1306,7 @@ export function EmailView() {
                   {(outlookCategories as any[]).length > 0 && (
                     <div className="mt-2 border-t border-border/50 pt-2">
                       <div className="mb-1 flex items-center gap-1.5 px-2.5">
-                        <Sparkles className="h-3 w-3 text-violet-500" aria-hidden />
+                        <Sparkles className="h-3 w-3 text-sky-500" aria-hidden />
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                           Etiquetas AI
                         </span>
@@ -2122,6 +2130,23 @@ export function EmailView() {
                       Crear tarea desde el correo
                     </TooltipContent>
                   </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        onClick={() => setSendToSlackOpen(true)}
+                        disabled={!emailDetail}
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Enviar a Slack
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             </TooltipProvider>
@@ -2236,6 +2261,9 @@ export function EmailView() {
                         setDraftHtml(safe);
                       }}
                       onCreateTask={() => setCreateTaskOpen(true)}
+                      onSummaryReady={(s) =>
+                        setEmailAiSummary({ summary: s.summary, suggestedAction: s.suggestedAction })
+                      }
                     />
                   </div>
                 )}
@@ -2334,7 +2362,33 @@ export function EmailView() {
         senderName={emailDetail?.from?.emailAddress?.name}
         senderEmail={emailDetail?.from?.emailAddress?.address}
         bodyPreview={emailDetail?.bodyPreview}
+        bodyHtml={
+          emailDetail?.body?.contentType === "html"
+            ? emailDetail?.body?.content
+            : undefined
+        }
+        bodyText={
+          emailDetail?.body?.contentType === "text"
+            ? emailDetail?.body?.content
+            : undefined
+        }
         receivedDate={emailDetail?.receivedDateTime ? formatDistanceToNow(parseISO(emailDetail.receivedDateTime), { addSuffix: true, locale: es }) : undefined}
+        receivedAtISO={emailDetail?.receivedDateTime ?? undefined}
+        aiSummary={emailAiSummary?.summary ?? null}
+        aiSuggestedAction={emailAiSummary?.suggestedAction ?? null}
+      />
+      <SendEmailToSlackDialog
+        open={sendToSlackOpen}
+        onOpenChange={setSendToSlackOpen}
+        subject={emailDetail?.subject ?? ""}
+        senderLabel={
+          emailDetail?.from?.emailAddress?.name ||
+          emailDetail?.from?.emailAddress?.address ||
+          "Remitente desconocido"
+        }
+        webLink={(emailDetail as { webLink?: string | null } | undefined)?.webLink ?? null}
+        aiSummary={emailAiSummary?.summary ?? null}
+        aiSuggestedAction={emailAiSummary?.suggestedAction ?? null}
       />
       {emailAction && selectedEmailId && (
         <ReplyForwardDialog
