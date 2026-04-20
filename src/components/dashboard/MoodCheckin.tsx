@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Heart } from "lucide-react";
-import { nowMX, toDateStringMX } from "@/lib/dateUtils";
+import { getMexicoTimeSlot, nowMX, toDateStringMX } from "@/lib/dateUtils";
 
 const MOODS = [
   { value: 1, emoji: "😞", label: "Difícil" },
@@ -23,25 +23,7 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
   const qc = useQueryClient();
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
 
-  const now = nowMX();
-  const currentHour = now.getHours();
-
-  let timeOfDay: "morning" | "afternoon";
-  let checkDate: string;
-
-  if (currentHour >= 9 && currentHour < 15) {
-    timeOfDay = "morning";
-    checkDate = toDateStringMX(now);
-  } else if (currentHour >= 15) {
-    timeOfDay = "afternoon";
-    checkDate = toDateStringMX(now);
-  } else {
-    timeOfDay = "afternoon";
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    checkDate = toDateStringMX(yesterday);
-  }
-
+  const { timeOfDay, checkDate } = getMexicoTimeSlot();
   const timeLabel = timeOfDay === "morning" ? "mañana" : "tarde";
 
   const { data: existingCheckin } = useQuery({

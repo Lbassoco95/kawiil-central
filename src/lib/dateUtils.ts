@@ -61,6 +61,31 @@ export function toDateStringMX(date?: Date): string {
 }
 
 /**
+ * Slot horario CDMX para mood/frase del día.
+ * Reglas (alineadas entre AiHeroGrid y MoodCheckin):
+ *  - 09:00–14:59 → "morning" del día actual
+ *  - 15:00–08:59 (día siguiente) → "afternoon"
+ *      • antes de 09:00 cae en el "afternoon" del día anterior
+ *        (último slot disponible para registrar / consultar)
+ */
+export function getMexicoTimeSlot(date?: Date): {
+  timeOfDay: "morning" | "afternoon";
+  checkDate: string;
+} {
+  const now = date ?? nowMX();
+  const hour = now.getHours();
+  if (hour >= 9 && hour < 15) {
+    return { timeOfDay: "morning", checkDate: toDateStringMX(now) };
+  }
+  if (hour >= 15) {
+    return { timeOfDay: "afternoon", checkDate: toDateStringMX(now) };
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return { timeOfDay: "afternoon", checkDate: toDateStringMX(yesterday) };
+}
+
+/**
  * Vencimiento por calendario en CDMX (compara solo día, evita desfaces UTC en ISO).
  */
 export function isPastDueCalendarMX(due: string | null | undefined): boolean {

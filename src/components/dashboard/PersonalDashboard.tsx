@@ -25,7 +25,6 @@ import {
   Trash2,
   ArrowRight,
   Sparkles,
-  Clock,
   AlertTriangle,
   CalendarDays,
   CalendarRange,
@@ -142,9 +141,7 @@ export function PersonalDashboard() {
   });
 
   const hasCompletedQuestionnaire = !!userPrefs?.completed_at;
-  const questionnaireDeadline = new Date("2026-03-24T23:59:59-06:00");
-  const showQuestionnaireReminder = !hasCompletedQuestionnaire && today < questionnaireDeadline;
-  const daysLeft = Math.max(0, Math.ceil((questionnaireDeadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+  const showQuestionnaireReminder = !hasCompletedQuestionnaire;
 
   const { data: profile } = useQuery({
     queryKey: ["dashboard-profile", user?.id],
@@ -502,6 +499,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
       {/* AI Hero · briefing + quote + mood — siempre arriba, full-width */}
       <div className="animate-fade-in">
         <AiHeroGrid
+          module="tareas"
           tasksCount={totalPending}
           completedToday={completedToday ?? 0}
           overdueCount={overdueTasks}
@@ -1064,9 +1062,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
                 <p className="text-sm font-medium text-foreground">Kawiil quiere conocerte</p>
                 <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Responde un breve cuestionario para personalizar tu experiencia</p>
                 <div className="flex items-center gap-2 mt-2.5">
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />{daysLeft}d
-                  </span>
                   <Button size="sm" variant="default" className="text-xs h-7" onClick={() => setShowQuestionnaire(true)}>Responder</Button>
                 </div>
               </div>

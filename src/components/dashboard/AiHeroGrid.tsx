@@ -22,7 +22,7 @@ import {
 // La "frase del día" solo aplica al dashboard personal (tareas).
 // En módulos como Clientes mostramos únicamente el briefing operativo.
 import { cn } from "@/lib/utils";
-import { nowMX, toDateStringMX } from "@/lib/dateUtils";
+import { getMexicoTimeSlot } from "@/lib/dateUtils";
 
 export type AiHeroModule = "tareas" | "clientes";
 
@@ -88,7 +88,7 @@ export function AiHeroGrid({
   const today = useMexicoToday();
 
   const firstName = getFirstName(profile, user?.email);
-  const greeting = getGreeting();
+  const greeting = useMemo(() => getGreeting(today), [today]);
 
   const eyebrowDate = today
     .toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short" })
@@ -96,14 +96,9 @@ export function AiHeroGrid({
   const isClientes = module === "clientes";
   const eyebrow = isClientes ? "Briefing · tu cartera" : `Briefing · ${eyebrowDate}`;
 
-  const { timeOfDay, todayYmd } = useMemo(() => {
-    const now = nowMX();
-    const hour = now.getHours();
-    return {
-      timeOfDay: (hour >= 15 ? "afternoon" : "morning") as "morning" | "afternoon",
-      todayYmd: toDateStringMX(now),
-    };
-  }, []);
+  // Recalcular slot al actualizarse `today` (cada minuto / al volver a la pestaña).
+  // Misma regla que `MoodCheckin` para evitar desalineación entre frase y mood.
+  const { timeOfDay, checkDate: todayYmd } = useMemo(() => getMexicoTimeSlot(today), [today]);
 
   const { data: todayMood } = useQuery({
     queryKey: ["ai-hero-mood", user?.id, todayYmd, timeOfDay],

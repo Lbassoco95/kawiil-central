@@ -824,40 +824,6 @@ function DocumentTileForRow({
   );
 }
 
-// ─── File row component (mantenido para retrocompat) ──────────
-function FileRow({ doc, onPreview, onDelete }: { doc: any; onPreview: () => void; onDelete: () => void }) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/30 hover:shadow-sm transition-all duration-150 cursor-pointer group rounded-lg" onClick={onPreview}>
-      <div className="shrink-0">{getFileIcon(doc.name, doc.source)}</div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate text-foreground">{doc.name}</p>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-          {doc.document_type && <span>{doc.document_type}</span>}
-          <span>{formatMX(doc.created_at, "dd MMM yyyy")}</span>
-          {doc.file_size ? <span>{formatFileSize(doc.file_size)}</span> : null}
-          {doc.uploader_profile && <span>{doc.uploader_profile.full_name}</span>}
-        </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary"
-          onClick={(e) => { e.stopPropagation(); onPreview(); }}>
-          <Eye className="h-4 w-4" />
-        </Button>
-        {doc.source === "dropbox" && doc.external_path && (
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary"
-            onClick={(e) => { e.stopPropagation(); window.open(doc.external_path, "_blank"); }}>
-            <ExternalLink className="h-4 w-4" />
-          </Button>
-        )}
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Flat grid for Recientes / Favoritos ──────────────────────
 function FlatGridView({
   documents,

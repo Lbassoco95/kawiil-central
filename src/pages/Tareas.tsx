@@ -227,7 +227,7 @@ const Tareas = () => {
   const tasksSummaryPrompt = useMemo(() => {
     if (!tasks) return "";
     const pending = tasks.filter((t: any) => !isTaskClosedStatus(t.status));
-    const overdue = pending.filter((t: any) => t.due_date && new Date(t.due_date) < new Date());
+    const overdue = pending.filter((t: any) => t.due_date && isPastDueCalendarMX(t.due_date));
     const critical = tasks.filter((t: any) => (t as any).criticality_level === "critico");
     const byPriority: Record<string, number> = {};
     const byArea: Record<string, number> = {};
