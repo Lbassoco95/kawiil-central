@@ -17,7 +17,8 @@ import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
-import { TasksAIPanoramaCard } from "@/components/tareas/TasksAIPanoramaCard";
+import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
+import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { MyTasksSmartGroups } from "@/components/tareas/MyTasksSmartGroups";
 import { QuickCreateInput } from "@/components/tareas/QuickCreateInput";
 import { TaskStatusTabs, type TaskStatusFilter, type TaskViewMode } from "@/components/tareas/TaskStatusTabs";
@@ -58,6 +59,7 @@ const Tareas = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const { data: profile } = useCurrentProfile();
   useTasksRealtime();
   const [area, setArea] = useState(() => searchParams.get("area") || "todas");
   const [search, setSearch] = useState("");
@@ -292,11 +294,17 @@ const Tareas = () => {
 
     const teamPending = openTasks.length;
 
+    const dueThisWeekTeam = (openTasks as any[]).filter((t) => {
+      if (!t.due_date) return false;
+      if (isPastDueCalendarMX(t.due_date)) return false;
+      return t.due_date <= sevenDaysFromTodayYmd;
+    }).length;
+
     return [
       myPending != null && {
-        label: "Mis pendientes",
-        value: myPending,
-        sub: teamPending > 0 ? `${teamPending} de equipo` : "asignadas a mí",
+        label: "En curso",
+        value: teamPending,
+        sub: `${myPending} asignada${myPending === 1 ? "" : "s"} a ti`,
         tone: "default" as const,
       },
       myOverdue != null && {
@@ -304,6 +312,12 @@ const Tareas = () => {
         value: myOverdue,
         sub: myOverdue > 0 ? "atender hoy" : "sin atrasos",
         tone: myOverdue > 0 ? ("warning" as const) : ("default" as const),
+      },
+      {
+        label: "Esta semana",
+        value: dueThisWeekTeam,
+        sub: dueThisWeekTeam > 0 ? "vencen en ≤7 días" : "sin entregas próximas",
+        tone: dueThisWeekTeam > 0 ? ("warning" as const) : ("default" as const),
       },
       completedTodayCount != null && {
         label: "Completadas hoy",
@@ -318,52 +332,7 @@ const Tareas = () => {
         tone: "primary" as const,
       },
     ];
-  }, [myAssignedLoading, myOpenTasks, openTasks.length, reminders, todayYmd, completedTodayCount]);
-
-  const tasksSummaryPrompt = useMemo(() => {
-    if (!tasks) return "";
-    const pending = tasks.filter((t: any) => !isTaskClosedStatus(t.status));
-    const overdue = pending.filter((t: any) => t.due_date && isPastDueCalendarMX(t.due_date));
-    const critical = tasks.filter((t: any) => (t as any).criticality_level === "critico");
-    const byPriority: Record<string, number> = {};
-    const byArea: Record<string, number> = {};
-    pending.forEach((t: any) => {
-      byPriority[t.priority] = (byPriority[t.priority] || 0) + 1;
-      if (t.area) { const lbl = getCelulaLabel(t.area); byArea[lbl] = (byArea[lbl] || 0) + 1; }
-    });
-
-    // Build assigned steps context
-    const overdueSteps = assignedSteps.filter((s) => isPastDueCalendarMX(s.dueDate));
-    const stepsContext = assignedSteps.length > 0 ? `
-PASOS DE PROYECTO ASIGNADOS A MÍ (${assignedSteps.length} total, ${overdueSteps.length} vencidos):
-${assignedSteps.slice(0, 8).map(s => {
-  const isOverdue = isPastDueCalendarMX(s.dueDate);
-  return `  ${isOverdue ? "⚠️" : "📋"} ${s.stepLabel} — Proyecto: ${s.projectName} [${s.sourceLabel}]${s.dueDate ? ` vence: ${s.dueDate}` : ""}${s.isCollaborator ? " (colaborador)" : ""}`;
-}).join("\n")}` : "";
-
-    return `Genera un resumen breve del estado de las tareas del equipo. Español mexicano, tono profesional, emojis.
-
-DATOS:
-- Total tareas visibles: ${tasks.length}
-- Pendientes: ${pending.length}
-- Vencidas: ${overdue.length}
-- Críticas (semáforo rojo): ${critical.length}
-
-POR PRIORIDAD: ${Object.entries(byPriority).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
-POR CÉLULA: ${Object.entries(byArea).map(([k, v]) => `${k}: ${v}`).join(", ") || "—"}
-
-TAREAS VENCIDAS MÁS ANTIGUAS:
-${overdue.slice(0, 5).map((t: any) => `- ${t.title} (${t.priority}, vence: ${t.due_date})`).join("\n") || "Ninguna"}
-${stepsContext}
-
-INSTRUCCIONES:
-1. Resume en 3-4 puntos el panorama de tareas con emojis.
-2. Si hay vencidas, menciona las más urgentes.
-3. Si hay pasos de proyecto asignados, menciona los más importantes y si alguno está vencido.
-4. Si hay críticas, destácalas.
-5. Sugiere por dónde empezar hoy.
-6. Máximo 120 palabras. Usa markdown.`;
-  }, [tasks, assignedSteps, areaLabelMap]);
+  }, [myAssignedLoading, myOpenTasks, openTasks, reminders, todayYmd, completedTodayCount]);
 
   const getDateColor = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -390,8 +359,10 @@ INSTRUCCIONES:
         <PageHeader
           variant="hero"
           icon={<CheckSquare />}
+          breadcrumb={["Kawiil OS", "Trabajo", "Tareas"]}
+          iconAccent="linear-gradient(135deg, hsl(210 95% 55%), hsl(var(--primary)))"
           title="Tareas"
-          description="Gestión de tareas y actividades internas"
+          description="Todo lo que tienes abierto en Kawiil — asignadas, delegadas y compartidas con tu célula."
           stats={heroStats}
           actions={
             <div className="flex flex-wrap items-center gap-2">
@@ -427,12 +398,17 @@ INSTRUCCIONES:
           </p>
         </div>
 
-        <TasksAIPanoramaCard
-          tasks={tasks}
-          getCelulaLabel={getCelulaLabel}
-          cacheKey={`tasks-${user?.id}-${area}`}
-          contextPrompt={tasksSummaryPrompt}
-          userId={user?.id}
+        <AiHeroGrid
+          module="tareas"
+          userCelula={profile?.area ?? null}
+          tasksCount={openTasks.length}
+          completedToday={completedTodayCount ?? 0}
+          overdueCount={
+            (openTasks as any[]).filter(
+              (t) => t.due_date && isPastDueCalendarMX(t.due_date),
+            ).length
+          }
+          remindersCount={reminders.filter((r) => !r.is_completed).length}
         />
 
         <section className="animate-fade-in surface-glass-subtle p-4 ring-1 ring-primary/10">
