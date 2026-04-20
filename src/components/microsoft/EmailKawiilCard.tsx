@@ -30,22 +30,28 @@ async function extractEdgeFunctionError(error: unknown, fallback: string): Promi
           error?: string;
           message?: string;
           detail?: string;
+          status?: number;
         };
         const hint =
           body?.error === "ai_not_configured"
             ? "Falta configurar ANTHROPIC_API_KEY en Edge Functions → Secrets."
             : body?.error === "ai_provider_error"
-              ? "El proveedor de IA (Anthropic) devolvió un error."
+              ? `Anthropic rechazó la petición${body?.status ? ` (HTTP ${body.status})` : ""}.`
               : body?.error === "empty_body"
                 ? "El correo no tiene contenido para resumir."
-                : null;
-        const parts = [
+                : body?.error === "ai_parse_error"
+                  ? "La IA respondió en un formato inesperado."
+                  : null;
+        const pieces = [
           body?.message,
           hint,
           body?.detail,
           body?.error && !hint ? body.error : null,
         ].filter((x): x is string => typeof x === "string" && x.length > 0);
-        if (parts.length > 0) return parts[0];
+        if (pieces.length > 0) {
+          const dedup = Array.from(new Set(pieces));
+          return dedup.join(" · ").slice(0, 500);
+        }
       } catch {
         try {
           const text = await res.clone().text();

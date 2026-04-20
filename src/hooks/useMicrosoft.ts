@@ -222,7 +222,37 @@ export function useBackfillOrgPhotos() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "backfill-org-photos" },
       });
-      if (error) throw error;
+      // Con 4xx/5xx el mensaje de `error` es genérico ("Edge Function returned a non-2xx
+      // status code"). El detalle real viaja en el body JSON, así que lo leemos y lo
+      // re-lanzamos para que el usuario vea la causa (403 permisos, 500 interno, etc.).
+      if (error) {
+        const errBody = await readSupabaseFunctionErrorBody(error);
+        let status: number | undefined;
+        if (error instanceof FunctionsHttpError) {
+          status = error.context?.status;
+        }
+        let detailed = "";
+        if (errBody) {
+          try {
+            const parsed = JSON.parse(errBody) as { error?: unknown; code?: unknown };
+            const code = typeof parsed.code === "string" ? parsed.code : "";
+            const msg = typeof parsed.error === "string" ? parsed.error : "";
+            if (code === "PERMISSION_REQUIRED" && msg) throw new Error(msg);
+            detailed = msg || errBody;
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message) throw parseErr;
+            detailed = errBody;
+          }
+        }
+        if (!detailed && status === 403) {
+          detailed = "No tienes permisos para sincronizar fotos de la organización (solo transformador/referente).";
+        }
+        if (!detailed && status === 401) {
+          detailed = "Sesión no autorizada. Vuelve a iniciar sesión e intenta de nuevo.";
+        }
+        const fallback = String((error as Error)?.message || "Error al invocar microsoft-api");
+        throw new Error(detailed || fallback);
+      }
       if (data?.error) throw new Error(String(data.error));
       return data as BackfillOrgPhotosReport;
     },
@@ -234,9 +264,16 @@ export function useBackfillOrgPhotos() {
       if (report.no_photo) parts.push(`${report.no_photo} sin foto`);
       if (report.failed) parts.push(`${report.failed} con error`);
       toast.success(`Fotos de Microsoft: ${parts.join(", ")} (de ${report.total})`);
+      if (report.failed && report.errors?.length) {
+        const first = report.errors[0];
+        toast.warning(
+          `${report.failed} usuario(s) con error. Primer fallo: ${first.error.slice(0, 140)}`,
+          { duration: 9000 },
+        );
+      }
     },
     onError: (err: Error) => {
-      toast.error("No se pudieron sincronizar las fotos: " + err.message);
+      toast.error("No se pudieron sincronizar las fotos: " + err.message, { duration: 9000 });
     },
   });
 }
