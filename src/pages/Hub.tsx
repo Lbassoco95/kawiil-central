@@ -37,6 +37,8 @@ import {
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
+import { Badge } from "@/components/ui/badge";
+import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 
 export default function Hub() {
   const { isAdminOrManager } = useUserRole();
@@ -105,22 +107,31 @@ export default function Hub() {
           variant="hero"
           breadcrumb={["Kawiil OS", "Conocimiento", "Hub"]}
           icon={<Library />}
+          iconAccent={KAWIIL_AI_GRADIENT}
           title="Hub"
           description="Manuales, procedimientos y comunicados internos"
           stats={heroStats}
           actions={
-            isAdminOrManager ? (
-              <>
-                <Button size="sm" variant="outline" onClick={() => setComunicadoDialogOpen(true)}>
-                  <Megaphone className="mr-1.5 h-3.5 w-3.5" />
-                  Comunicado
-                </Button>
-                <Button size="sm" onClick={() => setProcedureDialogOpen(true)}>
-                  <Upload className="mr-1.5 h-3.5 w-3.5" />
-                  Subir procedimiento
-                </Button>
-              </>
-            ) : null
+            <>
+              <Badge
+                variant="outline"
+                className="hidden sm:inline-flex border-sky-300/70 bg-sky-50/70 text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+              >
+                v2.4
+              </Badge>
+              {isAdminOrManager ? (
+                <>
+                  <Button size="sm" variant="outline" onClick={() => setComunicadoDialogOpen(true)}>
+                    <Megaphone className="mr-1.5 h-3.5 w-3.5" />
+                    Comunicado
+                  </Button>
+                  <Button size="sm" onClick={() => setProcedureDialogOpen(true)}>
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    Subir procedimiento
+                  </Button>
+                </>
+              ) : null}
+            </>
           }
         />
 
@@ -392,11 +403,26 @@ export default function Hub() {
 
       {/* Dialog: Subir procedimiento */}
       <Dialog open={procedureDialogOpen} onOpenChange={setProcedureDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Subir procedimiento</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
+        <DialogContent className="sm:max-w-md overflow-hidden p-0">
+          <div
+            className="flex items-center gap-3 px-5 py-4 text-white"
+            style={{ background: KAWIIL_AI_HEADER_BG }}
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
+              <Upload className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <DialogHeader className="space-y-0">
+                <DialogTitle className="text-white text-[15px] font-semibold">
+                  Subir procedimiento
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-[11.5px] text-white/80">
+                Comparte manuales con el equipo
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4 px-5 pb-5 pt-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Título *</Label>
               <Input value={procedureTitle} onChange={(e) => setProcedureTitle(e.target.value)} placeholder="Ej: Manual de integración" className="h-9 text-sm" />
@@ -420,9 +446,15 @@ export default function Hub() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-5 pb-5">
             <Button variant="outline" size="sm" onClick={() => setProcedureDialogOpen(false)}>Cancelar</Button>
-            <Button size="sm" onClick={handleUploadProcedure} disabled={createProcedure.isPending || !procedureTitle.trim() || !procedureFile}>
+            <Button
+              size="sm"
+              className="text-white hover:opacity-95"
+              style={{ background: KAWIIL_AI_GRADIENT }}
+              onClick={handleUploadProcedure}
+              disabled={createProcedure.isPending || !procedureTitle.trim() || !procedureFile}
+            >
               {createProcedure.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               Subir
             </Button>
@@ -432,11 +464,26 @@ export default function Hub() {
 
       {/* Dialog: Nuevo comunicado */}
       <Dialog open={comunicadoDialogOpen} onOpenChange={setComunicadoDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuevo comunicado</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
+        <DialogContent className="sm:max-w-md overflow-hidden p-0">
+          <div
+            className="flex items-center gap-3 px-5 py-4 text-white"
+            style={{ background: KAWIIL_AI_HEADER_BG }}
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
+              <Megaphone className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <DialogHeader className="space-y-0">
+                <DialogTitle className="text-white text-[15px] font-semibold">
+                  Nuevo comunicado
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-[11.5px] text-white/80">
+                Publica un aviso interno para tu equipo
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4 px-5 pb-5 pt-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Título *</Label>
               <Input value={comunicadoTitle} onChange={(e) => setComunicadoTitle(e.target.value)} placeholder="Asunto" className="h-9 text-sm" />
@@ -450,9 +497,15 @@ export default function Hub() {
               Fijar al inicio
             </label>
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-5 pb-5">
             <Button variant="outline" size="sm" onClick={() => setComunicadoDialogOpen(false)}>Cancelar</Button>
-            <Button size="sm" onClick={handlePublishComunicado} disabled={createComunicado.isPending || !comunicadoTitle.trim()}>
+            <Button
+              size="sm"
+              className="text-white hover:opacity-95"
+              style={{ background: KAWIIL_AI_GRADIENT }}
+              onClick={handlePublishComunicado}
+              disabled={createComunicado.isPending || !comunicadoTitle.trim()}
+            >
               {createComunicado.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               Publicar
             </Button>

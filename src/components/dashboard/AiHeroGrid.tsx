@@ -22,6 +22,7 @@ import {
 // En módulos como Clientes mostramos únicamente el briefing operativo.
 import { cn } from "@/lib/utils";
 import { getMexicoTimeSlot } from "@/lib/dateUtils";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 
 export type AiHeroModule = "tareas" | "clientes";
 
@@ -170,9 +171,17 @@ export function AiHeroGrid({
       )}
     >
       <div className="kw-ai-card kw-ai-brief">
-        <div className="kw-ai-eyebrow">
-          {isClientes ? <UsersIcon className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+        <div className="kw-ai-eyebrow flex items-center gap-2">
+          <span
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-white shadow-sm ring-1 ring-white/20"
+            style={{ background: KAWIIL_AI_GRADIENT }}
+          >
+            {isClientes ? <UsersIcon className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+          </span>
           <span className="capitalize">{eyebrow}</span>
+          <span className="ml-1 rounded-full border border-sky-300/70 bg-sky-50/70 px-1.5 py-[1px] text-[9.5px] font-semibold tracking-wider text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
+            KAWIIL AI · v2.4
+          </span>
         </div>
 
         {isClientes ? (
