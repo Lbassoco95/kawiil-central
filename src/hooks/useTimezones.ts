@@ -111,6 +111,94 @@ export const TIMEZONE_COUNTRIES: TimezoneCountry[] = [
     ],
   },
   {
+    country: "Bolivia",
+    flag: "🇧🇴",
+    cities: [
+      { code: "LPB", city: "La Paz", zone: "America/La_Paz", country: "Bolivia", flag: "🇧🇴" },
+      { code: "SRZ", city: "Santa Cruz", zone: "America/La_Paz", country: "Bolivia", flag: "🇧🇴" },
+      { code: "CBB", city: "Cochabamba", zone: "America/La_Paz", country: "Bolivia", flag: "🇧🇴" },
+      { code: "SRE", city: "Sucre", zone: "America/La_Paz", country: "Bolivia", flag: "🇧🇴" },
+    ],
+  },
+  {
+    country: "Ecuador",
+    flag: "🇪🇨",
+    cities: [
+      { code: "UIO", city: "Quito", zone: "America/Guayaquil", country: "Ecuador", flag: "🇪🇨" },
+      { code: "GYE", city: "Guayaquil", zone: "America/Guayaquil", country: "Ecuador", flag: "🇪🇨" },
+    ],
+  },
+  {
+    country: "Paraguay",
+    flag: "🇵🇾",
+    cities: [
+      { code: "ASU", city: "Asunción", zone: "America/Asuncion", country: "Paraguay", flag: "🇵🇾" },
+    ],
+  },
+  {
+    country: "Uruguay",
+    flag: "🇺🇾",
+    cities: [
+      { code: "MVD", city: "Montevideo", zone: "America/Montevideo", country: "Uruguay", flag: "🇺🇾" },
+    ],
+  },
+  {
+    country: "Venezuela",
+    flag: "🇻🇪",
+    cities: [
+      { code: "CCS", city: "Caracas", zone: "America/Caracas", country: "Venezuela", flag: "🇻🇪" },
+    ],
+  },
+  {
+    country: "República Dominicana",
+    flag: "🇩🇴",
+    cities: [
+      { code: "SDQ", city: "Santo Domingo", zone: "America/Santo_Domingo", country: "República Dominicana", flag: "🇩🇴" },
+    ],
+  },
+  {
+    country: "Guatemala",
+    flag: "🇬🇹",
+    cities: [
+      { code: "GUA", city: "Ciudad de Guatemala", zone: "America/Guatemala", country: "Guatemala", flag: "🇬🇹" },
+    ],
+  },
+  {
+    country: "Honduras",
+    flag: "🇭🇳",
+    cities: [
+      { code: "TGU", city: "Tegucigalpa", zone: "America/Tegucigalpa", country: "Honduras", flag: "🇭🇳" },
+    ],
+  },
+  {
+    country: "El Salvador",
+    flag: "🇸🇻",
+    cities: [
+      { code: "SAL", city: "San Salvador", zone: "America/El_Salvador", country: "El Salvador", flag: "🇸🇻" },
+    ],
+  },
+  {
+    country: "Nicaragua",
+    flag: "🇳🇮",
+    cities: [
+      { code: "MGA", city: "Managua", zone: "America/Managua", country: "Nicaragua", flag: "🇳🇮" },
+    ],
+  },
+  {
+    country: "Cuba",
+    flag: "🇨🇺",
+    cities: [
+      { code: "HAV", city: "La Habana", zone: "America/Havana", country: "Cuba", flag: "🇨🇺" },
+    ],
+  },
+  {
+    country: "Puerto Rico",
+    flag: "🇵🇷",
+    cities: [
+      { code: "SJU", city: "San Juan", zone: "America/Puerto_Rico", country: "Puerto Rico", flag: "🇵🇷" },
+    ],
+  },
+  {
     country: "Brasil",
     flag: "🇧🇷",
     cities: [
