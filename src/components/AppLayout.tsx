@@ -4,6 +4,7 @@ import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
 import { AppTopbar } from "@/components/layout/AppTopbar";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { GlobalCommandPalette } from "@/components/search/GlobalCommandPalette";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
@@ -73,13 +74,14 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
           className={`animate-fade-in ${
             isFullWidth
               ? `w-full max-w-none flex-1 min-h-0 flex flex-col overflow-hidden ${isMobile ? "px-0 pb-0 pt-0" : "px-0 pb-0"}`
-              : `max-w-7xl mx-auto ${isMobile ? "p-4" : "p-6"}`
+              : `max-w-7xl mx-auto ${isMobile ? "px-4 pt-4 pb-24" : "p-6"}`
           }`}
         >
           {children}
         </div>
       </main>
       <FloatingAIChat />
+      {isMobile && !isFullWidth && <MobileBottomNav />}
     </div>
     <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
     <GlobalCommandPalette />

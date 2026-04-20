@@ -1,8 +1,9 @@
-import { Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentProfile, getFirstName, getGreeting } from "@/hooks/useCurrentProfile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { openCommandPalette } from "@/lib/openCommandPalette";
+import { openMobileSidebar } from "@/lib/openMobileSidebar";
 import { cn } from "@/lib/utils";
 import { TopbarWidgets } from "./TopbarWidgets";
 
@@ -26,7 +27,7 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
     <div
       className={cn(
         "sticky top-0 z-30 shrink-0 border-b border-border/50 bg-background/85 backdrop-blur-md",
-        isMobile ? "px-4 pt-12 pb-2" : "px-6 py-2.5",
+        isMobile ? "px-3 py-2" : "px-6 py-2.5",
       )}
     >
       <div
@@ -35,14 +36,28 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
           isFullWidth ? "w-full max-w-none px-0" : "max-w-7xl mx-auto",
         )}
       >
+        {isMobile && (
+          <button
+            type="button"
+            onClick={openMobileSidebar}
+            aria-label="Abrir menú"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+        )}
         <div className="min-w-0 flex-1">
           <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             {greeting}
           </p>
           <h1 className="truncate text-base font-semibold leading-tight text-foreground sm:text-[15px]">
             {firstName}
-            <span className="ml-1.5 text-muted-foreground font-normal">·</span>
-            <span className="ml-1.5 font-normal text-muted-foreground">¿qué quieres avanzar hoy?</span>
+            {!isMobile && (
+              <>
+                <span className="ml-1.5 text-muted-foreground font-normal">·</span>
+                <span className="ml-1.5 font-normal text-muted-foreground">¿qué quieres avanzar hoy?</span>
+              </>
+            )}
           </h1>
         </div>
 

@@ -9,7 +9,6 @@ import {
   Kanban,
   LayoutDashboard,
   Mail,
-  Menu,
   MessageSquare,
   Bell,
   PanelLeftClose,
@@ -21,7 +20,8 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
@@ -31,6 +31,7 @@ import { useSlackChannelNotificationBadges } from "@/hooks/useSlackChannelNotifi
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed";
 import { openCommandPalette } from "@/lib/openCommandPalette";
+import { OPEN_MOBILE_SIDEBAR_EVENT } from "@/lib/openMobileSidebar";
 import { SidebarFooter } from "@/components/sidebar/SidebarFooter";
 import {
   Tooltip,
@@ -360,18 +361,22 @@ export function AppSidebar() {
   const { collapsed, toggle, setCollapsed } = useSidebarCollapsed();
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const onOpen = () => setMobileOpen(true);
+    window.addEventListener(OPEN_MOBILE_SIDEBAR_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_MOBILE_SIDEBAR_EVENT, onOpen);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (mobileOpen) setMobileOpen(false);
+  }, [location.pathname]);
 
   if (isMobile) {
     return (
       <TooltipProvider delayDuration={200}>
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="fixed left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar text-sidebar-foreground shadow-md"
-          aria-label="Abrir menú"
-        >
-          <Menu className="h-4 w-4" />
-        </button>
-
         {mobileOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity"
