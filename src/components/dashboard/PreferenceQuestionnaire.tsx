@@ -149,17 +149,10 @@ export function PreferenceQuestionnaire({ open, onClose, onCompleted }: Props) {
 
       if (error) throw error;
 
-      // Regenera ya la frase de hoy con las nuevas preferencias para sustituir
-      // cualquier cita genérica que la cache pudiera estar sirviendo.
-      const hour = nowMX().getHours();
-      const timeOfDay: "morning" | "afternoon" = hour >= 15 ? "afternoon" : "morning";
-      try {
-        await supabase.functions.invoke("generate-phrase", {
-          body: { time_of_day: timeOfDay, force_regenerate: true },
-        });
-      } catch {
-        /* no bloquear el flujo si la regeneración falla; el front la reintentará */
-      }
+      // No forzamos regeneración aquí: la edge `generate-phrase` detecta
+      // `user_preferences.updated_at` reciente y regenera automáticamente la
+      // próxima vez que el dashboard pida la frase (el invalidate de
+      // `ai-hero-phrase` en PersonalDashboard dispara ese refetch).
 
       toast.success("¡Gracias! Kawiil ahora te conoce mejor 🎉");
       onCompleted();

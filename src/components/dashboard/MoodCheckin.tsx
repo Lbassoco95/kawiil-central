@@ -84,22 +84,16 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
       if (error) throw error;
       return mood;
     },
-    onSuccess: async (mood) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["mood-checkin"] });
       qc.invalidateQueries({ queryKey: ["mood-history"] });
       qc.invalidateQueries({ queryKey: ["mood-streak"] });
       qc.invalidateQueries({ queryKey: ["personal-week-moods"] });
       qc.invalidateQueries({ queryKey: ["ai-hero-mood"] });
 
-      // Regenera la frase de hoy para que el tono se ajuste al ánimo recién registrado.
-      try {
-        await supabase.functions.invoke("generate-phrase", {
-          body: { time_of_day: timeOfDay, mood_score: mood, force_regenerate: true },
-        });
-      } catch {
-        /* no bloquear el flujo si la regeneración falla */
-      }
-      qc.invalidateQueries({ queryKey: ["ai-hero-phrase"] });
+      // La frase del día es del slot (mañana/tarde) y se actualiza únicamente
+      // por el cron `refresh-weekday-phrases` (lun-vie 08:00 y 15:00 CDMX).
+      // El mood recién guardado se considerará en el próximo refresh programado.
 
       toast.success("Registrado");
     },

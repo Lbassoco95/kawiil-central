@@ -32,6 +32,8 @@ import {
   Loader2,
   RefreshCw,
   Mail,
+  ExternalLink,
+  KeyRound,
 } from "lucide-react";
 import { differenceInMinutes } from "date-fns";
 import { nowMX } from "@/lib/dateUtils";
@@ -67,7 +69,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MoffinFielCredentialsSection } from "./MoffinFielCredentialsSection";
 import { MoffinSatCiecSection } from "./MoffinSatCiecSection";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { MOFFIN_USE_SOLUTIONS } from "@/lib/moffinUseSolutions";
@@ -775,7 +776,34 @@ export function AccountingDashboard({
               {MOFFIN_USE_SOLUTIONS ? (
                 <MoffinSatCiecSection clientId={clientId} />
               ) : (
-                <MoffinFielCredentialsSection clientId={clientId} />
+                <div className="rounded-md border border-border/50 bg-muted/20 p-3 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-[11px] font-medium text-foreground">
+                      e.firma (FIEL) y sellos digitales
+                    </span>
+                    {moffinFielStatus?.configured ? (
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        FIEL registrada
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400">
+                        Sin FIEL cargada
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Los certificados SAT se administran desde la ficha del cliente (pestaña General). Ahí se
+                    registran la e.firma y los sellos digitales con su vigencia y avisos automáticos.
+                  </p>
+                  <a
+                    href={`/clientes/${clientId}?tab=general#sat-certificates`}
+                    className="inline-flex items-center gap-1.5 text-[10px] font-medium text-primary hover:underline"
+                  >
+                    Ir a la ficha del cliente
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
               )}
               {!MOFFIN_USE_SOLUTIONS && moffinFielStatus?.configured ? (
                 <div className="space-y-2 max-w-sm">

@@ -13,11 +13,14 @@ const SLUG_DISPLAY_OVERRIDES: Record<string, string> = {
   juicios: "Juicios",
 };
 
-/** Format a célula slug into a user-friendly label */
-export function formatCelulaLabel(slug: string, labelMap?: Record<string, string>): string {
+/** Format a célula slug into a user-friendly label. Null-safe. */
+export function formatCelulaLabel(
+  slug: string | null | undefined,
+  labelMap?: Record<string, string>,
+): string {
+  if (!slug) return "Sin célula";
   if (labelMap && labelMap[slug]) return labelMap[slug];
   if (SLUG_DISPLAY_OVERRIDES[slug]) return SLUG_DISPLAY_OVERRIDES[slug];
-  // Capitalize first letter as last resort
   return slug.charAt(0).toUpperCase() + slug.slice(1).replace(/_/g, " ");
 }
 
@@ -41,8 +44,9 @@ export function useCelulaOptions() {
     celulaLabelMap[c.value] = c.label;
   }
 
-  /** Safe label resolver that never returns raw slugs */
-  const getCelulaLabel = (slug: string) => formatCelulaLabel(slug, celulaLabelMap);
+  /** Safe label resolver that never returns raw slugs. Accepts null/undefined. */
+  const getCelulaLabel = (slug: string | null | undefined) =>
+    formatCelulaLabel(slug, celulaLabelMap);
 
   return { celulaOptions, celulaLabelMap, getCelulaLabel, isLoading };
 }

@@ -10,7 +10,6 @@ import { MoodCheckin } from "@/components/dashboard/MoodCheckin";
 import {
   Sparkles,
   Quote,
-  RotateCw,
   CalendarPlus,
   BarChart3,
   Ban,
@@ -151,14 +150,6 @@ export function AiHeroGrid({
     refetchOnWindowFocus: false,
     retry: 1,
   });
-
-  const regeneratePhrase = useCallback(async () => {
-    if (!user) return;
-    await supabase.functions.invoke("generate-phrase", {
-      body: { ...phraseBody, force_regenerate: true },
-    });
-    await phraseQuery.refetch();
-  }, [user, phraseQuery, phraseBody]);
 
   const goToAssistant = useCallback(
     (prompt: string) => {
@@ -301,16 +292,6 @@ export function AiHeroGrid({
               </blockquote>
               <div className="kw-ai-quote-foot">
                 <span className="truncate">{phrase.author ? `— ${phrase.author}` : "Curada para ti"}</span>
-                <button
-                  type="button"
-                  onClick={regeneratePhrase}
-                  disabled={phraseQuery.isFetching}
-                  className="kw-ai-quote-refresh"
-                  aria-label="Otra frase"
-                  title="Otra frase"
-                >
-                  <RotateCw className={cn("h-3 w-3", phraseQuery.isFetching && "animate-spin")} />
-                </button>
               </div>
             </div>
           )}
