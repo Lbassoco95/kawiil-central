@@ -34,6 +34,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
+import { ProjectDelayPredictorCard } from "@/components/projects/ProjectDelayPredictorCard";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
@@ -411,6 +412,8 @@ const ProyectoDetalle = () => {
             className="relative"
           />
         </div>
+
+        <ProjectDelayPredictorCard project={project} tasks={tasks as any} />
 
         {/* Tab pills */}
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 flex-nowrap">

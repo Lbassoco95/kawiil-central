@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ClientProjectsTab } from "@/components/clients/ClientProjectsTab";
 import { ClientEditDialog } from "@/components/clients/ClientEditDialog";
+import { ClientHealthScoreCard } from "@/components/clients/ClientHealthScoreCard";
 import { ClientSatFiscalSection } from "@/components/clients/ClientSatFiscalSection";
 import { MoffinSatStatusSummary } from "@/components/clients/MoffinSatStatusSummary";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
@@ -252,6 +253,14 @@ const ClienteDetalle = () => {
         {/* General Tab */}
         {tab === "general" && (
           <div className="grid gap-6 md:grid-cols-2 animate-fade-in">
+            <div className="md:col-span-2">
+              <ClientHealthScoreCard
+                client={client}
+                projects={projects}
+                tasks={tasks}
+                documents={documents as any}
+              />
+            </div>
             <MoffinSatStatusSummary clientId={client.id} className="glass-card md:col-span-2" />
 
             <section className="glass-card p-5">
