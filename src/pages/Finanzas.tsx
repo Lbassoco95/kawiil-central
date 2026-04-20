@@ -18,6 +18,7 @@ import { ExpenseTable } from "@/components/finanzas/ExpenseTable";
 import { ExpenseReviewDialog } from "@/components/finanzas/ExpenseReviewDialog";
 import { SavioFinanceDashboard } from "@/components/finanzas/SavioFinanceDashboard";
 import { FinanceExecutiveSummary } from "@/components/finanzas/FinanceExecutiveSummary";
+import { FinanceCashflowAlerts } from "@/components/finanzas/FinanceCashflowAlerts";
 import { FinanceIntelligenceBoards } from "@/components/finanzas/FinanceIntelligenceBoards";
 import { KpiTile } from "@/components/finanzas/KpiTile";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
@@ -353,7 +354,15 @@ export default function Finanzas() {
               </TabsList>
               </div>
 
-              <TabsContent value="resumen" className="mt-0">
+              <TabsContent value="resumen" className="mt-0 space-y-4">
+                <FinanceCashflowAlerts
+                  expenses={expenses}
+                  kpis={financeData.kpis}
+                  trendBars={financeData.trendBars}
+                  savioEnabled
+                  onGoToSavio={() => setFinanceTab("savio")}
+                  onGoToGastos={() => setFinanceTab("gastos")}
+                />
                 <FinanceExecutiveSummary
                   expenses={expenses}
                   savioEnabled
@@ -386,7 +395,12 @@ export default function Finanzas() {
               </TabsList>
               </div>
 
-              <TabsContent value="resumen" className="mt-0">
+              <TabsContent value="resumen" className="mt-0 space-y-4">
+                <FinanceCashflowAlerts
+                  expenses={expenses}
+                  savioEnabled={false}
+                  onGoToGastos={() => setFinanceTab("gastos")}
+                />
                 <FinanceExecutiveSummary expenses={expenses} savioEnabled={false} />
               </TabsContent>
 

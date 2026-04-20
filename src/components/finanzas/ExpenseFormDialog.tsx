@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Sparkles, Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -20,6 +21,9 @@ import { useProjects } from "@/hooks/useProjects";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { expensesLimits } from "@/lib/fileIntake/limits";
+import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const CATEGORY_OPTIONS = [
   { value: "terceros", label: "Gastos por terceros / cliente" },
@@ -53,9 +57,14 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const { data: clients = [] } = useClients();
   const { data: projects = [] } = useProjects();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [aiClassifying, setAiClassifying] = useState(false);
+  const [aiHint, setAiHint] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) setPendingFiles([]);
+    if (!open) {
+      setPendingFiles([]);
+      setAiHint(null);
+    }
   }, [open]);
 
   const form = useForm<FormValues>({
@@ -79,6 +88,63 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const projectOptions = projects
     .filter((p: any) => !watchClient || p.client_id === watchClient)
     .map((p: any) => ({ value: p.id, label: p.name }));
+
+  const handleAiClassify = async () => {
+    const description = form.getValues("description").trim();
+    const notes = form.getValues("notes")?.trim() ?? "";
+    const amount = Number(form.getValues("amount") || 0);
+    if (!description) {
+      toast.error("Escribe primero una descripción para que la IA pueda clasificar.");
+      return;
+    }
+    setAiClassifying(true);
+    setAiHint(null);
+    try {
+      const prompt = `Clasifica el siguiente gasto en UNA categoría de Kawiil. Devuelve SOLO un objeto JSON válido sin texto adicional, con esta forma exacta:
+{"category":"terceros|viaticos|operativo|contratacion_externa","reason":"Explica en máximo 80 caracteres por qué."}
+
+Reglas para elegir category:
+- "terceros": gasto que se paga POR cuenta de un cliente (notarios, gestoría, derechos, copias, etc.) y luego se le repercute.
+- "viaticos": viajes, transporte, hospedaje, comidas en gestiones fuera de oficina.
+- "operativo": gastos internos del despacho (papelería, software, renta, servicios, suscripciones).
+- "contratacion_externa": pago a un tercero/proveedor por un servicio profesional (peritos, abogados externos, contadores externos, freelancers).
+
+Datos del gasto:
+- Descripción: ${description}
+- Monto: ${amount} MXN
+- Notas adicionales: ${notes || "(sin notas)"}`;
+
+      const raw = await fetchAiChatSimpleContent([{ role: "user", content: prompt }]);
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+      let parsed: { category?: string; reason?: string } | null = null;
+      try {
+        parsed = JSON.parse(cleaned) as { category?: string; reason?: string };
+      } catch {
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+          try {
+            parsed = JSON.parse(match[0]) as { category?: string; reason?: string };
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      const validCats = CATEGORY_OPTIONS.map((o) => o.value);
+      if (parsed?.category && validCats.includes(parsed.category)) {
+        form.setValue("category", parsed.category, { shouldValidate: true, shouldDirty: true });
+        const label = CATEGORY_OPTIONS.find((o) => o.value === parsed!.category)?.label ?? parsed.category;
+        const reason = (parsed.reason ?? "").trim().slice(0, 120);
+        setAiHint(reason ? `${label} — ${reason}` : `Sugerencia: ${label}`);
+        toast.success("Categoría sugerida por IA aplicada.");
+      } else {
+        toast.error("La IA no pudo clasificar este gasto. Revisa la descripción.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al consultar la IA.");
+    } finally {
+      setAiClassifying(false);
+    }
+  };
 
   const onSubmit = async (values: FormValues) => {
     await createExpense.mutateAsync({
@@ -110,7 +176,28 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
               name="category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Categoría *</FormLabel>
+                  <div className="flex items-center justify-between gap-2">
+                    <FormLabel>Categoría *</FormLabel>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleAiClassify}
+                      disabled={aiClassifying}
+                      className={cn(
+                        "h-7 gap-1 px-2 text-[11px]",
+                        "text-primary hover:bg-primary/10",
+                      )}
+                      title="Pide a la IA que sugiera la categoría según la descripción y el monto."
+                    >
+                      {aiClassifying ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      {aiClassifying ? "Pensando…" : "Sugerir con IA"}
+                    </Button>
+                  </div>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
@@ -121,6 +208,12 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
                       ))}
                     </SelectContent>
                   </Select>
+                  {aiHint && (
+                    <p className="mt-1 flex items-start gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2 py-1 text-[11px] text-primary">
+                      <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span className="leading-snug">{aiHint}</span>
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
