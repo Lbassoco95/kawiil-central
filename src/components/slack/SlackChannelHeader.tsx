@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, BellOff, PanelLeft, Search, Info, Users } from "lucide-react";
+import { Bell, BellOff, PanelLeft, Search, Info, Users, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +27,8 @@ type Props = {
   showSidebarTrigger?: boolean;
   messages: SlackMessage[];
   onJumpToMessage: (ts: string) => void;
+  aiPanelOpen?: boolean;
+  onToggleAiPanel?: () => void;
 };
 
 export function SlackChannelHeader({
@@ -42,6 +44,8 @@ export function SlackChannelHeader({
   showSidebarTrigger,
   messages,
   onJumpToMessage,
+  aiPanelOpen,
+  onToggleAiPanel,
 }: Props) {
   const [searchQ, setSearchQ] = useState("");
 
@@ -111,6 +115,23 @@ export function SlackChannelHeader({
               <Search className="h-3.5 w-3.5" />
             </Button>
           </div>
+          {onToggleAiPanel ? (
+            <Button
+              type="button"
+              variant={aiPanelOpen ? "default" : "outline"}
+              size="sm"
+              className={
+                aiPanelOpen
+                  ? "h-8 px-2.5 gap-1.5 text-[11px]"
+                  : "h-8 px-2.5 gap-1.5 text-[11px] border-primary/30 text-primary hover:bg-primary/10"
+              }
+              onClick={onToggleAiPanel}
+              title={aiPanelOpen ? "Cerrar asistente IA del canal" : "Abrir asistente IA del canal"}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">IA</span>
+            </Button>
+          ) : null}
           <Dialog>
             <DialogTrigger asChild>
               <Button type="button" variant="ghost" size="icon" className="h-8 w-8" title="Detalles">

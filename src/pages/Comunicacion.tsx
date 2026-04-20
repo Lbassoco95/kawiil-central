@@ -41,6 +41,7 @@ import { SlackChannelHeader } from "@/components/slack/SlackChannelHeader";
 import { SlackMessageList } from "@/components/slack/SlackMessageList";
 import { SlackComposer } from "@/components/slack/SlackComposer";
 import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
+import { SlackAiPanel } from "@/components/slack/SlackAiPanel";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { Button } from "@/components/ui/button";
@@ -143,6 +144,7 @@ export default function Comunicacion() {
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [taskFromSlackMessage, setTaskFromSlackMessage] = useState<SlackMessage | null>(null);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
@@ -1347,6 +1349,8 @@ export default function Comunicacion() {
                 const el = document.getElementById(`slack-msg-${ts.replace(/\./g, "-")}`);
                 el?.scrollIntoView({ behavior: "smooth", block: "center" });
               }}
+              aiPanelOpen={aiPanelOpen}
+              onToggleAiPanel={() => setAiPanelOpen((v) => !v)}
             />
             <SlackMessageList
               messages={messages}
@@ -1411,6 +1415,22 @@ export default function Comunicacion() {
             }
             onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
             onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
+          />
+          <SlackAiPanel
+            open={aiPanelOpen}
+            onClose={() => setAiPanelOpen(false)}
+            channelId={selectedChannel}
+            channelTitle={headerTitle}
+            messages={messages}
+            userMap={userMap}
+            selfUserId={connection?.slack_user_id ?? null}
+            onJumpToMessage={(ts) => {
+              const el = document.getElementById(`slack-msg-${ts.replace(/\./g, "-")}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            onInsertDraft={(text) => {
+              setDraft((prev) => (prev.trim() ? `${prev.trimEnd()}\n${text}` : text));
+            }}
           />
         </div>
       ) : (
