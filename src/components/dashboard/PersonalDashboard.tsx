@@ -16,6 +16,7 @@ import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
 import { PersonalRendimientoMetrics } from "@/components/dashboard/PersonalRendimientoMetrics";
 import { PersonalProjectsProgress } from "@/components/dashboard/PersonalProjectsProgress";
 import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
+import { DailyBriefingGrid } from "@/components/dashboard/DailyBriefingGrid";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { useMyActiveProjectsProgress } from "@/hooks/useMyActiveProjectsProgress";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
@@ -692,7 +693,15 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         </div>
 
         {/* Resumen */}
-        <TabsContent value="resumen" className="mt-4 space-y-4 animate-fade-in">
+        <TabsContent value="resumen" className="mt-4 space-y-5 animate-fade-in">
+          <DailyBriefingGrid
+            pendingTasks={pendingTasksSnapshot as any}
+            todayYmd={todayYmd}
+            completedToday={completedToday ?? 0}
+            overdueCount={overdueTasks}
+            dueTodayCount={dueTodayPending}
+          />
+
           {myTasks && myTasks.length > 0 && (
             <div>
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Próximas tareas</h3>
