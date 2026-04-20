@@ -18,9 +18,7 @@ import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
-const KAWIIL_AI_HEADER_BG =
-  "linear-gradient(135deg, hsl(220 100% 55%) 0%, hsl(210 100% 45%) 100%)";
+import { KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 
 interface SendEmailToSlackDialogProps {
   open: boolean;

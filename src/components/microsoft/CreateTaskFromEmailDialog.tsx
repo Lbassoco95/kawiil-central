@@ -25,9 +25,7 @@ import { Loader2, Sparkles, Wand2, X, Check, Info } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-
-const KAWIIL_AI_HEADER_BG =
-  "linear-gradient(135deg, hsl(220 100% 55%) 0%, hsl(210 100% 45%) 100%)";
+import { KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 
 interface Props {
   open: boolean;
