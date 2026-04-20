@@ -31,6 +31,7 @@ import {
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import { cn } from "@/lib/utils";
 import { TaskDependenciesPanel } from "./TaskDependenciesPanel";
 import { TaskKawiilAiCard } from "./TaskKawiilAiCard";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
@@ -548,40 +549,6 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const subtaskTotal = childSubtasks.length;
   const subtaskClosed = childSubtasks.filter((s: any) => isTaskClosedStatus(s.status)).length;
   const subtaskProgressPct = subtaskTotal === 0 ? 0 : Math.round((subtaskClosed / subtaskTotal) * 100);
-
-  const fileExtIcon = (name?: string) => {
-    const ext = (name?.split(".").pop() || "").toLowerCase();
-    if (["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(ext)) return FileImage;
-    if (["zip", "rar", "7z"].includes(ext)) return FileArchive;
-    if (["xlsx", "xls", "csv"].includes(ext)) return FileSpreadsheet;
-    return FileText;
-  };
-
-  const allAttachments = [
-    ...documents.map((d: any) => ({
-      kind: "doc" as const,
-      id: d.id,
-      name: d.name,
-      size: d.file_size,
-      created_at: d.created_at,
-      raw: d,
-    })),
-    ...dropboxLinks.map((l: any, i: number) => ({
-      kind: "dropbox" as const,
-      id: `dbx-${i}`,
-      name: l.name || (() => {
-        try {
-          return new URL(l.url).pathname.split("/").pop() || l.url;
-        } catch {
-          return l.url;
-        }
-      })(),
-      size: null as number | null,
-      created_at: l.added_at || null,
-      url: l.url,
-      index: i,
-    })),
-  ];
 
   const projectChip = (task as any)?.projects?.name as string | undefined;
   const clientChip = (task as any)?.clients?.name as string | undefined;
@@ -1154,7 +1121,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sin área" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Sin área</SelectItem>
-                        {Array.from(celulaLabelMap.entries()).map(([value, label]) => (
+                        {Object.entries(celulaLabelMap).map(([value, label]) => (
                           <SelectItem key={value} value={value}>{label}</SelectItem>
                         ))}
                       </SelectContent>

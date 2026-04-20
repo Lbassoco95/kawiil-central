@@ -108,7 +108,7 @@ export function TimezoneChips({ className }: TimezoneChipsProps) {
                   {TIMEZONE_COUNTRIES.map((c) => (
                     <CommandItem
                       key={c.country}
-                      value={`${c.country} ${c.cities.map((x) => `${x.code} ${x.city}`).join(" ")}`}
+                      value={countrySearchValue(c)}
                       onSelect={() => setActiveCountry(c.country)}
                     >
                       <span className="mr-2 text-base leading-none">{c.flag}</span>
@@ -156,6 +156,56 @@ function findCity(code: string): TimezoneEntry | undefined {
   return undefined;
 }
 
+function stripAccents(s: string) {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+const COUNTRY_ALIASES: Record<string, string> = {
+  Rusia: "Russia",
+  México: "Mexico",
+  "Estados Unidos": "USA United States America",
+  "Reino Unido": "UK United Kingdom England Britain",
+  Alemania: "Germany Deutschland",
+  Italia: "Italy",
+  España: "Spain",
+  Francia: "France",
+  Brasil: "Brazil",
+  Japón: "Japan",
+  "Corea del Sur": "South Korea",
+  Suecia: "Sweden",
+  Noruega: "Norway",
+  Dinamarca: "Denmark",
+  "Países Bajos": "Netherlands Holland",
+  Bélgica: "Belgium",
+  Suiza: "Switzerland",
+  Polonia: "Poland",
+  Grecia: "Greece",
+  Turquía: "Turkey",
+  Egipto: "Egypt",
+  Sudáfrica: "South Africa",
+  Marruecos: "Morocco",
+  Tailandia: "Thailand",
+  Filipinas: "Philippines",
+  Indonesia: "Bali Jakarta",
+  Singapur: "Singapore",
+  China: "PRC",
+  India: "Bharat",
+};
+
+function countrySearchValue(c: { country: string; cities: TimezoneEntry[] }) {
+  const cityTokens = c.cities
+    .map((x) => `${x.code} ${x.city ?? ""}`)
+    .join(" ");
+  const alias = COUNTRY_ALIASES[c.country] ?? "";
+  const raw = `${c.country} ${cityTokens} ${alias}`;
+  return `${raw} ${stripAccents(raw)}`;
+}
+
+function cityItemValue(entry: TimezoneEntry) {
+  const raw = `${entry.code} ${entry.city ?? ""} ${entry.country ?? ""} ${entry.zone}`;
+  return `${raw} ${stripAccents(raw)}`;
+}
+
 function CityItem({
   entry,
   now,
@@ -167,7 +217,7 @@ function CityItem({
 }) {
   return (
     <CommandItem
-      value={`${entry.code} ${entry.city ?? ""} ${entry.country ?? ""} ${entry.zone}`}
+      value={cityItemValue(entry)}
       onSelect={onSelect}
     >
       <span className="mr-2 text-base leading-none">{entry.flag}</span>
