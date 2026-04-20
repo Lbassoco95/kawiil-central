@@ -151,7 +151,7 @@ const Microsoft365Calendario = () => {
   return (
     <AppLayout>
       <ErrorBoundary>
-        <div className="space-y-4 animate-fade-in">
+        <div className="flex h-[calc(100vh-7rem)] flex-col gap-4 animate-fade-in">
           <PageHeader
             variant="hero"
             breadcrumb={["Kawiil OS", "Integraciones", "Calendario"]}
@@ -161,7 +161,9 @@ const Microsoft365Calendario = () => {
             description={`Outlook · ${profile?.displayName || profile?.mail || "Conectado"} — sincronizado con Microsoft 365, superpuesto con tareas y vencimientos de Kawiil.`}
             stats={heroStats}
           />
-          <CalendarView />
+          <div className="min-h-0 flex-1">
+            <CalendarView />
+          </div>
         </div>
       </ErrorBoundary>
     </AppLayout>

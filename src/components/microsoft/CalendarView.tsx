@@ -153,6 +153,14 @@ export function CalendarView() {
   }, [activeCategoryFilters]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Now indicator (línea roja con hora actual) — refresca cada minuto
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const t = setInterval(tick, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     if (isMobile) setViewMode("day");
   }, [isMobile]);
@@ -555,19 +563,37 @@ export function CalendarView() {
                   <div className="p-2 text-[10px] text-muted-foreground text-center border-r border-border flex items-center justify-center">
                     CDMX
                   </div>
-                  {viewDays.map((day) => (
-                    <div key={day.toISOString()} className={cn("p-2 text-center border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/50 transition-colors", isToday(day) && "bg-primary/10")}
-                      onClick={() => { setSelectedDate(day); setShowCreate(true); }}>
-                      <div className="text-xs text-muted-foreground capitalize">{format(day, "EEE", { locale: es })}</div>
-                      <div className={cn("text-sm font-medium", isToday(day) ? "text-primary" : "")}>{format(day, "d")}</div>
-                      {/* Kawiil task count */}
-                      {showKawiilTasks && getTasksForDay(day).length > 0 && (
-                        <Badge variant="secondary" className="h-4 px-1 text-[9px] mt-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                          {getTasksForDay(day).length} tarea{getTasksForDay(day).length > 1 ? "s" : ""}
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
+                  {viewDays.map((day) => {
+                    const dayTaskCount = getTasksForDay(day).length;
+                    const heat: "free" | "light" | "med" | "heavy" =
+                      dayTaskCount === 0
+                        ? "free"
+                        : dayTaskCount <= 2
+                          ? "light"
+                          : dayTaskCount <= 4
+                            ? "med"
+                            : "heavy";
+                    const heatClasses: Record<typeof heat, string> = {
+                      free: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+                      light: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+                      med: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+                      heavy: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+                    };
+                    return (
+                      <div key={day.toISOString()} className={cn("p-2 text-center border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/50 transition-colors", isToday(day) && "bg-primary/10")}
+                        onClick={() => { setSelectedDate(day); setShowCreate(true); }}>
+                        <div className="text-xs text-muted-foreground capitalize">{format(day, "EEE", { locale: es })}</div>
+                        <div className={cn("text-sm font-medium", isToday(day) ? "text-primary" : "")}>{format(day, "d")}</div>
+                        {showKawiilTasks && (
+                          <Badge variant="secondary" className={cn("h-4 px-1.5 text-[9px] mt-0.5 border-0", heatClasses[heat])}>
+                            {dayTaskCount === 0
+                              ? "libre"
+                              : `${dayTaskCount} tarea${dayTaskCount > 1 ? "s" : ""}`}
+                          </Badge>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* All-day events + tasks */}
@@ -605,7 +631,37 @@ export function CalendarView() {
                 </div>
 
                 {/* Time grid */}
-                <div className="grid border-t border-border" style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
+                {(() => {
+                  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+                  const showNow =
+                    viewDays.some((d) => isToday(d)) &&
+                    nowMinutes >= START_HOUR * 60 &&
+                    nowMinutes <= END_HOUR * 60;
+                  const nowTop = ((nowMinutes - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
+                  const nowLabel = `${now.getHours().toString().padStart(2, "0")}:${now
+                    .getMinutes()
+                    .toString()
+                    .padStart(2, "0")}`;
+                  return (
+                <div className="grid border-t border-border relative" style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
+                  {showNow && (
+                    <>
+                      <div
+                        className="pointer-events-none absolute z-30"
+                        style={{ top: nowTop, left: 56, right: 0, height: 0 }}
+                      >
+                        <div className="h-[2px] w-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.4)]" />
+                      </div>
+                      <div
+                        className="pointer-events-none absolute z-30 flex items-center justify-end pr-1.5"
+                        style={{ top: nowTop - 9, left: 0, width: 56, height: 18 }}
+                      >
+                        <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-semibold text-white shadow-sm">
+                          {nowLabel}
+                        </span>
+                      </div>
+                    </>
+                  )}
                   <div className="border-r border-border">
                     {TIME_SLOTS.map((slotMinutes) => (
                       <div key={slotMinutes} className="text-[11px] text-muted-foreground text-right pr-2 border-b border-border pt-1 leading-none"
@@ -679,6 +735,8 @@ export function CalendarView() {
                     );
                   })}
                 </div>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>
