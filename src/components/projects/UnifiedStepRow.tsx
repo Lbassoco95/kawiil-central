@@ -32,6 +32,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { createNotifications } from "@/lib/notificationHelpers";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 
 import { STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 
@@ -365,9 +366,27 @@ export function UnifiedStepRow({
                   <span className="text-[10px] text-muted-foreground sm:hidden">{assigneeName}</span>
                 )}
                 {localCollaborators.length > 0 && (
-                  <Badge variant="secondary" className="text-xs gap-1 hidden sm:inline-flex">
-                    <UserPlus className="h-3 w-3" />+{localCollaborators.length}
-                  </Badge>
+                  <div className="hidden sm:flex items-center gap-0">
+                    {localCollaborators.slice(0, 4).map((uid) => {
+                      const p = profiles.find((pp) => pp.user_id === uid);
+                      return (
+                        <UserAvatar
+                          key={uid}
+                          name={p?.full_name}
+                          email={p?.email}
+                          avatarUrl={p?.avatar_url}
+                          userId={uid}
+                          size="xs"
+                          className="ring-2 ring-background -ml-1 first:ml-0"
+                        />
+                      );
+                    })}
+                    {localCollaborators.length > 4 && (
+                      <span className="text-[10px] text-muted-foreground ml-1">
+                        +{localCollaborators.length - 4}
+                      </span>
+                    )}
+                  </div>
                 )}
                 {isOverdue && (
                   <Badge variant="destructive" className="text-[10px] sm:text-xs gap-1 px-1.5">

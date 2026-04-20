@@ -14,6 +14,51 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/functions-js";
+
+/**
+ * Extrae el mensaje real de una Edge Function cuando responde 4xx/5xx.
+ * `supabase.functions.invoke` tapa el body del error con el genérico
+ * "Edge Function returned a non-2xx status code"; aquí leemos el body.
+ */
+async function extractEdgeFunctionError(error: unknown, fallback: string): Promise<string> {
+  if (error instanceof FunctionsHttpError) {
+    const res = error.context;
+    if (res instanceof Response) {
+      try {
+        const body = (await res.clone().json()) as {
+          error?: string;
+          message?: string;
+          detail?: string;
+        };
+        const hint =
+          body?.error === "ai_not_configured"
+            ? "Falta configurar ANTHROPIC_API_KEY en Edge Functions → Secrets."
+            : body?.error === "ai_provider_error"
+              ? "El proveedor de IA (Anthropic) devolvió un error."
+              : body?.error === "empty_body"
+                ? "El correo no tiene contenido para resumir."
+                : null;
+        const parts = [
+          body?.message,
+          hint,
+          body?.detail,
+          body?.error && !hint ? body.error : null,
+        ].filter((x): x is string => typeof x === "string" && x.length > 0);
+        if (parts.length > 0) return parts[0];
+      } catch {
+        try {
+          const text = await res.clone().text();
+          if (text) return text.slice(0, 300);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 /**
  * EmailKawiilCard — Fase 2 del rediseño v2.4 del módulo Correo.
@@ -109,7 +154,10 @@ export function EmailKawiilCard({
           body: { subject, senderName, senderEmail, body, thread, locale: "es" },
         },
       );
-      if (error) throw new Error(error.message || "Error AI");
+      if (error) {
+        const msg = await extractEdgeFunctionError(error, "No se pudo generar el resumen.");
+        throw new Error(msg);
+      }
       if (!data || (data as any).error) {
         throw new Error((data as any)?.message || (data as any)?.error || "Sin resumen");
       }
@@ -137,7 +185,10 @@ export function EmailKawiilCard({
           body: { subject, senderName, senderEmail, body, thread, userName, locale: "es" },
         },
       );
-      if (error) throw new Error(error.message || "Error AI");
+      if (error) {
+        const msg = await extractEdgeFunctionError(error, "No se pudieron generar sugerencias.");
+        throw new Error(msg);
+      }
       if (!data || (data as any).error) {
         throw new Error((data as any)?.message || (data as any)?.error || "Sin sugerencias");
       }

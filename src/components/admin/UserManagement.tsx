@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw, Send, Link2, KeySquare, CheckCircle2 } from "lucide-react";
+import { UserAvatar } from "@/components/shared/UserAvatar";
+import { Users, Plus, Loader2, Mail, Phone, UserX, UserCheck, ChevronDown, ChevronUp, Calendar, KeyRound, Shield, MapPin, Pencil, RefreshCw, Send, Link2, KeySquare, CheckCircle2, ImageDown } from "lucide-react";
+import { useBackfillOrgPhotos } from "@/hooks/useMicrosoft";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatMX } from "@/lib/dateUtils";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
@@ -130,15 +131,6 @@ const ONBOARDING_CONFIG: Record<OnboardingStatus, { label: string; className: st
   },
 };
 
-function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
-}
-
 function useToggleUserActive() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -168,6 +160,7 @@ export function UserManagement() {
   const toggleActive = useToggleUserActive();
   const [sendingReset, setSendingReset] = useState<string | null>(null);
   const [resendingInvite, setResendingInvite] = useState<string | null>(null);
+  const backfillPhotos = useBackfillOrgPhotos();
 
   const handleSendRecovery = async (email: string, userId: string) => {
     setSendingReset(userId);
@@ -211,10 +204,26 @@ export function UserManagement() {
           <Users className="h-4 w-4" />
           Equipo Kawiil
         </CardTitle>
-        <Button size="sm" onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          Agregar Kawiiler
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => backfillPhotos.mutate()}
+            disabled={backfillPhotos.isPending}
+            title="Trae las fotos de perfil desde Microsoft 365 para todos los usuarios conectados"
+          >
+            {backfillPhotos.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <ImageDown className="h-4 w-4 mr-1" />
+            )}
+            Sincronizar fotos
+          </Button>
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Agregar Kawiiler
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -237,11 +246,14 @@ export function UserManagement() {
                 <div className="rounded-lg border hover:bg-muted/30 transition-colors">
                   <CollapsibleTrigger asChild>
                     <button className="flex items-center gap-3 w-full p-3 text-left">
-                      <Avatar className="h-9 w-9">
-                        <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                          {getInitials(user.full_name)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        name={user.full_name}
+                        email={user.email}
+                        avatarUrl={user.avatar_url}
+                        userId={user.user_id}
+                        size="lg"
+                        className="h-9 w-9"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm truncate">{user.full_name}</span>
@@ -422,11 +434,14 @@ export function UserManagement() {
                       key={user.id}
                       className="flex items-center gap-3 rounded-lg border border-dashed p-3 opacity-50"
                     >
-                      <Avatar className="h-9 w-9">
-                        <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                          {getInitials(user.full_name)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        name={user.full_name}
+                        email={user.email}
+                        avatarUrl={user.avatar_url}
+                        userId={user.user_id}
+                        size="lg"
+                        className="h-9 w-9 grayscale"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm truncate">{user.full_name}</span>

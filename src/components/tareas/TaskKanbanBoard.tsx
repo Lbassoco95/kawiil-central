@@ -14,6 +14,8 @@ interface TaskKanbanBoardProps {
   tasks: any[];
   areaColorMap: Map<string, string | undefined>;
   profileMap: Map<string, string | null>;
+  /** Map opcional de user_id → avatar_url para mostrar foto en la tarjeta. */
+  profileAvatarMap?: Map<string, string | null | undefined>;
   getCelulaLabel: (a: string | null) => string;
   onOpen: (t: any) => void;
 }
@@ -22,6 +24,7 @@ export function TaskKanbanBoard({
   tasks,
   areaColorMap,
   profileMap,
+  profileAvatarMap,
   getCelulaLabel,
   onOpen,
 }: TaskKanbanBoardProps) {
@@ -63,6 +66,8 @@ export function TaskKanbanBoard({
                     areaLabel={getCelulaLabel(task.area)}
                     areaColor={areaColorMap.get(task.area)}
                     assigneeName={task.assigned_to ? profileMap.get(task.assigned_to) || null : null}
+                    assigneeUserId={task.assigned_to ?? null}
+                    assigneeAvatarUrl={task.assigned_to ? profileAvatarMap?.get(task.assigned_to) ?? null : null}
                     onOpen={() => onOpen(task)}
                   />
                 ))

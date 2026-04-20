@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { useDueDateAlerts } from "@/hooks/useNotifications";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -932,11 +932,13 @@ export default function Notificaciones() {
                         onClick={() => handleNotificationClick(m)}
                       >
                         {tab === "menciones" ? (
-                          <Avatar className="h-7 w-7 shrink-0 mt-0.5">
-                            <AvatarFallback className="text-[10px] bg-secondary">
-                              {m.source_profile?.full_name?.charAt(0) || "?"}
-                            </AvatarFallback>
-                          </Avatar>
+                          <UserAvatar
+                            name={m.source_profile?.full_name}
+                            avatarUrl={m.source_profile?.avatar_url}
+                            userId={m.source_user_id}
+                            size="md"
+                            className="h-7 w-7 shrink-0 mt-0.5"
+                          />
                         ) : (
                           <div className="h-7 w-7 shrink-0 mt-0.5 rounded-full bg-secondary flex items-center justify-center">
                             {getNotificationIcon(m.type)}

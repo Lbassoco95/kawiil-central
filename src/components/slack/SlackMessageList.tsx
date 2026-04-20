@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -81,13 +81,6 @@ const REACTION_PICKER_KEYS = [
 /** Timestamp raíz del hilo para API y UI (mensaje padre o broadcast en canal). */
 function slackThreadRootTs(m: SlackMessage): string {
   return m.thread_ts && m.thread_ts !== m.ts ? m.thread_ts : m.thread_ts || m.ts;
-}
-
-function initials(name: string): string {
-  const p = name.trim().split(/\s+/).filter(Boolean);
-  if (p.length === 0) return "?";
-  if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
-  return (p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
 
 function reactionLabel(name: string): string {
@@ -472,12 +465,13 @@ export function SlackMessageList({
         )}
       >
         {showHeader ? (
-          <Avatar className="h-9 w-9 shrink-0 mt-0.5">
-            {av ? <AvatarImage src={av} alt="" /> : null}
-            <AvatarFallback className="text-[10px] bg-secondary text-secondary-foreground">
-              {initials(label)}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            name={label}
+            avatarUrl={av}
+            userId={uid || undefined}
+            size="lg"
+            className="h-9 w-9 shrink-0 mt-0.5"
+          />
         ) : (
           <div className="w-9 shrink-0 flex justify-end pr-1">
             <TooltipProvider>
@@ -674,10 +668,13 @@ export function SlackMessageList({
           </DialogHeader>
           {mentionUserId && (
             <div className="flex gap-3 pt-1">
-              <Avatar className="h-11 w-11">
-                {profileOpen?.avatar_url ? <AvatarImage src={profileOpen.avatar_url} alt="" /> : null}
-                <AvatarFallback>{initials(slackUserDisplayName(mentionUserId, userMap))}</AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={slackUserDisplayName(mentionUserId, userMap)}
+                avatarUrl={profileOpen?.avatar_url}
+                userId={mentionUserId}
+                size="xl"
+                showTooltip={false}
+              />
               <div className="min-w-0">
                 <p className="font-semibold text-sm truncate">{slackUserDisplayName(mentionUserId, userMap)}</p>
                 <p className="text-[10px] text-muted-foreground font-mono truncate">{mentionUserId}</p>

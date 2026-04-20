@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfiles } from "@/hooks/useTasks";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MentionTextarea } from "@/components/tasks/MentionTextarea";
@@ -133,11 +133,13 @@ export function ProjectCommentsTab({ projectId, projectName = "un proyecto" }: P
           )}
           {comments.map((c: any) => (
             <div key={c.id} className="flex gap-3">
-              <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback className="text-xs">
-                  {c.profile?.full_name?.charAt(0) || "?"}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={c.profile?.full_name}
+                avatarUrl={c.profile?.avatar_url}
+                userId={c.user_id}
+                size="md"
+                className="shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{c.profile?.full_name || "Usuario"}</span>

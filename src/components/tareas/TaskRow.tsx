@@ -8,13 +8,15 @@ import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Task } from "@/hooks/useTasks";
-import { initialsOf, avatarGradient } from "@/lib/avatarGradient";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 
 interface TaskRowProps {
   task: Task;
   areaLabel?: string;
   areaColor?: string;
   assigneeName?: string | null;
+  assigneeUserId?: string | null;
+  assigneeAvatarUrl?: string | null;
   onOpen: (task: Task) => void;
   onDelete?: () => void;
   canDelete?: boolean;
@@ -84,6 +86,8 @@ export function TaskRow({
   areaLabel,
   areaColor,
   assigneeName,
+  assigneeUserId,
+  assigneeAvatarUrl,
   onOpen,
   onDelete,
   canDelete,
@@ -199,17 +203,15 @@ export function TaskRow({
             </span>
           )}
           {assigneeName ? (
-            <span
-              className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
-              title={assigneeName}
-            >
-              <span
-                className="grid h-5 w-5 place-items-center rounded-full text-[9px] font-semibold uppercase text-white shadow-sm ring-1 ring-border/40"
-                style={{ background: avatarGradient(assigneeName) }}
-                aria-hidden
-              >
-                {initialsOf(assigneeName)}
-              </span>
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <UserAvatar
+                name={assigneeName}
+                avatarUrl={assigneeAvatarUrl}
+                userId={assigneeUserId || assigneeName}
+                size="xs"
+                className="h-5 w-5 shadow-sm ring-1 ring-border/40"
+                fallbackClassName="text-[9px] uppercase"
+              />
               <span className="truncate max-w-[120px]">{assigneeName}</span>
             </span>
           ) : (

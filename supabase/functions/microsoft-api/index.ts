@@ -356,6 +356,74 @@ async function readFirstBytesFromStream(body: ReadableStream<Uint8Array>, max: n
   return out;
 }
 
+/**
+ * Sincroniza la foto de Microsoft para `targetUserId` usando un access token ya válido.
+ * Retorna el mismo shape que la acción sync-profile-photo. Usado tanto por la acción
+ * individual como por el backfill masivo de una organización.
+ */
+async function syncProfilePhotoFor(
+  supabaseAdmin: any,
+  targetUserId: string,
+  accessToken: string,
+): Promise<
+  | { code: "NO_PHOTO" }
+  | { url: string; source: "microsoft"; contentType: string }
+> {
+  let photoRes: Response;
+  try {
+    photoRes = await graphMailFetchWithRetry(accessToken, "/me/photo/$value", {
+      headers: { Accept: "image/*" },
+    });
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    const lower = m.toLowerCase();
+    if (
+      /\[404\]/.test(m) ||
+      lower.includes("imagenotfound") ||
+      lower.includes("resourcenotfound") ||
+      lower.includes("itemnotfound")
+    ) {
+      return { code: "NO_PHOTO" };
+    }
+    throw e;
+  }
+
+  const contentType = photoRes.headers.get("content-type") || "image/jpeg";
+  const bytes = new Uint8Array(await photoRes.arrayBuffer());
+  if (bytes.length === 0) return { code: "NO_PHOTO" };
+
+  const ext = contentType.toLowerCase().includes("png")
+    ? "png"
+    : contentType.toLowerCase().includes("gif")
+      ? "gif"
+      : "jpg";
+  const path = `${targetUserId}/microsoft.${ext}`;
+
+  const { error: upErr } = await supabaseAdmin.storage
+    .from("avatars")
+    .upload(path, bytes, {
+      contentType,
+      upsert: true,
+      cacheControl: "3600",
+    });
+  if (upErr) {
+    throw new Error(`Avatar upload failed: ${upErr.message || String(upErr)}`);
+  }
+
+  const { data: pub } = supabaseAdmin.storage.from("avatars").getPublicUrl(path);
+  const url = `${pub.publicUrl}?v=${Date.now()}`;
+
+  const { error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .update({ avatar_url: url })
+    .eq("user_id", targetUserId);
+  if (profileErr) {
+    throw new Error(`Profile update failed: ${profileErr.message || String(profileErr)}`);
+  }
+
+  return { url, source: "microsoft", contentType };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -387,6 +455,77 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    const body = await req.json();
+    const { action, params } = body;
+
+    /**
+     * Backfill masivo de fotos de la organización del invocador. No requiere
+     * que el admin tenga Microsoft conectado: sólo permisos admin/manager.
+     * Recorre todos los usuarios de la org con `microsoft_tokens` y sincroniza
+     * su foto (refresca token si hace falta). No aborta ante errores puntuales.
+     */
+    if (action === "backfill-org-photos") {
+      const { data: isAdmin } = await supabaseAdmin.rpc("is_admin_or_manager", { _user_id: userId });
+      if (!isAdmin) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: orgId } = await supabaseAdmin.rpc("get_user_org_id", { _user_id: userId });
+      if (!orgId) {
+        return new Response(JSON.stringify({ error: "Organización no encontrada" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: orgProfiles, error: profErr } = await supabaseAdmin
+        .from("profiles")
+        .select("user_id")
+        .eq("organization_id", orgId);
+      if (profErr) {
+        throw new Error(`No se pudieron listar perfiles: ${profErr.message}`);
+      }
+      const orgUserIds = new Set((orgProfiles ?? []).map((p: any) => p.user_id));
+
+      const { data: tokenRows, error: tokensErr } = await supabaseAdmin
+        .from("microsoft_tokens")
+        .select("*");
+      if (tokensErr) {
+        throw new Error(`No se pudieron listar tokens: ${tokensErr.message}`);
+      }
+      const targets = (tokenRows ?? []).filter((r: any) => orgUserIds.has(r.user_id));
+
+      const report = {
+        total: targets.length,
+        synced: 0,
+        no_photo: 0,
+        failed: 0,
+        errors: [] as { user_id: string; error: string }[],
+      };
+
+      for (const row of targets) {
+        try {
+          const at = await refreshTokenIfNeeded(supabaseAdmin, row.user_id, row);
+          const res = await syncProfilePhotoFor(supabaseAdmin, row.user_id, at);
+          if ("code" in res && res.code === "NO_PHOTO") report.no_photo += 1;
+          else report.synced += 1;
+        } catch (e) {
+          report.failed += 1;
+          report.errors.push({
+            user_id: row.user_id,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
+      return new Response(JSON.stringify(report), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: tokenRow, error: tokenError } = await supabaseAdmin
       .from("microsoft_tokens")
       .select("*")
@@ -401,9 +540,6 @@ Deno.serve(async (req) => {
     }
 
     const accessToken = await refreshTokenIfNeeded(supabaseAdmin, userId, tokenRow);
-
-    const body = await req.json();
-    const { action, params } = body;
 
     let result;
 
@@ -1222,63 +1358,7 @@ Deno.serve(async (req) => {
        * { code: "NO_PHOTO" } sin tocar profiles.
        */
       case "sync-profile-photo": {
-        let photoRes: Response;
-        try {
-          photoRes = await graphMailFetchWithRetry(accessToken, "/me/photo/$value", {
-            headers: { Accept: "image/*" },
-          });
-        } catch (e) {
-          const m = e instanceof Error ? e.message : String(e);
-          const lower = m.toLowerCase();
-          if (
-            /\[404\]/.test(m) ||
-            lower.includes("imagenotfound") ||
-            lower.includes("resourcenotfound") ||
-            lower.includes("itemnotfound")
-          ) {
-            result = { code: "NO_PHOTO" };
-            break;
-          }
-          throw e;
-        }
-
-        const contentType = photoRes.headers.get("content-type") || "image/jpeg";
-        const bytes = new Uint8Array(await photoRes.arrayBuffer());
-        if (bytes.length === 0) {
-          result = { code: "NO_PHOTO" };
-          break;
-        }
-
-        const ext = contentType.toLowerCase().includes("png")
-          ? "png"
-          : contentType.toLowerCase().includes("gif")
-            ? "gif"
-            : "jpg";
-        const path = `${userId}/microsoft.${ext}`;
-
-        const { error: upErr } = await supabaseAdmin.storage
-          .from("avatars")
-          .upload(path, bytes, {
-            contentType,
-            upsert: true,
-            cacheControl: "3600",
-          });
-        if (upErr) {
-          throw new Error(`Avatar upload failed: ${upErr.message || String(upErr)}`);
-        }
-
-        const { data: pub } = supabaseAdmin.storage.from("avatars").getPublicUrl(path);
-        const url = `${pub.publicUrl}?v=${Date.now()}`;
-
-        const { error: profileErr } = await supabaseAdmin
-          .from("profiles")
-          .update({ avatar_url: url })
-          .eq("user_id", userId);
-        if (profileErr) {
-          throw new Error(`Profile update failed: ${profileErr.message || String(profileErr)}`);
-        }
-
-        result = { url, source: "microsoft", contentType };
+        result = await syncProfilePhotoFor(supabaseAdmin, userId, accessToken);
         break;
       }
 

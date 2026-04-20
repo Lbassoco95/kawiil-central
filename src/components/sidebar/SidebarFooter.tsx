@@ -1,13 +1,13 @@
 import { LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCurrentProfile, getInitials } from "@/hooks/useCurrentProfile";
+import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { ThemeToggle } from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +18,6 @@ interface SidebarFooterProps {
 export function SidebarFooter({ collapsed }: SidebarFooterProps) {
   const { signOut, user } = useAuth();
   const { data: profile } = useCurrentProfile();
-
-  const initials = getInitials(profile, user?.email);
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -46,22 +44,15 @@ export function SidebarFooter({ collapsed }: SidebarFooterProps) {
               collapsed && "justify-center",
             )}
           >
-            <Avatar
-              className="h-7 w-7 flex-shrink-0"
+            <UserAvatar
+              name={profile?.full_name}
+              email={user?.email}
+              avatarUrl={profile?.avatar_url}
+              userId={user?.id}
+              size="md"
+              className="flex-shrink-0"
               style={{ boxShadow: "0 0 0 2px var(--sb-bg)" }}
-            >
-              {profile?.avatar_url ? (
-                <AvatarImage src={profile.avatar_url} alt={profile?.full_name || "Avatar"} />
-              ) : null}
-              <AvatarFallback
-                className="text-[11px] font-bold text-white"
-                style={{
-                  background: "linear-gradient(135deg, hsl(260 70% 60%), hsl(210 80% 55%))",
-                }}
-              >
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            />
             {!collapsed && (
               <div className="min-w-0 leading-tight">
                 <div

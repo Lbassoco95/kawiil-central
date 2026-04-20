@@ -47,6 +47,8 @@ interface TaskGroupedListProps {
   areaLabelMap?: Map<string, string> | { get(k: string): string | undefined };
   areaColorMap: Map<string, string | undefined>;
   profileMap: Map<string, string | null>;
+  /** Map opcional de user_id → avatar_url para mostrar foto en la fila. */
+  profileAvatarMap?: Map<string, string | null | undefined>;
   getCelulaLabel?: (k: string) => string;
   onOpen: (task: Task) => void;
   onDelete?: (task: Task) => void;
@@ -58,6 +60,7 @@ export function TaskGroupedList({
   tasks,
   areaColorMap,
   profileMap,
+  profileAvatarMap,
   getCelulaLabel,
   onOpen,
   onDelete,
@@ -130,6 +133,8 @@ export function TaskGroupedList({
                   areaLabel={task.area ? getCelulaLabel?.(task.area) || task.area : undefined}
                   areaColor={task.area ? areaColorMap.get(task.area) : undefined}
                   assigneeName={task.assigned_to ? profileMap.get(task.assigned_to) || null : null}
+                  assigneeUserId={task.assigned_to ?? null}
+                  assigneeAvatarUrl={task.assigned_to ? profileAvatarMap?.get(task.assigned_to) ?? null : null}
                   onOpen={onOpen}
                   onDelete={onDelete ? () => onDelete(task) : undefined}
                   canDelete={canDelete}

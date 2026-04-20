@@ -23,6 +23,7 @@ import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { AiHeroV24 } from "@/components/dashboard/AiHeroV24";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
@@ -88,25 +89,6 @@ function statusDotClass(status?: string | null): string {
   }
 }
 
-function avatarClassForIndex(idx: number): string {
-  const n = ((idx % 5) + 5) % 5;
-  return `av-${n + 1}`;
-}
-
-function hashStringToAvatar(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return avatarClassForIndex(Math.abs(h));
-}
-
-function initialsFromName(name?: string | null): string {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return ((first + last) || name[0] || "?").toUpperCase();
-}
-
 function formatDueCell(ymd: string | null | undefined, todayYmd: string): {
   label: string;
   className: string;
@@ -170,6 +152,10 @@ const Tareas = () => {
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(
     () => new Map(profiles.map((p) => [p.user_id, p.full_name])),
+    [profiles],
+  );
+  const profileAvatarMap = useMemo(
+    () => new Map(profiles.map((p) => [p.user_id, p.avatar_url])),
     [profiles],
   );
 
@@ -595,10 +581,9 @@ const Tareas = () => {
                 const assigneeName = task.assigned_to
                   ? profileMap.get(task.assigned_to) ?? null
                   : null;
-                const avClass = task.assigned_to
-                  ? hashStringToAvatar(task.assigned_to)
-                  : "";
-                const initials = initialsFromName(assigneeName);
+                const assigneeAvatar = task.assigned_to
+                  ? profileAvatarMap.get(task.assigned_to) ?? null
+                  : null;
                 const clientName = (task as any).clients?.name ?? null;
                 const projectName = (task as any).projects?.name ?? null;
                 const criticality = (task as any).criticality_level ?? null;
@@ -651,7 +636,12 @@ const Tareas = () => {
                     </div>
                     {assigneeName ? (
                       <div className="assignee">
-                        <span className={`avatar ${avClass}`}>{initials}</span>
+                        <UserAvatar
+                          name={assigneeName}
+                          avatarUrl={assigneeAvatar}
+                          userId={task.assigned_to}
+                          size="sm"
+                        />
                         <span className="name">{assigneeName}</span>
                       </div>
                     ) : (
@@ -713,8 +703,9 @@ const Tareas = () => {
                 const assigneeName = task.assigned_to
                   ? profileMap.get(task.assigned_to) ?? null
                   : null;
-                const avClass = task.assigned_to ? hashStringToAvatar(task.assigned_to) : "";
-                const initials = initialsFromName(assigneeName);
+                const assigneeAvatar = task.assigned_to
+                  ? profileAvatarMap.get(task.assigned_to) ?? null
+                  : null;
                 return (
                   <div
                     key={task.id}
@@ -753,7 +744,12 @@ const Tareas = () => {
                     </div>
                     {assigneeName ? (
                       <div className="assignee">
-                        <span className={`avatar ${avClass}`}>{initials}</span>
+                        <UserAvatar
+                          name={assigneeName}
+                          avatarUrl={assigneeAvatar}
+                          userId={task.assigned_to}
+                          size="sm"
+                        />
                         <span className="name">{assigneeName}</span>
                       </div>
                     ) : (

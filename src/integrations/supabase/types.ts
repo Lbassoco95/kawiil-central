@@ -4037,6 +4037,62 @@ export type Database = {
           },
         ]
       }
+      slack_saved_messages: {
+        Row: {
+          author_name: string | null
+          author_slack_user_id: string | null
+          channel_id: string
+          channel_name: string | null
+          id: string
+          message_ts: string
+          organization_id: string
+          saved_at: string
+          snippet: string | null
+          status: string
+          thread_ts: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          author_name?: string | null
+          author_slack_user_id?: string | null
+          channel_id: string
+          channel_name?: string | null
+          id?: string
+          message_ts: string
+          organization_id: string
+          saved_at?: string
+          snippet?: string | null
+          status?: string
+          thread_ts?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          author_name?: string | null
+          author_slack_user_id?: string | null
+          channel_id?: string
+          channel_name?: string | null
+          id?: string
+          message_ts?: string
+          organization_id?: string
+          saved_at?: string
+          snippet?: string | null
+          status?: string
+          thread_ts?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slack_saved_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slack_sidebar_group_channels: {
         Row: {
           channel_id: string

@@ -9,7 +9,7 @@ import {
 } from "@/hooks/useProjectTeam";
 import { useProfiles } from "@/hooks/useTasks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -35,16 +35,6 @@ const ROLE_BADGE_CLASS: Record<ProjectTeamRole, string> = {
   junior: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
   colaborador: "bg-muted text-muted-foreground",
 };
-
-function initialsOf(name: string | null | undefined, email: string | null | undefined) {
-  const src = (name || email || "?").trim();
-  return src
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
-}
 
 export function ProjectTeamCard({ projectId, variant = "full" }: Props) {
   const { data: team = [], isLoading } = useProjectTeam(projectId);
@@ -94,11 +84,13 @@ export function ProjectTeamCard({ projectId, variant = "full" }: Props) {
             const name = m.profile?.full_name || m.profile?.email || m.user_id;
             return (
               <li key={m.id} className="flex items-center gap-2 group">
-                <Avatar className={compact ? "h-6 w-6" : "h-7 w-7"}>
-                  <AvatarFallback className="text-[10px]">
-                    {initialsOf(m.profile?.full_name, m.profile?.email)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  name={m.profile?.full_name}
+                  email={m.profile?.email}
+                  avatarUrl={m.profile?.avatar_url}
+                  userId={m.user_id}
+                  size={compact ? "sm" : "md"}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-foreground">{name}</p>
                   {!compact && m.profile?.email && (

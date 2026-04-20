@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { UserRound, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -7,14 +7,6 @@ export type TeamProfile = {
   full_name: string | null;
   avatar_url: string | null;
 };
-
-function initials(name: string | null | undefined, userId: string): string {
-  const n = (name || "").trim();
-  if (!n) return userId.slice(0, 2).toUpperCase();
-  const parts = n.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return n.slice(0, 2).toUpperCase();
-}
 
 function PersonChip({
   profile,
@@ -35,12 +27,12 @@ function PersonChip({
           : "border-border/60 bg-background/40"
       )}
     >
-      <Avatar className="h-7 w-7">
-        {profile?.avatar_url ? (
-          <AvatarImage src={profile.avatar_url} alt="" />
-        ) : null}
-        <AvatarFallback className="text-[10px] font-medium">{initials(profile?.full_name, userId)}</AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        name={profile?.full_name}
+        avatarUrl={profile?.avatar_url}
+        userId={userId}
+        size="md"
+      />
       <span className="text-xs font-medium leading-tight truncate max-w-[140px] sm:max-w-[180px]">{label}</span>
     </div>
   );

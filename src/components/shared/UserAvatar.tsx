@@ -30,6 +30,8 @@ export interface UserAvatarProps {
   size?: UserAvatarSize;
   /** Clases extra para el contenedor Avatar (útil para apilado, bordes, etc.). */
   className?: string;
+  /** Estilo inline para el contenedor Avatar. */
+  style?: React.CSSProperties;
   /** Clases extra para el fallback (iniciales). */
   fallbackClassName?: string;
   /** Controla si se muestra tooltip con el nombre. */
@@ -57,6 +59,7 @@ export const UserAvatar = React.forwardRef<HTMLSpanElement, UserAvatarProps>(fun
     userId,
     size = "md",
     className,
+    style,
     fallbackClassName,
     showTooltip = true,
     tooltipSide = "top",
@@ -70,7 +73,7 @@ export const UserAvatar = React.forwardRef<HTMLSpanElement, UserAvatarProps>(fun
   const initials = fallbackLabel || initialsOf(displayName || email || null);
 
   const avatar = (
-    <Avatar ref={ref} className={cn(SIZE_CLASSES[size], className)}>
+    <Avatar ref={ref} className={cn(SIZE_CLASSES[size], className)} style={style}>
       {avatarUrl ? <AvatarImage src={avatarUrl} alt={alt ?? displayName} /> : null}
       <AvatarFallback
         className={cn("font-semibold text-white", fallbackClassName)}

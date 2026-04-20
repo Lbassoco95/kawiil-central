@@ -10,6 +10,7 @@ import { ProjectCreationDialog } from "@/components/projects/ProjectCreationDial
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
 import { AiHeroV24 } from "@/components/dashboard/AiHeroV24";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { useState, useMemo } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
@@ -56,21 +57,6 @@ function projectStatusDot(status: ProjectStatus | string): string {
     default:
       return "s-pendiente";
   }
-}
-
-function avatarClassForKey(key: string): string {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
-  const n = ((h % 5) + 5) % 5;
-  return `av-${n + 1}`;
-}
-
-function initialsFromName(name?: string | null): string {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return ((first + last) || name[0] || "?").toUpperCase();
 }
 
 function monthAbbr(month1: number): string {
@@ -123,6 +109,12 @@ const Proyectos = () => {
   const profileName = useMemo(() => {
     const m = new Map<string, string>();
     for (const u of orgUsers) m.set(u.user_id, u.full_name || u.user_id);
+    return m;
+  }, [orgUsers]);
+
+  const profileAvatar = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const u of orgUsers) m.set(u.user_id, u.avatar_url ?? null);
     return m;
   }, [orgUsers]);
 
@@ -478,8 +470,9 @@ const Proyectos = () => {
               const responsibleName = responsibleId
                 ? profileName.get(responsibleId) ?? null
                 : null;
-              const avClass = responsibleId ? avatarClassForKey(responsibleId) : "";
-              const initials = initialsFromName(responsibleName);
+              const responsibleAvatar = responsibleId
+                ? profileAvatar.get(responsibleId) ?? null
+                : null;
               const limit = formatLimitCell(project.end_date ?? null, todayYmd);
               const fillCls = progressFillClass(pct, project.status);
               return (
@@ -539,7 +532,12 @@ const Proyectos = () => {
                   </div>
                   {responsibleName ? (
                     <div className="assignee">
-                      <span className={`avatar ${avClass}`}>{initials}</span>
+                      <UserAvatar
+                        name={responsibleName}
+                        avatarUrl={responsibleAvatar}
+                        userId={responsibleId}
+                        size="sm"
+                      />
                       <span className="name">{responsibleName}</span>
                     </div>
                   ) : (

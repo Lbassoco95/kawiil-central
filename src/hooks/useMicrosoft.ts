@@ -198,6 +198,49 @@ export function useSyncMicrosoftPhoto() {
   });
 }
 
+/**
+ * Reporte que devuelve la acci\u00f3n `backfill-org-photos` de la edge microsoft-api.
+ */
+export interface BackfillOrgPhotosReport {
+  total: number;
+  synced: number;
+  no_photo: number;
+  failed: number;
+  errors?: { user_id: string; error: string }[];
+}
+
+/**
+ * Dispara la sincronizaci\u00f3n masiva de fotos de Microsoft para todos los
+ * usuarios de la organizaci\u00f3n que ya tengan `microsoft_tokens`. Requiere
+ * permisos admin/manager en el servidor (lo valida la edge con is_admin_or_manager).
+ */
+export function useBackfillOrgPhotos() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (): Promise<BackfillOrgPhotosReport> => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "backfill-org-photos" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(String(data.error));
+      return data as BackfillOrgPhotosReport;
+    },
+    onSuccess: (report) => {
+      queryClient.invalidateQueries({ queryKey: ["current-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["org-users"] });
+      const parts: string[] = [`${report.synced} sincronizadas`];
+      if (report.no_photo) parts.push(`${report.no_photo} sin foto`);
+      if (report.failed) parts.push(`${report.failed} con error`);
+      toast.success(`Fotos de Microsoft: ${parts.join(", ")} (de ${report.total})`);
+    },
+    onError: (err: Error) => {
+      toast.error("No se pudieron sincronizar las fotos: " + err.message);
+    },
+  });
+}
+
 const AUTO_SYNC_PHOTO_FLAG = "kawiil:ms-photo-auto-sync";
 
 /**

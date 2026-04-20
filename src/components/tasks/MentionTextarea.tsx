@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 
 interface Profile {
   user_id: string;
@@ -169,11 +169,14 @@ export function MentionTextarea({
                 insertMention(p);
               }}
             >
-              <Avatar className="h-6 w-6">
-                <AvatarFallback className="text-xs">
-                  {p.full_name.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={p.full_name}
+                email={p.email}
+                avatarUrl={p.avatar_url}
+                userId={p.user_id}
+                size="sm"
+                showTooltip={false}
+              />
               <div className="min-w-0">
                 <div className="font-medium truncate">{p.full_name}</div>
                 <div className="text-xs text-muted-foreground truncate">{p.email}</div>

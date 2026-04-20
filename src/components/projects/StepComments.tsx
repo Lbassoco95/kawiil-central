@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProfiles } from "@/hooks/useTasks";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { Button } from "@/components/ui/button";
 import { MentionTextarea } from "@/components/tasks/MentionTextarea";
 import {
@@ -237,11 +237,13 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
         <div className="space-y-2 max-h-[250px] overflow-y-auto rounded-md border border-border/50 p-2">
           {comments.map((c: any) => (
             <div key={c.id} className="flex gap-2">
-              <Avatar className="h-6 w-6 shrink-0">
-                <AvatarFallback className="text-[10px]">
-                  {c.profile?.full_name?.charAt(0) || "?"}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={c.profile?.full_name}
+                avatarUrl={c.profile?.avatar_url}
+                userId={c.user_id}
+                size="sm"
+                className="shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium">{c.profile?.full_name || "Usuario"}</span>

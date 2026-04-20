@@ -2,11 +2,13 @@ import { useMemo } from "react";
 import { GanttChartSquare } from "lucide-react";
 import type { Task } from "@/hooks/useTasks";
 import { cn } from "@/lib/utils";
-import { initialsOf, avatarGradient } from "@/lib/avatarGradient";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 
 interface TaskTimelineViewProps {
   tasks: Task[];
   profileMap?: Map<string, string | null>;
+  /** Map opcional user_id → avatar_url para mostrar foto en la fila. */
+  profileAvatarMap?: Map<string, string | null | undefined>;
   onOpen: (task: Task) => void;
   className?: string;
 }
@@ -34,7 +36,7 @@ function formatShortDate(d: Date): string {
   return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
 }
 
-export function TaskTimelineView({ tasks, profileMap, onOpen, className }: TaskTimelineViewProps) {
+export function TaskTimelineView({ tasks, profileMap, profileAvatarMap, onOpen, className }: TaskTimelineViewProps) {
   const { rows, days, todayLeftPct } = useMemo(() => {
     const today = startOfDay(new Date());
     const withDates = tasks
@@ -137,6 +139,7 @@ export function TaskTimelineView({ tasks, profileMap, onOpen, className }: TaskT
         <ul className="divide-y divide-border/40">
           {rows.map(({ task, leftPct, widthPct, end }) => {
             const assigneeName = task.assigned_to ? profileMap?.get(task.assigned_to) || null : null;
+            const assigneeAvatar = task.assigned_to ? profileAvatarMap?.get(task.assigned_to) ?? null : null;
             const barBg = PRIORITY_BAR[task.priority || "media"] || PRIORITY_BAR.media;
             return (
               <li
@@ -149,13 +152,13 @@ export function TaskTimelineView({ tasks, profileMap, onOpen, className }: TaskT
                   className="flex min-w-0 items-center gap-2 text-left"
                 >
                   {assigneeName ? (
-                    <span
-                      className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[9px] font-semibold text-white"
-                      style={{ background: avatarGradient(assigneeName) }}
-                      aria-hidden
-                    >
-                      {initialsOf(assigneeName)}
-                    </span>
+                    <UserAvatar
+                      name={assigneeName}
+                      avatarUrl={assigneeAvatar}
+                      userId={task.assigned_to || assigneeName}
+                      size="sm"
+                      className="shrink-0"
+                    />
                   ) : (
                     <span className="h-6 w-6 shrink-0 rounded-full bg-muted" aria-hidden />
                   )}
