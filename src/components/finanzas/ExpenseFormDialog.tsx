@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, Wallet, X } from "lucide-react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent,
 } from "@/components/ui/dialog";
+import { KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from "@/components/ui/form";
@@ -165,12 +166,33 @@ Datos del gasto:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Nueva solicitud de gasto</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden p-0 [&>button.absolute]:hidden flex flex-col rounded-2xl border-sky-200/40 dark:border-sky-900/40">
+        <header
+          className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5 text-white shrink-0"
+          style={{ background: KAWIIL_AI_HEADER_BG }}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/15 backdrop-blur-sm">
+              <Wallet className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-semibold leading-tight">Nueva solicitud de gasto</p>
+              <p className="mt-0.5 truncate text-[11px] leading-tight text-white/80">
+                Adjunta comprobantes y deja a Kawiil ayudarte con la descripción
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-white/90 hover:bg-white/15"
+            onClick={() => onOpenChange(false)}
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 px-4 pb-4 pt-3 sm:px-5 overflow-y-auto">
             <FormField
               control={form.control}
               name="category"

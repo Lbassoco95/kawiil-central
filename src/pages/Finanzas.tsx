@@ -22,6 +22,9 @@ import { FinanceCashflowAlerts } from "@/components/finanzas/FinanceCashflowAler
 import { FinanceIntelligenceBoards } from "@/components/finanzas/FinanceIntelligenceBoards";
 import { KpiTile } from "@/components/finanzas/KpiTile";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
+import { Badge } from "@/components/ui/badge";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
+import { FinanceKawiilCard } from "@/components/finanzas/FinanceKawiilCard";
 import { useClients } from "@/hooks/useClients";
 import { useFinanceDashboardData } from "@/hooks/useFinanceDashboardData";
 import { yearMonthFromDate } from "@/lib/financeMonthMetrics";
@@ -304,16 +307,42 @@ export default function Finanzas() {
       <div className="space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
+          breadcrumb={["Kawiil OS", "Operación", "Finanzas"]}
           title="Finanzas"
           description={pageDescription}
           icon={<Wallet />}
+          iconAccent={KAWIIL_AI_GRADIENT}
           stats={heroStats}
           actions={
-            <Button size="sm" onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4 mr-1" /> Nueva solicitud
-            </Button>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="outline"
+                className="hidden sm:inline-flex border-sky-300/70 bg-sky-50/70 text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+              >
+                v2.4
+              </Badge>
+              <Button size="sm" onClick={() => setShowForm(true)}>
+                <Plus className="h-4 w-4 mr-1" /> Nueva solicitud
+              </Button>
+            </div>
           }
         />
+
+        {!isLoading && hasFinanceAccess && (
+          <FinanceKawiilCard
+            pendingCount={totals.pendingCount}
+            pendingAmount={totals.pending}
+            approvedCount={totals.approvedCount}
+            approvedAmount={totals.approved}
+            paidCount={totals.paidCount}
+            paidAmount={totals.paid}
+            cobradoMes={canViewSavioIncome ? financeData.kpis.cobradoMes.sum : null}
+            facturadoMes={canViewSavioIncome ? financeData.kpis.facturadoMes.sum : null}
+            carteraSum={canViewSavioIncome ? financeData.kpis.cartera.sum : null}
+            carteraCount={canViewSavioIncome ? financeData.kpis.cartera.count : null}
+            onGoToTab={(t) => setFinanceTab(t)}
+          />
+        )}
 
         {isLoading ? (
           <div className="space-y-6">

@@ -847,9 +847,6 @@ export default function Notificaciones() {
           />
         )}
 
-        <NotificationDeliveryPreferences />
-        <NotificationAiPreferences />
-
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(4)].map((_, i) => (
@@ -1106,6 +1103,20 @@ export default function Notificaciones() {
 
           </>
         )}
+
+        {/* Preferencias al final, separadas por un divider sutil */}
+        <div className="space-y-4 pt-4 border-t border-border/40">
+          <div>
+            <h2 className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Preferencias de notificaciones
+            </h2>
+            <p className="text-xs text-muted-foreground/80">
+              Cómo y dónde quieres recibir cada tipo de aviso.
+            </p>
+          </div>
+          <NotificationDeliveryPreferences />
+          <NotificationAiPreferences />
+        </div>
       </div>
     </AppLayout>
   );

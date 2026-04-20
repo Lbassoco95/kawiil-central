@@ -1,7 +1,8 @@
 import { useState } from "react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent,
 } from "@/components/ui/dialog";
+import { KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,7 @@ import { toast } from "sonner";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Check, X, CreditCard, Eye, Paperclip, Download } from "lucide-react";
+import { Check, X, CreditCard, Eye, Paperclip, Download, Receipt } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   terceros: "Terceros / cliente",
@@ -99,17 +100,35 @@ export function ExpenseReviewDialog({ expense, open, onOpenChange, canManage }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Detalle de gasto
-            <Badge className={STATUS_STYLES[expense.status]}>
-              {STATUS_LABELS[expense.status]}
-            </Badge>
-          </DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-lg overflow-hidden p-0 [&>button.absolute]:hidden flex flex-col rounded-2xl border-sky-200/40 dark:border-sky-900/40">
+        <header
+          className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5 text-white shrink-0"
+          style={{ background: KAWIIL_AI_HEADER_BG }}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/15 backdrop-blur-sm">
+              <Receipt className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex items-center gap-2">
+              <p className="truncate text-[14px] font-semibold leading-tight">
+                Detalle de gasto
+              </p>
+              <Badge className={`${STATUS_STYLES[expense.status]} border-0 text-[10px] font-semibold`}>
+                {STATUS_LABELS[expense.status]}
+              </Badge>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="rounded-md p-1.5 text-white/90 hover:bg-white/15"
+            onClick={() => onOpenChange(false)}
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
 
-        <div className="space-y-3 text-sm">
+        <div className="space-y-3 text-sm px-4 pb-4 pt-3 sm:px-5 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className="text-muted-foreground">Categoría</span>
