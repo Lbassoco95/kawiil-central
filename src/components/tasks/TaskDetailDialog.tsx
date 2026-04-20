@@ -8,11 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/UserAvatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useTaskDetail, useAddComment, useUpdateTask, type Task } from "@/hooks/useTasks";
@@ -26,7 +24,7 @@ import {
   MessageSquare, Paperclip, Link, Calendar, User, Clock,
   ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
   Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2, GitBranch,
-  ChevronRight, Activity as ActivityIcon, CheckCircle2,
+  ChevronRight, Activity as ActivityIcon, CheckCircle2, FileText,
 } from "lucide-react";
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
@@ -131,6 +129,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null);
   const [newSubtaskDueDate, setNewSubtaskDueDate] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [activeTab, setActiveTab] = useState<"comments" | "links" | "files">("comments");
 
   // Buffered editable fields
   const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
@@ -717,70 +716,68 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
               {/* Description — always visible */}
               {task.description && (
-                <div className="rounded-lg bg-muted/30 p-3">
-                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{task.description}</p>
-                </div>
+                <section className="dr-section">
+                  <h3>
+                    <FileText className="h-3 w-3" /> Descripción
+                  </h3>
+                  <div className="desc">{task.description}</div>
+                </section>
               )}
 
               {/* ── Subtareas ── */}
-              <div>
+              <section className="dr-section">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium flex items-center gap-1.5">
-                    <ListChecks className="h-4 w-4" />
-                    Subtareas
+                  <h3>
+                    <ListChecks className="h-3 w-3" /> Subtareas
                     {checklist.length > 0 && (
-                      <span className="text-xs text-muted-foreground font-normal ml-1">{completedCount}/{checklist.length}</span>
+                      <span className="count">{completedCount}/{checklist.length}</span>
                     )}
-                  </h4>
+                  </h3>
                 </div>
                 {checklist.length > 0 && (
-                  <div className="h-1 rounded-full bg-muted mb-2 overflow-hidden">
+                  <div className="time-bar mb-2">
                     <div
-                      className="h-full bg-primary rounded-full transition-all"
+                      className="fill"
                       style={{ width: `${checklist.length > 0 ? (completedCount / checklist.length) * 100 : 0}%` }}
                     />
                   </div>
                 )}
-                <div className="space-y-1">
+                <div className="checklist">
                   {checklist.map((item) => {
                     const assigneeName = item.assigned_to ? orgProfiles?.find(p => p.user_id === item.assigned_to)?.full_name : null;
                     return (
-                      <div key={item.id} className="flex items-start gap-2 group py-1">
-                        <Checkbox
+                      <div key={item.id} className={cn("check-item group", item.completed && "done")}>
+                        <input
+                          type="checkbox"
                           checked={item.completed}
-                          onCheckedChange={() => void toggleChecklistItem(item.id)}
-                          className="mt-0.5"
+                          onChange={() => void toggleChecklistItem(item.id)}
+                          className="h-3.5 w-3.5 accent-primary cursor-pointer"
                         />
-                      <div className="flex-1 min-w-0">
+                        <div className="label min-w-0">
                           {item.task_id ? (
                             <button
                               type="button"
-                              className={`text-sm text-left hover:underline inline-flex items-center gap-1 ${item.completed ? "line-through text-muted-foreground" : "text-primary"}`}
+                              className={cn(
+                                "text-left hover:underline inline-flex items-center gap-1",
+                                item.completed ? "text-muted-foreground" : "text-primary"
+                              )}
                               onClick={() => setSelectedSubtaskId(item.task_id!)}
                             >
                               {item.text}
                               <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
                             </button>
                           ) : (
-                            <span className={`text-sm ${item.completed ? "line-through text-muted-foreground" : "text-foreground"}`}>
-                              {item.text}
+                            <span>{item.text}</span>
+                          )}
+                          {item.due_date && (
+                            <span className="who ml-2 inline-flex items-center gap-0.5">
+                              <Calendar className="h-2.5 w-2.5" />{formatMX(item.due_date, "dd MMM")}
                             </span>
                           )}
-                          <div className="flex flex-wrap gap-1.5 mt-0.5">
-                            {assigneeName && (
-                              <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
-                                <User className="h-2.5 w-2.5" />{assigneeName}
-                              </Badge>
-                            )}
-                            {item.due_date && (
-                              <Badge variant="outline" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
-                                <Calendar className="h-2.5 w-2.5" />{formatMX(item.due_date, "dd MMM yyyy")}
-                              </Badge>
-                            )}
-                          </div>
                         </div>
+                        {assigneeName && <span className="who">{assigneeName}</span>}
                         <button
-                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity mt-0.5"
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
                           onClick={() => removeChecklistItem(item.id)}
                         >
                           <X className="h-3 w-3" />
@@ -823,13 +820,14 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                     <Plus className="h-3 w-3" /> Crear subtarea
                   </Button>
                 </div>
-              </div>
+              </section>
 
               {/* ── Collaborators ── */}
-              <div>
-                <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
-                  <UserPlus className="h-4 w-4" /> Colaboradores
-                </h4>
+              <section className="dr-section">
+                <h3>
+                  <UserPlus className="h-3 w-3" /> Colaboradores
+                  {assignees.length > 0 && <span className="count">{assignees.length}</span>}
+                </h3>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {assignees.map((a: any) => (
                     <Badge key={a.id} variant="secondary" className="gap-1 text-xs">
@@ -846,83 +844,103 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   searchPlaceholder="Buscar colaborador..."
                   className="w-full sm:w-[250px]"
                 />
-              </div>
+              </section>
 
               {/* ── Advanced: Criticality/Delay (collapsible) ── */}
-              <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
-                <CollapsibleTrigger asChild>
-                  <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                    <Settings2 className="h-3.5 w-3.5" />
-                    Semáforo y atraso
-                    <ChevronDown className={`h-3 w-3 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/20">
-                    <div>
-                      <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
-                      <Select value={currentCriticality} onValueChange={(v) => setPending("criticality_level", v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {CRITICALITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
-                      <Select value={currentDelayCategory || "__none__"} onValueChange={(v) => setPending("delay_category", v === "__none__" ? null : v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {DELAY_CATEGORIES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {currentDelayCategory && (
-                      <div className="col-span-full">
-                        <span className="text-xs text-muted-foreground block mb-1">Notas</span>
-                        <Textarea
-                          className="text-xs min-h-[60px]"
-                          placeholder="Describe la situación..."
-                          value={currentDelayNotes || ""}
-                          onChange={(e) => setPending("delay_notes", e.target.value || null)}
-                        />
+              <section className="dr-section">
+                <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full">
+                      <h3 className="cursor-pointer hover:text-foreground transition-colors">
+                        <Settings2 className="h-3 w-3" /> Semáforo y atraso
+                        <ChevronDown className={cn("h-3 w-3 ml-auto transition-transform", showAdvanced && "rotate-180")} />
+                      </h3>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/20">
+                      <div>
+                        <span className="text-xs text-muted-foreground block mb-1">Semáforo</span>
+                        <Select value={currentCriticality} onValueChange={(v) => setPending("criticality_level", v)}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {CRITICALITY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </div>
-                    )}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
+                      <div>
+                        <span className="text-xs text-muted-foreground block mb-1">Motivo de atraso</span>
+                        <Select value={currentDelayCategory || "__none__"} onValueChange={(v) => setPending("delay_category", v === "__none__" ? null : v)}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {DELAY_CATEGORIES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {currentDelayCategory && (
+                        <div className="col-span-full">
+                          <span className="text-xs text-muted-foreground block mb-1">Notas</span>
+                          <Textarea
+                            className="text-xs min-h-[60px]"
+                            placeholder="Describe la situación..."
+                            value={currentDelayNotes || ""}
+                            onChange={(e) => setPending("delay_notes", e.target.value || null)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </section>
 
               <Separator />
 
-              {/* ── Tabs ── */}
-              <Tabs defaultValue="comments" className="w-full">
-                <TabsList className="w-full">
-                  <TabsTrigger value="comments" className="flex-1 text-xs">
-                    <MessageSquare className="h-3.5 w-3.5 mr-1" />Comentarios ({comments.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="links" className="flex-1 text-xs">
-                    <Link className="h-3.5 w-3.5 mr-1" />Enlaces ({dropboxLinks.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="files" className="flex-1 text-xs">
-                    <Paperclip className="h-3.5 w-3.5 mr-1" />Archivos ({documents.length})
-                  </TabsTrigger>
-                </TabsList>
+              {/* ── Tabs v2.4 ── */}
+              <div className="dr-tabs">
+                <button
+                  type="button"
+                  className={cn(activeTab === "comments" && "active")}
+                  onClick={() => setActiveTab("comments")}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" /> Comentarios ({comments.length})
+                </button>
+                <button
+                  type="button"
+                  className={cn(activeTab === "links" && "active")}
+                  onClick={() => setActiveTab("links")}
+                >
+                  <Link className="h-3.5 w-3.5" /> Enlaces ({dropboxLinks.length})
+                </button>
+                <button
+                  type="button"
+                  className={cn(activeTab === "files" && "active")}
+                  onClick={() => setActiveTab("files")}
+                >
+                  <Paperclip className="h-3.5 w-3.5" /> Archivos ({documents.length})
+                </button>
+              </div>
 
-                {/* Comments tab */}
-                <TabsContent value="comments" className="space-y-3 mt-3">
-                  <div className="space-y-3 max-h-[250px] overflow-y-auto">
-                    {comments.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin comentarios aún</p>}
+              {activeTab === "comments" && (
+                <div className="space-y-3 mt-3">
+                  <div className="comment-list max-h-[260px] overflow-y-auto">
+                    {comments.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">Sin comentarios aún</p>
+                    )}
                     {comments.map((c) => (
-                      <div key={c.id} className="flex gap-2.5">
-                        <Avatar className="h-7 w-7">
-                          <AvatarFallback className="text-[10px]">{c.profile?.full_name?.charAt(0) || "?"}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium">{c.profile?.full_name || "Usuario"}</span>
-                            <span className="text-[10px] text-muted-foreground">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
+                      <div key={c.id} className="comment">
+                        <UserAvatar
+                          name={c.profile?.full_name}
+                          avatarUrl={c.profile?.avatar_url}
+                          userId={c.user_id}
+                          size="md"
+                          className="shrink-0"
+                        />
+                        <div className="body">
+                          <div className="head">
+                            <span className="who">{c.profile?.full_name || "Usuario"}</span>
+                            <span className="when">{formatMX(c.created_at, "dd MMM HH:mm")}</span>
                           </div>
-                          <p className="text-sm text-foreground whitespace-pre-wrap break-words overflow-hidden">{renderCommentContent(c.content)}</p>
+                          <div className="text">{renderCommentContent(c.content)}</div>
                         </div>
                       </div>
                     ))}
@@ -947,7 +965,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                     </div>
                   )}
 
-                  <div className="flex gap-1.5">
+                  <div className="comment-composer">
                     <div className="flex-1 min-w-0">
                       <MentionTextarea
                         value={commentText} onChange={setCommentText} profiles={orgProfiles ?? []}
@@ -998,10 +1016,11 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       <Send className="h-4 w-4" />
                     </Button>
                   </div>
-                </TabsContent>
+                </div>
+              )}
 
-                {/* Links tab */}
-                <TabsContent value="links" className="space-y-3 mt-3 min-w-0">
+              {activeTab === "links" && (
+                <div className="space-y-3 mt-3 min-w-0">
                   <div className="space-y-1.5 min-w-0">
                     {dropboxLinks.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin enlaces de Dropbox</p>}
                     {dropboxLinks.map((link: any, i: number) => {
@@ -1045,10 +1064,11 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       <Button size="sm" variant="outline" className="h-8" onClick={() => setShowDropboxPicker(true)} title="Seleccionar archivo de Dropbox"><FolderOpen className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
-                </TabsContent>
+                </div>
+              )}
 
-                {/* Files tab */}
-                <TabsContent value="files" className="space-y-3 mt-3">
+              {activeTab === "files" && (
+                <div className="space-y-3 mt-3">
                   <div className="space-y-1.5">
                     {documents.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin archivos adjuntos</p>}
                     {documents.map((doc) => (
@@ -1095,8 +1115,8 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       </div>
                     </label>
                   </div>
-                </TabsContent>
-              </Tabs>
+                </div>
+              )}
 
               </div>
             </div>
@@ -1148,14 +1168,17 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                     <div>
                       <label className="text-[10px] text-muted-foreground block mb-1">Colaboradores ({assignees.length})</label>
                       <div className="flex flex-wrap gap-1">
-                        {assignees.map((a: any) => {
-                          const initials = (a.profile?.full_name || "?").split(" ").slice(0, 2).map((p: string) => p[0]).join("").toUpperCase();
-                          return (
-                            <Avatar key={a.id} className="h-6 w-6 border border-background -ml-1 first:ml-0" title={a.profile?.full_name}>
-                              <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
-                            </Avatar>
-                          );
-                        })}
+                        {assignees.map((a: any) => (
+                          <UserAvatar
+                            key={a.id}
+                            name={a.profile?.full_name}
+                            email={a.profile?.email}
+                            avatarUrl={a.profile?.avatar_url}
+                            userId={a.user_id}
+                            size="sm"
+                            className="border border-background -ml-1 first:ml-0"
+                          />
+                        ))}
                       </div>
                     </div>
                   )}
