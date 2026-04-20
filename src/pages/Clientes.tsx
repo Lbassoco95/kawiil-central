@@ -32,6 +32,7 @@ import type { PageHeaderStat } from "@/components/shared/PageHeader";
 import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
 import type { Database } from "@/integrations/supabase/types";
 
+type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientStatus = Database["public"]["Enums"]["client_status"];
 type ClientType = Database["public"]["Enums"]["client_type"];
 
@@ -69,6 +70,18 @@ const TYPE_GROUP_LABELS: Record<ClientType, string> = {
 };
 
 const TYPE_GROUP_ORDER: ClientType[] = ["persona_moral", "persona_fisica"];
+
+const SERVICE_AREA_COLOR_VAR: Partial<Record<ServiceArea, string>> = {
+  contabilidad: "var(--area-contabilidad)",
+  legal: "var(--area-legal)",
+  softlanding: "var(--area-softlanding)",
+  pld_ft: "var(--area-pld)",
+};
+
+function serviceAreaDotColor(area: ServiceArea | string): string {
+  const v = SERVICE_AREA_COLOR_VAR[area as ServiceArea];
+  return v ? `hsl(${v})` : "hsl(var(--primary))";
+}
 
 const Clientes = () => {
   const navigate = useNavigate();
