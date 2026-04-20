@@ -5,7 +5,7 @@ import { invokeSlackApi, type SlackMessage } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { SlackComposer } from "./SlackComposer";
 import { SlackMessageList } from "./SlackMessageList";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type Props = {
   open: boolean;
@@ -19,6 +19,8 @@ type Props = {
   reactionPending?: { messageTs: string; name: string } | null;
   onToggleReaction?: (messageTs: string, emojiName: string, add: boolean) => void;
   onCreateTaskFromMessage?: (message: SlackMessage) => void;
+  /** IDs Slack de usuarios que pueden arrobarse dentro del hilo (mismos miembros del canal). */
+  mentionUserIds?: string[];
 };
 
 export function SlackThreadPanel({
@@ -33,6 +35,7 @@ export function SlackThreadPanel({
   reactionPending = null,
   onToggleReaction,
   onCreateTaskFromMessage,
+  mentionUserIds,
 }: Props) {
   const [draft, setDraft] = useState("");
 
@@ -61,6 +64,23 @@ export function SlackThreadPanel({
   const messages = threadQuery.data || [];
   const parent = messages[0];
   const replies = messages.slice(1);
+
+  /**
+   * Lista de IDs arrobables dentro del hilo. Si `mentionUserIds` viene del
+   * contenedor (p. ej. miembros del canal en `Comunicacion`), la usamos;
+   * si no, caemos al conjunto de autores del hilo para que el popover
+   * siempre tenga candidatos reales.
+   */
+  const effectiveMentionIds = useMemo(() => {
+    if (mentionUserIds && mentionUserIds.length > 0) return mentionUserIds;
+    const set = new Set<string>();
+    for (const m of messages) {
+      if (m.user) set.add(m.user);
+      for (const id of m.reply_users ?? []) set.add(id);
+    }
+    for (const id of Object.keys(userMap)) set.add(id);
+    return [...set];
+  }, [mentionUserIds, messages, userMap]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -107,6 +127,8 @@ export function SlackThreadPanel({
               disabled={!threadTs}
               sending={sending}
               channelLabel="respuesta en hilo"
+              mentionUserIds={effectiveMentionIds}
+              userMap={userMap}
               compact
             />
           </div>

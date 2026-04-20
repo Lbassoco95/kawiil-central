@@ -1677,6 +1677,7 @@ export default function Comunicacion() {
             channelId={selectedChannel}
             threadTs={threadRootTs}
             userMap={userMap}
+            mentionUserIds={composerMemberIds}
             onReply={(text) => {
               if (!threadRootTs) return;
               postMutation.mutate({ text, thread_ts: threadRootTs });
