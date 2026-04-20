@@ -376,6 +376,16 @@ const Configuracion = () => {
                       financieros mantienen su paleta por ahora (se ajustarán
                       en una próxima iteración).
                     </p>
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      debug · estado:{" "}
+                      <span className="text-foreground">{cvdMode}</span> ·
+                      DOM[data-cvd]:{" "}
+                      <span className="text-foreground">
+                        {typeof document !== "undefined"
+                          ? document.documentElement.dataset.cvd ?? "(no set)"
+                          : "(ssr)"}
+                      </span>
+                    </p>
                   </div>
                 </div>
               </section>
