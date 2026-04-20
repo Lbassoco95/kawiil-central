@@ -22,6 +22,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { SlackChannelFilesPanel } from "@/components/slack/SlackChannelFilesPanel";
 
 /**
  * SlackAiPanel — Fase 2 del rediseño v2.4 del módulo Slack.
@@ -632,6 +633,13 @@ export function SlackAiPanel({
               Las respuestas son borradores generados por IA. Revísalas antes de enviar.
             </p>
           </section>
+
+          {/* Archivos del canal: preview, sync a Kawiil y guardar en Dropbox */}
+          <SlackChannelFilesPanel
+            channelTitle={channelTitle}
+            messages={messages}
+            userMap={userMap}
+          />
         </div>
       </ScrollArea>
     </aside>

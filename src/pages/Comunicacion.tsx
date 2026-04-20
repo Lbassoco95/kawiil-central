@@ -43,6 +43,7 @@ import { SlackComposer } from "@/components/slack/SlackComposer";
 import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackAiPanel } from "@/components/slack/SlackAiPanel";
 import { SlackChannelInlineSummary } from "@/components/slack/SlackChannelInlineSummary";
+import { SlackQuickReplyBar } from "@/components/slack/SlackQuickReplyBar";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { Button } from "@/components/ui/button";
@@ -1509,6 +1510,36 @@ export default function Comunicacion() {
               onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
               selectedChannelId={selectedChannel}
               onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
+            />
+            <SlackQuickReplyBar
+              channelId={selectedChannel}
+              channelTitle={headerTitle}
+              messages={messages}
+              userMap={userMap}
+              selfUserId={connection?.slack_user_id ?? null}
+              conversationType={
+                selectedMeta?.is_im
+                  ? "im"
+                  : selectedMeta?.is_mpim
+                    ? "mpim"
+                    : selectedMeta?.is_private
+                      ? "private"
+                      : "channel"
+              }
+              userName={
+                connection?.slack_user_id
+                  ? slackUserDisplayName(connection.slack_user_id, userMap)
+                  : (user?.user_metadata as { full_name?: string } | undefined)?.full_name ||
+                    user?.email ||
+                    ""
+              }
+              onInsertReply={(text) => {
+                setDraft((current) => {
+                  const trimmed = (current || "").trim();
+                  return trimmed ? `${trimmed}\n\n${text}` : text;
+                });
+                toast.success("Sugerencia añadida al borrador.");
+              }}
             />
             <SlackComposer
               value={draft}
