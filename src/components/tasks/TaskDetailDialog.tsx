@@ -32,6 +32,7 @@ import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { cn } from "@/lib/utils";
 import { TaskDependenciesPanel } from "./TaskDependenciesPanel";
 import { TaskKawiilAiCard } from "./TaskKawiilAiCard";
+import { TaskAiBriefingCard } from "./TaskAiBriefingCard";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -1123,6 +1124,25 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
             {/* ── Sidebar v2.4 (dr-rail) ── */}
             <aside className="dr-rail hidden md:flex">
+              {/* Briefing IA (LLM) */}
+              <TaskAiBriefingCard
+                task={task as any}
+                subtasks={childSubtasks as any}
+                clientName={clientChip ?? null}
+                projectName={projectChip ?? null}
+                assigneeName={
+                  currentAssignedTo
+                    ? orgProfiles?.find((p) => p.user_id === currentAssignedTo)?.full_name ?? null
+                    : null
+                }
+              />
+
+              {/* Kawiil IA (heurística local) */}
+              <TaskKawiilAiCard
+                task={task as any}
+                subtasks={childSubtasks as any}
+              />
+
               {/* Asignación */}
               <section className="rc space-y-2.5">
                 <h4>
@@ -1286,12 +1306,6 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                 taskId={taskId}
                 projectId={task.project_id || null}
                 onOpenTask={(id) => setSelectedSubtaskId(id)}
-              />
-
-              {/* Kawiil IA */}
-              <TaskKawiilAiCard
-                task={task as any}
-                subtasks={childSubtasks as any}
               />
 
               {/* Actividad reciente */}

@@ -29,7 +29,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  */
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+// Haiku por defecto: resúmenes cortos, barato, mayor TPM. Sonnet 4 (30k TPM en tier 1)
+// revienta el rate limit rápido con hilos grandes. Override con KAWIIL_AI_FAST_MODEL.
+const DEFAULT_MODEL =
+  Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || "claude-haiku-4-5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +56,42 @@ function jsonResponse(payload: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+/**
+ * Llama a Anthropic. Un solo intento: con tier 1 apretado los reintentos
+ * server-side amplifican la carga (cada click = N llamadas) y empeoran los
+ * 429. La capa de caché + semáforo client-side es quien protege al tier.
+ */
+async function callAnthropicOnce(args: {
+  apiKey: string;
+  model: string;
+  maxTokens: number;
+  system: string;
+  userPrompt: string;
+}): Promise<Response> {
+  return await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": args.apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: args.model,
+      max_tokens: args.maxTokens,
+      system: args.system,
+      messages: [{ role: "user", content: args.userPrompt }],
+    }),
+  });
+}
+
+/** SHA-256 del contenido fuente — llave de caché en `public.ai_response_cache`. */
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const CACHE_SCOPE = "email-summary";
 
 function tryParseJsonFromText(text: string): Record<string, unknown> | null {
   if (!text) return null;
@@ -102,12 +141,37 @@ serve(async (req) => {
     const subject = (payload.subject || "(sin asunto)").trim();
     const senderName = (payload.senderName || "Desconocido").trim();
     const senderEmail = (payload.senderEmail || "").trim();
-    const bodyPlain = stripHtml(payload.body || "").slice(0, 6000);
-    const threadPlain = stripHtml(payload.thread || "").slice(0, 4000);
+    const bodyPlain = stripHtml(payload.body || "").slice(0, 2200);
+    const threadPlain = stripHtml(payload.thread || "").slice(0, 600);
     const locale = payload.locale === "en" ? "en" : "es";
 
     if (!bodyPlain) {
       return jsonResponse({ error: "empty_body", message: "El correo no tiene contenido para resumir." }, 400);
+    }
+
+    // ───────── Caché server-side por hash del contenido ─────────
+    // Evita llamar a Anthropic si ya resumimos exactamente este correo antes
+    // (para cualquier usuario / dispositivo). Absorbe los 429 del tier 1.
+    const cacheKey = await sha256Hex(`${locale}|${subject}|${senderEmail}|${bodyPlain}|${threadPlain}`);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const serviceClient = serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+      : null;
+
+    if (serviceClient) {
+      const { data: cached } = await serviceClient
+        .from("ai_response_cache")
+        .select("response, model")
+        .eq("scope", CACHE_SCOPE)
+        .eq("cache_key", cacheKey)
+        .maybeSingle();
+      if (cached?.response) {
+        return jsonResponse({
+          ...cached.response,
+          model: cached.model || DEFAULT_MODEL,
+          cached: true,
+        });
+      }
     }
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
@@ -154,19 +218,12 @@ Devuelve EXACTAMENTE este JSON (sin otras llaves, sin comentarios, sin fences):
   "suggestedAction": "una sola oración imperativa con la próxima acción recomendada, o null si no hay nada que hacer"
 }`;
 
-    const aiResp = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        max_tokens: 800,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
+    const aiResp = await callAnthropicOnce({
+      apiKey: ANTHROPIC_API_KEY,
+      model: DEFAULT_MODEL,
+      maxTokens: 500,
+      system: systemPrompt,
+      userPrompt,
     });
 
     if (!aiResp.ok) {
@@ -193,11 +250,26 @@ Devuelve EXACTAMENTE este JSON (sin otras llaves, sin comentarios, sin fences):
         ? parsed.suggestedAction.trim()
         : null;
 
+    const payloadOut = { summary, keyPoints, suggestedAction };
+    // Guarda en caché (best-effort, no frena la respuesta si falla).
+    if (serviceClient) {
+      serviceClient
+        .from("ai_response_cache")
+        .upsert({
+          scope: CACHE_SCOPE,
+          cache_key: cacheKey,
+          response: payloadOut,
+          model: DEFAULT_MODEL,
+        })
+        .then(({ error }) => {
+          if (error) console.warn("email-ai-summary cache upsert failed", error.message);
+        });
+    }
+
     return jsonResponse({
-      summary,
-      keyPoints,
-      suggestedAction,
+      ...payloadOut,
       model: DEFAULT_MODEL,
+      cached: false,
     });
   } catch (e) {
     console.error("email-ai-summary error", e);

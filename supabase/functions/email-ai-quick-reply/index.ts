@@ -28,7 +28,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  */
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+// Haiku por defecto (ver email-ai-summary). Override con KAWIIL_AI_FAST_MODEL.
+const DEFAULT_MODEL =
+  Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || "claude-haiku-4-5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +54,36 @@ function jsonResponse(payload: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+async function callAnthropicOnce(args: {
+  apiKey: string;
+  model: string;
+  maxTokens: number;
+  system: string;
+  userPrompt: string;
+}): Promise<Response> {
+  return await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": args.apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: args.model,
+      max_tokens: args.maxTokens,
+      system: args.system,
+      messages: [{ role: "user", content: args.userPrompt }],
+    }),
+  });
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const CACHE_SCOPE = "email-quick-reply";
 
 function tryParseJsonFromText(text: string): Record<string, unknown> | null {
   if (!text) return null;
@@ -101,11 +133,34 @@ serve(async (req) => {
     const senderName = (payload.senderName || "Desconocido").trim();
     const senderEmail = (payload.senderEmail || "").trim();
     const userName = (payload.userName || "").trim();
-    const bodyPlain = stripHtml(payload.body || "").slice(0, 5000);
-    const threadPlain = stripHtml(payload.thread || "").slice(0, 3000);
+    const bodyPlain = stripHtml(payload.body || "").slice(0, 1800);
+    const threadPlain = stripHtml(payload.thread || "").slice(0, 400);
     const locale = payload.locale === "en" ? "en" : "es";
 
     if (!bodyPlain) return jsonResponse({ error: "empty_body" }, 400);
+
+    // Caché server-side compartido por hash (scope="email-quick-reply").
+    const cacheKey = await sha256Hex(`${locale}|${userName}|${subject}|${senderEmail}|${bodyPlain}|${threadPlain}`);
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const serviceClient = serviceRoleKey
+      ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+      : null;
+
+    if (serviceClient) {
+      const { data: cached } = await serviceClient
+        .from("ai_response_cache")
+        .select("response, model")
+        .eq("scope", CACHE_SCOPE)
+        .eq("cache_key", cacheKey)
+        .maybeSingle();
+      if (cached?.response) {
+        return jsonResponse({
+          ...cached.response,
+          model: cached.model || DEFAULT_MODEL,
+          cached: true,
+        });
+      }
+    }
 
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
@@ -168,19 +223,12 @@ Devuelve EXACTAMENTE este JSON (sin otras llaves, sin comentarios, sin fences):
   ]
 }`;
 
-    const aiResp = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        max_tokens: 1200,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
+    const aiResp = await callAnthropicOnce({
+      apiKey: ANTHROPIC_API_KEY,
+      model: DEFAULT_MODEL,
+      maxTokens: 900,
+      system: systemPrompt,
+      userPrompt,
     });
 
     if (!aiResp.ok) {
@@ -208,7 +256,22 @@ Devuelve EXACTAMENTE este JSON (sin otras llaves, sin comentarios, sin fences):
       .filter((s) => s.body.length > 0)
       .slice(0, 4);
 
-    return jsonResponse({ suggestions, model: DEFAULT_MODEL });
+    const payloadOut = { suggestions };
+    if (serviceClient) {
+      serviceClient
+        .from("ai_response_cache")
+        .upsert({
+          scope: CACHE_SCOPE,
+          cache_key: cacheKey,
+          response: payloadOut,
+          model: DEFAULT_MODEL,
+        })
+        .then(({ error }) => {
+          if (error) console.warn("email-ai-quick-reply cache upsert failed", error.message);
+        });
+    }
+
+    return jsonResponse({ ...payloadOut, model: DEFAULT_MODEL, cached: false });
   } catch (e) {
     console.error("email-ai-quick-reply error", e);
     return jsonResponse({ error: e instanceof Error ? e.message : "unknown" }, 500);

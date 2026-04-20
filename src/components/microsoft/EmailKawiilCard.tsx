@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles,
   Loader2,
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
+import { withAiRateLimit, invalidateAiCache } from "@/lib/kawiilAiCache";
 
 /**
  * Extrae el mensaje real de una Edge Function cuando responde 4xx/5xx.
@@ -127,6 +128,10 @@ const TONE_STYLE: Record<QuickReply["tone"], string> = {
 
 const KAWIIL_AI_GRADIENT = "linear-gradient(135deg, hsl(200 100% 50%), hsl(220 100% 55%))";
 
+/** Scopes usados en `kawiilAiCache` para que coincidan entre ambas ramas. */
+const CACHE_SCOPE_SUMMARY = "email-summary";
+const CACHE_SCOPE_QUICK_REPLY = "email-quick-reply";
+
 export function EmailKawiilCard({
   emailId,
   subject,
@@ -150,67 +155,120 @@ export function EmailKawiilCard({
   const [repliesError, setRepliesError] = useState<string | null>(null);
   const [expandedReplyId, setExpandedReplyId] = useState<string | null>(null);
 
-  const fetchSummary = useCallback(async () => {
+  // Refs a las props volátiles para que `fetchSummary` / `fetchQuickReplies`
+  // no cambien de identidad en cada render (lo cual antes disparaba el effect
+  // y generaba peticiones redundantes contra la Edge Function).
+  const propsRef = useRef({ subject, senderName, senderEmail, body, thread, userName });
+  useEffect(() => {
+    propsRef.current = { subject, senderName, senderEmail, body, thread, userName };
+  }, [subject, senderName, senderEmail, body, thread, userName]);
+
+  const onSummaryReadyRef = useRef(onSummaryReady);
+  useEffect(() => {
+    onSummaryReadyRef.current = onSummaryReady;
+  }, [onSummaryReady]);
+
+  const fetchSummary = useCallback(async (opts?: { force?: boolean; emailId?: string }) => {
+    const id = opts?.emailId ?? emailId;
+    const force = opts?.force ?? false;
     setSummaryLoading(true);
     setSummaryError(null);
     try {
-      const { data, error } = await supabase.functions.invoke<SummaryResult & { error?: string; message?: string }>(
-        "email-ai-summary",
-        {
-          body: { subject, senderName, senderEmail, body, thread, locale: "es" },
+      const { value, fromCache } = await withAiRateLimit<SummaryResult>({
+        scope: CACHE_SCOPE_SUMMARY,
+        key: id,
+        force,
+        fn: async () => {
+          const p = propsRef.current;
+          const { data, error } = await supabase.functions.invoke<SummaryResult & { error?: string; message?: string }>(
+            "email-ai-summary",
+            {
+              body: {
+                subject: p.subject,
+                senderName: p.senderName,
+                senderEmail: p.senderEmail,
+                body: p.body,
+                thread: p.thread,
+                locale: "es",
+              },
+            },
+          );
+          if (error) {
+            const msg = await extractEdgeFunctionError(error, "No se pudo generar el resumen.");
+            throw new Error(msg);
+          }
+          if (!data || (data as any).error) {
+            throw new Error((data as any)?.message || (data as any)?.error || "Sin resumen");
+          }
+          return {
+            summary: data.summary || "",
+            keyPoints: Array.isArray(data.keyPoints) ? data.keyPoints : [],
+            suggestedAction: data.suggestedAction ?? null,
+          };
         },
-      );
-      if (error) {
-        const msg = await extractEdgeFunctionError(error, "No se pudo generar el resumen.");
-        throw new Error(msg);
-      }
-      if (!data || (data as any).error) {
-        throw new Error((data as any)?.message || (data as any)?.error || "Sin resumen");
-      }
-      const next: SummaryResult = {
-        summary: data.summary || "",
-        keyPoints: Array.isArray(data.keyPoints) ? data.keyPoints : [],
-        suggestedAction: data.suggestedAction ?? null,
-      };
-      setSummary(next);
-      onSummaryReady?.(next);
+      });
+      setSummary(value);
+      onSummaryReadyRef.current?.(value);
+      return fromCache;
     } catch (e) {
       setSummaryError(e instanceof Error ? e.message : "Error desconocido");
     } finally {
       setSummaryLoading(false);
     }
-  }, [subject, senderName, senderEmail, body, thread, onSummaryReady]);
+  }, [emailId]);
 
-  const fetchQuickReplies = useCallback(async () => {
+  const fetchQuickReplies = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force ?? false;
     setRepliesLoading(true);
     setRepliesError(null);
     try {
-      const { data, error } = await supabase.functions.invoke<{ suggestions?: QuickReply[]; error?: string; message?: string }>(
-        "email-ai-quick-reply",
-        {
-          body: { subject, senderName, senderEmail, body, thread, userName, locale: "es" },
+      const { value } = await withAiRateLimit<QuickReply[]>({
+        scope: CACHE_SCOPE_QUICK_REPLY,
+        key: emailId,
+        force,
+        fn: async () => {
+          const p = propsRef.current;
+          const { data, error } = await supabase.functions.invoke<{ suggestions?: QuickReply[]; error?: string; message?: string }>(
+            "email-ai-quick-reply",
+            {
+              body: {
+                subject: p.subject,
+                senderName: p.senderName,
+                senderEmail: p.senderEmail,
+                body: p.body,
+                thread: p.thread,
+                userName: p.userName,
+                locale: "es",
+              },
+            },
+          );
+          if (error) {
+            const msg = await extractEdgeFunctionError(error, "No se pudieron generar sugerencias.");
+            throw new Error(msg);
+          }
+          if (!data || (data as any).error) {
+            throw new Error((data as any)?.message || (data as any)?.error || "Sin sugerencias");
+          }
+          return Array.isArray(data.suggestions) ? data.suggestions : [];
         },
-      );
-      if (error) {
-        const msg = await extractEdgeFunctionError(error, "No se pudieron generar sugerencias.");
-        throw new Error(msg);
-      }
-      if (!data || (data as any).error) {
-        throw new Error((data as any)?.message || (data as any)?.error || "Sin sugerencias");
-      }
-      setQuickReplies(Array.isArray(data.suggestions) ? data.suggestions : []);
+      });
+      setQuickReplies(value);
     } catch (e) {
       setRepliesError(e instanceof Error ? e.message : "Error desconocido");
     } finally {
       setRepliesLoading(false);
     }
-  }, [subject, senderName, senderEmail, body, thread, userName]);
+  }, [emailId]);
 
   useEffect(() => {
+    setExpandedReplyId(null);
+    setSummaryError(null);
+    setRepliesError(null);
+    // Se limpia el estado local; `withAiRateLimit` decidirá si sirve del caché
+    // persistente o dispara la Edge Function.
     setSummary(null);
     setQuickReplies(null);
-    setExpandedReplyId(null);
-    void fetchSummary();
+    void fetchSummary({ emailId });
   }, [emailId, fetchSummary]);
 
   const showActionBadge = useMemo(() => Boolean(summary?.suggestedAction), [summary]);
@@ -254,7 +312,10 @@ export function EmailKawiilCard({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => void fetchSummary()}
+            onClick={() => {
+              invalidateAiCache(CACHE_SCOPE_SUMMARY, emailId);
+              void fetchSummary({ force: true, emailId });
+            }}
             disabled={summaryLoading}
             aria-label="Regenerar resumen"
             title="Regenerar resumen"
@@ -352,7 +413,11 @@ export function EmailKawiilCard({
             variant="ghost"
             size="sm"
             className="h-6 gap-1 text-[11px]"
-            onClick={() => void fetchQuickReplies()}
+            onClick={() => {
+              const forceRegen = Boolean(quickReplies);
+              if (forceRegen) invalidateAiCache(CACHE_SCOPE_QUICK_REPLY, emailId);
+              void fetchQuickReplies({ force: forceRegen });
+            }}
             disabled={repliesLoading}
           >
             {repliesLoading ? (
