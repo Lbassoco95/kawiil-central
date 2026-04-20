@@ -20,6 +20,13 @@
 const LS_PREFIX = "kawiil.ai.cache.v1:";
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 const MAX_CONCURRENT = 2;
+/**
+ * Timeout duro del lado cliente. Si la Edge Function / Anthropic no responde
+ * en este tiempo, preferimos fallar con un error claro a dejar el card en
+ * estado "Procesando…" indefinido. El edge tiene su propio `AbortSignal.timeout(25s)`
+ * para cortar Anthropic antes, este es el tope externo de seguridad.
+ */
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 type CacheEntry<T> = { t: number; v: T };
 
@@ -118,11 +125,32 @@ function release(): void {
   if (next) next();
 }
 
+/** Race una promesa contra un timeout; si gana el timeout, rechaza con mensaje claro. */
+function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("La IA tardó demasiado en responder. Intenta de nuevo."));
+    }, timeoutMs);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /**
  * Ejecuta `fn` respetando:
  *   - caché `scope:key` (si no está `force`)
  *   - dedup: si otro caller ya está pidiendo la misma key, ambos reciben el mismo resultado
  *   - semáforo global de MAX_CONCURRENT
+ *   - timeout duro (default 30s) que rompe el "Procesando…" infinito si el
+ *     edge function cuelga o la red muere.
  *
  * El caller decide si `force` (típicamente al click de regenerar).
  */
@@ -131,9 +159,17 @@ export async function withAiRateLimit<T>(opts: {
   key: string;
   force?: boolean;
   ttlMs?: number;
+  timeoutMs?: number;
   fn: () => Promise<T>;
 }): Promise<{ value: T; fromCache: boolean }> {
-  const { scope, key, force = false, ttlMs = DEFAULT_TTL_MS, fn } = opts;
+  const {
+    scope,
+    key,
+    force = false,
+    ttlMs = DEFAULT_TTL_MS,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    fn,
+  } = opts;
 
   if (!force) {
     const cached = readAiCache<T>(scope, key, ttlMs);
@@ -143,7 +179,9 @@ export async function withAiRateLimit<T>(opts: {
   const fullKey = `${scope}:${key}`;
   const existing = inFlight.get(fullKey) as Promise<T> | undefined;
   if (existing) {
-    const value = await existing;
+    // Aplicamos timeout también al piggyback para que un caller colgado no
+    // contagie a los demás.
+    const value = await withTimeout(existing, timeoutMs);
     return { value, fromCache: true };
   }
 
@@ -159,6 +197,13 @@ export async function withAiRateLimit<T>(opts: {
     }
   })();
   inFlight.set(fullKey, p);
-  const value = await p;
+  // Si expira el timeout, limpiamos el inFlight para que el próximo intento
+  // pueda relanzar. `p` puede seguir corriendo en background (no podemos
+  // cancelar fetches ajenos desde aquí), pero ya no bloquea UI.
+  const guarded = withTimeout(p, timeoutMs).catch((err) => {
+    inFlight.delete(fullKey);
+    throw err;
+  });
+  const value = await guarded;
   return { value, fromCache: false };
 }

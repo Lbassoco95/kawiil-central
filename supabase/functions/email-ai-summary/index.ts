@@ -69,6 +69,8 @@ async function callAnthropicOnce(args: {
   system: string;
   userPrompt: string;
 }): Promise<Response> {
+  // Tope duro de 25s — si Anthropic tarda más, preferimos devolver error al
+  // cliente (que tiene su propio timeout de 30s) a que el isolate cuelgue.
   return await fetch(ANTHROPIC_API_URL, {
     method: "POST",
     headers: {
@@ -82,6 +84,7 @@ async function callAnthropicOnce(args: {
       system: args.system,
       messages: [{ role: "user", content: args.userPrompt }],
     }),
+    signal: AbortSignal.timeout(25_000),
   });
 }
 
@@ -120,14 +123,12 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return jsonResponse({ error: "Unauthorized" }, 401);
+    // NOTA: `verify_jwt = true` en supabase/config.toml hace que el gateway
+    // valide el JWT antes de invocar esta función. No llamamos `auth.getUser()`
+    // aquí porque el roundtrip HTTP a /auth/v1/user cuelga el isolate bajo
+    // carga (connection reset) y no necesitamos el objeto user.
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const requesterClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userErr } = await requesterClient.auth.getUser();
-    if (userErr || !user) return jsonResponse({ error: "Unauthorized" }, 401);
 
     const payload = (await req.json().catch(() => ({}))) as {
       subject?: string;
@@ -159,18 +160,23 @@ serve(async (req) => {
       : null;
 
     if (serviceClient) {
-      const { data: cached } = await serviceClient
-        .from("ai_response_cache")
-        .select("response, model")
-        .eq("scope", CACHE_SCOPE)
-        .eq("cache_key", cacheKey)
-        .maybeSingle();
-      if (cached?.response) {
-        return jsonResponse({
-          ...cached.response,
-          model: cached.model || DEFAULT_MODEL,
-          cached: true,
-        });
+      // Lectura best-effort: si la DB tarda o falla, seguimos a Anthropic.
+      try {
+        const { data: cached } = await serviceClient
+          .from("ai_response_cache")
+          .select("response, model")
+          .eq("scope", CACHE_SCOPE)
+          .eq("cache_key", cacheKey)
+          .maybeSingle();
+        if (cached?.response) {
+          return jsonResponse({
+            ...cached.response,
+            model: cached.model || DEFAULT_MODEL,
+            cached: true,
+          });
+        }
+      } catch (cacheErr) {
+        console.error("email-ai-summary cache read failed", cacheErr);
       }
     }
 
@@ -253,17 +259,22 @@ Devuelve EXACTAMENTE este JSON (sin otras llaves, sin comentarios, sin fences):
     const payloadOut = { summary, keyPoints, suggestedAction };
     // Guarda en caché (best-effort, no frena la respuesta si falla).
     if (serviceClient) {
-      serviceClient
-        .from("ai_response_cache")
-        .upsert({
-          scope: CACHE_SCOPE,
-          cache_key: cacheKey,
-          response: payloadOut,
-          model: DEFAULT_MODEL,
-        })
-        .then(({ error }) => {
-          if (error) console.warn("email-ai-summary cache upsert failed", error.message);
-        });
+      try {
+        serviceClient
+          .from("ai_response_cache")
+          .upsert({
+            scope: CACHE_SCOPE,
+            cache_key: cacheKey,
+            response: payloadOut,
+            model: DEFAULT_MODEL,
+          })
+          .then(({ error }) => {
+            if (error) console.warn("email-ai-summary cache upsert failed", error.message);
+          })
+          .catch((err) => console.warn("email-ai-summary cache upsert threw", err));
+      } catch (cacheErr) {
+        console.warn("email-ai-summary cache upsert sync threw", cacheErr);
+      }
     }
 
     return jsonResponse({

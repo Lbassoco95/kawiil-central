@@ -62,6 +62,8 @@ async function callAnthropicOnce(args: {
   system: string;
   userPrompt: string;
 }): Promise<Response> {
+  // Tope duro de 25s — el cliente tiene timeout de 30s, esto nos deja margen
+  // para devolver un error limpio en vez de colgar el isolate.
   return await fetch(ANTHROPIC_API_URL, {
     method: "POST",
     headers: {
@@ -75,6 +77,7 @@ async function callAnthropicOnce(args: {
       system: args.system,
       messages: [{ role: "user", content: args.userPrompt }],
     }),
+    signal: AbortSignal.timeout(25_000),
   });
 }
 
@@ -110,14 +113,10 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return jsonResponse({ error: "Unauthorized" }, 401);
+    // El gateway ya validó el JWT (verify_jwt=true). Evitar `auth.getUser()`
+    // porque cuelga bajo carga con connection reset.
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const requesterClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userErr } = await requesterClient.auth.getUser();
-    if (userErr || !user) return jsonResponse({ error: "Unauthorized" }, 401);
 
     const payload = (await req.json().catch(() => ({}))) as {
       subject?: string;
@@ -147,18 +146,23 @@ serve(async (req) => {
       : null;
 
     if (serviceClient) {
-      const { data: cached } = await serviceClient
-        .from("ai_response_cache")
-        .select("response, model")
-        .eq("scope", CACHE_SCOPE)
-        .eq("cache_key", cacheKey)
-        .maybeSingle();
-      if (cached?.response) {
-        return jsonResponse({
-          ...cached.response,
-          model: cached.model || DEFAULT_MODEL,
-          cached: true,
-        });
+      // Best-effort: si la DB tarda o falla, seguimos a Anthropic.
+      try {
+        const { data: cached } = await serviceClient
+          .from("ai_response_cache")
+          .select("response, model")
+          .eq("scope", CACHE_SCOPE)
+          .eq("cache_key", cacheKey)
+          .maybeSingle();
+        if (cached?.response) {
+          return jsonResponse({
+            ...cached.response,
+            model: cached.model || DEFAULT_MODEL,
+            cached: true,
+          });
+        }
+      } catch (cacheErr) {
+        console.error("email-ai-quick-reply cache read failed", cacheErr);
       }
     }
 
@@ -258,17 +262,22 @@ Devuelve EXACTAMENTE este JSON (sin otras llaves, sin comentarios, sin fences):
 
     const payloadOut = { suggestions };
     if (serviceClient) {
-      serviceClient
-        .from("ai_response_cache")
-        .upsert({
-          scope: CACHE_SCOPE,
-          cache_key: cacheKey,
-          response: payloadOut,
-          model: DEFAULT_MODEL,
-        })
-        .then(({ error }) => {
-          if (error) console.warn("email-ai-quick-reply cache upsert failed", error.message);
-        });
+      try {
+        serviceClient
+          .from("ai_response_cache")
+          .upsert({
+            scope: CACHE_SCOPE,
+            cache_key: cacheKey,
+            response: payloadOut,
+            model: DEFAULT_MODEL,
+          })
+          .then(({ error }) => {
+            if (error) console.warn("email-ai-quick-reply cache upsert failed", error.message);
+          })
+          .catch((err) => console.warn("email-ai-quick-reply cache upsert threw", err));
+      } catch (cacheErr) {
+        console.warn("email-ai-quick-reply cache upsert sync threw", cacheErr);
+      }
     }
 
     return jsonResponse({ ...payloadOut, model: DEFAULT_MODEL, cached: false });
