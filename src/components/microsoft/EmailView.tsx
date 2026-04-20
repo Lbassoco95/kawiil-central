@@ -83,6 +83,7 @@ import {
 import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
+import { EmailInboxAiPanel } from "./EmailInboxAiPanel";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { ReplyForwardDialog } from "./ReplyForwardDialog";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
@@ -328,6 +329,7 @@ export function EmailView() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string>("inbox");
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  const [aiInboxOpen, setAiInboxOpen] = useState(false);
   const [emailAction, setEmailAction] = useState<EmailAction>(null);
   const [forwardTo, setForwardTo] = useState("");
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
@@ -1282,6 +1284,25 @@ export function EmailView() {
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">Actualizar correos</TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={aiInboxOpen ? "default" : "outline"}
+                    size="icon"
+                    className={cn(
+                      "h-9 w-9 shrink-0",
+                      !aiInboxOpen && "border-primary/30 text-primary hover:bg-primary/10",
+                    )}
+                    onClick={() => setAiInboxOpen((v) => !v)}
+                    aria-label="Triaje IA del inbox"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {aiInboxOpen ? "Cerrar triaje IA" : "Triaje IA del inbox"}
+                </TooltipContent>
+              </Tooltip>
               <Button
                 size="sm"
                 className="h-9 shrink-0 gap-2 px-4 text-white shadow-md hover:shadow-lg border-0"
@@ -2028,6 +2049,17 @@ export function EmailView() {
           </div>
         )}
       </div>
+      <EmailInboxAiPanel
+        open={aiInboxOpen}
+        onClose={() => setAiInboxOpen(false)}
+        emails={allEmails as any}
+        onOpenEmail={(email) => {
+          handleOpenEmail(email);
+        }}
+        folderLabel={
+          sortedFolders.find((f: any) => f.id === selectedFolderId)?.displayName ?? undefined
+        }
+      />
       </div>
     </div>
 
