@@ -18,6 +18,7 @@ import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { TasksAIPanoramaCard } from "@/components/tareas/TasksAIPanoramaCard";
+import { MyTasksSmartGroups } from "@/components/tareas/MyTasksSmartGroups";
 import { QuickCreateInput } from "@/components/tareas/QuickCreateInput";
 import { TaskStatusTabs, type TaskStatusFilter, type TaskViewMode } from "@/components/tareas/TaskStatusTabs";
 import {
@@ -64,6 +65,15 @@ const Tareas = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [showAllSteps, setShowAllSteps] = useState(false);
   const [showAllMyOpen, setShowAllMyOpen] = useState(false);
+  const [myTasksLayout, setMyTasksLayout] = useState<"smart" | "lista">(() => {
+    if (typeof window === "undefined") return "smart";
+    const v = window.localStorage.getItem("kawiil-tareas-mias-layout");
+    return v === "lista" ? "lista" : "smart";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try { window.localStorage.setItem("kawiil-tareas-mias-layout", myTasksLayout); } catch { /* ignore */ }
+  }, [myTasksLayout]);
   const deleteTask = useDeleteTask();
   const { canDeleteTasks } = useUserRole();
   const { areaOptions, areaLabelMap, getCelulaLabel } = useAreaOptions();
@@ -426,7 +436,7 @@ INSTRUCCIONES:
         />
 
         <section className="animate-fade-in surface-glass-subtle p-4 ring-1 ring-primary/10">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between mb-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
             <div className="flex items-start gap-2 min-w-0">
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
                 <UserCheck className="h-4 w-4" />
@@ -439,10 +449,44 @@ INSTRUCCIONES:
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug max-w-xl">
-                  Solo tareas internas donde eres responsable. Los pasos dentro de proyectos (constitución, gestoría, etc.) están en la sección de abajo.
+                  {myTasksLayout === "smart"
+                    ? "Agrupadas por urgencia: lo que urge primero, lo que puede esperar al final."
+                    : "Solo tareas internas donde eres responsable. Los pasos dentro de proyectos están en la sección de abajo."}
                 </p>
               </div>
             </div>
+            {myOpenTasks.length > 0 && (
+              <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border/50 bg-background/70 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMyTasksLayout("smart")}
+                  className={cn(
+                    "rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+                    myTasksLayout === "smart"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-pressed={myTasksLayout === "smart"}
+                  title="Agrupar por urgencia"
+                >
+                  Por urgencia
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMyTasksLayout("lista")}
+                  className={cn(
+                    "rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+                    myTasksLayout === "lista"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-pressed={myTasksLayout === "lista"}
+                  title="Vista lista plana"
+                >
+                  Lista
+                </button>
+              </div>
+            )}
           </div>
 
           {myAssignedLoading ? (
@@ -459,6 +503,13 @@ INSTRUCCIONES:
             <div className="space-y-2">
               {myOpenTasks.length === 0 ? (
                 <p className="text-xs text-muted-foreground text-center py-3">No tienes tareas del tablero en curso.</p>
+              ) : myTasksLayout === "smart" ? (
+                <MyTasksSmartGroups
+                  tasks={myOpenTasks as any}
+                  areaColorMap={areaColorMap}
+                  getCelulaLabel={getCelulaLabel}
+                  onOpen={(t) => openTask(t as any)}
+                />
               ) : (
                 <>
                   {(showAllMyOpen ? myOpenTasks : myOpenTasks.slice(0, 10)).map((task, i) => (
