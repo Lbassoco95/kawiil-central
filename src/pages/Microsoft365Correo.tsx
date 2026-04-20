@@ -13,16 +13,16 @@ const Microsoft365Correo = () => {
   return (
     <AppLayout contentMaxWidth="full">
       <div className="flex flex-col h-full min-h-0 min-w-0 bg-card">
-        <div className="shrink-0 border-b border-border/70 bg-card px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary">
+        <div className="shrink-0 border-b border-border/70 bg-card/80 backdrop-blur-sm px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="grid h-9 w-9 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
               <Mail className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm font-semibold tracking-tight text-foreground">Correo</h1>
+              <h1 className="text-base font-bold tracking-tight gradient-text leading-tight">Correo</h1>
               {profile && (
-                <p className="truncate text-[11px] text-muted-foreground -mt-0.5">
-                  {profile.displayName || profile.mail || ""}
+                <p className="truncate text-[11px] text-muted-foreground leading-tight">
+                  Outlook · {profile.displayName || profile.mail || ""}
                 </p>
               )}
             </div>
