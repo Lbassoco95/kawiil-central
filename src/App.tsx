@@ -29,6 +29,7 @@ import Finanzas from "./pages/Finanzas";
 import NotFound from "./pages/NotFound";
 import PipelineLayout from "./pages/pipeline/PipelineLayout";
 import PipelineBoard from "./pages/pipeline/PipelineBoard";
+import PipelineDashboard from "./pages/pipeline/PipelineDashboard";
 import PipelineList from "./pages/pipeline/PipelineList";
 import LeadDetailPage from "./pages/pipeline/LeadDetailPage";
 import PipelineAnalytics from "./pages/pipeline/PipelineAnalytics";
@@ -107,6 +108,7 @@ const App = () => (
                 }
               >
                 <Route index element={<PipelineBoard />} />
+                <Route path="dashboard" element={<PipelineDashboard />} />
                 <Route path="list" element={<PipelineList />} />
                 <Route path="leads/:id" element={<LeadDetailPage />} />
                 <Route path="analytics" element={<PipelineAnalytics />} />

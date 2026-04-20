@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
 
 const tabs = [
+  { to: "/pipeline/dashboard", label: "Dashboard" },
   { to: "/pipeline", label: "Tablero", end: true },
   { to: "/pipeline/list", label: "Lista" },
   { to: "/pipeline/analytics", label: "Métricas" },
@@ -18,6 +19,9 @@ const tabs = [
 export default function PipelineLayout() {
   const loc = useLocation();
   const hideTabs = /^\/pipeline\/leads\//.test(loc.pathname);
+  // En el Dashboard el hero ejecutivo "Sala de control comercial" ya cumple el rol del header,
+  // así que ocultamos el header genérico para evitar dos cabeceras compitiendo visualmente.
+  const isDashboard = loc.pathname === "/pipeline/dashboard";
   const [searchParams, setSearchParams] = useSearchParams();
   const pipelineQ = searchParams.get("q") ?? "";
 
@@ -32,13 +36,15 @@ export default function PipelineLayout() {
   return (
     <AppLayout>
       <div className="flex flex-col gap-4 p-4 md:p-6 max-w-[1600px] mx-auto w-full">
-        <div className="surface-toolbar p-4 md:p-5">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Pipeline y leads</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">
-            Embudo comercial, seguimiento y correos automatizados.
-          </p>
-        </div>
-        {!hideTabs && (
+        {!isDashboard && (
+          <div className="surface-toolbar p-4 md:p-5">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Pipeline y leads</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1">
+              Embudo comercial, seguimiento y correos automatizados.
+            </p>
+          </div>
+        )}
+        {!hideTabs && !isDashboard && (
           <div className="surface-toolbar max-w-xl space-y-1.5 rounded-xl p-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
