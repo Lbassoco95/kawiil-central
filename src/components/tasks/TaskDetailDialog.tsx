@@ -555,14 +555,14 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-[min(1180px,96vw)] w-full h-[92vh] gap-0 p-0 overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[min(1180px,96vw)] w-full h-[92vh] sm:h-[92vh] sm:max-h-[92vh] gap-0 p-0 sm:p-0 pt-0 sm:pt-0 overflow-hidden flex flex-col">
         <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">Cargando...</div>
         ) : task ? (
           <div className="flex flex-col flex-1 min-h-0">
             {/* ── Header sticky v2.5 ── */}
-            <div className="shrink-0 border-b bg-background/80 backdrop-blur-md px-5 sm:px-7 py-4 space-y-3">
+            <div className="shrink-0 border-b bg-background/80 backdrop-blur-md px-5 sm:px-7 pr-14 sm:pr-16 py-4 space-y-3">
               {/* Breadcrumb */}
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 {clientChip && (
@@ -681,7 +681,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
             </div>
 
             {/* ── Body 2-column v2.5 ── */}
-            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px]">
 
             {/* ── Main column (scrollable) ── */}
             <div className="overflow-y-auto px-5 sm:px-7 py-5 space-y-6 border-r border-border/60">
@@ -1097,7 +1097,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
             </div>
 
             {/* ── Sidebar v2.5 ── */}
-            <aside className="hidden lg:flex flex-col gap-4 overflow-y-auto bg-muted/20 px-4 py-5">
+            <aside className="hidden md:flex flex-col gap-4 overflow-y-auto bg-muted/20 px-4 py-5">
               {/* Asignación */}
               <section className="rounded-lg border bg-background p-3 space-y-2.5">
                 <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">

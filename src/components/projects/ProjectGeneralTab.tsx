@@ -368,8 +368,8 @@ INSTRUCCIONES:
   return (
     <div className="space-y-4">
       {/* Fila superior v2.5: AI Summary (LLM) + heurística rápida + equipo */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="md:col-span-2 space-y-4">
           <AISummaryCard
             cacheKey={`project-${project.id}`}
             contextPrompt={projectSummaryPrompt}
