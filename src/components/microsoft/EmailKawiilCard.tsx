@@ -1,0 +1,380 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Sparkles,
+  Loader2,
+  RefreshCw,
+  Send,
+  Copy,
+  ListChecks,
+  ListTodo,
+  ArrowRight,
+  Wand2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+/**
+ * EmailKawiilCard — Fase 2 del rediseño v2.4 del módulo Correo.
+ * Muestra resumen ejecutivo + puntos clave + acción sugerida + sugerencias de respuesta rápida.
+ *
+ * Llama a las Edge Functions:
+ *   - email-ai-summary
+ *   - email-ai-quick-reply
+ *
+ * Las dos requieren JWT (`verify_jwt = true`).
+ */
+
+type SummaryResult = {
+  summary: string;
+  keyPoints: string[];
+  suggestedAction: string | null;
+};
+
+type QuickReply = {
+  id: string;
+  label: string;
+  tone: "professional" | "short" | "affirmative" | "declining";
+  body: string;
+};
+
+interface Props {
+  emailId: string;
+  subject: string;
+  senderName?: string;
+  senderEmail?: string;
+  body: string;
+  thread?: string;
+  userName?: string;
+  /** Permite insertar una sugerencia de respuesta como borrador. */
+  onUseReply?: (body: string) => void;
+  /** Atajo a "crear tarea desde correo". */
+  onCreateTask?: (suggestedTitle?: string | null) => void;
+  className?: string;
+}
+
+const TAB_DEFS = [
+  { id: "summary", label: "Resumen", icon: Sparkles },
+  { id: "keyPoints", label: "Puntos clave", icon: ListChecks },
+  { id: "action", label: "Acción", icon: ArrowRight },
+] as const;
+
+type TabId = typeof TAB_DEFS[number]["id"];
+
+const TONE_STYLE: Record<QuickReply["tone"], string> = {
+  professional: "border-violet-200/70 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/30 dark:text-violet-300",
+  short: "border-sky-200/70 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300",
+  affirmative: "border-emerald-200/70 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300",
+  declining: "border-amber-200/70 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300",
+};
+
+export function EmailKawiilCard({
+  emailId,
+  subject,
+  senderName,
+  senderEmail,
+  body,
+  thread,
+  userName,
+  onUseReply,
+  onCreateTask,
+  className,
+}: Props) {
+  const [tab, setTab] = useState<TabId>("summary");
+  const [summary, setSummary] = useState<SummaryResult | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const [quickReplies, setQuickReplies] = useState<QuickReply[] | null>(null);
+  const [repliesLoading, setRepliesLoading] = useState(false);
+  const [repliesError, setRepliesError] = useState<string | null>(null);
+  const [expandedReplyId, setExpandedReplyId] = useState<string | null>(null);
+
+  const fetchSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke<SummaryResult & { error?: string; message?: string }>(
+        "email-ai-summary",
+        {
+          body: { subject, senderName, senderEmail, body, thread, locale: "es" },
+        },
+      );
+      if (error) throw new Error(error.message || "Error AI");
+      if (!data || (data as any).error) {
+        throw new Error((data as any)?.message || (data as any)?.error || "Sin resumen");
+      }
+      setSummary({
+        summary: data.summary || "",
+        keyPoints: Array.isArray(data.keyPoints) ? data.keyPoints : [],
+        suggestedAction: data.suggestedAction ?? null,
+      });
+    } catch (e) {
+      setSummaryError(e instanceof Error ? e.message : "Error desconocido");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [subject, senderName, senderEmail, body, thread]);
+
+  const fetchQuickReplies = useCallback(async () => {
+    setRepliesLoading(true);
+    setRepliesError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ suggestions?: QuickReply[]; error?: string; message?: string }>(
+        "email-ai-quick-reply",
+        {
+          body: { subject, senderName, senderEmail, body, thread, userName, locale: "es" },
+        },
+      );
+      if (error) throw new Error(error.message || "Error AI");
+      if (!data || (data as any).error) {
+        throw new Error((data as any)?.message || (data as any)?.error || "Sin sugerencias");
+      }
+      setQuickReplies(Array.isArray(data.suggestions) ? data.suggestions : []);
+    } catch (e) {
+      setRepliesError(e instanceof Error ? e.message : "Error desconocido");
+    } finally {
+      setRepliesLoading(false);
+    }
+  }, [subject, senderName, senderEmail, body, thread, userName]);
+
+  useEffect(() => {
+    setSummary(null);
+    setQuickReplies(null);
+    setExpandedReplyId(null);
+    void fetchSummary();
+  }, [emailId, fetchSummary]);
+
+  const showActionBadge = useMemo(() => Boolean(summary?.suggestedAction), [summary]);
+
+  const handleCopy = (text: string) => {
+    if (!text) return;
+    void navigator.clipboard.writeText(text);
+    toast.success("Copiado al portapapeles");
+  };
+
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50 via-white to-sky-50 shadow-sm",
+        "dark:border-violet-900/40 dark:from-violet-950/30 dark:via-background dark:to-sky-950/20",
+        className,
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-violet-200/50 px-3 py-2 dark:border-violet-900/30">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ring-1 ring-violet-300/40"
+            style={{ background: "linear-gradient(135deg, hsl(270 70% 55%), hsl(310 70% 55%))" }}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-white" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold text-foreground">Kawiil AI · Resumen</p>
+            <p className="truncate text-[10px] text-muted-foreground">
+              {summaryLoading ? "Procesando…" : "Análisis del correo"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {showActionBadge && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-300">
+              Acción sugerida
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => void fetchSummary()}
+            disabled={summaryLoading}
+            aria-label="Regenerar resumen"
+            title="Regenerar resumen"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", summaryLoading && "animate-spin")} />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 border-b border-violet-200/40 px-3 pt-2 dark:border-violet-900/30">
+        {TAB_DEFS.map((t) => {
+          const active = tab === t.id;
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-t-md border-b-2 px-2 py-1.5 text-[11px] font-medium transition-colors",
+                active
+                  ? "border-violet-500 text-violet-700 dark:text-violet-300"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon className="h-3 w-3" />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="px-4 py-3 text-sm text-foreground/85">
+        {summaryLoading && !summary && (
+          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Generando resumen del correo…
+          </div>
+        )}
+        {summaryError && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
+            {summaryError}
+          </div>
+        )}
+
+        {summary && tab === "summary" && (
+          <p className="leading-relaxed text-foreground/90">
+            {summary.summary || "Sin resumen disponible."}
+          </p>
+        )}
+
+        {summary && tab === "keyPoints" && (
+          summary.keyPoints.length === 0 ? (
+            <p className="text-xs italic text-muted-foreground">No se detectaron puntos clave.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {summary.keyPoints.map((kp, idx) => (
+                <li key={idx} className="flex gap-2 text-[13px] leading-relaxed">
+                  <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
+                  <span>{kp}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+
+        {summary && tab === "action" && (
+          summary.suggestedAction ? (
+            <div className="space-y-2">
+              <p className="text-[13px] leading-relaxed">{summary.suggestedAction}</p>
+              {onCreateTask && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 border-amber-300/70 bg-amber-50 text-xs text-amber-800 hover:bg-amber-100 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200"
+                  onClick={() => onCreateTask(summary.suggestedAction)}
+                >
+                  <ListTodo className="h-3.5 w-3.5" />
+                  Crear tarea desde esta acción
+                </Button>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs italic text-muted-foreground">No se requiere ninguna acción inmediata.</p>
+          )
+        )}
+      </div>
+
+      <div className="border-t border-violet-200/40 px-3 py-2.5 dark:border-violet-900/30">
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Respuesta rápida
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 text-[11px]"
+            onClick={() => void fetchQuickReplies()}
+            disabled={repliesLoading}
+          >
+            {repliesLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Wand2 className="h-3 w-3" />
+            )}
+            {quickReplies ? "Regenerar" : "Generar"}
+          </Button>
+        </div>
+
+        {repliesError && (
+          <p className="mb-1 text-[11px] text-destructive">{repliesError}</p>
+        )}
+
+        {!quickReplies && !repliesLoading && (
+          <p className="text-[11px] text-muted-foreground">
+            Genera 3 borradores listos para usar (Profesional, Breve, Confirmar).
+          </p>
+        )}
+
+        {repliesLoading && (
+          <div className="flex items-center gap-2 py-1 text-[11px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Generando sugerencias…
+          </div>
+        )}
+
+        {quickReplies && quickReplies.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap gap-1.5">
+              {quickReplies.map((qr) => {
+                const expanded = expandedReplyId === qr.id;
+                return (
+                  <button
+                    key={qr.id}
+                    type="button"
+                    onClick={() => setExpandedReplyId(expanded ? null : qr.id)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                      TONE_STYLE[qr.tone],
+                      expanded && "ring-1 ring-offset-1 ring-violet-400/50 dark:ring-offset-background",
+                    )}
+                  >
+                    {qr.label}
+                  </button>
+                );
+              })}
+            </div>
+            {expandedReplyId && (() => {
+              const qr = quickReplies.find((x) => x.id === expandedReplyId);
+              if (!qr) return null;
+              return (
+                <div className="rounded-md border border-border/60 bg-background/70 p-2.5 text-xs leading-relaxed">
+                  <p className="whitespace-pre-wrap text-foreground/90">{qr.body}</p>
+                  <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1 text-[11px]"
+                      onClick={() => handleCopy(qr.body)}
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copiar
+                    </Button>
+                    {onUseReply && (
+                      <Button
+                        size="sm"
+                        className="h-6 gap-1 text-[11px] text-white shadow-sm"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, hsl(270 70% 55%), hsl(310 70% 55%))",
+                        }}
+                        onClick={() => {
+                          onUseReply(qr.body);
+                          toast.success("Borrador insertado");
+                        }}
+                      >
+                        <Send className="h-3 w-3" />
+                        Usar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

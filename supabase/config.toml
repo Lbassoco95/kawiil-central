@@ -89,3 +89,7 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.unzip-batch]
     verify_jwt = true
+  [functions.email-ai-summary]
+    verify_jwt = true
+  [functions.email-ai-quick-reply]
+    verify_jwt = true

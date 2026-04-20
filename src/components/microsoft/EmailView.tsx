@@ -84,6 +84,7 @@ import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
 import { EmailAIAssistant } from "./EmailAIAssistant";
 import { EmailInboxAiPanel } from "./EmailInboxAiPanel";
+import { EmailKawiilCard } from "./EmailKawiilCard";
 import { ComposeEmailDialog } from "./ComposeEmailDialog";
 import { ReplyForwardDialog } from "./ReplyForwardDialog";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
@@ -289,6 +290,92 @@ function getAvatarColor(email?: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
+// ─── Avatar gradiente (mock v2.4) ─────────────────────────────
+const AVATAR_GRADIENTS: Array<[string, string]> = [
+  ["hsl(217 91% 55%)", "hsl(217 91% 45%)"],
+  ["hsl(142 71% 45%)", "hsl(142 71% 35%)"],
+  ["hsl(38 85% 55%)", "hsl(38 85% 45%)"],
+  ["hsl(280 65% 55%)", "hsl(280 65% 45%)"],
+  ["hsl(340 80% 55%)", "hsl(340 80% 45%)"],
+  ["hsl(197 85% 50%)", "hsl(197 85% 40%)"],
+  ["hsl(0 84% 55%)", "hsl(0 84% 45%)"],
+  ["hsl(15 85% 55%)", "hsl(15 85% 45%)"],
+];
+
+/** Devuelve un gradient CSS determinista por dominio/email. SAT y dominios "marca" se forzan a paleta acorde al mock. */
+function getAvatarGradient(emailAddr?: string, displayName?: string): string {
+  const lowEmail = (emailAddr || "").toLowerCase();
+  const lowName = (displayName || "").toLowerCase();
+  const domain = lowEmail.split("@")[1] || "";
+  if (/sat\.gob/.test(domain) || /\bsat\b/.test(lowName)) return `linear-gradient(135deg, ${AVATAR_GRADIENTS[6][0]}, ${AVATAR_GRADIENTS[6][1]})`;
+  if (/microsoft\.com|microsoft365|cfe\.gob|telmex/.test(domain)) return `linear-gradient(135deg, ${AVATAR_GRADIENTS[2][0]}, ${AVATAR_GRADIENTS[2][1]})`;
+  if (/dropbox\.com/.test(domain)) return `linear-gradient(135deg, ${AVATAR_GRADIENTS[0][0]}, ${AVATAR_GRADIENTS[3][0]})`;
+  if (/notaria|notario/.test(lowName)) return `linear-gradient(135deg, ${AVATAR_GRADIENTS[5][0]}, ${AVATAR_GRADIENTS[5][1]})`;
+  const src = lowEmail || lowName || "?";
+  let hash = 0;
+  for (let i = 0; i < src.length; i++) hash = (hash + src.charCodeAt(i)) % 2147483647;
+  const [a, b] = AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
+  return `linear-gradient(135deg, ${a}, ${b})`;
+}
+
+// ─── Etiquetas inferidas (URGENTE / SAT / FACTURA) ────────────
+type InferredChipTone = "urgente" | "sat" | "factura" | "cliente" | "interno" | "ai";
+
+function inferEmailChips(email: any): Array<{ label: string; tone: InferredChipTone }> {
+  const chips: Array<{ label: string; tone: InferredChipTone }> = [];
+  const fromAddr = (email?.from?.emailAddress?.address || "").toLowerCase();
+  const subject = (email?.subject || "");
+  const importance = email?.importance;
+  const domain = fromAddr.split("@")[1] || "";
+  if (importance === "high" || /\b(urgente|urgent|requerimiento|obligatori|48h|72h)\b/i.test(subject)) {
+    chips.push({ label: "Urgente", tone: "urgente" });
+  }
+  if (/sat\.gob\.mx|\bsat\.gob\b/.test(domain) || /\bSAT\b/.test(subject)) {
+    chips.push({ label: "SAT", tone: "sat" });
+  }
+  if (/factura|invoice|recibo cfe|telmex|microsoft 365 business/i.test(subject)) {
+    chips.push({ label: "Factura", tone: "factura" });
+  }
+  return chips;
+}
+
+const INFERRED_CHIP_STYLES: Record<InferredChipTone, string> = {
+  urgente: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800/40",
+  sat: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300 border-red-200/60 dark:border-red-800/30",
+  factura: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border-amber-200/60 dark:border-amber-800/40",
+  cliente: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300 border-sky-200/60 dark:border-sky-800/40",
+  interno: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 border-emerald-200/60 dark:border-emerald-800/40",
+  ai: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 border-violet-200/60 dark:border-violet-800/40",
+};
+
+// ─── Date buckets (Hoy · Ayer · Semana pasada · …) ────────────
+type DateBucket = "hoy" | "ayer" | "semana" | "anterior";
+
+function getDateBucket(dateStr: string | undefined, now: Date): DateBucket {
+  if (!dateStr) return "anterior";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "anterior";
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  if (t === today) return "hoy";
+  if (t === today - dayMs) return "ayer";
+  if (today - t < 7 * dayMs) return "semana";
+  return "anterior";
+}
+
+function getBucketLabel(bucket: DateBucket, sampleDate: Date | null): string {
+  if (bucket === "hoy" && sampleDate) {
+    const dayName = WEEKDAY_SHORT_ES[sampleDate.getDay()];
+    const dn = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][sampleDate.getDay()] || dayName;
+    const monthName = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][sampleDate.getMonth()];
+    return `Hoy · ${dn} ${sampleDate.getDate()} de ${monthName}`;
+  }
+  if (bucket === "ayer") return "Ayer";
+  if (bucket === "semana") return "Esta semana";
+  return "Anteriores";
+}
+
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
 export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv22-sheet-csv-preview";
 
@@ -353,6 +440,13 @@ export function EmailView() {
   const [foldersCollapsed, setFoldersCollapsed] = useState(readFoldersCollapsedPref);
   /** Escritorio: oculta la lista al leer un correo para ampliar el lector */
   const [listPaneCollapsed, setListPaneCollapsed] = useState(false);
+  /** Filtro rápido sobre la lista (mock v2.4 — chips arriba de la lista) */
+  const [listFilter, setListFilter] = useState<"all" | "unread" | "attachments" | "sat" | "facturas">("all");
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const listRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -1200,6 +1294,65 @@ export function EmailView() {
                       );
                     })}
                   </div>
+                  {/* Etiquetas AI (categorías Outlook) */}
+                  {(outlookCategories as any[]).length > 0 && (
+                    <div className="mt-2 border-t border-border/50 pt-2">
+                      <div className="mb-1 flex items-center gap-1.5 px-2.5">
+                        <Sparkles className="h-3 w-3 text-violet-500" aria-hidden />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Etiquetas AI
+                        </span>
+                      </div>
+                      <div className="space-y-0.5 px-1">
+                        {(outlookCategories as any[]).slice(0, 8).map((cat: any) => {
+                          const name = cat?.displayName as string | undefined;
+                          if (!name) return null;
+                          const color = categoryColorMap.get(name) || "hsl(var(--primary))";
+                          return (
+                            <button
+                              key={cat.id || name}
+                              type="button"
+                              title={name}
+                              className="group flex w-full items-center gap-2 rounded-md py-1.5 pl-2 pr-1 text-left text-xs transition-colors hover:bg-accent/50"
+                              onClick={() => {
+                                handleSearch(`category:"${name}"`);
+                              }}
+                            >
+                              <span
+                                className="inline-block h-2 w-2 shrink-0 rounded-full"
+                                style={{ background: color }}
+                              />
+                              <span className="min-w-0 flex-1 truncate text-foreground/85 group-hover:text-foreground">
+                                {name}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* Indicador de sincronización Outlook */}
+                  <div className="mx-2 mb-2 mt-3 rounded-lg border border-border/60 bg-muted/30 p-2">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-semibold uppercase tracking-wider text-muted-foreground">Outlook</span>
+                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Sincronizado
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: "62%",
+                          background: "linear-gradient(90deg, hsl(207 100% 42%), hsl(217 91% 60%))",
+                        }}
+                      />
+                    </div>
+                    <p className="mt-1 text-[9px] text-muted-foreground/70 tabular-nums">
+                      Última lectura · ahora
+                    </p>
+                  </div>
                 </ScrollArea>
                 <div className="shrink-0 border-t border-border p-2">
                   {creatingFolder ? (
@@ -1316,6 +1469,33 @@ export function EmailView() {
               </Button>
             </div>
           </TooltipProvider>
+          {/* Filter chips (mock v2.4) */}
+          <div className="-mb-1 flex flex-wrap items-center gap-1.5">
+            {([
+              { id: "all", label: "Todos" },
+              { id: "unread", label: "No leídos" },
+              { id: "attachments", label: "Con adjuntos" },
+              { id: "sat", label: "SAT" },
+              { id: "facturas", label: "Facturas" },
+            ] as const).map((f) => {
+              const active = listFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setListFilter(f.id)}
+                  className={cn(
+                    "h-6 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
+                    active
+                      ? "border-primary/40 bg-primary/15 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)_inset]"
+                      : "border-border/60 bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Lista con scroll + pie fijo para «más correos» (siempre visible) */}
@@ -1346,7 +1526,33 @@ export function EmailView() {
             </div>
           ) : (
             <div className="px-0">
-              {allEmails.map((email: any) => {
+              {(() => {
+                let visible = allEmails;
+                if (listFilter !== "all") {
+                  visible = visible.filter((e: any) => {
+                    if (listFilter === "unread") return !e.isRead;
+                    if (listFilter === "attachments") return Boolean(e.hasAttachments);
+                    if (listFilter === "sat") {
+                      const dom = ((e.from?.emailAddress?.address || "").toLowerCase().split("@")[1] || "");
+                      return /sat\.gob/.test(dom) || /\bSAT\b/.test(e.subject || "");
+                    }
+                    if (listFilter === "facturas") return /factura|invoice|recibo cfe|telmex|microsoft 365 business/i.test(e.subject || "");
+                    return true;
+                  });
+                }
+                if (visible.length === 0) {
+                  return (
+                    <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+                      Sin resultados para este filtro.
+                    </div>
+                  );
+                }
+                let lastBucket: DateBucket | null = null;
+                return visible.map((email: any) => {
+                const ts = emailListTimestamp(email);
+                const bucket = getDateBucket(ts, now);
+                const showSep = bucket !== lastBucket;
+                if (showSep) lastBucket = bucket;
                 const isActive = selectedEmailId === email.id;
                 const unread = !email.isRead;
                 const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address || "Desconocido";
@@ -1354,8 +1560,16 @@ export function EmailView() {
                 const subject = email.subject || "(sin asunto)";
                 const bodyPreview = (email.bodyPreview || "").trim() || "…";
                 return (
+                  <div key={email.id} className="contents">
+                  {showSep && (
+                    <div className="sticky top-0 z-10 flex items-center gap-2 border-y border-border/40 bg-background/85 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
+                      <span>{getBucketLabel(bucket, ts ? new Date(ts) : null)}</span>
+                      <span className="ml-auto rounded-full bg-muted/70 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground/80">
+                        {visible.filter((x: any) => getDateBucket(emailListTimestamp(x), now) === bucket).length}
+                      </span>
+                    </div>
+                  )}
                   <div
-                    key={email.id}
                     draggable
                     onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
@@ -1376,10 +1590,8 @@ export function EmailView() {
                           aria-hidden
                         />
                         <div
-                          className={cn(
-                            "h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-semibold shrink-0",
-                            getAvatarColor(senderEmail),
-                          )}
+                          className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-semibold shrink-0 shadow-sm ring-1 ring-black/5 dark:ring-white/5"
+                          style={{ background: getAvatarGradient(senderEmail, senderName) }}
                         >
                           {getInitials(senderName, senderEmail)}
                         </div>
@@ -1481,6 +1693,26 @@ export function EmailView() {
                             <span className="text-muted-foreground font-normal"> - {bodyPreview}</span>
                           </p>
                         </div>
+                        {(() => {
+                          const inferred = inferEmailChips(email);
+                          const cats: string[] = Array.isArray(email.categories) ? email.categories : [];
+                          if (inferred.length === 0 && cats.length === 0) return null;
+                          return (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {inferred.map((chip) => (
+                                <span
+                                  key={`inf-${chip.tone}`}
+                                  className={cn(
+                                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                                    INFERRED_CHIP_STYLES[chip.tone],
+                                  )}
+                                >
+                                  {chip.label}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         {Array.isArray(email.categories) && email.categories.length > 0 && (
                           <div className="mt-1 flex flex-wrap items-center gap-1">
                             {email.categories.slice(0, 3).map((cat: string) => {
@@ -1512,8 +1744,10 @@ export function EmailView() {
                       </div>
                     </div>
                   </div>
+                  </div>
                 );
-              })}
+                });
+              })()}
 
               {/* Sentinel dentro del scroll para cargar al acercarse al final */}
               {hasNextPage && (
@@ -1980,6 +2214,31 @@ export function EmailView() {
             {/* Email body + thread — columna centrada estilo lector premium */}
             <ScrollArea className="flex-1">
               <div className="px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+                {/* Kawiil AI · Resumen + Quick Reply (Fase 2 v2.4) */}
+                {selectedEmailId && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full">
+                    <EmailKawiilCard
+                      emailId={selectedEmailId}
+                      subject={emailDetail.subject || ""}
+                      senderName={emailDetail.from?.emailAddress?.name}
+                      senderEmail={emailDetail.from?.emailAddress?.address}
+                      body={emailDetail.body?.content || ""}
+                      thread={threadContextForAi || undefined}
+                      onUseReply={(text) => {
+                        if (emailAction !== "reply") {
+                          handleStartReply("reply");
+                        }
+                        const safe = text
+                          .replace(/&/g, "&amp;")
+                          .replace(/</g, "&lt;")
+                          .replace(/>/g, "&gt;")
+                          .replace(/\n/g, "<br>");
+                        setDraftHtml(safe);
+                      }}
+                      onCreateTask={() => setCreateTaskOpen(true)}
+                    />
+                  </div>
+                )}
                 <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border-2 border-primary/15 bg-card/95 shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08] overflow-hidden">
                   <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
                     {emailDetail.body?.contentType === "html" ? (
