@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import './styles/v24.css';
 
 /* Ocultar badge / FAB "Edit with Lovable" (preview Lovable, tagger, overlays) */
 [data-lovable-badge],
@@ -114,6 +115,91 @@ div[id*="lovable" i] {
     --sidebar-accent-foreground: 220 15% 95%;
     --sidebar-border: 226 16% 14%;
     --sidebar-ring: 210 100% 58%;
+  }
+
+  /* =====================================================================
+     Modo daltonico / CVD (Color Vision Deficiency)
+     Eje independiente de data-theme. Reescribe tokens semanticos de color
+     para evitar confusiones rojo-verde (deutero/prota) o azul-amarillo
+     (trita). Paletas basadas en Wong + IBM color-blind safe.
+     ===================================================================== */
+
+  [data-cvd="deuteranopia"],
+  [data-cvd="protanopia"] {
+    --destructive: 15 85% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 210 80% 50%;
+    --success-foreground: 0 0% 100%;
+    --warning: 48 95% 55%;
+    --warning-foreground: 220 20% 14%;
+    --info: 200 85% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --priority-urgent: 15 85% 50%;
+    --priority-high: 30 95% 55%;
+    --priority-medium: 48 95% 55%;
+    --priority-low: 200 80% 50%;
+
+    --area-contabilidad: 210 100% 47%;
+    --area-legal: 240 100% 32%;
+    --area-softlanding: 220 70% 45%;
+    --area-pld: 30 95% 50%;
+  }
+
+  [data-cvd="protanopia"] {
+    --destructive: 20 80% 45%;
+    --priority-urgent: 20 80% 45%;
+  }
+
+  [data-cvd="tritanopia"] {
+    --destructive: 0 85% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 140 70% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 320 75% 55%;
+    --warning-foreground: 0 0% 100%;
+    --info: 0 85% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --priority-urgent: 0 85% 50%;
+    --priority-high: 320 75% 55%;
+    --priority-medium: 340 80% 60%;
+    --priority-low: 140 70% 40%;
+
+    --area-contabilidad: 320 75% 50%;
+    --area-legal: 240 100% 32%;
+    --area-softlanding: 140 70% 35%;
+    --area-pld: 0 80% 50%;
+  }
+
+  /* Dark variants: subimos luminosidad ~10% igual que hace el bloque
+     [data-theme="dark"] base para conservar contraste sobre fondo oscuro. */
+  [data-cvd="deuteranopia"][data-theme="dark"],
+  [data-cvd="protanopia"][data-theme="dark"] {
+    --destructive: 15 90% 60%;
+    --success: 210 85% 60%;
+    --warning: 48 95% 65%;
+    --info: 200 85% 60%;
+    --priority-urgent: 15 90% 60%;
+    --priority-high: 30 95% 62%;
+    --priority-medium: 48 95% 65%;
+    --priority-low: 200 85% 62%;
+  }
+
+  [data-cvd="protanopia"][data-theme="dark"] {
+    --destructive: 20 85% 55%;
+    --priority-urgent: 20 85% 55%;
+  }
+
+  [data-cvd="tritanopia"][data-theme="dark"] {
+    --destructive: 0 90% 62%;
+    --success: 140 65% 50%;
+    --warning: 320 80% 65%;
+    --info: 0 90% 62%;
+    --priority-urgent: 0 90% 62%;
+    --priority-high: 320 80% 65%;
+    --priority-medium: 340 85% 68%;
+    --priority-low: 140 65% 50%;
   }
 }
 

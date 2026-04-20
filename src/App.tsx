@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ModuleGate } from "@/components/ModuleGate";
@@ -50,6 +51,7 @@ const App = () => (
       storageKey="kawiil-sb-theme"
       disableTransitionOnChange
     >
+    <AccessibilityProvider>
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -126,6 +128,7 @@ const App = () => (
         </BrowserRouter>
       </ErrorBoundary>
     </TooltipProvider>
+    </AccessibilityProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

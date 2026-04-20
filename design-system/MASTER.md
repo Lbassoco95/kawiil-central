@@ -132,6 +132,29 @@ gradientes `violet/purple/fuchsia` locales.
 - Contraste texto/fondo ≥ 4.5:1 en cuerpo; foco visible (`ring-2`).
 - `@media (prefers-reduced-motion: reduce)` ya acorta animaciones globales; no añadir animaciones decorativas largas fuera de eso.
 
+### Modo daltónico (eje `data-cvd`)
+
+Eje independiente de `data-theme` (claro/oscuro). Controlado por `AccessibilityProvider` en [`src/contexts/AccessibilityContext.tsx`](../src/contexts/AccessibilityContext.tsx); persiste en `localStorage` con clave `kawiil-cvd-mode` y se aplica como atributo `data-cvd` en `<html>`. Un script inline en [`index.html`](../index.html) lo aplica antes del bundle para evitar flash.
+
+Valores soportados: `off` (default, sin atributo), `deuteranopia`, `protanopia`, `tritanopia`. El selector vive en `Configuración → Apariencia` ([`src/pages/Admin.tsx`](../src/pages/Admin.tsx)) como grid 2×2 de cards con mini-swatches.
+
+Los overrides CSS están en [`src/index.css`](../src/index.css) y se combinan con `[data-theme="dark"]`. Solo se reasignan tokens **semánticos** (no se toca `--primary`/`--accent` porque el azul Kawiil es seguro en deutero/prota):
+
+| Token                 | Default (claro) | Deutero / Prota | Tritanopía       |
+|-----------------------|-----------------|-----------------|------------------|
+| `--destructive`       | rojo            | bermellón       | rojo puro        |
+| `--success`           | verde           | azul            | verde            |
+| `--warning`           | ámbar           | amarillo        | magenta          |
+| `--info`              | azul            | azul cielo      | rojo             |
+| `--priority-urgent`   | rojo            | bermellón       | rojo             |
+| `--priority-high`     | naranja         | naranja         | magenta          |
+| `--priority-medium`   | amarillo        | amarillo        | rosa             |
+| `--priority-low`      | verde           | azul cielo      | verde            |
+
+**Regla para componentes nuevos:** cualquier UI que transmita estado crítico (prioridad, semáforo, éxito/error) debe acompañar el color con **icono o texto**, para que siga siendo legible incluso si el usuario no activa el modo daltónico.
+
+**Fuera de alcance actual:** los gráficos Recharts con colores hardcodeados (`FINANCE_CHART_COLORS`, etc.) no reaccionan a `data-cvd` todavía. Se planea exponer `useCvdPalette()` en un PR posterior.
+
 ## Anti-patrones
 
 - Glass en cascada en >3 niveles anidados.

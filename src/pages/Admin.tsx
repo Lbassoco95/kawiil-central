@@ -17,7 +17,12 @@ import {
   Sun,
   Moon,
   Settings,
+  Eye,
 } from "lucide-react";
+import {
+  useAccessibility,
+  type CvdMode,
+} from "@/contexts/AccessibilityContext";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { MoffinIntegrationCard } from "@/components/admin/MoffinIntegrationCard";
@@ -43,6 +48,40 @@ const TABS: { key: TabKey; label: string; icon: typeof Users }[] = [
 
 const VALID: TabKey[] = TABS.map((t) => t.key);
 
+type CvdOption = {
+  key: CvdMode;
+  label: string;
+  description: string;
+  swatches: [string, string, string];
+};
+
+const CVD_OPTIONS: CvdOption[] = [
+  {
+    key: "off",
+    label: "Desactivado",
+    description: "Paleta estándar de Kawiil OS.",
+    swatches: ["hsl(0 72% 51%)", "hsl(38 92% 50%)", "hsl(157 72% 36%)"],
+  },
+  {
+    key: "deuteranopia",
+    label: "Deuteranopía",
+    description: "Rojo-verde (tipo más común). Cambia verdes por azul.",
+    swatches: ["hsl(15 85% 50%)", "hsl(48 95% 55%)", "hsl(200 80% 50%)"],
+  },
+  {
+    key: "protanopia",
+    label: "Protanopía",
+    description: "Rojo-verde con rojos más apagados. Refuerza naranjas.",
+    swatches: ["hsl(20 80% 45%)", "hsl(48 95% 55%)", "hsl(200 80% 50%)"],
+  },
+  {
+    key: "tritanopia",
+    label: "Tritanopía",
+    description: "Azul-amarillo (poco común). Usa magenta y verde.",
+    swatches: ["hsl(0 85% 50%)", "hsl(320 75% 55%)", "hsl(140 70% 40%)"],
+  },
+];
+
 const Configuracion = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get("tab") as TabKey | null;
@@ -50,6 +89,7 @@ const Configuracion = () => {
   const [tab, setTabState] = useState<TabKey>(initial);
   const { isTransformador } = useUserRole();
   const { theme, setTheme } = useTheme();
+  const { cvdMode, setCvdMode } = useAccessibility();
 
   const setTab = (key: TabKey) => {
     setTabState(key);
@@ -164,7 +204,7 @@ const Configuracion = () => {
                       Apariencia · v2.4
                     </p>
                     <p className="mt-0.5 truncate text-[11px] leading-tight text-white/80">
-                      Tema claro/oscuro y opciones visuales de Kawiil OS
+                      Tema claro/oscuro y modo accesible para daltonismo
                     </p>
                   </div>
                 </header>
@@ -201,10 +241,70 @@ const Configuracion = () => {
                       </button>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-dashed border-border/60 bg-background/30 p-3">
-                    <h3 className="text-sm font-semibold">Próximamente</h3>
+                  <div className="border-t border-border/50 pt-4">
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                      <h3 className="text-sm font-semibold">
+                        Visión / Daltonismo
+                      </h3>
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Densidad de tablas, idioma y atajos de teclado personalizados.
+                      Ajusta la paleta de colores semánticos (prioridades,
+                      estados, áreas) para perfiles de visión específicos. Se
+                      combina con el modo claro u oscuro.
+                    </p>
+                    <div
+                      role="radiogroup"
+                      aria-label="Modo daltónico"
+                      className="mt-3 grid gap-2 sm:grid-cols-2"
+                    >
+                      {CVD_OPTIONS.map((opt) => {
+                        const active = cvdMode === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            onClick={() => setCvdMode(opt.key)}
+                            className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                              active
+                                ? "border-sky-500/60 bg-sky-50/70 ring-1 ring-sky-500/40 dark:bg-sky-900/20"
+                                : "border-border/60 bg-background/40 hover:border-border hover:bg-background/60"
+                            }`}
+                          >
+                            <div className="mt-0.5 flex flex-col gap-1">
+                              {opt.swatches.map((color, i) => (
+                                <span
+                                  key={i}
+                                  className="h-2.5 w-2.5 rounded-full ring-1 ring-border/40"
+                                  style={{ background: color }}
+                                  aria-hidden="true"
+                                />
+                              ))}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className={`text-xs font-semibold ${
+                                  active
+                                    ? "text-foreground"
+                                    : "text-foreground/90"
+                                }`}
+                              >
+                                {opt.label}
+                              </p>
+                              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                                {opt.description}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      La selección se guarda en este dispositivo. Los gráficos
+                      financieros mantienen su paleta por ahora (se ajustarán
+                      en una próxima iteración).
                     </p>
                   </div>
                 </div>
