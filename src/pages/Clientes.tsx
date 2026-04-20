@@ -9,7 +9,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Plus, Search, Users, Mail, Trash2, ChevronDown, ChevronRight, Building2, Layers, Download } from "lucide-react";
+import { Plus, Search, Users, Mail, Trash2, ChevronDown, ChevronRight, Building2, Download, User2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,7 +32,6 @@ import type { PageHeaderStat } from "@/components/shared/PageHeader";
 import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
 import type { Database } from "@/integrations/supabase/types";
 
-type ServiceArea = Database["public"]["Enums"]["service_area"];
 type ClientStatus = Database["public"]["Enums"]["client_status"];
 type ClientType = Database["public"]["Enums"]["client_type"];
 
@@ -50,12 +49,10 @@ const STATUS_LABELS: Record<ClientStatus, string> = Object.fromEntries(
   Object.entries(CLIENT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
 ) as Record<ClientStatus, string>;
 
-const AREA_ORDER: ServiceArea[] = [
-  "contabilidad", "legal", "softlanding", "pld_ft",
-  "cumplimiento", "juicios", "gestoria", "constitucion_nacional",
-];
-
-type GroupMode = "area" | "grupo";
+/** Vista de Clientes: agrupar por TIPO de persona (PM / PF / Prospectos) o por
+ * GRUPO empresarial. Intencionalmente NO se agrupa por "área de servicio" —
+ * eso es la lógica del módulo Proyectos, no de Clientes. */
+type GroupMode = "tipo" | "grupo";
 
 function clientInitials(name: string): string {
   return (name || "?")
@@ -66,17 +63,12 @@ function clientInitials(name: string): string {
     .join("");
 }
 
-const SERVICE_AREA_COLOR_VAR: Partial<Record<ServiceArea, string>> = {
-  contabilidad: "var(--area-contabilidad)",
-  legal: "var(--area-legal)",
-  softlanding: "var(--area-softlanding)",
-  pld_ft: "var(--area-pld)",
+const TYPE_GROUP_LABELS: Record<ClientType, string> = {
+  persona_moral: "Personas morales",
+  persona_fisica: "Personas físicas",
 };
 
-function serviceAreaDotColor(area: ServiceArea | string): string {
-  const v = SERVICE_AREA_COLOR_VAR[area as ServiceArea];
-  return v ? `hsl(${v})` : "hsl(var(--primary))";
-}
+const TYPE_GROUP_ORDER: ClientType[] = ["persona_moral", "persona_fisica"];
 
 const Clientes = () => {
   const navigate = useNavigate();
@@ -92,9 +84,8 @@ const Clientes = () => {
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const [groupMode, setGroupMode] = useState<GroupMode>("area");
+  const [groupMode, setGroupMode] = useState<GroupMode>("tipo");
   const [clientTypeFilter, setClientTypeFilter] = useState<ClientTypeFilter>("all");
-  const [areaFilter, setAreaFilter] = useState<"all" | ServiceArea | "sin_servicio">("all");
   const { data: clients, isLoading } = useClients();
   const { data: clientGroups } = useClientGroups();
   const deleteClient = useDeleteClient();
@@ -126,33 +117,38 @@ const Clientes = () => {
     );
   }, [clients, search, clientTypeFilter]);
 
-  const groupedByArea = useMemo(() => {
-    const groups: Record<string, typeof filtered> = {};
-    const noService: typeof filtered = [];
+  const groupedByType = useMemo(() => {
+    const buckets: Record<ClientType, typeof filtered> = {
+      persona_moral: [],
+      persona_fisica: [],
+    };
+    const prospectos: typeof filtered = [];
 
     for (const client of filtered) {
-      if (!client.services || client.services.length === 0) {
-        noService.push(client);
+      if (client.status === "prospecto") {
+        prospectos.push(client);
         continue;
       }
-      const primaryArea = client.primary_area || client.services[0];
-      if (!groups[primaryArea]) groups[primaryArea] = [];
-      groups[primaryArea].push(client);
+      buckets[client.client_type].push(client);
     }
 
-    for (const key of Object.keys(groups)) {
-      groups[key].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    const sortByName = (a: typeof filtered[number], b: typeof filtered[number]) =>
+      a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+
+    for (const k of Object.keys(buckets) as ClientType[]) {
+      buckets[k].sort(sortByName);
     }
-    noService.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    prospectos.sort(sortByName);
 
-    const result: { key: string; label: string; clients: typeof filtered }[] = AREA_ORDER
-      .filter((key) => groups[key] && groups[key].length > 0)
-      .map((key) => ({ key, label: SERVICE_LABELS[key], clients: groups[key] }));
-
-    if (noService.length > 0) {
-      result.push({ key: "sin_servicio", label: "Sin servicio asignado", clients: noService });
+    const result: { key: string; label: string; clients: typeof filtered }[] = [];
+    for (const key of TYPE_GROUP_ORDER) {
+      if (buckets[key].length > 0) {
+        result.push({ key, label: TYPE_GROUP_LABELS[key], clients: buckets[key] });
+      }
     }
-
+    if (prospectos.length > 0) {
+      result.push({ key: "prospectos", label: "Prospectos", clients: prospectos });
+    }
     return result;
   }, [filtered]);
 
@@ -193,7 +189,7 @@ const Clientes = () => {
   }
 
   const groupedByEmpresa = useMemo(() => {
-    if (!clientGroups || !allGroupMembers) return groupedByArea;
+    if (!clientGroups || !allGroupMembers) return groupedByType;
     const memberMap = new Map<string, string[]>();
     for (const m of allGroupMembers) {
       if (!memberMap.has(m.group_id)) memberMap.set(m.group_id, []);
@@ -217,13 +213,9 @@ const Clientes = () => {
       result.push({ key: "sin_grupo", label: "Sin grupo empresarial", clients: ungrouped });
     }
     return result;
-  }, [filtered, clientGroups, allGroupMembers, groupedByArea]);
+  }, [filtered, clientGroups, allGroupMembers, groupedByType]);
 
-  const groupedRaw = groupMode === "area" ? groupedByArea : groupedByEmpresa;
-  const grouped = useMemo(() => {
-    if (groupMode !== "area" || areaFilter === "all") return groupedRaw;
-    return groupedRaw.filter((g) => g.key === areaFilter);
-  }, [groupedRaw, groupMode, areaFilter]);
+  const grouped = groupMode === "tipo" ? groupedByType : groupedByEmpresa;
 
   const typeCounts = useMemo(() => {
     const base = clients ?? [];
@@ -365,15 +357,17 @@ const Clientes = () => {
             <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
-                onClick={() => setGroupMode("area")}
-                className={`tab-pill ${groupMode === "area" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1 whitespace-nowrap`}
+                onClick={() => setGroupMode("tipo")}
+                className={`tab-pill ${groupMode === "tipo" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1 whitespace-nowrap`}
+                title="Agrupar por tipo de persona"
               >
-                <Layers className="h-3 w-3 shrink-0" /> Área
+                <User2 className="h-3 w-3 shrink-0" /> Tipo
               </button>
               <button
                 type="button"
                 onClick={() => setGroupMode("grupo")}
                 className={`tab-pill ${groupMode === "grupo" ? "tab-pill-active" : "tab-pill-inactive"} inline-flex items-center gap-1 whitespace-nowrap`}
+                title="Agrupar por grupo empresarial"
               >
                 <Building2 className="h-3 w-3 shrink-0" /> Grupo
               </button>
@@ -425,57 +419,6 @@ const Clientes = () => {
           </div>
         </div>
 
-        {groupMode === "area" && groupedRaw.length > 0 && (
-          <nav
-            aria-label="Navegación por área"
-            className="surface-toolbar -mx-1 flex gap-1.5 overflow-x-auto px-3 py-2 sm:mx-0 sm:px-3"
-          >
-            <button
-              type="button"
-              onClick={() => setAreaFilter("all")}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                areaFilter === "all"
-                  ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
-                  : "border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground",
-              )}
-            >
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full"
-                style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
-                aria-hidden
-              />
-              Todas
-              <span className={cn("rounded-full px-1.5 py-0 text-[10px] tabular-nums", areaFilter === "all" ? "bg-primary/15" : "bg-muted/60")}>
-                {filtered.length}
-              </span>
-            </button>
-            {groupedRaw.map((g) => {
-              const active = areaFilter === g.key;
-              const dot = serviceAreaDotColor(g.key);
-              return (
-                <button
-                  key={g.key}
-                  type="button"
-                  onClick={() => setAreaFilter(g.key as ServiceArea | "sin_servicio")}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                    active
-                      ? "border-primary/40 bg-primary/10 text-primary shadow-sm"
-                      : "border-border/60 bg-background/60 text-muted-foreground hover:border-border hover:text-foreground",
-                  )}
-                >
-                  <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: dot }} aria-hidden />
-                  {g.label}
-                  <span className={cn("rounded-full px-1.5 py-0 text-[10px] tabular-nums", active ? "bg-primary/15" : "bg-muted/60")}>
-                    {g.clients.length}
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-        )}
-
         {isLoading ? (
           <div className="space-y-2">
             {[...Array(6)].map((_, i) => (
@@ -520,7 +463,7 @@ const Clientes = () => {
                   <CollapsibleContent>
                     <div className="mt-2 space-y-2">
                       {group.clients.map((client, i) => {
-                        const services = (client.services || []).filter((s) => s !== group.key);
+                        const services = client.services || [];
                         const visibleServices = services.slice(0, 3);
                         const extraServices = services.length - visibleServices.length;
                         return (
