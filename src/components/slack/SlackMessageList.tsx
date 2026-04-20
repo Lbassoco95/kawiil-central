@@ -32,6 +32,7 @@ import {
   type FormatContext,
 } from "@/lib/slackFormatting";
 import { SLACK_EMOJI } from "@/lib/slackFormatting";
+import { SlackSaveForLaterButton } from "@/components/slack/SlackSaveForLaterButton";
 
 type Props = {
   messages: SlackMessage[];
@@ -54,6 +55,10 @@ type Props = {
   onToggleReaction?: (messageTs: string, emojiName: string, add: boolean) => void;
   selectedChannelId: string;
   onCreateTaskFromMessage?: (message: SlackMessage) => void;
+  /** Set de keys `channel|ts` de mensajes guardados en "Más tarde". */
+  savedMessageKeys?: Set<string>;
+  /** Etiqueta amable del canal actual para persistir con el guardado. */
+  currentChannelName?: string | null;
 };
 
 const REACTION_PICKER_KEYS = [
@@ -309,6 +314,8 @@ export function SlackMessageList({
   onToggleReaction,
   selectedChannelId,
   onCreateTaskFromMessage,
+  savedMessageKeys,
+  currentChannelName = null,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [mentionUserId, setMentionUserId] = useState<string | null>(null);
@@ -600,7 +607,7 @@ export function SlackMessageList({
               </div>
             )
           )}
-          {(onOpenThread || onCreateTaskFromMessage) && (
+          {(onOpenThread || onCreateTaskFromMessage || selectedChannelId) && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               {onOpenThread && (
               <Button
@@ -632,6 +639,19 @@ export function SlackMessageList({
                   <ClipboardPlus className="h-3.5 w-3.5 shrink-0" />
                   Crear tarea
                 </Button>
+              )}
+              {selectedChannelId && (
+                <SlackSaveForLaterButton
+                  channelId={selectedChannelId}
+                  messageTs={m.ts}
+                  threadTs={m.thread_ts ?? null}
+                  snippet={m.text ?? null}
+                  authorSlackUserId={m.user ?? null}
+                  authorName={slackUserDisplayName(m.user, userMap)}
+                  channelName={currentChannelName}
+                  isSaved={!!savedMessageKeys?.has(`${selectedChannelId}|${m.ts}`)}
+                  variant="compact"
+                />
               )}
             </div>
           )}

@@ -42,6 +42,8 @@ import { SlackMessageList } from "@/components/slack/SlackMessageList";
 import { SlackComposer } from "@/components/slack/SlackComposer";
 import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackAiPanel } from "@/components/slack/SlackAiPanel";
+import { SlackActivityPanel } from "@/components/slack/SlackActivityPanel";
+import { SlackLaterPanel } from "@/components/slack/SlackLaterPanel";
 import { SlackChannelInlineSummary } from "@/components/slack/SlackChannelInlineSummary";
 import { SlackQuickReplyBar } from "@/components/slack/SlackQuickReplyBar";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
@@ -56,6 +58,12 @@ import {
   markSlackChannelNotificationsRead,
 } from "@/hooks/useSlackChannelNotificationBadges";
 import { useSlackUnreadSync } from "@/hooks/useSlackUnreadSync";
+import {
+  useSlackSavedKeySet,
+  useSlackSavedCount,
+} from "@/hooks/useSlackSavedMessages";
+import { useSlackUnreadMentionsCount } from "@/hooks/useSlackActivityFeed";
+import type { SlackActivityTab } from "@/hooks/useSlackActivityFeed";
 
 type HistoryPage = {
   messages: SlackMessage[];
@@ -141,12 +149,17 @@ export default function Comunicacion() {
 
   const channelFromUrl = searchParams.get("channel") || "";
   const tsFromUrl = searchParams.get("ts") || "";
+  const activityFromUrl = (searchParams.get("activity") || "") as string;
+  const openLaterFromUrl = searchParams.get("later") === "1";
 
   const [selectedChannel, setSelectedChannel] = useState<string>(channelFromUrl);
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+  const [activityInitialTab, setActivityInitialTab] = useState<SlackActivityTab>("all");
+  const [laterPanelOpen, setLaterPanelOpen] = useState(false);
   const [summaryBannerOpen, setSummaryBannerOpen] = useState(false);
   const [taskFromSlackMessage, setTaskFromSlackMessage] = useState<SlackMessage | null>(null);
   const [newDmOpen, setNewDmOpen] = useState(false);
@@ -191,6 +204,58 @@ export default function Comunicacion() {
     if (!channelFromUrl || channelFromUrl === selectedChannel) return;
     switchChannel(channelFromUrl, false);
   }, [channelFromUrl, selectedChannel, switchChannel]);
+
+  useEffect(() => {
+    if (!activityFromUrl) return;
+    const validTabs: SlackActivityTab[] = ["all", "mentions", "threads", "dms", "reactions"];
+    const tab = (validTabs.includes(activityFromUrl as SlackActivityTab)
+      ? (activityFromUrl as SlackActivityTab)
+      : "mentions");
+    setActivityInitialTab(tab);
+    setActivityPanelOpen(true);
+    setLaterPanelOpen(false);
+    setAiPanelOpen(false);
+  }, [activityFromUrl]);
+
+  useEffect(() => {
+    if (!openLaterFromUrl) return;
+    setLaterPanelOpen(true);
+    setActivityPanelOpen(false);
+    setAiPanelOpen(false);
+  }, [openLaterFromUrl]);
+
+  const handleOpenActivityPanel = useCallback(() => {
+    setActivityPanelOpen((v) => {
+      const next = !v;
+      if (next) {
+        setLaterPanelOpen(false);
+        setAiPanelOpen(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleOpenLaterPanel = useCallback(() => {
+    setLaterPanelOpen((v) => {
+      const next = !v;
+      if (next) {
+        setActivityPanelOpen(false);
+        setAiPanelOpen(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleOpenAiPanel = useCallback(() => {
+    setAiPanelOpen((v) => {
+      const next = !v;
+      if (next) {
+        setActivityPanelOpen(false);
+        setLaterPanelOpen(false);
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!user?.id || !selectedChannel) return;
@@ -1106,6 +1171,34 @@ export default function Comunicacion() {
     ? conversationTitle(selectedMeta, userMap, titleOpts)
     : "Selecciona una conversación";
 
+  const savedKeySet = useSlackSavedKeySet("in_progress");
+  const savedLaterCount = useSlackSavedCount("in_progress").data ?? 0;
+  const slackUnreadMentions = useSlackUnreadMentionsCount().data ?? 0;
+
+  const resolveChannelTitle = useCallback(
+    (channelId: string): string | undefined => {
+      const c = conversations.find((x) => x.id === channelId);
+      if (!c) return undefined;
+      return conversationTitle(c, userMap, titleOpts);
+    },
+    [conversations, userMap, titleOpts],
+  );
+
+  const handleJumpToSlackMessage = useCallback(
+    (channelId: string, ts: string) => {
+      if (channelId !== selectedChannel) {
+        switchChannel(channelId, false);
+        setSearchParams({ channel: channelId, ts });
+      } else {
+        const el = document.getElementById(`slack-msg-${ts.replace(/\./g, "-")}`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      setActivityPanelOpen(false);
+      setLaterPanelOpen(false);
+    },
+    [selectedChannel, switchChannel, setSearchParams],
+  );
+
   const showHash =
     !!selectedMeta && !selectedMeta.is_im && !selectedMeta.is_mpim && !selectedMeta.is_private;
 
@@ -1422,7 +1515,7 @@ export default function Comunicacion() {
                 el?.scrollIntoView({ behavior: "smooth", block: "center" });
               }}
               aiPanelOpen={aiPanelOpen}
-              onToggleAiPanel={() => setAiPanelOpen((v) => !v)}
+              onToggleAiPanel={handleOpenAiPanel}
               summaryBannerOpen={summaryBannerOpen}
               onToggleSummaryBanner={() => setSummaryBannerOpen((v) => !v)}
               conversationType={
@@ -1483,6 +1576,8 @@ export default function Comunicacion() {
               onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
               selectedChannelId={selectedChannel}
               onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
+              savedMessageKeys={savedKeySet}
+              currentChannelName={headerTitle}
             />
             <SlackQuickReplyBar
               channelId={selectedChannel}
@@ -1586,6 +1681,19 @@ export default function Comunicacion() {
             onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
             onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
           />
+          <SlackActivityPanel
+            open={activityPanelOpen}
+            onClose={() => setActivityPanelOpen(false)}
+            initialTab={activityInitialTab}
+            onJumpToMessage={handleJumpToSlackMessage}
+            resolveChannelTitle={resolveChannelTitle}
+          />
+          <SlackLaterPanel
+            open={laterPanelOpen}
+            onClose={() => setLaterPanelOpen(false)}
+            onJumpToMessage={handleJumpToSlackMessage}
+            resolveChannelTitle={resolveChannelTitle}
+          />
           <SlackAiPanel
             open={aiPanelOpen}
             onClose={() => setAiPanelOpen(false)}
@@ -1618,7 +1726,8 @@ export default function Comunicacion() {
           />
         </div>
       ) : (
-        <div className="flex flex-1 min-h-[min(480px,70vh)] flex-col items-center justify-center px-6 py-16 text-center">
+        <div className="flex flex-1 min-h-0 min-w-0">
+          <div className="flex flex-1 min-h-[min(480px,70vh)] flex-col items-center justify-center px-6 py-16 text-center">
           <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary mb-4">
             <MessageSquarePlus className="h-7 w-7" />
           </div>
@@ -1673,6 +1782,20 @@ export default function Comunicacion() {
               </div>
             );
           })()}
+          </div>
+          <SlackActivityPanel
+            open={activityPanelOpen}
+            onClose={() => setActivityPanelOpen(false)}
+            initialTab={activityInitialTab}
+            onJumpToMessage={handleJumpToSlackMessage}
+            resolveChannelTitle={resolveChannelTitle}
+          />
+          <SlackLaterPanel
+            open={laterPanelOpen}
+            onClose={() => setLaterPanelOpen(false)}
+            onJumpToMessage={handleJumpToSlackMessage}
+            resolveChannelTitle={resolveChannelTitle}
+          />
         </div>
       )}
     </>
@@ -1728,6 +1851,12 @@ export default function Comunicacion() {
           channelsCount={slackHeaderSummary.channels}
           directsCount={slackHeaderSummary.directs}
           onNewMessage={() => setNewDmOpen(true)}
+          onOpenActivity={handleOpenActivityPanel}
+          activityOpen={activityPanelOpen}
+          activityUnread={slackUnreadMentions}
+          onOpenLater={handleOpenLaterPanel}
+          laterOpen={laterPanelOpen}
+          laterCount={savedLaterCount}
         />
       </div>
     </AppLayout>

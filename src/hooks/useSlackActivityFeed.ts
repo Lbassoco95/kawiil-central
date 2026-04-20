@@ -70,7 +70,7 @@ export function useSlackActivityFeed(tab: SlackActivityTab = "all", onlyUnread =
       const { data, error } = await q;
       if (error) throw error;
 
-      const rows = (data ?? []) as Array<{
+      const rows = (data ?? []) as unknown as Array<{
         id: string;
         type: string;
         title: string;

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Plus, MessageSquarePlus } from "lucide-react";
+import { Plus, MessageSquarePlus, Activity, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -22,6 +22,18 @@ type Props = {
   directsCount?: number;
   /** CTA principal: redactar nuevo mensaje directo. */
   onNewMessage?: () => void;
+  /** Abrir panel de Actividad (menciones, hilos, DMs, reacciones). */
+  onOpenActivity?: () => void;
+  /** Panel Actividad abierto (para estado activo del botón del rail). */
+  activityOpen?: boolean;
+  /** Conteo de actividad/menciones no leídas para el badge del rail. */
+  activityUnread?: number;
+  /** Abrir panel "Más tarde" (mensajes guardados). */
+  onOpenLater?: () => void;
+  /** Panel Más tarde abierto. */
+  laterOpen?: boolean;
+  /** Conteo de saved messages en curso para el badge del rail. */
+  laterCount?: number;
 };
 
 /**
@@ -47,9 +59,17 @@ export function SlackWorkspaceLayout({
   channelsCount,
   directsCount,
   onNewMessage,
+  onOpenActivity,
+  activityOpen = false,
+  activityUnread = 0,
+  onOpenLater,
+  laterOpen = false,
+  laterCount = 0,
 }: Props) {
   const initial = (workspaceInitial ?? workspaceName.charAt(0) ?? "K").toUpperCase();
   const unreadBadge = totalUnread > 0 ? (totalUnread > 99 ? "99+" : String(totalUnread)) : null;
+  const activityBadge = activityUnread > 0 ? (activityUnread > 99 ? "99+" : String(activityUnread)) : null;
+  const laterBadge = laterCount > 0 ? (laterCount > 99 ? "99+" : String(laterCount)) : null;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 overflow-hidden rounded-2xl border border-slate-200/70 bg-card shadow-sm dark:border-slate-800/60">
@@ -85,6 +105,50 @@ export function SlackWorkspaceLayout({
             aria-label="Nuevo mensaje directo"
           >
             <Plus className="h-4 w-4" />
+          </button>
+        )}
+        {onOpenActivity && (
+          <button
+            type="button"
+            onClick={onOpenActivity}
+            className={cn(
+              "relative grid h-9 w-9 place-items-center rounded-xl border transition",
+              activityOpen
+                ? "border-white/60 bg-white/10 text-white"
+                : "border-white/15 text-white/65 hover:border-white/40 hover:text-white",
+            )}
+            title="Actividad"
+            aria-label="Actividad"
+            aria-pressed={activityOpen}
+          >
+            <Activity className="h-4 w-4" />
+            {activityBadge && (
+              <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white tabular-nums leading-none">
+                {activityBadge}
+              </span>
+            )}
+          </button>
+        )}
+        {onOpenLater && (
+          <button
+            type="button"
+            onClick={onOpenLater}
+            className={cn(
+              "relative grid h-9 w-9 place-items-center rounded-xl border transition",
+              laterOpen
+                ? "border-white/60 bg-white/10 text-white"
+                : "border-white/15 text-white/65 hover:border-white/40 hover:text-white",
+            )}
+            title="Más tarde"
+            aria-label="Más tarde"
+            aria-pressed={laterOpen}
+          >
+            <Bookmark className="h-4 w-4" />
+            {laterBadge && (
+              <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-sky-500 px-1 text-[9px] font-bold text-white tabular-nums leading-none">
+                {laterBadge}
+              </span>
+            )}
           </button>
         )}
         <div className="mt-auto flex flex-col items-center gap-1 text-[9px] uppercase tracking-wider text-white/40">

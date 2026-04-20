@@ -879,6 +879,20 @@ export default function Notificaciones() {
             {/* Mentions, Activity & Sistema lists */}
             {(tab === "menciones" || tab === "actividad" || tab === "sistema") && (
               <div className="space-y-4">
+                {tab === "menciones" &&
+                  mentions.some((m) => m.type === "slack_mention" && !m.is_read) && (
+                    <div className="flex justify-start">
+                      <button
+                        type="button"
+                        onClick={() => navigate("/comunicacion?activity=mentions")}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/70 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-100 transition-colors dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300"
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        Abrir en Slack · Actividad
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
                 {currentUnread.length > 0 && (
                   <div className="flex justify-end">
                     <button
