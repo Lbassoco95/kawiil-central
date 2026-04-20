@@ -152,12 +152,13 @@ export function CalendarView() {
     try { window.localStorage.setItem("kawiil-cal-cat-filters", JSON.stringify(activeCategoryFilters)); } catch { /* ignore */ }
   }, [activeCategoryFilters]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const nowIndicatorRef = useRef<HTMLDivElement>(null);
 
-  // Now indicator (línea roja con hora actual) — refresca cada minuto
+  // Now indicator (línea roja con hora actual) — refresca cada 30s para precisión
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
     const tick = () => setNow(new Date());
-    const t = setInterval(tick, 60_000);
+    const t = setInterval(tick, 30_000);
     return () => clearInterval(t);
   }, []);
 
@@ -165,15 +166,38 @@ export function CalendarView() {
     if (isMobile) setViewMode("day");
   }, [isMobile]);
 
-  // Persist & restore scroll position of the calendar area
+  // Persist & restore scroll position of the calendar area; si no hay scroll guardado,
+  // hacer scroll automáticamente a la hora actual (cuando hoy está visible).
   useEffect(() => {
     const el = scrollAreaRef.current;
     if (!el || typeof window === "undefined") return;
     const key = `kawiil-cal-scroll-${viewMode}`;
+    let restored = false;
     try {
       const saved = window.sessionStorage.getItem(key);
-      if (saved) el.scrollTop = parseInt(saved, 10) || 0;
+      if (saved) {
+        el.scrollTop = parseInt(saved, 10) || 0;
+        restored = true;
+      }
     } catch { /* ignore */ }
+    if (!restored) {
+      // Scroll a la hora actual: dejarla a ~1/3 desde la parte superior del viewport.
+      const t = window.setTimeout(() => {
+        const indicator = nowIndicatorRef.current;
+        if (!indicator || !el) return;
+        const elRect = el.getBoundingClientRect();
+        const indRect = indicator.getBoundingClientRect();
+        const offset = indRect.top - elRect.top;
+        el.scrollTop = el.scrollTop + offset - el.clientHeight / 3;
+      }, 120);
+      // No retornamos el cleanup aquí porque registraremos el scroll listener abajo.
+      // Pero es seguro limpiar si el componente se desmonta antes:
+      const cleanupTimeout = () => window.clearTimeout(t);
+      el.addEventListener("scroll", function onceScroll() {
+        cleanupTimeout();
+        el.removeEventListener("scroll", onceScroll);
+      }, { passive: true, once: true });
+    }
     const onScroll = () => {
       try { window.sessionStorage.setItem(key, String(el.scrollTop)); } catch { /* ignore */ }
     };
@@ -318,7 +342,19 @@ export function CalendarView() {
       case "month": setCurrentDate(subMonths(currentDate, 1)); break;
     }
   };
-  const goToday = () => setCurrentDate(new Date());
+  const goToday = () => {
+    setCurrentDate(new Date());
+    // Tras renderizar el cambio de fecha, hacer scroll al indicador de "ahora".
+    window.setTimeout(() => {
+      const el = scrollAreaRef.current;
+      const indicator = nowIndicatorRef.current;
+      if (!el || !indicator) return;
+      const elRect = el.getBoundingClientRect();
+      const indRect = indicator.getBoundingClientRect();
+      const offset = indRect.top - elRect.top;
+      el.scrollTo({ top: el.scrollTop + offset - el.clientHeight / 3, behavior: "smooth" });
+    }, 80);
+  };
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, any[]>();
@@ -645,22 +681,21 @@ export function CalendarView() {
                   return (
                 <div className="grid border-t border-border relative" style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
                   {showNow && (
-                    <>
-                      <div
-                        className="pointer-events-none absolute z-30"
-                        style={{ top: nowTop, left: 56, right: 0, height: 0 }}
-                      >
-                        <div className="h-[2px] w-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.4)]" />
-                      </div>
-                      <div
-                        className="pointer-events-none absolute z-30 flex items-center justify-end pr-1.5"
-                        style={{ top: nowTop - 9, left: 0, width: 56, height: 18 }}
-                      >
-                        <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-semibold text-white shadow-sm">
-                          {nowLabel}
-                        </span>
-                      </div>
-                    </>
+                    <div
+                      ref={nowIndicatorRef}
+                      className="pointer-events-none absolute z-30 flex items-center"
+                      style={{ top: nowTop - 10, left: 48, right: 0, height: 20 }}
+                      aria-label={`Hora actual: ${nowLabel}`}
+                    >
+                      <span className="relative inline-flex items-center justify-center shrink-0">
+                        <span className="absolute inline-flex h-4 w-4 rounded-full bg-red-500/25 motion-safe:animate-ping" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-card shadow-sm" />
+                      </span>
+                      <span className="ml-1 inline-flex items-center rounded-full bg-card border border-red-500 text-red-600 dark:text-red-400 px-1.5 py-[1px] text-[10px] font-semibold shadow-sm leading-none shrink-0">
+                        {nowLabel}
+                      </span>
+                      <span className="flex-1 h-[2px] bg-red-500/70 ml-1 shadow-[0_0_4px_rgba(239,68,68,0.35)]" />
+                    </div>
                   )}
                   <div className="border-r border-border">
                     {TIME_SLOTS.map((slotMinutes) => (
@@ -671,9 +706,23 @@ export function CalendarView() {
 
                   {viewDays.map((day) => {
                     const dayEvents = getEventsForDay(day).filter((e: any) => !e._isAllDay);
+                    const dayIsToday = isToday(day);
+                    const pastHeight = dayIsToday
+                      ? Math.max(0, Math.min(nowTop, (END_HOUR - START_HOUR) * (60 / SLOT_MINUTES) * SLOT_HEIGHT))
+                      : 0;
                     return (
-                      <div key={day.toISOString() + "-column"} className="relative border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/10"
+                      <div key={day.toISOString() + "-column"} className={cn(
+                        "relative border-r border-border last:border-r-0 cursor-pointer hover:bg-muted/10",
+                        dayIsToday && "bg-primary/[0.03]"
+                      )}
                         onClick={() => { setSelectedDate(day); setShowCreate(true); }}>
+                        {dayIsToday && pastHeight > 0 && (
+                          <div
+                            aria-hidden
+                            className="pointer-events-none absolute inset-x-0 top-0 bg-muted/40 dark:bg-muted/15"
+                            style={{ height: pastHeight }}
+                          />
+                        )}
                         {TIME_SLOTS.map((slotMinutes) => (
                           <div key={slotMinutes} className="border-b border-border/60 last:border-b-0 transition-colors duration-100 relative"
                             style={{ height: `${SLOT_HEIGHT}px` }}

@@ -49,8 +49,7 @@ import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { conversationTitle, slackUserDisplayName } from "@/components/slack/slackGrouping";
-import { Bell, Layers, Loader2, MessageSquare, MessageSquarePlus, RefreshCw } from "lucide-react";
-import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
+import { Bell, Layers, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   useSlackChannelNotificationBadges,
@@ -1127,7 +1126,7 @@ export default function Comunicacion() {
     return [...m];
   }, [channelMembers, slackUserIds]);
 
-  const kawiilSlackStats: PageHeaderStat[] = useMemo(() => {
+  const slackHeaderSummary = useMemo(() => {
     const totalConvs = conversations.length;
     const channels = conversations.filter((c) => !c.is_im && !c.is_mpim).length;
     const directs = conversations.filter((c) => c.is_im || c.is_mpim).length;
@@ -1135,34 +1134,8 @@ export default function Comunicacion() {
       (acc, n) => acc + (n || 0),
       0,
     );
-    const starred = Object.values(commPrefsByChannel).filter((p) => p.is_starred).length;
-    return [
-      {
-        label: "Conversaciones",
-        value: totalConvs,
-        sub: `${channels} canales · ${directs} DM/grupo`,
-        tone: "default",
-      },
-      {
-        label: "Sin leer",
-        value: totalUnread,
-        sub: totalUnread > 0 ? "pendientes" : "al día",
-        tone: totalUnread > 0 ? "warning" : "success",
-      },
-      {
-        label: "Destacados",
-        value: starred,
-        sub: starred > 0 ? "fijados" : "ninguno",
-        tone: starred > 0 ? "primary" : "default",
-      },
-      {
-        label: "Estado",
-        value: isConnected ? "Conectado" : "Desconectado",
-        sub: connection?.slack_user_id ? "OAuth ok" : "—",
-        tone: isConnected ? "success" : "warning",
-      },
-    ];
-  }, [conversations, displayUnreadByChannel, commPrefsByChannel, isConnected, connection?.slack_user_id]);
+    return { totalConvs, channels, directs, totalUnread };
+  }, [conversations, displayUnreadByChannel]);
 
   if (loadingConn) {
     return (
@@ -1740,25 +1713,22 @@ export default function Comunicacion() {
               : "Usuario Slack"
         }
       />
-      <div className="flex flex-1 min-h-0 flex-col gap-3 px-3 pb-3 pt-3 sm:px-4 sm:pt-4 sm:pb-4">
-        <PageHeader
-          variant="hero"
-          breadcrumb={["Kawiil OS", "Comunicación", "Slack"]}
-          title="Slack workspace"
-          description="Conversaciones unificadas con AI: detecta lo importante, sugiere respuestas y genera tareas en un clic."
-          icon={<MessageSquare className="h-5 w-5 text-white" />}
-          iconAccent="linear-gradient(135deg, hsl(280 70% 55%), hsl(220 90% 55%))"
-          stats={kawiilSlackStats}
-          className="shrink-0"
+      <div className="flex flex-1 min-h-0 flex-col px-2 pb-2 pt-2 sm:px-3 sm:pt-3 sm:pb-3">
+        <SlackWorkspaceLayout
+          sidebar={sidebar}
+          main={<div className="flex flex-col flex-1 min-h-0 overflow-hidden">{main}</div>}
+          mobileListOpen={mobileListOpen}
+          onMobileListOpenChange={setMobileListOpen}
+          workspaceName="Kawiil"
+          workspaceInitial="K"
+          isConnected={isConnected}
+          connectionLabel={connection?.slack_user_id ? "OAuth ok" : "—"}
+          totalUnread={slackHeaderSummary.totalUnread}
+          totalConversations={slackHeaderSummary.totalConvs}
+          channelsCount={slackHeaderSummary.channels}
+          directsCount={slackHeaderSummary.directs}
+          onNewMessage={() => setNewDmOpen(true)}
         />
-        <div className="flex flex-1 min-h-0">
-          <SlackWorkspaceLayout
-            sidebar={sidebar}
-            main={<div className="flex flex-col flex-1 min-h-0 overflow-hidden">{main}</div>}
-            mobileListOpen={mobileListOpen}
-            onMobileListOpenChange={setMobileListOpen}
-          />
-        </div>
       </div>
     </AppLayout>
   );
