@@ -9,8 +9,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Kawiil";
   const options = {
     body: data.body || "",
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: "/icon-192.png",
+    badge: "/icon-32.png",
     tag: data.tag || `kawiil-${Date.now()}`,
     renotify: true,
     vibrate: [120, 80, 120],
