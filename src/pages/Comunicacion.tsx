@@ -47,7 +47,8 @@ import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { conversationTitle, slackUserDisplayName } from "@/components/slack/slackGrouping";
-import { Bell, Layers, Loader2, MessageSquarePlus, RefreshCw } from "lucide-react";
+import { Bell, Layers, Loader2, MessageSquare, MessageSquarePlus, RefreshCw } from "lucide-react";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import {
   useSlackChannelNotificationBadges,
@@ -1074,6 +1075,43 @@ export default function Comunicacion() {
     return [...m];
   }, [channelMembers, slackUserIds]);
 
+  const kawiilSlackStats: PageHeaderStat[] = useMemo(() => {
+    const totalConvs = conversations.length;
+    const channels = conversations.filter((c) => !c.is_im && !c.is_mpim).length;
+    const directs = conversations.filter((c) => c.is_im || c.is_mpim).length;
+    const totalUnread = Object.values(displayUnreadByChannel).reduce(
+      (acc, n) => acc + (n || 0),
+      0,
+    );
+    const starred = Object.values(commPrefsByChannel).filter((p) => p.is_starred).length;
+    return [
+      {
+        label: "Conversaciones",
+        value: totalConvs,
+        sub: `${channels} canales · ${directs} DM/grupo`,
+        tone: "default",
+      },
+      {
+        label: "Sin leer",
+        value: totalUnread,
+        sub: totalUnread > 0 ? "pendientes" : "al día",
+        tone: totalUnread > 0 ? "warning" : "success",
+      },
+      {
+        label: "Destacados",
+        value: starred,
+        sub: starred > 0 ? "fijados" : "ninguno",
+        tone: starred > 0 ? "primary" : "default",
+      },
+      {
+        label: "Estado",
+        value: isConnected ? "Conectado" : "Desconectado",
+        sub: connection?.slack_user_id ? "OAuth ok" : "—",
+        tone: isConnected ? "success" : "warning",
+      },
+    ];
+  }, [conversations, displayUnreadByChannel, commPrefsByChannel, isConnected, connection?.slack_user_id]);
+
   if (loadingConn) {
     return (
       <AppLayout contentMaxWidth="full">
@@ -1130,18 +1168,18 @@ export default function Comunicacion() {
       headerActions={
         <div className="flex flex-col gap-1.5">
           {showSlackPushBanner && (
-            <Alert className="border-amber-800/60 bg-amber-950/30 text-amber-100 py-2 px-3">
-              <Bell className="h-4 w-4 text-amber-400" />
+            <Alert className="border-amber-300/60 dark:border-amber-700/40 bg-amber-50/80 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100 py-2 px-3">
+              <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <AlertTitle className="text-xs font-semibold mb-1">
                 {vapidConfigured ? "Avisos fuera de la app" : "Notificaciones push no disponibles"}
               </AlertTitle>
-              <AlertDescription className="text-[11px] text-amber-100/90 leading-snug space-y-1.5">
+              <AlertDescription className="text-[11px] text-amber-900/90 dark:text-amber-100/90 leading-snug space-y-1.5">
                 {vapidConfigured ? (
                   <>
                     <p>
                       Con la app abierta verás avisos emergentes en Kawiil; el historial del canal se actualiza al
                       llegar un mensaje que te notifique. El sonido y el aviso del sistema los configuras en{" "}
-                      <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                      <Link to="/notificaciones" className="underline font-medium text-amber-700 dark:text-amber-200">
                         Notificaciones
                       </Link>{" "}
                       (permiso del navegador + sonido Slack). Silenciar un chat con la campana en la lista no bloquea
@@ -1149,7 +1187,7 @@ export default function Comunicacion() {
                     </p>
                     <p>
                       Para recibir Slack con la pestaña cerrada, activa también push en{" "}
-                      <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                      <Link to="/notificaciones" className="underline font-medium text-amber-700 dark:text-amber-200">
                         Notificaciones
                       </Link>
                       .
@@ -1159,29 +1197,29 @@ export default function Comunicacion() {
                   <>
                     <p>
                       Falta la variable{" "}
-                      <code className="rounded bg-black/30 px-1 text-[10px]">VITE_VAPID_PUBLIC_KEY</code> en Lovable; sin
+                      <code className="rounded bg-amber-200/40 dark:bg-black/30 px-1 text-[10px]">VITE_VAPID_PUBLIC_KEY</code> en Lovable; sin
                       ella no hay push en segundo plano. Puedes{" "}
                       <button
                         type="button"
-                        className="underline font-medium text-amber-200 hover:text-amber-100"
+                        className="underline font-medium text-amber-700 dark:text-amber-200 hover:text-amber-900 dark:hover:text-amber-100"
                         onClick={dismissPushBanner}
                       >
                         ocultar este aviso
                       </button>{" "}
                       mientras tanto.
                     </p>
-                    <details className="rounded border border-amber-800/40 bg-black/20 px-2 py-1.5">
-                      <summary className="cursor-pointer text-amber-200/95 font-medium select-none">
+                    <details className="rounded border border-amber-300 dark:border-amber-800/40 bg-amber-100/40 dark:bg-black/20 px-2 py-1.5">
+                      <summary className="cursor-pointer text-amber-800 dark:text-amber-200/95 font-medium select-none">
                         Pasos: generar claves, Lovable, Supabase y publicar
                       </summary>
-                      <p className="mt-2 text-amber-100/90">
+                      <p className="mt-2 text-amber-900/90 dark:text-amber-100/90">
                         Cuando esté configurado, cada usuario activa push en{" "}
-                        <Link to="/notificaciones" className="underline font-medium text-amber-200">
+                        <Link to="/notificaciones" className="underline font-medium text-amber-700 dark:text-amber-200">
                           Notificaciones
                         </Link>
                         .
                       </p>
-                      <ul className="list-disc pl-4 mt-2 space-y-0.5 text-amber-200/95">
+                      <ul className="list-disc pl-4 mt-2 space-y-0.5 text-amber-800 dark:text-amber-200/95">
                         <li>
                           Generar par:{" "}
                           <code className="rounded bg-black/30 px-1">npx web-push generate-vapid-keys</code>
@@ -1199,7 +1237,7 @@ export default function Comunicacion() {
                           <code className="rounded bg-black/30 px-1">mailto:equipo@tudominio.com</code>).
                         </li>
                       </ul>
-                      <p className="text-amber-300/80 mt-1.5">
+                      <p className="text-amber-600 dark:text-amber-300/80 mt-1.5">
                         Tras guardar en Lovable, vuelve a <strong>publicar</strong> el proyecto para que el navegador
                         reciba la clave pública.
                       </p>
@@ -1216,7 +1254,7 @@ export default function Comunicacion() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 text-[10px] border-amber-700/50 bg-amber-950/40 text-amber-100 hover:bg-amber-900/50"
+                    className="h-7 text-[10px] border-amber-400/60 dark:border-amber-700/50 bg-amber-100/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 hover:bg-amber-200/70 dark:hover:bg-amber-900/50"
                     onClick={dismissPushBanner}
                   >
                     Ocultar aviso
@@ -1229,7 +1267,7 @@ export default function Comunicacion() {
             type="button"
             variant="outline"
             size="sm"
-            className="w-full h-8 text-xs justify-start gap-2 bg-zinc-800/80 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+            className="w-full h-8 text-xs justify-start gap-2 bg-background/60 border-border hover:bg-accent/60"
             onClick={() => setGroupsDialogOpen(true)}
           >
             <Layers className="h-3.5 w-3.5 shrink-0 opacity-80" />
@@ -1238,19 +1276,22 @@ export default function Comunicacion() {
           <SlackStatusPresets />
           <Button
             type="button"
-            variant="secondary"
             size="sm"
-            className="w-full h-8 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border-zinc-700"
+            className="w-full h-8 text-xs gap-1.5 shadow-sm"
+            style={{
+              background:
+                "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))",
+            }}
             onClick={() => setNewDmOpen(true)}
           >
-            <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5 shrink-0" />
+            <MessageSquarePlus className="h-3.5 w-3.5 shrink-0" />
             Nuevo mensaje directo
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="w-full h-7 text-[10px] text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/80"
+            className="w-full h-7 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/50"
             onClick={() => connect()}
             disabled={isConnecting}
             title="Vuelve a abrir Slack para aplicar permisos (p. ej. users.profile:write para estado)"
@@ -1266,7 +1307,7 @@ export default function Comunicacion() {
             type="button"
             variant="ghost"
             size="sm"
-            className="w-full h-7 text-[10px] text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60"
+            className="w-full h-7 text-[10px] text-muted-foreground/80 hover:text-foreground hover:bg-accent/50"
             title="Consulta a Slack qué permisos tiene tu token actual y muestra si faltan reactions:write o reactions:read"
             onClick={async () => {
               try {
@@ -1317,9 +1358,9 @@ export default function Comunicacion() {
   const main = (
     <>
       {profile?.notify_slack_all_channels === false && isConnected && (
-        <Alert className="rounded-none border-x-0 border-t-0 border-amber-600/50 bg-amber-950/20 text-amber-100">
+        <Alert className="rounded-none border-x-0 border-t-0 border-amber-400/60 dark:border-amber-600/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-900 dark:text-amber-100">
           <AlertTitle className="text-sm">Avisos globales de Slack desactivados</AlertTitle>
-          <AlertDescription className="text-xs text-amber-100/90">
+          <AlertDescription className="text-xs text-amber-900/90 dark:text-amber-100/90">
             No recibirás mensajes de canales aunque el interruptor de cada chat esté en «Avisos». Actívalo en{" "}
             <Link to="/notificaciones" className="underline font-medium">
               Notificaciones
@@ -1351,6 +1392,15 @@ export default function Comunicacion() {
               }}
               aiPanelOpen={aiPanelOpen}
               onToggleAiPanel={() => setAiPanelOpen((v) => !v)}
+              conversationType={
+                selectedMeta?.is_im
+                  ? "im"
+                  : selectedMeta?.is_mpim
+                    ? "mpim"
+                    : selectedMeta?.is_private
+                      ? "private"
+                      : "channel"
+              }
             />
             <SlackMessageList
               messages={messages}
@@ -1424,6 +1474,20 @@ export default function Comunicacion() {
             messages={messages}
             userMap={userMap}
             selfUserId={connection?.slack_user_id ?? null}
+            conversationType={
+              selectedMeta?.is_im
+                ? "im"
+                : selectedMeta?.is_mpim
+                  ? "mpim"
+                  : selectedMeta?.is_private
+                    ? "private"
+                    : "channel"
+            }
+            userName={
+              connection?.slack_user_id
+                ? slackUserDisplayName(connection.slack_user_id, userMap)
+                : undefined
+            }
             onJumpToMessage={(ts) => {
               const el = document.getElementById(`slack-msg-${ts.replace(/\./g, "-")}`);
               el?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1529,12 +1593,26 @@ export default function Comunicacion() {
               : "Usuario Slack"
         }
       />
-      <SlackWorkspaceLayout
-        sidebar={sidebar}
-        main={<div className="flex flex-col flex-1 min-h-0 overflow-hidden">{main}</div>}
-        mobileListOpen={mobileListOpen}
-        onMobileListOpenChange={setMobileListOpen}
-      />
+      <div className="flex flex-1 min-h-0 flex-col gap-3 px-3 pb-3 pt-3 sm:px-4 sm:pt-4 sm:pb-4">
+        <PageHeader
+          variant="hero"
+          breadcrumb={["Kawiil OS", "Comunicación", "Slack"]}
+          title="Slack workspace"
+          description="Conversaciones unificadas con AI: detecta lo importante, sugiere respuestas y genera tareas en un clic."
+          icon={<MessageSquare className="h-5 w-5 text-white" />}
+          iconAccent="linear-gradient(135deg, hsl(280 70% 55%), hsl(220 90% 55%))"
+          stats={kawiilSlackStats}
+          className="shrink-0"
+        />
+        <div className="flex flex-1 min-h-0">
+          <SlackWorkspaceLayout
+            sidebar={sidebar}
+            main={<div className="flex flex-col flex-1 min-h-0 overflow-hidden">{main}</div>}
+            mobileListOpen={mobileListOpen}
+            onMobileListOpenChange={setMobileListOpen}
+          />
+        </div>
+      </div>
     </AppLayout>
   );
 }

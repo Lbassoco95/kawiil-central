@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, BellOff, PanelLeft, Search, Info, Users, Sparkles } from "lucide-react";
+import { Bell, BellOff, PanelLeft, Search, Info, Users, Sparkles, Hash, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import type { SlackMessage } from "@/lib/slackApi";
 import { toast } from "sonner";
 
@@ -29,6 +30,15 @@ type Props = {
   onJumpToMessage: (ts: string) => void;
   aiPanelOpen?: boolean;
   onToggleAiPanel?: () => void;
+  /** Tipo de conversación para elegir icono (DM, MPIM, canal). Si no se provee se usa Hash. */
+  conversationType?: "channel" | "private" | "im" | "mpim";
+};
+
+const TYPE_ICON_BG: Record<NonNullable<Props["conversationType"]>, string> = {
+  channel: "linear-gradient(135deg, hsl(207 100% 42%), hsl(217 91% 60%))",
+  private: "linear-gradient(135deg, hsl(280 65% 50%), hsl(260 70% 60%))",
+  im: "linear-gradient(135deg, hsl(160 70% 38%), hsl(180 70% 45%))",
+  mpim: "linear-gradient(135deg, hsl(330 75% 55%), hsl(280 70% 55%))",
 };
 
 export function SlackChannelHeader({
@@ -46,6 +56,7 @@ export function SlackChannelHeader({
   onJumpToMessage,
   aiPanelOpen,
   onToggleAiPanel,
+  conversationType,
 }: Props) {
   const [searchQ, setSearchQ] = useState("");
 
@@ -63,10 +74,20 @@ export function SlackChannelHeader({
     }
   };
 
+  const tileType = conversationType ?? (showHash ? "channel" : "private");
+  const TileIcon =
+    tileType === "im" ? MessageCircle : tileType === "mpim" ? Users : Hash;
+
   return (
-    <header className="shrink-0 z-10 flex flex-col gap-2 border-b border-border/70 bg-card px-4 py-3 shadow-sm backdrop-blur-sm">
+    <header
+      className="relative shrink-0 z-10 overflow-hidden border-b border-border/60 bg-card px-4 py-3 sm:px-5 sm:py-3.5"
+      style={{
+        backgroundImage:
+          "radial-gradient(ellipse 360px 120px at 0% 0%, hsl(var(--primary) / 0.05), transparent 70%)",
+      }}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           {showSidebarTrigger && onOpenSidebar && (
             <Button
               type="button"
@@ -79,6 +100,14 @@ export function SlackChannelHeader({
               <span className="sr-only">Abrir lista de conversaciones</span>
             </Button>
           )}
+          {/* Icon tile estilo v2.4 */}
+          <div
+            aria-hidden
+            className="hidden sm:grid h-9 w-9 place-items-center rounded-xl text-white shadow-sm shrink-0"
+            style={{ background: TILE_BG(tileType) }}
+          >
+            <TileIcon className="h-4 w-4" />
+          </div>
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground truncate flex items-center gap-1.5">
               {showHash && <span className="text-muted-foreground font-normal">#</span>}
@@ -100,36 +129,37 @@ export function SlackChannelHeader({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <div className="hidden sm:flex items-center gap-1 max-w-[200px]">
-            <Input
-              id="comunicacion-slack-buscar-mensajes"
-              name="comunicacion_slack_buscar_mensajes"
-              autoComplete="off"
-              value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && runSearch()}
-              placeholder="Buscar…"
-              className="h-8 text-xs"
-            />
-            <Button type="button" variant="secondary" size="icon" className="h-8 w-8 shrink-0" onClick={runSearch}>
-              <Search className="h-3.5 w-3.5" />
-            </Button>
+          <div className="hidden sm:flex items-center gap-1 max-w-[220px]">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70" />
+              <Input
+                id="comunicacion-slack-buscar-mensajes"
+                name="comunicacion_slack_buscar_mensajes"
+                autoComplete="off"
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                placeholder="Buscar en este chat…"
+                className="h-8 pl-8 text-xs bg-background/60 border-border focus-visible:ring-primary/30"
+              />
+            </div>
           </div>
           {onToggleAiPanel ? (
             <Button
               type="button"
               variant={aiPanelOpen ? "default" : "outline"}
               size="sm"
-              className={
+              className={cn(
+                "h-8 px-2.5 gap-1.5 text-[11px] transition-all",
                 aiPanelOpen
-                  ? "h-8 px-2.5 gap-1.5 text-[11px]"
-                  : "h-8 px-2.5 gap-1.5 text-[11px] border-primary/30 text-primary hover:bg-primary/10"
-              }
+                  ? "shadow-sm"
+                  : "border-violet-300/40 dark:border-violet-700/40 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-500/10",
+              )}
               onClick={onToggleAiPanel}
               title={aiPanelOpen ? "Cerrar asistente IA del canal" : "Abrir asistente IA del canal"}
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">IA</span>
+              <span className="hidden sm:inline">Kawiil AI</span>
             </Button>
           ) : null}
           <Dialog>
@@ -147,31 +177,37 @@ export function SlackChannelHeader({
               {topicLine && <p className="text-sm text-muted-foreground mt-2">{topicLine}</p>}
             </DialogContent>
           </Dialog>
-          {isWatching ? (
-            <Bell className="h-4 w-4 text-primary hidden sm:block" aria-hidden />
-          ) : (
-            <BellOff className="h-4 w-4 text-muted-foreground hidden sm:block" aria-hidden />
-          )}
-          <Switch
-            id="slack-watch"
-            checked={isWatching}
-            disabled={watchPending}
-            onCheckedChange={onWatchChange}
-            title={
-              isWatching
-                ? "Recibes avisos en Kawiil por mensajes en este chat. Desactiva para silenciar solo aquí (@menciones siguen)."
-                : "Avisos silenciados solo en este chat. Activa para volver a recibir mensajes (si los avisos globales están encendidos en Notificaciones)."
-            }
-          />
-          <Label
-            htmlFor="slack-watch"
-            className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap"
-            title="Por defecto encendido en todos los canales; aquí solo silencias esta conversación."
-          >
-            Avisos
-          </Label>
+          <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/40 px-2 py-1">
+            {isWatching ? (
+              <Bell className="h-3.5 w-3.5 text-primary" aria-hidden />
+            ) : (
+              <BellOff className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+            )}
+            <Switch
+              id="slack-watch"
+              checked={isWatching}
+              disabled={watchPending}
+              onCheckedChange={onWatchChange}
+              title={
+                isWatching
+                  ? "Recibes avisos en Kawiil por mensajes en este chat. Desactiva para silenciar solo aquí (@menciones siguen)."
+                  : "Avisos silenciados solo en este chat. Activa para volver a recibir mensajes (si los avisos globales están encendidos en Notificaciones)."
+              }
+            />
+            <Label
+              htmlFor="slack-watch"
+              className="text-[11px] text-muted-foreground cursor-pointer whitespace-nowrap"
+              title="Por defecto encendido en todos los canales; aquí solo silencias esta conversación."
+            >
+              Avisos
+            </Label>
+          </div>
         </div>
       </div>
     </header>
   );
+}
+
+function TILE_BG(t: NonNullable<Props["conversationType"]>) {
+  return TYPE_ICON_BG[t];
 }

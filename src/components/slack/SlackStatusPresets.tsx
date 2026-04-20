@@ -68,7 +68,7 @@ export function SlackStatusPresets() {
           type="button"
           variant="outline"
           size="sm"
-          className="w-full h-8 text-xs justify-start gap-2 bg-zinc-800/80 border-zinc-700 text-zinc-200 hover:bg-zinc-700 hover:text-white"
+          className="w-full h-8 text-xs justify-start gap-2 bg-background/60 border-border hover:bg-accent/60"
           disabled={setStatus.isPending}
         >
           {setStatus.isPending ? (

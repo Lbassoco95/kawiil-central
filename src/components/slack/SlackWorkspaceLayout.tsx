@@ -10,28 +10,15 @@ type Props = {
 
 export function SlackWorkspaceLayout({ sidebar, main, mobileListOpen, onMobileListOpenChange }: Props) {
   return (
-    <div
-      className="flex h-full min-h-0 w-full flex-1 border-t"
-      style={{ borderColor: "hsl(var(--border))" }}
-    >
+    <div className="flex h-full min-h-0 w-full flex-1 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
       {/* Desktop rail */}
-      <aside
-        className="hidden lg:flex w-[min(100%,380px)] min-w-[300px] max-w-[420px] shrink-0 flex-col border-r"
-        style={{
-          background: "hsl(var(--sidebar-background))",
-          color: "hsl(var(--sidebar-foreground))",
-          borderColor: "hsl(var(--sidebar-foreground) / 0.12)",
-        }}
-      >
-        <div
-          className="px-3 py-3 border-b"
-          style={{ borderColor: "hsl(var(--sidebar-foreground) / 0.12)" }}
-        >
-          <p className="text-xs font-semibold tracking-tight" style={{ color: "hsl(var(--sidebar-foreground))" }}>
-            Workspace
+      <aside className="hidden lg:flex w-[min(100%,360px)] min-w-[280px] max-w-[400px] shrink-0 flex-col border-r border-border/60 bg-muted/30 dark:bg-muted/20">
+        <div className="px-3 py-3 border-b border-border/60">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Workspace · Slack
           </p>
-          <p className="text-[10px] mt-0.5" style={{ color: "hsl(var(--sidebar-foreground) / 0.55)" }}>
-            Mensajes de Slack
+          <p className="text-[10px] mt-0.5 text-muted-foreground/70">
+            Conversaciones, canales y mensajes directos
           </p>
         </div>
         <div className="flex-1 min-h-0 overflow-hidden">{sidebar}</div>
@@ -41,18 +28,10 @@ export function SlackWorkspaceLayout({ sidebar, main, mobileListOpen, onMobileLi
       <Sheet open={mobileListOpen} onOpenChange={onMobileListOpenChange}>
         <SheetContent
           side="left"
-          className="w-[min(100vw,380px)] sm:max-w-[380px] p-0 flex flex-col"
-          style={{
-            background: "hsl(var(--sidebar-background))",
-            color: "hsl(var(--sidebar-foreground))",
-            borderColor: "hsl(var(--sidebar-foreground) / 0.12)",
-          }}
+          className="w-[min(100vw,380px)] sm:max-w-[380px] p-0 flex flex-col bg-card border-border/60"
         >
-          <SheetHeader
-            className="px-4 py-3 border-b text-left space-y-0"
-            style={{ borderColor: "hsl(var(--sidebar-foreground) / 0.12)" }}
-          >
-            <SheetTitle className="text-sm font-semibold" style={{ color: "hsl(var(--sidebar-foreground))" }}>
+          <SheetHeader className="px-4 py-3 border-b border-border/60 text-left space-y-0">
+            <SheetTitle className="text-sm font-semibold text-foreground">
               Conversaciones
             </SheetTitle>
           </SheetHeader>

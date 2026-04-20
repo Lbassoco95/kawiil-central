@@ -97,7 +97,7 @@ function SectionHeader({
     <CollapsibleTrigger
       id={sectionId}
       data-slack-section={sectionId}
-      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 min-w-0"
+      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80 hover:text-foreground [&[data-state=closed]_svg]:-rotate-90 min-w-0 transition-colors"
     >
       <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
       <span className="truncate min-w-0 flex-1 text-left">{label}</span>
@@ -122,14 +122,14 @@ function SortableConvRow(props: Parameters<typeof ConvRow>[0] & { id: string; un
       {...attributes}
       className={cn(
         "flex items-stretch gap-0 rounded-md",
-        rowHighlight && "bg-zinc-100 text-zinc-900 ring-1 ring-zinc-300/70 shadow-sm",
+        rowHighlight && "bg-accent/50 text-foreground ring-1 ring-border shadow-sm",
       )}
     >
       <button
         type="button"
         className={cn(
           "px-0.5 flex items-center cursor-grab active:cursor-grabbing touch-none",
-          rowHighlight ? "text-zinc-500 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-400",
+          rowHighlight ? "text-muted-foreground/80 hover:text-foreground" : "text-muted-foreground/60 hover:text-foreground",
         )}
         {...listeners}
         aria-label="Arrastrar para reordenar"
@@ -177,7 +177,11 @@ function ConvRow({
     <div
       className={cn(
         "relative w-full flex items-center gap-0 rounded-md transition-colors group/row",
-        selected ? "bg-zinc-700 text-white" : highlightUnread ? "bg-zinc-100 text-zinc-900 ring-1 ring-zinc-300/70 shadow-sm" : "hover:bg-zinc-800/90",
+        selected
+          ? "bg-primary/12 text-foreground ring-1 ring-primary/25"
+          : highlightUnread
+            ? "bg-accent/50 text-foreground ring-1 ring-border shadow-sm"
+            : "hover:bg-accent/40",
       )}
     >
       <button
@@ -186,12 +190,12 @@ function ConvRow({
         className={cn(
           "relative flex-1 text-left pl-3 pr-1 py-1.5 rounded-md text-[13px] flex items-center gap-2 min-w-0",
           selected
-            ? "font-medium text-white"
+            ? "font-semibold text-foreground"
             : highlightUnread || unreadInEmbed
-              ? "font-semibold text-zinc-900"
+              ? "font-semibold text-foreground"
               : hasUnread
-                ? "font-bold text-white"
-                : "text-zinc-200",
+                ? "font-bold text-foreground"
+                : "text-foreground/85",
         )}
         title={
           hasUnread
@@ -211,13 +215,13 @@ function ConvRow({
           />
         )}
         {c.is_im ? (
-          <MessageCircle className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
+          <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-70" />
         ) : c.is_mpim ? (
-          <Users className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
+          <Users className="h-3.5 w-3.5 shrink-0 opacity-70" />
         ) : isPublicChannel ? (
-          <Hash className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
+          <Hash className="h-3.5 w-3.5 shrink-0 opacity-70" />
         ) : (
-          <Lock className={cn("h-3.5 w-3.5 shrink-0 opacity-70", (highlightUnread || unreadInEmbed) && "text-zinc-600")} />
+          <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
         )}
         <span className="truncate min-w-0">{isPublicChannel && c.name ? `#${c.name}` : title}</span>
         <UnreadBadge count={unreadCount} />
@@ -230,8 +234,8 @@ function ConvRow({
             onToggleNotificationsMuted();
           }}
           className={cn(
-            "p-1.5 rounded-md shrink-0 text-zinc-500 hover:text-sky-300",
-            notificationsMuted && "text-zinc-400",
+            "p-1.5 rounded-md shrink-0 text-muted-foreground/60 hover:text-primary hover:bg-primary/5 transition-colors",
+            notificationsMuted && "text-muted-foreground/80",
           )}
           title={
             notificationsMuted
@@ -254,8 +258,8 @@ function ConvRow({
             onToggleStar();
           }}
           className={cn(
-            "p-1.5 rounded-md shrink-0 text-zinc-500 hover:text-amber-400",
-            starred && "text-amber-400",
+            "p-1.5 rounded-md shrink-0 text-muted-foreground/60 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors",
+            starred && "text-amber-500",
           )}
           title={starred ? "Quitar de destacados" : "Destacar"}
         >
@@ -396,7 +400,7 @@ export function SlackConversationList({
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
-        <Loader2 className="h-7 w-7 animate-spin text-sidebar-foreground/40" />
+        <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/60" />
       </div>
     );
   }
@@ -418,19 +422,19 @@ export function SlackConversationList({
     .filter(filterMatch);
 
   return (
-    <div className="flex flex-col h-full min-h-0 text-zinc-100">
-      <div className="p-2 border-b border-zinc-700/80 shrink-0 space-y-2">
+    <div className="flex flex-col h-full min-h-0 text-foreground">
+      <div className="p-2 border-b border-border/60 shrink-0 space-y-2">
         {headerActions}
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70" />
           <Input
             id="comunicacion-slack-buscar-conversaciones"
             name="comunicacion_slack_buscar_conversaciones"
             autoComplete="off"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar…"
-            className="h-8 pl-8 text-xs bg-zinc-800/80 border-zinc-700 placeholder:text-zinc-500 text-zinc-100"
+            placeholder="Buscar canal o persona…"
+            className="h-8 pl-8 text-xs bg-background/60 border-border focus-visible:ring-primary/30"
           />
         </div>
       </div>
@@ -457,14 +461,14 @@ export function SlackConversationList({
           {customGroupsFiltered.map((g) => (
             <Collapsible key={g.id} defaultOpen>
               <div className="flex items-stretch gap-0.5 px-1">
-                <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-300 [&[data-state=closed]_svg]:-rotate-90 rounded-md">
+                <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80 hover:text-foreground [&[data-state=closed]_svg]:-rotate-90 rounded-md transition-colors">
                   <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
                   <span className="truncate min-w-0 flex-1 text-left">{g.title}</span>
                   <UnreadBadge count={sumUnread(g.conversations)} />
                 </CollapsibleTrigger>
                 <Link
                   to={`/asistente-ia?slackGroup=${encodeURIComponent(g.id)}`}
-                  className="inline-flex items-center gap-0.5 shrink-0 rounded-md px-2 py-1.5 text-[10px] font-medium text-amber-300 bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-600 self-center"
+                  className="inline-flex items-center gap-0.5 shrink-0 rounded-md px-2 py-1.5 text-[10px] font-medium text-primary bg-primary/10 hover:bg-primary/15 border border-primary/20 self-center transition-colors"
                   title="Analizar mensajes recientes de este grupo con Kawiil IA"
                 >
                   <Sparkles className="h-3 w-3" />
