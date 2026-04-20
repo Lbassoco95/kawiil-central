@@ -301,6 +301,76 @@ const Configuracion = () => {
                         );
                       })}
                     </div>
+                    <div className="mt-4 rounded-xl border border-border/60 bg-background/40 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Vista previa en vivo
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Así se ven los colores semánticos con el perfil activo (
+                        <span className="font-medium text-foreground">
+                          {CVD_OPTIONS.find((o) => o.key === cvdMode)?.label ??
+                            "Desactivado"}
+                        </span>
+                        ).
+                      </p>
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Prioridades
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
+                              style={{ background: "hsl(var(--priority-urgent))" }}
+                            >
+                              P1 · Urgente
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
+                              style={{ background: "hsl(var(--priority-high))" }}
+                            >
+                              P2 · Alta
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-foreground"
+                              style={{
+                                background: "hsl(var(--priority-medium))",
+                              }}
+                            >
+                              P3 · Media
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
+                              style={{ background: "hsl(var(--priority-low))" }}
+                            >
+                              P4 · Baja
+                            </span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Estados
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-success px-2.5 py-0.5 text-[11px] font-semibold text-success-foreground">
+                              Éxito
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-warning px-2.5 py-0.5 text-[11px] font-semibold text-warning-foreground">
+                              Advertencia
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-destructive px-2.5 py-0.5 text-[11px] font-semibold text-destructive-foreground">
+                              Error
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white"
+                              style={{ background: "hsl(var(--info))" }}
+                            >
+                              Info
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                     <p className="mt-2 text-[11px] text-muted-foreground">
                       La selección se guarda en este dispositivo. Los gráficos
                       financieros mantienen su paleta por ahora (se ajustarán
