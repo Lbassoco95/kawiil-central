@@ -3,7 +3,7 @@ import { UserManagement } from "@/components/admin/UserManagement";
 import { CelulaManagement } from "@/components/admin/CelulaManagement";
 import { CatalogManagement } from "@/components/admin/CatalogManagement";
 import { AdoptionAnalyticsTab } from "@/components/admin/AdoptionAnalyticsTab";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useTheme } from "next-themes";
@@ -18,6 +18,8 @@ import {
   Moon,
   Settings,
   Eye,
+  Check,
+  RotateCcw,
 } from "lucide-react";
 import {
   useAccessibility,
@@ -90,6 +92,52 @@ const Configuracion = () => {
   const { isTransformador } = useUserRole();
   const { theme, setTheme } = useTheme();
   const { cvdMode, setCvdMode } = useAccessibility();
+
+  const [pendingCvdMode, setPendingCvdMode] = useState<CvdMode>(cvdMode);
+  const pendingRef = useRef<CvdMode>(cvdMode);
+  const savedRef = useRef<CvdMode>(cvdMode);
+
+  useEffect(() => {
+    savedRef.current = cvdMode;
+    setPendingCvdMode(cvdMode);
+    pendingRef.current = cvdMode;
+  }, [cvdMode]);
+
+  const applyCvdToDom = (mode: CvdMode) => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    if (mode === "off") {
+      delete root.dataset.cvd;
+    } else {
+      root.dataset.cvd = mode;
+    }
+  };
+
+  const handleSelectPreview = (mode: CvdMode) => {
+    setPendingCvdMode(mode);
+    pendingRef.current = mode;
+    applyCvdToDom(mode);
+  };
+
+  const handleSaveCvd = () => {
+    setCvdMode(pendingCvdMode);
+  };
+
+  const handleDiscardCvd = () => {
+    setPendingCvdMode(cvdMode);
+    pendingRef.current = cvdMode;
+    applyCvdToDom(cvdMode);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pendingRef.current !== savedRef.current) {
+        applyCvdToDom(savedRef.current);
+      }
+    };
+  }, []);
+
+  const cvdDirty = pendingCvdMode !== cvdMode;
 
   const setTab = (key: TabKey) => {
     setTabState(key);
@@ -249,9 +297,10 @@ const Configuracion = () => {
                       </h3>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Ajusta la paleta de colores semánticos (prioridades,
-                      estados, áreas) para perfiles de visión específicos. Se
-                      combina con el modo claro u oscuro.
+                      Selecciona un perfil para previsualizarlo en vivo y luego
+                      pulsa <span className="font-medium text-foreground">Guardar</span>{" "}
+                      para hacerlo permanente en este dispositivo. Se combina
+                      con el modo claro u oscuro.
                     </p>
                     <div
                       role="radiogroup"
@@ -259,14 +308,15 @@ const Configuracion = () => {
                       className="mt-3 grid gap-2 sm:grid-cols-2"
                     >
                       {CVD_OPTIONS.map((opt) => {
-                        const active = cvdMode === opt.key;
+                        const active = pendingCvdMode === opt.key;
+                        const isSaved = cvdMode === opt.key;
                         return (
                           <button
                             key={opt.key}
                             type="button"
                             role="radio"
                             aria-checked={active}
-                            onClick={() => setCvdMode(opt.key)}
+                            onClick={() => handleSelectPreview(opt.key)}
                             className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
                               active
                                 ? "border-sky-500/60 bg-sky-50/70 ring-1 ring-sky-500/40 dark:bg-sky-900/20"
@@ -284,15 +334,22 @@ const Configuracion = () => {
                               ))}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p
-                                className={`text-xs font-semibold ${
-                                  active
-                                    ? "text-foreground"
-                                    : "text-foreground/90"
-                                }`}
-                              >
-                                {opt.label}
-                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <p
+                                  className={`text-xs font-semibold ${
+                                    active
+                                      ? "text-foreground"
+                                      : "text-foreground/90"
+                                  }`}
+                                >
+                                  {opt.label}
+                                </p>
+                                {isSaved && (
+                                  <span className="inline-flex items-center rounded-full bg-sky-100 px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wider text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                                    Actual
+                                  </span>
+                                )}
+                              </div>
                               <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
                                 {opt.description}
                               </p>
@@ -371,20 +428,48 @@ const Configuracion = () => {
                         </div>
                       </div>
                     </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
+                      {cvdDirty ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleSaveCvd}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-sky-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-sky-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2"
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                            Guardar cambios
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleDiscardCvd}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            Descartar
+                          </button>
+                          <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                            Previsualizando{" "}
+                            <span className="font-semibold">
+                              {CVD_OPTIONS.find(
+                                (o) => o.key === pendingCvdMode,
+                              )?.label}
+                            </span>{" "}
+                            — aún no guardado
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            {CVD_OPTIONS.find((o) => o.key === cvdMode)?.label}
+                          </span>{" "}
+                          guardado en este dispositivo. Cambia un perfil para
+                          previsualizar.
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-2 text-[11px] text-muted-foreground">
-                      La selección se guarda en este dispositivo. Los gráficos
-                      financieros mantienen su paleta por ahora (se ajustarán
-                      en una próxima iteración).
-                    </p>
-                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                      debug · estado:{" "}
-                      <span className="text-foreground">{cvdMode}</span> ·
-                      DOM[data-cvd]:{" "}
-                      <span className="text-foreground">
-                        {typeof document !== "undefined"
-                          ? document.documentElement.dataset.cvd ?? "(no set)"
-                          : "(ssr)"}
-                      </span>
+                      Los gráficos financieros mantienen su paleta por ahora
+                      (se ajustarán en una próxima iteración).
                     </p>
                   </div>
                 </div>
