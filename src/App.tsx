@@ -33,7 +33,6 @@ import PipelineBoard from "./pages/pipeline/PipelineBoard";
 import PipelineDashboard from "./pages/pipeline/PipelineDashboard";
 import PipelineList from "./pages/pipeline/PipelineList";
 import LeadDetailPage from "./pages/pipeline/LeadDetailPage";
-import PipelineAnalytics from "./pages/pipeline/PipelineAnalytics";
 import EmailTemplates from "./pages/pipeline/EmailTemplates";
 import EmailSequences from "./pages/pipeline/EmailSequences";
 import PipelineSettings from "./pages/pipeline/PipelineSettings";
@@ -113,7 +112,6 @@ const App = () => (
                 <Route path="dashboard" element={<PipelineDashboard />} />
                 <Route path="list" element={<PipelineList />} />
                 <Route path="leads/:id" element={<LeadDetailPage />} />
-                <Route path="analytics" element={<PipelineAnalytics />} />
                 <Route path="activities" element={<PipelineActivities />} />
                 <Route path="templates" element={<EmailTemplates />} />
                 <Route path="sequences" element={<EmailSequences />} />

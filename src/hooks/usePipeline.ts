@@ -11,12 +11,16 @@ export const pipelineQueryKeys = {
   leads: ["pipeline-leads"] as const,
   lead: (id: string) => ["pipeline-lead", id] as const,
   activities: (leadId: string) => ["pipeline-activities", leadId] as const,
+  activitiesFeed: (limit: number) => ["pipeline-activities-feed", limit] as const,
   emailLog: (leadId: string) => ["pipeline-email-log", leadId] as const,
   templates: ["pipeline-email-templates"] as const,
+  templateUsage: ["pipeline-template-usage"] as const,
   sequences: ["pipeline-email-sequences"] as const,
+  sequenceSteps: (sequenceId: string) => ["pipeline-sequence-steps", sequenceId] as const,
   stats: (from?: string, to?: string) => ["pipeline-stats", from, to] as const,
   tasks: (leadId: string) => ["pipeline-tasks", leadId] as const,
   allTasks: ["pipeline-all-tasks"] as const,
+  automations: ["pipeline-automations"] as const,
 };
 
 export function usePipelineStages() {
@@ -259,6 +263,7 @@ export interface LeadTask {
   leads?: {
     full_name: string;
     email: string | null;
+    phone: string | null;
     stage_id: string;
     pipeline_stages?: { name: string; color: string } | null;
   } | null;
@@ -294,7 +299,7 @@ export function useAllTasks(filter: "overdue" | "today" | "upcoming" | "all" = "
 
       let qb = supabase
         .from("lead_tasks" as never)
-        .select("*, leads(full_name, email, stage_id, pipeline_stages(name, color))")
+        .select("*, leads(full_name, email, phone, stage_id, pipeline_stages(name, color))")
         .eq("is_completed", false)
         .order("due_date", { ascending: true });
 
@@ -348,4 +353,202 @@ export function useRescheduleTask() {
       qc.invalidateQueries({ queryKey: pipelineQueryKeys.allTasks });
     },
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v2.5 · Pipeline vision alignment
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LeadActivityFeedItem {
+  id: string;
+  lead_id: string;
+  type: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  lead?: { full_name: string | null } | null;
+}
+
+/**
+ * Feed org-wide de actividades recientes del pipeline.
+ */
+export function useLeadActivitiesFeed(limit = 10) {
+  return useQuery({
+    queryKey: pipelineQueryKeys.activitiesFeed(limit),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_activities")
+        .select("id, lead_id, type, metadata, created_at, leads(full_name)")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      type Row = {
+        id: string;
+        lead_id: string;
+        type: string;
+        metadata: Record<string, unknown> | null;
+        created_at: string;
+        leads: { full_name: string | null } | { full_name: string | null }[] | null;
+      };
+      return ((data || []) as Row[]).map((r) => ({
+        id: r.id,
+        lead_id: r.lead_id,
+        type: r.type,
+        metadata: r.metadata,
+        created_at: r.created_at,
+        lead: Array.isArray(r.leads) ? r.leads[0] ?? null : r.leads,
+      })) satisfies LeadActivityFeedItem[];
+    },
+  });
+}
+
+export interface StageAggregate {
+  count: number;
+  sumMxn: number;
+}
+
+/**
+ * Agrega leads por stage_id → { count, sumMxn } usando los datos en memoria.
+ * No hace query extra; úsalo junto a usePipelineLeads().
+ */
+export function aggregateStageValues(leads: Lead[]): Map<string, StageAggregate> {
+  const m = new Map<string, StageAggregate>();
+  for (const l of leads) {
+    const bucket = m.get(l.stage_id) ?? { count: 0, sumMxn: 0 };
+    bucket.count += 1;
+    const v = (l as Lead & { estimated_value?: number | null }).estimated_value;
+    if (v && !Number.isNaN(Number(v))) bucket.sumMxn += Number(v);
+    m.set(l.stage_id, bucket);
+  }
+  return m;
+}
+
+/**
+ * Hook de conveniencia: devuelve Map<stage_id, { count, sumMxn }> derivado de usePipelineLeads.
+ */
+export function usePipelineStageValues(activeOnly = true) {
+  const { data: leads = [] } = usePipelineLeads(activeOnly);
+  return aggregateStageValues(leads);
+}
+
+export type PipelineAutomationKey =
+  | "auto_cool_down_14d"
+  | "auto_advance_on_reply"
+  | "auto_score_boost_on_open";
+
+export interface PipelineAutomationRow {
+  id: string;
+  organization_id: string;
+  key: string;
+  enabled: boolean;
+  config: Record<string, unknown> | null;
+}
+
+export function usePipelineAutomations() {
+  return useQuery({
+    queryKey: pipelineQueryKeys.automations,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pipeline_automations")
+        .select("id, organization_id, key, enabled, config")
+        .order("key", { ascending: true });
+      if (error) throw error;
+      return (data || []) as PipelineAutomationRow[];
+    },
+  });
+}
+
+export function useUpdatePipelineAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      const { error } = await supabase
+        .from("pipeline_automations")
+        .update({ enabled })
+        .eq("id", id);
+      if (error) throw error;
+      return { id, enabled };
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: pipelineQueryKeys.automations });
+    },
+  });
+}
+
+/**
+ * Conteo de uso por plantilla (count en email_log por template_id).
+ * Devuelve Map<template_id, count>.
+ */
+export function useTemplateUsage() {
+  return useQuery({
+    queryKey: pipelineQueryKeys.templateUsage,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("email_log")
+        .select("template_id");
+      if (error) throw error;
+      const map = new Map<string, number>();
+      for (const row of (data || []) as Array<{ template_id: string | null }>) {
+        if (!row.template_id) continue;
+        map.set(row.template_id, (map.get(row.template_id) ?? 0) + 1);
+      }
+      return map;
+    },
+  });
+}
+
+/**
+ * Descarga un CSV de leads filtrados en memoria. Client-side, sin RPC.
+ */
+export function downloadLeadsCsv(
+  leads: Lead[],
+  stageNameById: (id: string) => string,
+): void {
+  const headers = [
+    "Nombre",
+    "Empresa",
+    "Email",
+    "Telefono",
+    "Pais",
+    "Etapa",
+    "Score",
+    "Prioridad",
+    "Monto MXN",
+    "Campana",
+    "Creado",
+    "Ultima actividad",
+  ];
+  const escape = (v: unknown) => {
+    const s = v === null || v === undefined ? "" : String(v);
+    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+  const rows = leads.map((l) => {
+    const any = l as Lead & { estimated_value?: number | null; last_activity_at?: string | null };
+    return [
+      l.full_name,
+      l.company_name ?? "",
+      l.email ?? "",
+      l.phone ?? "",
+      l.country_name ?? l.country_code ?? "",
+      stageNameById(l.stage_id),
+      l.score ?? 0,
+      l.priority,
+      any.estimated_value ?? "",
+      l.campaign_name ?? "",
+      l.created_at,
+      any.last_activity_at ?? "",
+    ].map(escape).join(",");
+  });
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

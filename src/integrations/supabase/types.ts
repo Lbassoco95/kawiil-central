@@ -2804,6 +2804,7 @@ export type Database = {
           email: string | null
           entity_type: string | null
           estimated_budget: string | null
+          estimated_value: number | null
           form_name: string | null
           full_name: string
           id: string
@@ -2843,6 +2844,7 @@ export type Database = {
           email?: string | null
           entity_type?: string | null
           estimated_budget?: string | null
+          estimated_value?: number | null
           form_name?: string | null
           full_name: string
           id?: string
@@ -2882,6 +2884,7 @@ export type Database = {
           email?: string | null
           entity_type?: string | null
           estimated_budget?: string | null
+          estimated_value?: number | null
           form_name?: string | null
           full_name?: string
           id?: string
@@ -3292,6 +3295,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "personalized_phrases_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_automations: {
+        Row: {
+          config: Json
+          created_at: string
+          enabled: boolean
+          id: string
+          key: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          key: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          key?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_automations_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

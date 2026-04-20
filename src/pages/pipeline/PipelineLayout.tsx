@@ -7,15 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { Search, X, Filter } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
+import { useAllTasks } from "@/hooks/usePipeline";
 
-const tabs = [
+const tabs: Array<{ to: string; label: string; end?: boolean; counterKey?: "overdue" }> = [
   { to: "/pipeline/dashboard", label: "Dashboard" },
   { to: "/pipeline", label: "Tablero", end: true },
   { to: "/pipeline/list", label: "Lista" },
-  { to: "/pipeline/analytics", label: "Métricas" },
-  { to: "/pipeline/activities", label: "Actividades" },
-  { to: "/pipeline/templates", label: "Plantillas" },
+  { to: "/pipeline/activities", label: "Actividades", counterKey: "overdue" },
   { to: "/pipeline/sequences", label: "Secuencias" },
+  { to: "/pipeline/templates", label: "Plantillas" },
   { to: "/pipeline/settings", label: "Ajustes" },
 ];
 
@@ -27,6 +27,8 @@ export default function PipelineLayout() {
   const isDashboard = loc.pathname === "/pipeline/dashboard";
   const [searchParams, setSearchParams] = useSearchParams();
   const pipelineQ = searchParams.get("q") ?? "";
+  const { data: overdueTasks = [] } = useAllTasks("overdue");
+  const overdueCount = overdueTasks.length;
 
   const setPipelineQ = (value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -88,23 +90,42 @@ export default function PipelineLayout() {
         )}
         {!hideTabs && (
           <nav className="surface-toolbar flex flex-wrap gap-1 p-2">
-            {tabs.map((t) => (
-              <NavLink
-                key={t.to}
-                to={t.to}
-                end={t.end}
-                className={({ isActive }) =>
-                  cn(
-                    "px-3 py-1.5 text-sm rounded-lg transition-colors",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
-                  )
-                }
-              >
-                {t.label}
-              </NavLink>
-            ))}
+            {tabs.map((t) => {
+              const count = t.counterKey === "overdue" ? overdueCount : 0;
+              return (
+                <NavLink
+                  key={t.to}
+                  to={t.to}
+                  end={t.end}
+                  className={({ isActive }) =>
+                    cn(
+                      "px-3 py-1.5 text-sm rounded-lg transition-colors inline-flex items-center gap-1.5",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                    )
+                  }
+                >
+                  {({ isActive }: { isActive: boolean }) => (
+                    <>
+                      <span>{t.label}</span>
+                      {count > 0 ? (
+                        <span
+                          className={cn(
+                            "inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold tabular-nums leading-[18px]",
+                            isActive
+                              ? "bg-white/25 text-white"
+                              : "bg-destructive text-destructive-foreground",
+                          )}
+                        >
+                          {count}
+                        </span>
+                      ) : null}
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
           </nav>
         )}
         <Outlet />

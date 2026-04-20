@@ -91,6 +91,89 @@ El resto de la pestaña (Detalles del proyecto, Descripción, Notas de atraso, G
 - **Heurística vs. LLM**: las mini-cards "Kawiil IA" del detalle de tarea/proyecto son **heurísticas** (sin invocar Edge Functions ni Anthropic). Para análisis profundo seguir usando `AISummaryCard`.
 - **Tipografía**: títulos de sección en sidebar usan `text-[11px] font-semibold uppercase tracking-wider text-muted-foreground`; cards de sidebar usan `rounded-lg border bg-background p-3 space-y-2.5`.
 
+## Pantallas alineadas (fase v2.5 — Pipeline comercial)
+
+El módulo Pipeline fue rediseñado como **sala de control comercial** para alinear con la visión v2.5 del producto. Siete vistas (`Dashboard`, `Tablero`, `Lista`, `Actividades`, `Secuencias`, `Plantillas`, `Ajustes`) usan el mismo vocabulario visual: pills de filtro, pastillas de etapa coloreadas, insights IA en fondo `KAWIIL_AI_SOFT_BG` y CTAs IA con gradient `KAWIIL_AI_GRADIENT`.
+
+### Migración de base de datos
+
+Archivo: [`supabase/migrations/20260420140000_pipeline_v25_vision.sql`](../supabase/migrations/20260420140000_pipeline_v25_vision.sql) — idempotente.
+
+- `leads.estimated_value numeric(12,2)` nullable (MXN). Alimenta el totalizador **PIPELINE MXN** en el hero, las pastillas de `$` en el tablero, la columna **Monto** de la lista y el KPI **Ingresos proyectados**.
+- `UPDATE pipeline_stages.name` para rename conversacional: `registrado→Nuevo`, `contactado→Saludé`, `calificado→Entendí qué busca`, `propuesta→Le mandé propuesta`, `negociacion→Negociando`, `convertido→Cerrado`. **Los slugs no cambian** — son el contrato para integraciones (webhooks, secuencias, automatizaciones).
+- Tabla `pipeline_automations (organization_id, key, enabled, config jsonb)` con RLS org-scoped (mismo patrón que `pipeline_stages`) y seed por organización para 3 claves: `auto_cool_down_14d` (on por defecto, 14 días), `auto_advance_on_reply` (off), `auto_score_boost_on_open` (off). Trigger `trg_seed_pipeline_automations` inicializa las claves al crear una nueva organización.
+
+### Utilidades compartidas
+
+[`src/lib/pipelineFormat.ts`](../src/lib/pipelineFormat.ts) concentra los formateadores del módulo: `formatMxn`, `formatMxnShort` (compactos $45K / $1.2M), `flagForCountry` (emoji por ISO-2 o fallback a regional indicators), `relativeTime` ("Hace 2h", "Ayer 17:45", "Hace 4d"), `stageBadgeStyle` (pill con bg en 14% opacidad + borderColor al 40%), `scoreDotColor` (rojo ≥80, naranja ≥60, amarillo ≥40, gris), `initialsFromName` y `avatarBgFromName` (hash determinístico a paleta de 8 colores) y `stageCta` (CTA contextual según slug del stage).
+
+### Hooks nuevos en `usePipeline`
+
+- `useLeadActivitiesFeed(limit)` — feed org-wide para el card **Actividad reciente** del dashboard.
+- `aggregateStageValues(leads) → Map<stage_id, { count, sumMxn }>` (más `usePipelineStageValues`) — derivado de `usePipelineLeads`, sin query extra; alimenta tablero, dashboard y hero.
+- `usePipelineAutomations` + `useUpdatePipelineAutomation` — toggle persistente por org.
+- `useTemplateUsage` — `Map<template_id, count>` desde `email_log`; pinta el chip **Usada N×** en la grid de plantillas.
+- `downloadLeadsCsv(leads, stageName)` — export CSV client-side con BOM UTF-8.
+
+### Layout
+
+[`PipelineLayout.tsx`](../src/pages/pipeline/PipelineLayout.tsx) ya **no incluye** el tab "Métricas" (el dashboard absorbe esos KPIs). El tab **Actividades** muestra un badge rojo con el conteo de tareas vencidas (`useAllTasks("overdue")`). Se elimina `PipelineAnalytics.tsx` y su ruta `/pipeline/analytics`.
+
+### Dashboard
+
+[`PipelineDashboard.tsx`](../src/pages/pipeline/PipelineDashboard.tsx) aterriza como sala de control comercial:
+
+- **Hero** gradient azul con 4 stats: Leads activos · **PIPELINE MXN** · Calientes · Salud del embudo.
+- **5 KPI tiles**: Leads nuevos, Tasa de respuesta, Tasa de cierre, **Ciclo promedio** (días entre `created_at` y `updated_at` en cerrados) y **Ingresos proyectados** (suma `estimated_value × probabilidad_por_etapa` con `registrado=10% → negociacion=70%`).
+- **Funnel** con % de pass-through consecutivo (`count_{n+1} / count_n`) en vez de % vs etapa inicial.
+- **Velocity** con pares consecutivos ("Saludé → Entendí"), más tile inferior **Ciclo total promedio** = suma de días.
+- **Fila inferior v2.5**: `Top5HotLeadsCard` · `LeadsByCountryCard` (barras con bandera) · `RecentActivityCard` (iconos por `type`, tiempo relativo).
+
+### Tablero
+
+[`PipelineBoard.tsx`](../src/pages/pipeline/PipelineBoard.tsx) gana filtros pill (`Todos · Calientes · En riesgo · Míos · Más filtros`), y reescribe `StageColumn` + `LeadCard` v2.5:
+
+- `StageColumn`: header con `$XXK MXN` (de `aggregateStageValues`), contador y botón `+` que pre-selecciona el `stage_id` en el modal de nuevo lead.
+- `LeadCard`: borde izquierdo con color de la etapa, avatar iniciales, chip de score + flame en calientes, insight IA (primera línea de `notes`) en fondo `KAWIIL_AI_SOFT_BG`, pastillas `campaña` + `$ monto`, CTA contextual según slug (`stageCta`), iconos `mailto:` / `tel:`.
+
+### Lista
+
+[`PipelineList.tsx`](../src/pages/pipeline/PipelineList.tsx) adopta los mismos pills, más selectores de etapa y país con bandera, popover **Más filtros** (prioridad / urgencia / visa) y botón **Exportar CSV** (`downloadLeadsCsv`). Columnas: **Lead** (avatar + nombre) · **Empresa** · **Score** (punto coloreado) · **Etapa** (pastilla `stageBadgeStyle`) · **Monto** · **País** (bandera + nombre) · **Última actividad** (`relativeTime`) · **Campaña**.
+
+### Actividades
+
+[`PipelineActivities.tsx`](../src/pages/pipeline/PipelineActivities.tsx) pasa a layout 2-col `Vencidas | Hoy`, con una sección **Próximos 7 días** debajo. `TaskCard` renderiza CTAs contextuales por `task_type`:
+- `call` → **Ir a llamada** (`tel:${lead.phone}`)
+- `email` → **Enviar** (abre `SendEmailModal`)
+- otros → **Redactar con IA** (invoca `ai-email-draft`, copia al portapapeles, abre el compositor)
+
+El bloque **Leads sin actividad 7+ días** añade un CTA masivo **Enviar Follow-up masivo IA** con gradient `KAWIIL_AI_GRADIENT` que inserta una `lead_task` tipo `follow_up` por cada lead inactivo (due +1h, alta prioridad).
+
+### Secuencias
+
+[`EmailSequences.tsx`](../src/pages/pipeline/EmailSequences.tsx) muestra un header con stats (`Total · Activas · Leads en secuencia`) y cada secuencia como un **diagrama horizontal**: chips `DÍA N · delay` con `template.subject`, conectados por chevrons. Botones `Probar` / `Editar` / `Activar-Pausar`, más métricas agregadas (`% apertura`, `% respuesta`) calculadas desde `email_log.sequence_step_id`.
+
+### Plantillas
+
+[`EmailTemplates.tsx`](../src/pages/pipeline/EmailTemplates.tsx) rediseña el grid como cards con borde superior por categoría (colores: primer contacto azul, follow_up violeta, propuesta ámbar, reactivación rosa), chip de slug, contador **Usada N×** y CTA **Generar con IA** (gradient `KAWIIL_AI_GRADIENT`) que invoca `ai-email-draft` y precarga `name / subject / body_html` en el form de edición.
+
+### Ajustes
+
+[`PipelineSettings.tsx`](../src/pages/pipeline/PipelineSettings.tsx) añade:
+
+- Botón **Copiar** para la URL del webhook Meta (navigator.clipboard + toast + estado ✓).
+- **Dropzone visual** para CSV (estado drag-over con borde primary, ícono `Upload`).
+- **Etapas** del pipeline como pastillas coloreadas reordenables con `dnd-kit` (horizontal); guarda `position` masivamente y preserva slugs.
+- Sección nueva **Automatizaciones IA** con header `KAWIIL_AI_SOFT_BG`, íconos por clave y `Switch` ligado a `usePipelineAutomations`.
+
+### Reglas v2.5 · Pipeline
+
+- **Nunca** cambiar `pipeline_stages.slug` (el rename de v2.5 toca solo `name`). El slug es el contrato con Meta, secuencias e integraciones.
+- Toda cifra monetaria en MXN debe pasar por `formatMxn` o `formatMxnShort` para mantener consistencia (MXN, compactos con K / M, fallback `—`).
+- Toda pastilla de etapa reutiliza `stageBadgeStyle(stage)` para respetar el color editorial.
+- Todo CTA IA (redacción, follow-up masivo, generación de plantilla) usa `KAWIIL_AI_GRADIENT` en el botón; los bloques contextuales (insights, headers de sección AI) usan `KAWIIL_AI_SOFT_BG`.
+- Las automatizaciones IA **solo persisten preferencia** en v2.5; los triggers/cron que las ejecuten se entregan en un PR separado.
+
 ## Tokens de Kawiil AI (v2.4)
 
 Ubicación canónica: [`src/lib/kawiilAi.ts`](../src/lib/kawiilAi.ts).
