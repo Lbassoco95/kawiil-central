@@ -1025,34 +1025,42 @@ const Documentos = () => {
     const fav = favorites?.size ?? null;
 
     let dropbox: number | null = null;
+    let enApp: number | null = null;
     if (documents) {
       dropbox = documents.filter((d: any) => d.source === "dropbox").length;
+      enApp = documents.length - dropbox;
     }
 
     return [
+      {
+        label: "Dropbox",
+        value: "Conectado",
+        sub: "biblioteca sincronizada",
+        tone: "success" as const,
+      },
       total != null && {
-        label: "Total",
+        label: "Total archivos",
         value: total,
-        sub: "en biblioteca",
+        sub: "Kawiil + Dropbox",
         tone: "default" as const,
       },
       thisWeek != null && {
         label: "Esta semana",
-        value: thisWeek,
-        sub: thisWeek === 1 ? "documento nuevo" : "documentos nuevos",
-        tone: "success" as const,
+        value: `+${thisWeek}`,
+        sub: thisWeek === 1 ? "archivo nuevo" : "archivos nuevos",
+        tone: "primary" as const,
+      },
+      enApp != null && {
+        label: "En la app",
+        value: enApp,
+        sub: "subidos directo a Kawiil",
+        tone: "default" as const,
       },
       fav != null && {
         label: "Favoritos",
         value: fav,
-        sub: "marcados con estrella",
-        tone: "primary" as const,
-      },
-      dropbox != null && {
-        label: "Dropbox",
-        value: dropbox,
-        sub: total ? `de ${total} totales` : "enlaces sincronizados",
-        tone: "default" as const,
+        sub: fav === 1 ? "marcado con estrella" : "marcados con estrella",
+        tone: "warning" as const,
       },
     ];
   }, [documents, favorites]);
@@ -1063,17 +1071,9 @@ const Documentos = () => {
         <PageHeader
           variant="hero"
           title="Documentos"
-          description={
-            viewMode === "dropbox"
-              ? "Explorador de archivos en Dropbox"
-              : viewMode === "recientes"
-                ? "Últimos 30 documentos por fecha de creación"
-                : viewMode === "favoritos"
-                  ? "Tus documentos marcados con estrella"
-                  : viewMode === "ia"
-                    ? "Búsqueda semántica con IA sobre el catálogo"
-                    : "Documentos registrados en la aplicación"
-          }
+          description="Explorador unificado — Dropbox conectado + archivos subidos en Kawiil. Busca, previsualiza y comparte con IA contextual."
+          breadcrumb={["Kawiil OS", "Trabajo", "Documentos"]}
+          iconAccent="linear-gradient(135deg, hsl(210 95% 55%), hsl(195 90% 50%))"
           icon={<FileText />}
           stats={heroStats}
           actions={
