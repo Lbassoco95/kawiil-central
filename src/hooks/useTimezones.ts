@@ -286,6 +286,185 @@ export const TIMEZONE_COUNTRIES: TimezoneCountry[] = [
     ],
   },
   {
+    country: "Suecia",
+    flag: "🇸🇪",
+    cities: [
+      { code: "STO", city: "Estocolmo", zone: "Europe/Stockholm", country: "Suecia", flag: "🇸🇪" },
+    ],
+  },
+  {
+    country: "Noruega",
+    flag: "🇳🇴",
+    cities: [
+      { code: "OSL", city: "Oslo", zone: "Europe/Oslo", country: "Noruega", flag: "🇳🇴" },
+    ],
+  },
+  {
+    country: "Dinamarca",
+    flag: "🇩🇰",
+    cities: [
+      { code: "CPH", city: "Copenhague", zone: "Europe/Copenhagen", country: "Dinamarca", flag: "🇩🇰" },
+    ],
+  },
+  {
+    country: "Irlanda",
+    flag: "🇮🇪",
+    cities: [
+      { code: "DUB", city: "Dublín", zone: "Europe/Dublin", country: "Irlanda", flag: "🇮🇪" },
+    ],
+  },
+  {
+    country: "Bélgica",
+    flag: "🇧🇪",
+    cities: [
+      { code: "BRU", city: "Bruselas", zone: "Europe/Brussels", country: "Bélgica", flag: "🇧🇪" },
+    ],
+  },
+  {
+    country: "Austria",
+    flag: "🇦🇹",
+    cities: [
+      { code: "VIE", city: "Viena", zone: "Europe/Vienna", country: "Austria", flag: "🇦🇹" },
+    ],
+  },
+  {
+    country: "Polonia",
+    flag: "🇵🇱",
+    cities: [
+      { code: "WAW", city: "Varsovia", zone: "Europe/Warsaw", country: "Polonia", flag: "🇵🇱" },
+    ],
+  },
+  {
+    country: "Grecia",
+    flag: "🇬🇷",
+    cities: [
+      { code: "ATH", city: "Atenas", zone: "Europe/Athens", country: "Grecia", flag: "🇬🇷" },
+    ],
+  },
+  {
+    country: "Rusia",
+    flag: "🇷🇺",
+    cities: [
+      { code: "MOW", city: "Moscú", zone: "Europe/Moscow", country: "Rusia", flag: "🇷🇺" },
+      { code: "LED", city: "San Petersburgo", zone: "Europe/Moscow", country: "Rusia", flag: "🇷🇺" },
+      { code: "KGD", city: "Kaliningrado", zone: "Europe/Kaliningrad", country: "Rusia", flag: "🇷🇺" },
+      { code: "SVX", city: "Ekaterimburgo", zone: "Asia/Yekaterinburg", country: "Rusia", flag: "🇷🇺" },
+      { code: "OVB", city: "Novosibirsk", zone: "Asia/Novosibirsk", country: "Rusia", flag: "🇷🇺" },
+      { code: "IKT", city: "Irkutsk", zone: "Asia/Irkutsk", country: "Rusia", flag: "🇷🇺" },
+      { code: "VVO", city: "Vladivostok", zone: "Asia/Vladivostok", country: "Rusia", flag: "🇷🇺" },
+    ],
+  },
+  {
+    country: "Turquía",
+    flag: "🇹🇷",
+    cities: [
+      { code: "IST", city: "Estambul", zone: "Europe/Istanbul", country: "Turquía", flag: "🇹🇷" },
+      { code: "ESB", city: "Ankara", zone: "Europe/Istanbul", country: "Turquía", flag: "🇹🇷" },
+    ],
+  },
+  {
+    country: "Ucrania",
+    flag: "🇺🇦",
+    cities: [
+      { code: "IEV", city: "Kiev", zone: "Europe/Kyiv", country: "Ucrania", flag: "🇺🇦" },
+    ],
+  },
+  {
+    country: "Egipto",
+    flag: "🇪🇬",
+    cities: [
+      { code: "CAI", city: "El Cairo", zone: "Africa/Cairo", country: "Egipto", flag: "🇪🇬" },
+    ],
+  },
+  {
+    country: "Sudáfrica",
+    flag: "🇿🇦",
+    cities: [
+      { code: "JNB", city: "Johannesburgo", zone: "Africa/Johannesburg", country: "Sudáfrica", flag: "🇿🇦" },
+      { code: "CPT", city: "Ciudad del Cabo", zone: "Africa/Johannesburg", country: "Sudáfrica", flag: "🇿🇦" },
+    ],
+  },
+  {
+    country: "Marruecos",
+    flag: "🇲🇦",
+    cities: [
+      { code: "CMN", city: "Casablanca", zone: "Africa/Casablanca", country: "Marruecos", flag: "🇲🇦" },
+    ],
+  },
+  {
+    country: "Nigeria",
+    flag: "🇳🇬",
+    cities: [
+      { code: "LOS", city: "Lagos", zone: "Africa/Lagos", country: "Nigeria", flag: "🇳🇬" },
+    ],
+  },
+  {
+    country: "Arabia Saudita",
+    flag: "🇸🇦",
+    cities: [
+      { code: "RUH", city: "Riad", zone: "Asia/Riyadh", country: "Arabia Saudita", flag: "🇸🇦" },
+      { code: "JED", city: "Yeda", zone: "Asia/Riyadh", country: "Arabia Saudita", flag: "🇸🇦" },
+    ],
+  },
+  {
+    country: "Catar",
+    flag: "🇶🇦",
+    cities: [
+      { code: "DOH", city: "Doha", zone: "Asia/Qatar", country: "Catar", flag: "🇶🇦" },
+    ],
+  },
+  {
+    country: "Tailandia",
+    flag: "🇹🇭",
+    cities: [
+      { code: "BKK", city: "Bangkok", zone: "Asia/Bangkok", country: "Tailandia", flag: "🇹🇭" },
+    ],
+  },
+  {
+    country: "Vietnam",
+    flag: "🇻🇳",
+    cities: [
+      { code: "SGN", city: "Ciudad Ho Chi Minh", zone: "Asia/Ho_Chi_Minh", country: "Vietnam", flag: "🇻🇳" },
+      { code: "HAN", city: "Hanói", zone: "Asia/Ho_Chi_Minh", country: "Vietnam", flag: "🇻🇳" },
+    ],
+  },
+  {
+    country: "Indonesia",
+    flag: "🇮🇩",
+    cities: [
+      { code: "CGK", city: "Yakarta", zone: "Asia/Jakarta", country: "Indonesia", flag: "🇮🇩" },
+      { code: "DPS", city: "Bali", zone: "Asia/Makassar", country: "Indonesia", flag: "🇮🇩" },
+    ],
+  },
+  {
+    country: "Malasia",
+    flag: "🇲🇾",
+    cities: [
+      { code: "KUL", city: "Kuala Lumpur", zone: "Asia/Kuala_Lumpur", country: "Malasia", flag: "🇲🇾" },
+    ],
+  },
+  {
+    country: "Filipinas",
+    flag: "🇵🇭",
+    cities: [
+      { code: "MNL", city: "Manila", zone: "Asia/Manila", country: "Filipinas", flag: "🇵🇭" },
+    ],
+  },
+  {
+    country: "Taiwán",
+    flag: "🇹🇼",
+    cities: [
+      { code: "TPE", city: "Taipéi", zone: "Asia/Taipei", country: "Taiwán", flag: "🇹🇼" },
+    ],
+  },
+  {
+    country: "Nueva Zelanda",
+    flag: "🇳🇿",
+    cities: [
+      { code: "AKL", city: "Auckland", zone: "Pacific/Auckland", country: "Nueva Zelanda", flag: "🇳🇿" },
+    ],
+  },
+  {
     country: "Japón",
     flag: "🇯🇵",
     cities: [
