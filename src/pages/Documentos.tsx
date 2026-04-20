@@ -21,12 +21,13 @@ import {
   Plus, Search, FileText, Link, ExternalLink, Trash2,
   Eye, Folder, FolderOpen, ChevronLeft, Image,
   FileSpreadsheet, File, FileCode, Loader2, HardDrive, Cloud,
-  FolderPlus, Pencil, Clock, Star
+  FolderPlus, Pencil, Clock, Star, Sparkles
 } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { documentsLimits } from "@/lib/fileIntake/limits";
 import { DocumentTile, extensionAccent, inferExtension } from "@/components/documentos/DocumentTile";
 import { DocumentsTreeNav, type TreeNode } from "@/components/documentos/DocumentsTreeNav";
+import { DocumentSemanticSearch } from "@/components/documents/DocumentSemanticSearch";
 import { useDocumentFavorites, useToggleDocumentFavorite } from "@/hooks/useDocumentFavorites";
 import { cn } from "@/lib/utils";
 import { KAWIIL_TEAM_ROOT, KAWIIL_TEAM_ROOT_NAME } from "@/lib/dropboxConfig";
@@ -974,7 +975,7 @@ const Documentos = () => {
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"dropbox" | "organized" | "recientes" | "favoritos">("dropbox");
+  const [viewMode, setViewMode] = useState<"dropbox" | "organized" | "recientes" | "favoritos" | "ia">("dropbox");
   const [organizedFolder, setOrganizedFolder] = useState<string | null>(null);
 
   const { data: documents, isLoading } = useDocuments({ search, source: sourceFilter });
@@ -1069,7 +1070,9 @@ const Documentos = () => {
                 ? "Últimos 30 documentos por fecha de creación"
                 : viewMode === "favoritos"
                   ? "Tus documentos marcados con estrella"
-                  : "Documentos registrados en la aplicación"
+                  : viewMode === "ia"
+                    ? "Búsqueda semántica con IA sobre el catálogo"
+                    : "Documentos registrados en la aplicación"
           }
           icon={<FileText />}
           stats={heroStats}
@@ -1089,6 +1092,7 @@ const Documentos = () => {
               { key: "organized" as const, label: "Aplicación", icon: HardDrive },
               { key: "recientes" as const, label: "Recientes", icon: Clock },
               { key: "favoritos" as const, label: "Favoritos", icon: Star },
+              { key: "ia" as const, label: "Buscar con IA", icon: Sparkles },
             ].map((t) => {
               const count =
                 t.key === "favoritos"
@@ -1191,6 +1195,15 @@ const Documentos = () => {
                 onToggleFavorite={handleToggleFavorite}
               />
             )}
+          </div>
+        ) : viewMode === "ia" ? (
+          <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">
+            <DocumentSemanticSearch
+              documents={documents as any}
+              isLoading={isLoading}
+              favorites={favorites}
+              onToggleFavorite={handleToggleFavorite}
+            />
           </div>
         ) : (
           <div className="glass-card overflow-hidden rounded-2xl p-4 sm:p-5 border-border/50">

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Download, ExternalLink, FileText, Image, FileSpreadsheet, Code, Loader2, X } from "lucide-react";
 import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { DocumentAiInsightsPanel } from "@/components/documents/DocumentAiInsightsPanel";
 
 interface DocumentPreviewDialogProps {
   open: boolean;
@@ -22,6 +23,10 @@ interface DocumentPreviewDialogProps {
     source: string;
     external_path?: string | null;
     file_size?: number | null;
+    document_type?: string | null;
+    tags?: string[] | null;
+    clients?: { name: string } | null;
+    projects?: { name: string } | null;
   } | null;
 }
 
@@ -187,6 +192,8 @@ export function DocumentPreviewDialog({ open, onOpenChange, document }: Document
             </div>
           </div>
         </DialogHeader>
+
+        <DocumentAiInsightsPanel document={document} />
 
         <div className="flex-1 min-h-0 rounded-md border bg-muted/30 overflow-auto">
           {loading && (

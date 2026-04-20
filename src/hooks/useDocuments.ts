@@ -122,6 +122,35 @@ export function useCreateDocument() {
   });
 }
 
+export function useUpdateDocumentMeta() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      document_type?: string | null;
+      tags?: string[];
+    }) => {
+      const patch: Record<string, unknown> = {};
+      if (input.document_type !== undefined) patch.document_type = input.document_type;
+      if (input.tags !== undefined) patch.tags = input.tags;
+      const { data, error } = await supabase
+        .from("documents")
+        .update(patch as never)
+        .eq("id", input.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+    onError: (err: Error) => {
+      toast.error("No se pudo actualizar el documento: " + err.message);
+    },
+  });
+}
+
 export function useDeleteDocument() {
   const queryClient = useQueryClient();
 
