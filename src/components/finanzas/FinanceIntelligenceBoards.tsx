@@ -60,8 +60,22 @@ import {
 } from "@/components/ui/tooltip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
+import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG, KAWIIL_AI_SOFT_BG } from "@/lib/kawiilAi";
+
+/**
+ * Paleta v2.4 para los gráficos de tableros financieros.
+ * - Azul Kawiil (`primary`) para Cobrado (lo positivo "principal").
+ * - Indigo (acento Kawiil más profundo) para Facturado.
+ * - Rose para Gastos pagados (egresos = rojo, intuitivo).
+ */
+const FINANCE_CHART_COLORS = {
+  cobrado: "#0ea5e9",
+  facturado: "#6366f1",
+  gastos: "#f43f5e",
+} as const;
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 
@@ -250,6 +264,82 @@ export function FinanceIntelligenceBoards({ expenses, clients, savioEnabled = tr
   return (
     <TooltipProvider>
       <div className="space-y-6">
+        {/* Header KAWIIL AI v2.4 — banner azul Kawiil con resumen del periodo + CTA briefing */}
+        <section
+          className="overflow-hidden rounded-2xl border border-sky-200/70 shadow-sm dark:border-sky-800/40"
+          aria-label="Tableros financieros · Kawiil AI"
+        >
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-200/40 px-4 py-3 dark:border-sky-800/30"
+            style={{ background: KAWIIL_AI_HEADER_BG }}
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+                style={{ background: KAWIIL_AI_GRADIENT }}
+              >
+                <BarChart3 className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[13px] font-semibold leading-tight tracking-tight text-foreground">
+                  Tableros financieros · KAWIIL AI
+                  <Badge
+                    variant="outline"
+                    className="ml-1 h-4 border-sky-300/70 bg-sky-50/70 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+                  >
+                    v2.4
+                  </Badge>
+                </p>
+                <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                  {formatRangeLabel(primaryRange)}
+                  {compareRange ? ` · vs ${formatRangeLabel(compareRange)}` : ""}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-1.5 px-3 text-[11.5px] text-white shadow-sm hover:opacity-95"
+              style={{ background: KAWIIL_AI_GRADIENT }}
+              onClick={() => void runAi()}
+              disabled={aiLoading || intelligence.isLoading}
+            >
+              {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Briefing con Kawiil AI
+            </Button>
+          </div>
+          <div
+            className="grid gap-2 px-4 py-3 sm:grid-cols-4"
+            style={{ background: KAWIIL_AI_SOFT_BG }}
+          >
+            <MiniHeaderStat
+              label="Cobrado"
+              value={formatMoney(intelligence.primaryCollected.sum)}
+              accent={FINANCE_CHART_COLORS.cobrado}
+              loading={intelligence.isLoading}
+            />
+            <MiniHeaderStat
+              label="Gastos pagados"
+              value={formatMoney(intelligence.primaryExpenses.sum)}
+              accent={FINANCE_CHART_COLORS.gastos}
+              loading={intelligence.isLoading}
+            />
+            <MiniHeaderStat
+              label="Facturado"
+              value={formatMoney(intelligence.primaryInvoiced.sum)}
+              accent={FINANCE_CHART_COLORS.facturado}
+              loading={intelligence.isLoading}
+            />
+            <MiniHeaderStat
+              label="Cartera"
+              value={formatMoney(intelligence.portfolio.sum)}
+              accent="#0284c7"
+              loading={intelligence.isLoading}
+              hint={`${intelligence.portfolio.count} fact.`}
+            />
+          </div>
+        </section>
+
         <Card className="border-border/50 bg-card/90">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -453,33 +543,22 @@ export function FinanceIntelligenceBoards({ expenses, clients, savioEnabled = tr
                     contentStyle={{ fontSize: 12, borderRadius: 12 }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Cobrado" fill="#0d9488" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Gastos pagados" fill="#7c3aed" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Facturado" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Cobrado" fill={FINANCE_CHART_COLORS.cobrado} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Gastos pagados" fill={FINANCE_CHART_COLORS.gastos} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Facturado" fill={FINANCE_CHART_COLORS.facturado} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="gap-1.5 text-xs"
-            onClick={() => void runAi()}
-            disabled={aiLoading || intelligence.isLoading}
-          >
-            {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            Briefing con IA (Claude)
-          </Button>
-          {intelligence.canLoadMoreSavioPages && (
+        {intelligence.canLoadMoreSavioPages && (
+          <div className="flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" variant="outline" className="text-xs" onClick={intelligence.loadMoreSavioPages}>
               Cargar más Savio (+{SAVIO_FINANCE_PAGE_BOOST_STEP} págs.)
             </Button>
-          )}
-        </div>
+          </div>
+        )}
 
         <Collapsible open={aiOpen} onOpenChange={setAiOpen}>
           <CollapsibleTrigger asChild>
@@ -694,10 +773,50 @@ function looksLikeSavioId(id: string): boolean {
 
 function Kpi({ title, value, hint }: { title: string; value: string; hint: string }) {
   return (
-    <div className="rounded-2xl border border-border/50 bg-card/90 p-4 shadow-sm">
+    <div className="relative overflow-hidden rounded-2xl border border-sky-200/60 bg-card p-4 shadow-sm dark:border-sky-800/40">
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 h-full w-1"
+        style={{ background: KAWIIL_AI_GRADIENT }}
+      />
       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
       <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function MiniHeaderStat({
+  label,
+  value,
+  accent,
+  loading,
+  hint,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+  loading?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl bg-white/60 px-3 py-2 backdrop-blur-sm dark:bg-white/5">
+      <span
+        aria-hidden
+        className="h-7 w-1 shrink-0 rounded-full"
+        style={{ background: accent }}
+      />
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+        {loading ? (
+          <Skeleton className="mt-0.5 h-4 w-20" />
+        ) : (
+          <p className="mt-0.5 truncate text-[13px] font-semibold tabular-nums text-foreground" title={value}>
+            {value}
+            {hint ? <span className="ml-1 text-[10px] font-normal text-muted-foreground">· {hint}</span> : null}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

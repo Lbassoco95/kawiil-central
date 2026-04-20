@@ -110,7 +110,7 @@ function SectionHeader({
     <CollapsibleTrigger
       id={sectionId}
       data-slack-section={sectionId}
-      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80 hover:text-foreground [&[data-state=closed]_svg]:-rotate-90 min-w-0 transition-colors"
+      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200/75 hover:text-white [&[data-state=closed]_svg]:-rotate-90 min-w-0 transition-colors"
     >
       <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
       <span className="truncate min-w-0 flex-1 text-left">{label}</span>
@@ -285,12 +285,12 @@ function ConvRow({
         className={cn(
           "relative flex-1 text-left pl-3 pr-1 py-1.5 rounded-md text-[13px] flex items-center gap-2 min-w-0",
           selected
-            ? "font-semibold text-foreground"
+            ? "font-semibold text-white"
             : highlightUnread || unreadInEmbed
-              ? "font-semibold text-foreground"
+              ? "font-semibold text-white"
               : hasUnread
-                ? "font-bold text-foreground"
-                : "text-foreground/85",
+                ? "font-bold text-white"
+                : "text-slate-100/95 hover:text-white",
         )}
         title={
           hasUnread
