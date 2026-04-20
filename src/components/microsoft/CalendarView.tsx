@@ -51,7 +51,7 @@ import { Link } from "react-router-dom";
 type ViewMode = "day" | "3days" | "week" | "month";
 
 const START_HOUR = 6;
-const END_HOUR = 21;
+const END_HOUR = 23;
 const SLOT_MINUTES = 30;
 const TIME_SLOTS = Array.from(
   { length: ((END_HOUR - START_HOUR) * 60) / SLOT_MINUTES + 1 },
@@ -669,11 +669,14 @@ export function CalendarView() {
                 {/* Time grid */}
                 {(() => {
                   const nowMinutes = now.getHours() * 60 + now.getMinutes();
-                  const showNow =
-                    viewDays.some((d) => isToday(d)) &&
-                    nowMinutes >= START_HOUR * 60 &&
-                    nowMinutes <= END_HOUR * 60;
-                  const nowTop = ((nowMinutes - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
+                  const dayStartMin = START_HOUR * 60;
+                  const dayEndMin = END_HOUR * 60;
+                  const totalGridHeight = ((END_HOUR - START_HOUR) * 60 / SLOT_MINUTES) * SLOT_HEIGHT;
+                  // Mostrar el indicador siempre que hoy esté visible; si la hora cae fuera
+                  // del rango 06:00–23:00 lo "clampamos" al borde correspondiente.
+                  const showNow = viewDays.some((d) => isToday(d));
+                  const clampedMinutes = Math.max(dayStartMin, Math.min(nowMinutes, dayEndMin));
+                  const nowTop = ((clampedMinutes - dayStartMin) / SLOT_MINUTES) * SLOT_HEIGHT;
                   const nowLabel = `${now.getHours().toString().padStart(2, "0")}:${now
                     .getMinutes()
                     .toString()
