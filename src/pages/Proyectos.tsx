@@ -12,7 +12,9 @@ import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader"
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { ProjectCreationDialog } from "@/components/projects/ProjectCreationDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
+import { ProjectsBriefingCard } from "@/components/projects/ProjectsBriefingCard";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import { useState, useMemo } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
@@ -71,6 +73,7 @@ function progressBarBackground(pct: number, status: ProjectStatus): string {
 
 const Proyectos = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: projects, isLoading } = useProjects();
   const deleteProject = useDeleteProject();
   const { isAdminOrManager } = useUserRole();
@@ -326,6 +329,22 @@ const Proyectos = () => {
         />
         <LawsuitFormDialog open={lawsuitOpen} onOpenChange={setLawsuitOpen} />
         <MeetingMinutesDialog open={minutesOpen} onOpenChange={setMinutesOpen} />
+
+        <ProjectsBriefingCard
+          ready={!!projects && !isLoading}
+          cacheKey={`${user?.id ?? "anon"}-${statusFilter}-${selectedArea}`}
+          projects={(projects ?? []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            status: p.status,
+            area: p.area,
+            client_name: p.clients?.name ?? null,
+            criticality_level: p.criticality_level ?? null,
+            delay_category: p.delay_category ?? null,
+            progress_pct: typeof p.progress_pct === "number" ? p.progress_pct : null,
+            updated_at: p.updated_at ?? null,
+          }))}
+        />
 
         <div className="surface-toolbar space-y-4 p-4">
         <div className="flex flex-wrap gap-2 items-center">

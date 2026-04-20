@@ -45,6 +45,43 @@ const ACTIVITY_TYPES = [
 ];
 const KNOWN_TYPES = [...MENTION_TYPES, ...ACTIVITY_TYPES];
 
+/**
+ * Devuelve la lista de CTAs explícitas para una notificación según su tipo/entidad.
+ * Se renderizan debajo del body (estilo mock v2.4) sin desactivar el clic global de la card.
+ */
+function getNotificationCtas(
+  m: { type: string; entity_type: string | null; entity_id: string | null; entity_ref?: string | null },
+): Array<{ key: string; label: string; primary?: boolean }> {
+  const ctas: Array<{ key: string; label: string; primary?: boolean }> = [];
+
+  if (m.type === "task_assigned" || m.type === "task_reassigned" || m.entity_type === "task") {
+    ctas.push({ key: "open_task", label: "Abrir tarea", primary: true });
+  }
+  if (m.type === "deadline_overdue_task" || m.type === "deadline_due_tomorrow_task") {
+    ctas.push({ key: "open_task", label: "Abrir tarea", primary: true });
+  }
+  if (m.type === "mention" || m.type === "slack_mention") {
+    ctas.push({ key: "reply", label: "Responder", primary: true });
+  }
+  if (m.type === "slack_message") {
+    ctas.push({ key: "open_slack", label: "Abrir en Slack", primary: true });
+  }
+  if (m.type === "expense_created" || m.type === "expense_status_changed" || m.entity_type === "expense") {
+    ctas.push({ key: "open_expense", label: "Ver gasto", primary: true });
+  }
+  if (m.type === "ai_proactive_tip") {
+    ctas.push({ key: "open_assistant", label: "Abrir asistente", primary: true });
+  }
+  if (m.type === "knowledge_sync" || m.type.startsWith("knowledge")) {
+    ctas.push({ key: "open_knowledge", label: "Ver agente", primary: true });
+  }
+  if (m.type === "improvement_suggestion") {
+    ctas.push({ key: "open_suggestion", label: "Ver sugerencia", primary: true });
+  }
+
+  return ctas;
+}
+
 function getNotificationIcon(type: string) {
   if (type === "task_assigned" || type === "task_reassigned") return <ClipboardList className="h-3.5 w-3.5 text-primary" />;
   if (type === "expense_created" || type === "expense_status_changed") return <DollarSign className="h-3.5 w-3.5 text-emerald-500" />;
@@ -752,16 +789,26 @@ export default function Notificaciones() {
               sub: `${mentions.length} totales`,
             },
             {
-              label: "Vencidas",
-              value: (alerts?.overdue?.length ?? 0) + (alerts?.stepsOverdue?.length ?? 0),
-              tone: hasOverdue ? "warning" : "default",
-              sub: hasOverdue ? "Atender hoy" : "Sin vencidas",
+              label: "Actividad",
+              value: unreadActivity.length,
+              tone: unreadActivity.length > 0 ? "primary" : "default",
+              sub: "Equipo · últimas 24h",
             },
             {
-              label: "Por vencer",
-              value: (alerts?.dueSoon?.length ?? 0) + (alerts?.stepsDueSoon?.length ?? 0),
-              tone: hasDueSoon ? "primary" : "default",
-              sub: "Próximos 3 días",
+              label: "Vencimientos",
+              value:
+                (alerts?.overdue?.length ?? 0) +
+                (alerts?.stepsOverdue?.length ?? 0) +
+                (alerts?.dueSoon?.length ?? 0) +
+                (alerts?.stepsDueSoon?.length ?? 0),
+              tone: hasOverdue ? "warning" : hasDueSoon ? "primary" : "default",
+              sub: hasOverdue ? "Atender hoy" : "Próximos 14 días",
+            },
+            {
+              label: "Sistema",
+              value: unreadSistema.length,
+              tone: unreadSistema.length > 0 ? "primary" : "default",
+              sub: "IA · agentes · push",
             },
           ] satisfies PageHeaderStat[]}
         />
@@ -878,7 +925,35 @@ export default function Notificaciones() {
                               {m.body}
                             </p>
                           )}
-                          <span className="text-[11px] text-muted-foreground mt-1 block">
+                          {(() => {
+                            const ctas = getNotificationCtas({
+                              type: m.type,
+                              entity_type: m.entity_type,
+                              entity_id: m.entity_id,
+                              entity_ref: m.entity_ref,
+                            });
+                            if (ctas.length === 0) return null;
+                            return (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {ctas.map((c) => (
+                                  <Button
+                                    key={c.key}
+                                    type="button"
+                                    size="sm"
+                                    variant={c.primary ? "default" : "outline"}
+                                    className="h-7 px-2.5 text-[11px]"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleNotificationClick(m);
+                                    }}
+                                  >
+                                    {c.label}
+                                  </Button>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                          <span className="text-[11px] text-muted-foreground mt-1.5 block">
                             {formatMX(m.created_at, "dd MMM yyyy HH:mm")}
                           </span>
                         </div>

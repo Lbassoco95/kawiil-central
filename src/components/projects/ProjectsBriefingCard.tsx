@@ -1,0 +1,241 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { LayoutGrid, AlertTriangle, Loader2, RefreshCw, FileText, Scale } from "lucide-react";
+import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
+import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
+import { nowMX, toDateStringMX } from "@/lib/dateUtils";
+import { cn } from "@/lib/utils";
+
+interface ProjectBriefRow {
+  id: string;
+  name: string;
+  status: string;
+  area?: string | null;
+  client_name?: string | null;
+  criticality_level?: string | null;
+  delay_category?: string | null;
+  progress_pct?: number | null;
+  updated_at?: string | null;
+}
+
+interface Props {
+  /** Lista filtrada de proyectos visibles para el usuario (tras filtros activos). */
+  projects: ProjectBriefRow[];
+  /** Identificador para cache localStorage (incluye usuario + scope). */
+  cacheKey: string;
+  /** True cuando ya hay datos cargados; evita disparar IA en hidratación inicial. */
+  ready: boolean;
+  className?: string;
+  /** Callbacks para los CTAs. Si no se pasan, se navega al asistente con prompt. */
+  onSeeRisks?: () => void;
+  onRebalance?: () => void;
+  onGenerateReport?: () => void;
+}
+
+/**
+ * Card "Briefing · Tus proyectos" del módulo Proyectos (mock v2.4).
+ * Genera un resumen IA de 2-3 líneas focalizado en proyectos en riesgo y oportunidades de adelanto.
+ * El resumen se cachea en `localStorage` por día para no quemar tokens en cada navegación.
+ */
+export function ProjectsBriefingCard({
+  projects,
+  cacheKey,
+  ready,
+  className,
+  onSeeRisks,
+  onRebalance,
+  onGenerateReport,
+}: Props) {
+  const navigate = useNavigate();
+  const storageKey = `kawiil-projects-briefing-${cacheKey}`;
+
+  const [content, setContent] = useState<string | null>(() => {
+    try {
+      const cached = localStorage.getItem(storageKey);
+      if (cached) {
+        const { date, content: c } = JSON.parse(cached) as { date?: string; content?: string };
+        if (date === toDateStringMX(nowMX()) && c) return c;
+      }
+    } catch {}
+    return null;
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Conteos para fallback / pre-aviso (siempre disponibles aunque IA falle).
+  const counts = useMemo(() => {
+    const activos = projects.filter((p) => p.status === "activo");
+    const enRiesgo = activos.filter(
+      (p) => p.criticality_level === "critico" || p.delay_category === "retrasado",
+    );
+    const sinActividad = activos.filter((p) => {
+      if (!p.updated_at) return false;
+      const days = Math.floor((Date.now() - new Date(p.updated_at).getTime()) / (24 * 60 * 60 * 1000));
+      return days >= 7;
+    });
+    return { activos, enRiesgo, sinActividad };
+  }, [projects]);
+
+  const contextPrompt = useMemo(() => {
+    const sample = counts.enRiesgo.slice(0, 8).map((p) => {
+      const parts = [p.name];
+      if (p.client_name) parts.push(`cliente ${p.client_name}`);
+      if (p.criticality_level === "critico") parts.push("CRÍTICO");
+      if (p.delay_category === "retrasado") parts.push("RETRASADO");
+      if (typeof p.progress_pct === "number") parts.push(`${Math.round(p.progress_pct)}% avance`);
+      return `- ${parts.join(" · ")}`;
+    }).join("\n");
+    return [
+      "Eres un copiloto operativo de un despacho fiscal/legal. Genera un BRIEFING ULTRA CORTO (máximo 2 párrafos cortos, sin listas, sin saludos).",
+      "Tono directo, ejecutivo, español de México. NO repitas conteos ya visibles, NO inventes datos.",
+      "",
+      `Contexto:`,
+      `- Proyectos activos: ${counts.activos.length}`,
+      `- En riesgo (crítico o retrasado): ${counts.enRiesgo.length}`,
+      `- Sin actividad ≥ 7 días: ${counts.sinActividad.length}`,
+      counts.enRiesgo.length > 0 ? `\nProyectos en riesgo (top):\n${sample}` : "",
+      "",
+      "Estructura: 1) qué proyecto(s) atender PRIMERO y por qué (con nombre concreto), 2) si aplica, una oportunidad de adelantar otro proyecto. Si todo está bien, dilo y sugiere una mejora marginal.",
+    ].join("\n");
+  }, [counts]);
+
+  const generate = useCallback(async () => {
+    if (!ready) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const txt = await fetchAiChatSimpleContent(
+        [{ role: "user", content: contextPrompt }],
+        { retries: 2 },
+      );
+      if (txt) {
+        setContent(txt);
+        try {
+          localStorage.setItem(
+            storageKey,
+            JSON.stringify({ date: toDateStringMX(nowMX()), content: txt }),
+          );
+        } catch {}
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al generar briefing");
+    } finally {
+      setLoading(false);
+    }
+  }, [contextPrompt, ready, storageKey]);
+
+  useEffect(() => {
+    if (ready && !content && !loading) {
+      void generate();
+    }
+  }, [ready, content, loading, generate]);
+
+  const handleSeeRisks = useCallback(() => {
+    if (onSeeRisks) return onSeeRisks();
+    navigate(
+      `/asistente?prompt=${encodeURIComponent(
+        "Lista los proyectos de mi despacho que están en riesgo (crítico o retrasado), por qué y la próxima acción concreta para cada uno.",
+      )}`,
+    );
+  }, [navigate, onSeeRisks]);
+
+  const handleRebalance = useCallback(() => {
+    if (onRebalance) return onRebalance();
+    navigate(
+      `/asistente?prompt=${encodeURIComponent(
+        "Rebalancea la carga de mis proyectos: qué proyectos puedo despriorizar o reasignar para liberar tiempo en los críticos.",
+      )}`,
+    );
+  }, [navigate, onRebalance]);
+
+  const handleReport = useCallback(() => {
+    if (onGenerateReport) return onGenerateReport();
+    navigate(
+      `/asistente?prompt=${encodeURIComponent(
+        "Genera un reporte ejecutivo de mis proyectos activos: avance, riesgos, próximos hitos y bloqueos.",
+      )}`,
+    );
+  }, [navigate, onGenerateReport]);
+
+  return (
+    <section
+      className={cn(
+        "rounded-2xl border border-border/70 px-5 py-4 sm:px-6 sm:py-5",
+        className,
+      )}
+      style={{
+        background:
+          "radial-gradient(ellipse 420px 160px at 0% 0%, hsl(var(--primary) / 0.08), transparent 70%), " +
+          "radial-gradient(ellipse 320px 120px at 100% 100%, hsl(var(--accent) / 0.07), transparent 70%), " +
+          "hsl(var(--card))",
+      }}
+    >
+      <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-primary">
+        <LayoutGrid className="h-3 w-3" />
+        <span>Briefing · tus proyectos</span>
+        {loading ? (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground ml-1" />
+        ) : content ? (
+          <button
+            type="button"
+            onClick={() => void generate()}
+            className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
+            title="Regenerar briefing"
+            aria-label="Regenerar briefing"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-3 min-h-[44px] text-sm leading-relaxed text-foreground">
+        {error ? (
+          <p className="text-xs text-destructive">
+            {error} · {counts.enRiesgo.length > 0
+              ? `${counts.enRiesgo.length} proyecto${counts.enRiesgo.length === 1 ? "" : "s"} en riesgo requiere${counts.enRiesgo.length === 1 ? "" : "n"} atención.`
+              : "todo en orden."}
+          </p>
+        ) : content ? (
+          <KawiilAiMarkdown className="text-sm leading-relaxed">
+            {content}
+          </KawiilAiMarkdown>
+        ) : loading ? (
+          <p className="text-xs text-muted-foreground">Analizando tu cartera de proyectos…</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {counts.enRiesgo.length > 0
+              ? `${counts.enRiesgo.length} proyecto${counts.enRiesgo.length === 1 ? "" : "s"} requiere${counts.enRiesgo.length === 1 ? "" : "n"} atención.`
+              : "Todos tus proyectos activos están sin alertas."}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={handleSeeRisks}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+        >
+          <AlertTriangle className="h-3 w-3 text-warning" />
+          Ver riesgos
+        </button>
+        <button
+          type="button"
+          onClick={handleRebalance}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+        >
+          <Scale className="h-3 w-3 text-primary" />
+          Rebalancear
+        </button>
+        <button
+          type="button"
+          onClick={handleReport}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs font-medium text-foreground/90 transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+        >
+          <FileText className="h-3 w-3 text-accent" />
+          Reporte
+        </button>
+      </div>
+    </section>
+  );
+}
