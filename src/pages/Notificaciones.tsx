@@ -32,6 +32,9 @@ import {
 import { playNotificationBeep } from "@/lib/notificationBeep";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
+import { NotificationsKawiilCard } from "@/components/notifications/NotificationsKawiilCard";
 
 type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
 
@@ -85,14 +88,14 @@ function getNotificationCtas(
 function getNotificationIcon(type: string) {
   if (type === "task_assigned" || type === "task_reassigned") return <ClipboardList className="h-3.5 w-3.5 text-primary" />;
   if (type === "expense_created" || type === "expense_status_changed") return <DollarSign className="h-3.5 w-3.5 text-emerald-500" />;
-  if (type === "knowledge_sync") return <BrainCircuit className="h-3.5 w-3.5 text-violet-500" />;
-  if (type.startsWith("knowledge")) return <Bot className="h-3.5 w-3.5 text-violet-500" />;
+  if (type === "knowledge_sync") return <BrainCircuit className="h-3.5 w-3.5 text-sky-500" />;
+  if (type.startsWith("knowledge")) return <Bot className="h-3.5 w-3.5 text-sky-500" />;
   if (type === "deadline_overdue_task") return <AlertTriangle className="h-3.5 w-3.5 text-destructive" />;
   if (type === "deadline_due_tomorrow_task") return <CalendarClock className="h-3.5 w-3.5 text-amber-600" />;
   if (type === "improvement_suggestion") return <Lightbulb className="h-3.5 w-3.5 text-amber-500" />;
-  if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-primary" />;
-  if (type === "slack_mention") return <AtSign className="h-3.5 w-3.5 text-[#611f69]" />;
-  if (type === "slack_message") return <MessageSquare className="h-3.5 w-3.5 text-[#611f69]" />;
+  if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-sky-500" />;
+  if (type === "slack_mention") return <AtSign className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
+  if (type === "slack_message") return <MessageSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
@@ -773,8 +776,17 @@ export default function Notificaciones() {
           variant="hero"
           breadcrumb={["Kawiil OS", "Avisos", "Notificaciones"]}
           icon={<Bell />}
+          iconAccent={KAWIIL_AI_GRADIENT}
           title="Notificaciones"
           description="Menciones, actividad del equipo y alertas de vencimiento"
+          actions={
+            <Badge
+              variant="outline"
+              className="hidden sm:inline-flex border-sky-300/70 bg-sky-50/70 text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+            >
+              v2.4
+            </Badge>
+          }
           stats={[
             {
               label: "Sin leer",
@@ -812,6 +824,28 @@ export default function Notificaciones() {
             },
           ] satisfies PageHeaderStat[]}
         />
+
+        {!isLoading && (
+          <NotificationsKawiilCard
+            unreadMentions={unreadMentions.length}
+            totalMentions={mentions.length}
+            unreadActivity={unreadActivity.length}
+            totalActivity={activityItems.length}
+            unreadSistema={unreadSistema.length}
+            alertCounts={{
+              overdueTasks: alerts?.overdue?.length ?? 0,
+              overdueSteps: alerts?.stepsOverdue?.length ?? 0,
+              dueSoonTasks: alerts?.dueSoon?.length ?? 0,
+              dueSoonSteps: alerts?.stepsDueSoon?.length ?? 0,
+            }}
+            topMentionTitle={unreadMentions[0]?.title ?? null}
+            topMentionBody={unreadMentions[0]?.body ?? null}
+            topMentionAuthor={unreadMentions[0]?.source_profile?.full_name ?? null}
+            onGoToTab={(t) => setTab(t)}
+            onMarkAllRead={() => markAllAsRead.mutate()}
+            markAllPending={markAllAsRead.isPending}
+          />
+        )}
 
         <NotificationDeliveryPreferences />
         <NotificationAiPreferences />
