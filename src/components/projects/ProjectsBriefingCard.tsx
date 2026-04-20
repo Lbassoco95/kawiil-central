@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LayoutGrid, AlertTriangle, Loader2, RefreshCw, FileText, Scale } from "lucide-react";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
-import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
-import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { cn } from "@/lib/utils";
+import { useAiModuleBriefing, sha256Hex } from "@/hooks/useAiModuleBriefing";
 
 interface ProjectBriefRow {
   id: string;
@@ -21,8 +20,8 @@ interface ProjectBriefRow {
 interface Props {
   /** Lista filtrada de proyectos visibles para el usuario (tras filtros activos). */
   projects: ProjectBriefRow[];
-  /** Identificador para cache localStorage (incluye usuario + scope). */
-  cacheKey: string;
+  /** (Legacy) cacheKey — ya no se usa. El cache ahora vive en Supabase. Se mantiene por compat. */
+  cacheKey?: string;
   /** True cuando ya hay datos cargados; evita disparar IA en hidratación inicial. */
   ready: boolean;
   className?: string;
@@ -33,13 +32,13 @@ interface Props {
 }
 
 /**
- * Card "Briefing · Tus proyectos" del módulo Proyectos (mock v2.4).
- * Genera un resumen IA de 2-3 líneas focalizado en proyectos en riesgo y oportunidades de adelanto.
- * El resumen se cachea en `localStorage` por día para no quemar tokens en cada navegación.
+ * Card "Briefing · Tus proyectos" del módulo Proyectos.
+ * Genera un resumen IA de 2-3 líneas focalizado en proyectos en riesgo y oportunidades
+ * de adelanto. El resumen se cachea en `public.ai_module_briefings` (módulo `proyectos`)
+ * por día y usuario, con invalidación por `payload_hash` cuando cambian los proyectos.
  */
 export function ProjectsBriefingCard({
   projects,
-  cacheKey,
   ready,
   className,
   onSeeRisks,
@@ -47,20 +46,6 @@ export function ProjectsBriefingCard({
   onGenerateReport,
 }: Props) {
   const navigate = useNavigate();
-  const storageKey = `kawiil-projects-briefing-${cacheKey}`;
-
-  const [content, setContent] = useState<string | null>(() => {
-    try {
-      const cached = localStorage.getItem(storageKey);
-      if (cached) {
-        const { date, content: c } = JSON.parse(cached) as { date?: string; content?: string };
-        if (date === toDateStringMX(nowMX()) && c) return c;
-      }
-    } catch {}
-    return null;
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Conteos para fallback / pre-aviso (siempre disponibles aunque IA falle).
   const counts = useMemo(() => {
@@ -76,59 +61,55 @@ export function ProjectsBriefingCard({
     return { activos, enRiesgo, sinActividad };
   }, [projects]);
 
-  const contextPrompt = useMemo(() => {
-    const sample = counts.enRiesgo.slice(0, 8).map((p) => {
-      const parts = [p.name];
-      if (p.client_name) parts.push(`cliente ${p.client_name}`);
-      if (p.criticality_level === "critico") parts.push("CRÍTICO");
-      if (p.delay_category === "retrasado") parts.push("RETRASADO");
-      if (typeof p.progress_pct === "number") parts.push(`${Math.round(p.progress_pct)}% avance`);
-      return `- ${parts.join(" · ")}`;
-    }).join("\n");
-    return [
-      "Eres un copiloto operativo de un despacho fiscal/legal. Genera un BRIEFING ULTRA CORTO (máximo 2 párrafos cortos, sin listas, sin saludos).",
-      "Tono directo, ejecutivo, español de México. NO repitas conteos ya visibles, NO inventes datos.",
-      "",
-      `Contexto:`,
-      `- Proyectos activos: ${counts.activos.length}`,
-      `- En riesgo (crítico o retrasado): ${counts.enRiesgo.length}`,
-      `- Sin actividad ≥ 7 días: ${counts.sinActividad.length}`,
-      counts.enRiesgo.length > 0 ? `\nProyectos en riesgo (top):\n${sample}` : "",
-      "",
-      "Estructura: 1) qué proyecto(s) atender PRIMERO y por qué (con nombre concreto), 2) si aplica, una oportunidad de adelantar otro proyecto. Si todo está bien, dilo y sugiere una mejora marginal.",
-    ].join("\n");
-  }, [counts]);
+  const payload = useMemo(
+    () => ({
+      v: 1,
+      module: "proyectos",
+      activos: counts.activos.length,
+      enRiesgo: counts.enRiesgo.length,
+      sinActividad: counts.sinActividad.length,
+      topIds: counts.enRiesgo.slice(0, 8).map((p) => p.id),
+    }),
+    [counts],
+  );
 
-  const generate = useCallback(async () => {
-    if (!ready) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const txt = await fetchAiChatSimpleContent(
-        [{ role: "user", content: contextPrompt }],
-        { retries: 2 },
-      );
-      if (txt) {
-        setContent(txt);
-        try {
-          localStorage.setItem(
-            storageKey,
-            JSON.stringify({ date: toDateStringMX(nowMX()), content: txt }),
-          );
-        } catch {}
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al generar briefing");
-    } finally {
-      setLoading(false);
-    }
-  }, [contextPrompt, ready, storageKey]);
-
+  const [payloadHash, setPayloadHash] = useState("");
   useEffect(() => {
-    if (ready && !content && !loading) {
-      void generate();
-    }
-  }, [ready, content, loading, generate]);
+    if (!ready) return;
+    void sha256Hex(JSON.stringify(payload)).then(setPayloadHash);
+  }, [payload, ready]);
+
+  const briefing = useAiModuleBriefing({
+    module: "proyectos",
+    payloadHash,
+    enabled: ready && !!payloadHash,
+    buildMessages: () => {
+      const sample = counts.enRiesgo
+        .slice(0, 8)
+        .map((p) => {
+          const parts = [p.name];
+          if (p.client_name) parts.push(`cliente ${p.client_name}`);
+          if (p.criticality_level === "critico") parts.push("CRÍTICO");
+          if (p.delay_category === "retrasado") parts.push("RETRASADO");
+          if (typeof p.progress_pct === "number") parts.push(`${Math.round(p.progress_pct)}% avance`);
+          return `- ${parts.join(" · ")}`;
+        })
+        .join("\n");
+      const prompt = [
+        "Eres un copiloto operativo de un despacho fiscal/legal. Genera un BRIEFING ULTRA CORTO (máximo 2 párrafos cortos, sin listas, sin saludos).",
+        "Tono directo, ejecutivo, español de México. NO repitas conteos ya visibles, NO inventes datos.",
+        "",
+        "Contexto:",
+        `- Proyectos activos: ${counts.activos.length}`,
+        `- En riesgo (crítico o retrasado): ${counts.enRiesgo.length}`,
+        `- Sin actividad ≥ 7 días: ${counts.sinActividad.length}`,
+        counts.enRiesgo.length > 0 ? `\nProyectos en riesgo (top):\n${sample}` : "",
+        "",
+        "Estructura: 1) qué proyecto(s) atender PRIMERO y por qué (con nombre concreto), 2) si aplica, una oportunidad de adelantar otro proyecto. Si todo está bien, dilo y sugiere una mejora marginal.",
+      ].join("\n");
+      return [{ role: "user", content: prompt }];
+    },
+  });
 
   const handleSeeRisks = useCallback(() => {
     if (onSeeRisks) return onSeeRisks();
@@ -157,6 +138,10 @@ export function ProjectsBriefingCard({
     );
   }, [navigate, onGenerateReport]);
 
+  const loading = briefing.isLoading || briefing.isRefreshing;
+  const content = briefing.content;
+  const error = briefing.error;
+
   return (
     <section
       className={cn(
@@ -178,7 +163,7 @@ export function ProjectsBriefingCard({
         ) : content ? (
           <button
             type="button"
-            onClick={() => void generate()}
+            onClick={() => void briefing.regenerate()}
             className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
             title="Regenerar briefing"
             aria-label="Regenerar briefing"
@@ -189,9 +174,9 @@ export function ProjectsBriefingCard({
       </div>
 
       <div className="mt-3 min-h-[44px] text-sm leading-relaxed text-foreground">
-        {error ? (
+        {error && !content ? (
           <p className="text-xs text-destructive">
-            {error} · {counts.enRiesgo.length > 0
+            {error.message} · {counts.enRiesgo.length > 0
               ? `${counts.enRiesgo.length} proyecto${counts.enRiesgo.length === 1 ? "" : "s"} en riesgo requiere${counts.enRiesgo.length === 1 ? "" : "n"} atención.`
               : "todo en orden."}
           </p>

@@ -1,11 +1,17 @@
-import { useState, useMemo, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, Archive, UserCheck, ChevronRight, ListChecks } from "lucide-react";
+import {
+  Plus,
+  CheckSquare,
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  Users as UsersIcon,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useTasks, useMyAssignedTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
@@ -17,91 +23,134 @@ import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
-import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
-import { MyTasksSmartGroups } from "@/components/tareas/MyTasksSmartGroups";
-import { QuickCreateInput } from "@/components/tareas/QuickCreateInput";
-import { TaskStatusTabs, type TaskStatusFilter, type TaskViewMode } from "@/components/tareas/TaskStatusTabs";
-import {
-  TaskFiltersDrawer,
-  useTaskAdvancedFilters,
-} from "@/components/tareas/TaskFiltersDrawer";
-import { TaskGroupedList } from "@/components/tareas/TaskGroupedList";
+import { AiHeroV24 } from "@/components/dashboard/AiHeroV24";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
-import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEntryButton";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  formatMX,
   isPastDueCalendarMX,
   toDateStringMX,
   mexicoDayRangeISO,
   addDaysToYmd,
 } from "@/lib/dateUtils";
-import { TaskKanbanBoard } from "@/components/tareas/TaskKanbanBoard";
-import { TaskTimelineView } from "@/components/tareas/TaskTimelineView";
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+
+type StatusFilter = "todas" | "mias" | "vencidas" | "sin_resp";
+type OrderMode = "fecha" | "prioridad" | "responsable";
+type Vista = "activas" | "historial";
 
 const statusLabels = TASK_STATUS_CONFIG;
-
 const stepStatusLabels: Record<string, string> = Object.fromEntries(
-  Object.entries(STEP_STATUS_CONFIG).map(([k, v]) => [k, v.label])
+  Object.entries(STEP_STATUS_CONFIG).map(([k, v]) => [k, v.label]),
 );
+
+function priorityClass(priority?: string | null): string {
+  switch (priority) {
+    case "urgente":
+      return "prio-urgent";
+    case "alta":
+      return "prio-high";
+    case "media":
+      return "prio-medium";
+    default:
+      return "prio-low";
+  }
+}
+
+function priorityRank(priority?: string | null): number {
+  switch (priority) {
+    case "urgente":
+      return 0;
+    case "alta":
+      return 1;
+    case "media":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function statusDotClass(status?: string | null): string {
+  switch (status) {
+    case "en_progreso":
+      return "s-progreso";
+    case "en_revision":
+      return "s-revision";
+    case "completada":
+      return "s-complet";
+    case "cancelada":
+      return "s-pausa";
+    case "pendiente":
+    default:
+      return "s-pendiente";
+  }
+}
+
+function avatarClassForIndex(idx: number): string {
+  const n = ((idx % 5) + 5) % 5;
+  return `av-${n + 1}`;
+}
+
+function hashStringToAvatar(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return avatarClassForIndex(Math.abs(h));
+}
+
+function initialsFromName(name?: string | null): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return ((first + last) || name[0] || "?").toUpperCase();
+}
+
+function formatDueCell(ymd: string | null | undefined, todayYmd: string): {
+  label: string;
+  className: string;
+} {
+  if (!ymd) return { label: "—", className: "cell-muted" };
+  if (ymd < todayYmd) {
+    const days = Math.floor(
+      (new Date(todayYmd).getTime() - new Date(ymd).getTime()) / (24 * 60 * 60 * 1000),
+    );
+    const [, m, d] = ymd.split("-");
+    const mx = monthAbbr(parseInt(m, 10));
+    return {
+      label: `Venció ${parseInt(d, 10)} ${mx}`,
+      className: "cell-date overdue",
+    };
+  }
+  const tomorrow = addDaysToYmd(todayYmd, 1);
+  if (ymd === todayYmd) return { label: "Hoy", className: "cell-date soon" };
+  if (ymd === tomorrow) return { label: "Mañana", className: "cell-date soon" };
+  const in7 = addDaysToYmd(todayYmd, 7);
+  const [, m, d] = ymd.split("-");
+  const mx = monthAbbr(parseInt(m, 10));
+  const label = `${parseInt(d, 10)} ${mx}`;
+  if (ymd <= in7) return { label, className: "cell-date soon" };
+  return { label, className: "cell-date" };
+}
+
+function monthAbbr(month1: number): string {
+  const names = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  return names[(month1 - 1 + 12) % 12];
+}
 
 const Tareas = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   useTasksRealtime();
-  const [area, setArea] = useState(() => searchParams.get("area") || "todas");
+
+  // ── Estado principal ────────────────────────────────────────
   const [search, setSearch] = useState("");
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(() => searchParams.get("taskId"));
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
-  const [showAllSteps, setShowAllSteps] = useState(false);
-  const [showAllMyOpen, setShowAllMyOpen] = useState(false);
-  const [myTasksLayout, setMyTasksLayout] = useState<"smart" | "lista">(() => {
-    if (typeof window === "undefined") return "smart";
-    const v = window.localStorage.getItem("kawiil-tareas-mias-layout");
-    return v === "lista" ? "lista" : "smart";
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try { window.localStorage.setItem("kawiil-tareas-mias-layout", myTasksLayout); } catch { /* ignore */ }
-  }, [myTasksLayout]);
-  const deleteTask = useDeleteTask();
-  const { canDeleteTasks } = useUserRole();
-  const { areaOptions, areaLabelMap, getCelulaLabel } = useAreaOptions();
-  const { data: assignedSteps = [] } = useAssignedSteps();
-  const { data: profiles = [] } = useProfiles();
-  const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
-  const areaColorMap = useMemo(() => {
-    const m = new Map<string, string | undefined>();
-    for (const o of areaOptions) m.set(o.value, (o as any).color || undefined);
-    return m;
-  }, [areaOptions]);
-
-  const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>("todas");
-  const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
-    if (typeof window === "undefined") return "lista";
-    const v = window.localStorage.getItem("kawiil-tareas-view");
-    if (v === "kanban" || v === "timeline" || v === "calendario" || v === "lista") {
-      return v as TaskViewMode;
-    }
-    return "lista";
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try { window.localStorage.setItem("kawiil-tareas-view", viewMode); } catch { /* ignore */ }
-  }, [viewMode]);
-  const { filters: advFilters, setFilters: setAdvFilters, clear: clearAdvFilters, activeCount: advActiveCount } = useTaskAdvancedFilters();
-
-  const [vistaTareas, setVistaTareas] = useState<"activas" | "historial">(() => {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("todas");
+  const [celula, setCelula] = useState<string>(() => searchParams.get("area") || "todas");
+  const [orden, setOrden] = useState<OrderMode>("fecha");
+  const [vista, setVista] = useState<Vista>(() => {
     if (typeof window === "undefined") return "activas";
     const p = new URLSearchParams(window.location.search);
     if (p.get("vista") === "historial") return "historial";
@@ -109,28 +158,38 @@ const Tareas = () => {
     if (st === "completada" || st === "cancelada") return "historial";
     return "activas";
   });
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
+    () => searchParams.get("taskId"),
+  );
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
-  // Sync selectedTaskId with URL query param for deep links
+  const deleteTask = useDeleteTask();
+  const { canDeleteTasks } = useUserRole();
+  const { areaOptions, getCelulaLabel } = useAreaOptions();
+  const { data: assignedSteps = [] } = useAssignedSteps();
+  const { data: profiles = [] } = useProfiles();
+  const profileMap = useMemo(
+    () => new Map(profiles.map((p) => [p.user_id, p.full_name])),
+    [profiles],
+  );
+
+  // Sync URL → estado
   useEffect(() => {
     const urlTaskId = searchParams.get("taskId");
-    if (urlTaskId && urlTaskId !== selectedTaskId) {
-      setSelectedTaskId(urlTaskId);
-    }
+    if (urlTaskId && urlTaskId !== selectedTaskId) setSelectedTaskId(urlTaskId);
     const urlArea = searchParams.get("area");
-    if (urlArea && urlArea !== area) {
-      setArea(urlArea);
-    }
+    if (urlArea && urlArea !== celula) setCelula(urlArea);
     const v = searchParams.get("vista");
     const st = searchParams.get("status");
-    if (v === "historial" || st === "completada" || st === "cancelada") {
-      setVistaTareas("historial");
-    } else {
-      setVistaTareas("activas");
-    }
+    if (v === "historial" || st === "completada" || st === "cancelada") setVista("historial");
+    else setVista("activas");
   }, [searchParams]);
 
-  /** Si la tarea pertenece a un proyecto, abre el proyecto en pestaña Tareas con el detalle; si no, modal en /tareas. */
-  const openTask = (task: { id: string; project_id?: string | null; phase_key?: string | null }) => {
+  const openTask = (task: {
+    id: string;
+    project_id?: string | null;
+    phase_key?: string | null;
+  }) => {
     const pid = task.project_id;
     if (pid) {
       const p = new URLSearchParams();
@@ -149,11 +208,15 @@ const Tareas = () => {
   };
   const closeTask = () => {
     setSelectedTaskId(null);
-    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.delete("taskId"); return p; });
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      p.delete("taskId");
+      return p;
+    });
   };
 
-  const setVistaTareasAndUrl = (next: "activas" | "historial") => {
-    setVistaTareas(next);
+  const setVistaAndUrl = (next: Vista) => {
+    setVista(next);
     setSearchParams((prev) => {
       const p = new URLSearchParams(prev);
       if (next === "historial") {
@@ -167,86 +230,16 @@ const Tareas = () => {
     });
   };
 
-  const { data: tasks, isLoading } = useTasks({
-    area: area !== "todas" ? area : undefined,
+  // ── Datos ───────────────────────────────────────────────────
+  const { data: tasks = [], isLoading } = useTasks({
+    area: celula !== "todas" ? celula : undefined,
     search: search || undefined,
   });
+  const { data: myAssignedRaw = [] } = useMyAssignedTasks();
 
-  const { data: myAssignedRaw = [], isLoading: myAssignedLoading } = useMyAssignedTasks();
-
-  const myOpenTasks = useMemo(() => {
-    const open = myAssignedRaw.filter((t) => !isTaskClosedStatus(t.status));
-    const pr = { urgente: 0, alta: 1, media: 2, baja: 3 } as Record<string, number>;
-    return [...open].sort((a, b) => {
-      const oa = a.due_date && isPastDueCalendarMX(a.due_date) ? 0 : 1;
-      const ob = b.due_date && isPastDueCalendarMX(b.due_date) ? 0 : 1;
-      if (oa !== ob) return oa - ob;
-      const da = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-      const db = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-      if (da !== db) return da - db;
-      return (pr[a.priority] ?? 4) - (pr[b.priority] ?? 4);
-    });
-  }, [myAssignedRaw]);
-
-  const myClosedTasks = useMemo(() => {
-    const closed = myAssignedRaw.filter((t) => isTaskClosedStatus(t.status));
-    return [...closed].sort(
-      (a, b) =>
-        new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
-    );
-  }, [myAssignedRaw]);
-
-  const openTasks = useMemo(() => tasks?.filter((t: any) => !isTaskClosedStatus(t.status)) ?? [], [tasks]);
-
-  const advFilteredOpen = useMemo(() => {
-    return (openTasks as any[]).filter((t) => {
-      if (advFilters.clientId && t.client_id !== advFilters.clientId) return false;
-      if (advFilters.projectId && t.project_id !== advFilters.projectId) return false;
-      if (advFilters.assignedTo && t.assigned_to !== advFilters.assignedTo) return false;
-      if (advFilters.area && t.area !== advFilters.area) return false;
-      if (advFilters.priority && t.priority !== advFilters.priority) return false;
-      return true;
-    });
-  }, [openTasks, advFilters]);
-
-  const statusCounts = useMemo(() => ({
-    todas: advFilteredOpen.length,
-    pendientes: advFilteredOpen.filter((t: any) => t.status === "pendiente").length,
-    en_curso: advFilteredOpen.filter((t: any) => t.status === "en_progreso" || t.status === "en_revision").length,
-    vencidas: advFilteredOpen.filter((t: any) => t.due_date && isPastDueCalendarMX(t.due_date)).length,
-    criticas: advFilteredOpen.filter(
-      (t: any) => t.criticality_level === "critico" || t.priority === "urgente",
-    ).length,
-  }), [advFilteredOpen]);
-
-  const filteredOpenTasks = useMemo(() => {
-    switch (statusFilter) {
-      case "pendientes":
-        return advFilteredOpen.filter((t: any) => t.status === "pendiente");
-      case "en_curso":
-        return advFilteredOpen.filter((t: any) => t.status === "en_progreso" || t.status === "en_revision");
-      case "vencidas":
-        return advFilteredOpen.filter((t: any) => t.due_date && isPastDueCalendarMX(t.due_date));
-      case "criticas":
-        return advFilteredOpen.filter(
-          (t: any) => t.criticality_level === "critico" || t.priority === "urgente",
-        );
-      default:
-        return advFilteredOpen;
-    }
-  }, [advFilteredOpen, statusFilter]);
-
-  const closedTasks = useMemo(() => {
-    const list = tasks?.filter((t: any) => isTaskClosedStatus(t.status)) ?? [];
-    return [...list].sort(
-      (a: any, b: any) =>
-        new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
-    );
-  }, [tasks]);
-
-  // ─── Hero stats: contadores por usuario, en zona CDMX ────────
   const today = useMexicoToday();
   const todayYmd = useMemo(() => toDateStringMX(today), [today]);
+  const in7Ymd = useMemo(() => addDaysToYmd(todayYmd, 7), [todayYmd]);
   const { reminders } = useReminders();
 
   const { data: completedTodayCount } = useQuery({
@@ -277,107 +270,164 @@ const Tareas = () => {
     },
   });
 
+  const openTasks = useMemo(
+    () => (tasks as any[]).filter((t) => !isTaskClosedStatus(t.status)),
+    [tasks],
+  );
+  const closedTasks = useMemo(() => {
+    const list = (tasks as any[]).filter((t) => isTaskClosedStatus(t.status));
+    return [...list].sort(
+      (a, b) =>
+        new Date(b.updated_at || b.created_at).getTime() -
+        new Date(a.updated_at || a.created_at).getTime(),
+    );
+  }, [tasks]);
+
+  const overdueCount = useMemo(
+    () =>
+      openTasks.filter((t) => t.due_date && isPastDueCalendarMX(t.due_date)).length,
+    [openTasks],
+  );
+  const dueThisWeekCount = useMemo(
+    () =>
+      openTasks.filter((t) => {
+        if (!t.due_date) return false;
+        if (isPastDueCalendarMX(t.due_date)) return false;
+        return t.due_date <= in7Ymd;
+      }).length,
+    [openTasks, in7Ymd],
+  );
+  const blockedCount = useMemo(
+    () =>
+      openTasks.filter((t) =>
+        Boolean((t as any).is_blocked) ||
+        (t as any).status === "bloqueada" ||
+        (t as any).delay_category === "bloqueada",
+      ).length,
+    [openTasks],
+  );
+  const sinRespCount = useMemo(
+    () => openTasks.filter((t) => !t.assigned_to).length,
+    [openTasks],
+  );
+  const miasCount = useMemo(
+    () =>
+      openTasks.filter((t) => t.assigned_to === user?.id && !isTaskClosedStatus(t.status)).length,
+    [openTasks, user?.id],
+  );
+
+  // ── Filtro de pills + ordenamiento ──────────────────────────
+  const filteredOpen = useMemo(() => {
+    let list = openTasks;
+    switch (statusFilter) {
+      case "mias":
+        list = list.filter((t) => t.assigned_to === user?.id);
+        break;
+      case "vencidas":
+        list = list.filter((t) => t.due_date && isPastDueCalendarMX(t.due_date));
+        break;
+      case "sin_resp":
+        list = list.filter((t) => !t.assigned_to);
+        break;
+      default:
+        break;
+    }
+    const sorted = [...list];
+    if (orden === "fecha") {
+      sorted.sort((a, b) => {
+        const da = a.due_date ?? "9999-12-31";
+        const db = b.due_date ?? "9999-12-31";
+        if (da !== db) return da < db ? -1 : 1;
+        return priorityRank(a.priority) - priorityRank(b.priority);
+      });
+    } else if (orden === "prioridad") {
+      sorted.sort((a, b) => {
+        const diff = priorityRank(a.priority) - priorityRank(b.priority);
+        if (diff !== 0) return diff;
+        const da = a.due_date ?? "9999-12-31";
+        const db = b.due_date ?? "9999-12-31";
+        return da < db ? -1 : da > db ? 1 : 0;
+      });
+    } else {
+      sorted.sort((a, b) => {
+        const na = a.assigned_to ? profileMap.get(a.assigned_to) ?? "" : "~";
+        const nb = b.assigned_to ? profileMap.get(b.assigned_to) ?? "" : "~";
+        return na.localeCompare(nb, "es");
+      });
+    }
+    return sorted;
+  }, [openTasks, statusFilter, orden, user?.id, profileMap]);
+
+  // ── Stats del hero ──────────────────────────────────────────
   const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
-    const myPending = myAssignedLoading ? null : myOpenTasks.length;
-    const myOverdue = myAssignedLoading
-      ? null
-      : myOpenTasks.filter((t: any) => t.due_date && isPastDueCalendarMX(t.due_date)).length;
-
-    const sevenDaysFromTodayYmd = addDaysToYmd(todayYmd, 7);
-    const upcomingReminders = reminders.filter((r) => {
-      if (r.is_completed) return false;
-      if (!r.due_date) return false;
-      return r.due_date <= sevenDaysFromTodayYmd;
-    }).length;
-
-    const teamPending = openTasks.length;
-
-    const dueThisWeekTeam = (openTasks as any[]).filter((t) => {
-      if (!t.due_date) return false;
-      if (isPastDueCalendarMX(t.due_date)) return false;
-      return t.due_date <= sevenDaysFromTodayYmd;
-    }).length;
+    const myOpen = myAssignedRaw.filter((t) => !isTaskClosedStatus(t.status));
+    const myOverdue = myOpen.filter(
+      (t) => t.due_date && isPastDueCalendarMX(t.due_date),
+    ).length;
 
     return [
-      myPending != null && {
+      {
         label: "En curso",
-        value: teamPending,
-        sub: `${myPending} asignada${myPending === 1 ? "" : "s"} a ti`,
+        value: openTasks.length,
+        sub: `${myOpen.length} asignada${myOpen.length === 1 ? "" : "s"} a ti`,
         tone: "default" as const,
       },
-      myOverdue != null && {
+      {
         label: "Vencidas",
         value: myOverdue,
-        sub: myOverdue > 0 ? "atender hoy" : "sin atrasos",
+        sub: myOverdue > 0 ? "Requieren atención" : "Sin atrasos",
         tone: myOverdue > 0 ? ("warning" as const) : ("default" as const),
       },
       {
         label: "Esta semana",
-        value: dueThisWeekTeam,
-        sub: dueThisWeekTeam > 0 ? "vencen en ≤7 días" : "sin entregas próximas",
-        tone: dueThisWeekTeam > 0 ? ("warning" as const) : ("default" as const),
+        value: dueThisWeekCount,
+        sub: dueThisWeekCount > 0 ? "Vencen en ≤7 días" : "Sin entregas próximas",
+        tone: dueThisWeekCount > 0 ? ("warning" as const) : ("default" as const),
       },
       completedTodayCount != null && {
-        label: "Completadas hoy",
+        label: "Hoy",
         value: completedTodayCount,
-        sub: completedTodayCount === 0 ? "aún ninguna" : "buen ritmo",
+        sub: completedTodayCount === 0 ? "Aún ninguna" : "Completadas · buen ritmo",
         tone: "success" as const,
       },
       {
-        label: "Recordatorios",
-        value: upcomingReminders,
-        sub: upcomingReminders > 0 ? "próximos 7 días" : "ninguno próximo",
-        tone: "primary" as const,
+        label: "Bloqueadas",
+        value: blockedCount,
+        sub: blockedCount > 0 ? "Esperan info" : "Ninguna",
+        tone: blockedCount > 0 ? ("warning" as const) : ("default" as const),
       },
     ];
-  }, [myAssignedLoading, myOpenTasks, openTasks, reminders, todayYmd, completedTodayCount]);
+  }, [myAssignedRaw, openTasks.length, dueThisWeekCount, completedTodayCount, blockedCount]);
 
-  const getDateColor = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const weekFromNow = new Date();
-    weekFromNow.setDate(weekFromNow.getDate() + 7);
-    if (d < now) return "text-destructive font-medium";
-    if (d <= weekFromNow) return "text-warning font-medium";
-    return "text-muted-foreground";
-  };
-
-  const getPriorityBar = (priority: string) => {
-    switch (priority) {
-      case "urgente": return "priority-bar-urgent";
-      case "alta": return "priority-bar-high";
-      case "media": return "priority-bar-medium";
-      default: return "priority-bar-low";
-    }
-  };
-
-  /** Pill compacto v2.5 P1-P4 (consistente con TaskDetailDialog header). */
-  const getPriorityPillClass = (priority: string) => {
-    switch (priority) {
-      case "urgente":
-        return "bg-red-500/15 text-red-700 dark:text-red-300";
-      case "alta":
-        return "bg-orange-500/15 text-orange-700 dark:text-orange-300";
-      case "media":
-        return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
-      default:
-        return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
-    }
-  };
-  const getPriorityPillLabel = (priority: string) => {
-    switch (priority) {
-      case "urgente": return "P1";
-      case "alta": return "P2";
-      case "media": return "P3";
-      default: return "P4";
-    }
-  };
-  const getSubtaskCount = (task: any) =>
-    Array.isArray(task?.checklist) ? task.checklist.length : 0;
+  // ── Contexto para AiHeroV24 ─────────────────────────────────
+  const topCritical = useMemo(
+    () =>
+      openTasks
+        .filter(
+          (t) =>
+            t.priority === "urgente" ||
+            (t.due_date && isPastDueCalendarMX(t.due_date)) ||
+            (t as any).criticality_level === "critico",
+        )
+        .slice(0, 8)
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          client: (t as any).clients?.name ?? null,
+          dueInDays: t.due_date
+            ? Math.round(
+                (new Date(t.due_date).getTime() - new Date(todayYmd).getTime()) /
+                  (24 * 60 * 60 * 1000),
+              )
+            : null,
+          priority: t.priority ?? null,
+        })),
+    [openTasks, todayYmd],
+  );
 
   return (
     <AppLayout>
-      <div className="space-y-6 animate-fade-in">
+      <div className="kwv24 space-y-6 animate-fade-in">
         <PageHeader
           variant="hero"
           icon={<CheckSquare />}
@@ -396,500 +446,409 @@ const Tareas = () => {
           }
         />
 
-        <div className="surface-toolbar space-y-2 p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-            <div className="min-w-0 flex-1">
-              <QuickCreateInput area={area !== "todas" ? area : undefined} />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 shrink-0 w-full sm:w-auto"
-              onClick={() => openNewTaskModal()}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Formulario completo
-            </Button>
-          </div>
-          <p className="text-[11px] text-muted-foreground leading-snug">
-            Tokens: <code className="rounded bg-muted px-1">@persona</code>{" "}
-            <code className="rounded bg-muted px-1">#cliente</code>{" "}
-            <code className="rounded bg-muted px-1">!prioridad</code>{" "}
-            <code className="rounded bg-muted px-1">/fecha</code> · Enter para crear · «Formulario completo» abre todos los campos.
-          </p>
-        </div>
-
-        <AiHeroGrid
+        <AiHeroV24
           module="tareas"
-          tasksCount={openTasks.length}
-          completedToday={completedTodayCount ?? 0}
-          overdueCount={
-            (openTasks as any[]).filter(
-              (t) => t.due_date && isPastDueCalendarMX(t.due_date),
-            ).length
-          }
-          remindersCount={reminders.filter((r) => !r.is_completed).length}
-          showQuote={false}
-          showMoodCheckin={false}
+          ready={!isLoading}
+          ctx={{
+            tasksCount: openTasks.length,
+            completedToday: completedTodayCount ?? 0,
+            overdueCount,
+            dueThisWeekCount,
+            blockedCount,
+            topCritical,
+          }}
         />
 
-        <section className="animate-fade-in surface-glass-subtle p-4 ring-1 ring-primary/10">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
-            <div className="flex items-start gap-2 min-w-0">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                <UserCheck className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-semibold text-foreground">Mis tareas del tablero</h2>
-                  <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-full font-medium tabular-nums">
-                    {myOpenTasks.length} en curso
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug max-w-xl">
-                  {myTasksLayout === "smart"
-                    ? "Agrupadas por urgencia: lo que urge primero, lo que puede esperar al final."
-                    : "Solo tareas internas donde eres responsable. Los pasos dentro de proyectos están en la sección de abajo."}
-                </p>
-              </div>
+        <div className="kpi-strip">
+          <div className="kpi">
+            <div className="label">En curso</div>
+            <div className="num">{openTasks.length}</div>
+            <div className="sub">{miasCount} asignada{miasCount === 1 ? "" : "s"} a ti</div>
+          </div>
+          <div className={`kpi ${overdueCount > 0 ? "danger" : ""}`}>
+            <div className="label">Vencidas</div>
+            <div className="num">{overdueCount}</div>
+            <div className="sub">
+              {overdueCount > 0 ? "Requieren atención" : "Sin atrasos"}
             </div>
-            {myOpenTasks.length > 0 && (
-              <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border/50 bg-background/70 p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setMyTasksLayout("smart")}
-                  className={cn(
-                    "rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
-                    myTasksLayout === "smart"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  aria-pressed={myTasksLayout === "smart"}
-                  title="Agrupar por urgencia"
-                >
-                  Por urgencia
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMyTasksLayout("lista")}
-                  className={cn(
-                    "rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
-                    myTasksLayout === "lista"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                  aria-pressed={myTasksLayout === "lista"}
-                  title="Vista lista plana"
-                >
-                  Lista
-                </button>
+          </div>
+          <div className={`kpi ${dueThisWeekCount > 0 ? "warn" : ""}`}>
+            <div className="label">Esta semana</div>
+            <div className="num">{dueThisWeekCount}</div>
+            <div className="sub">
+              {dueThisWeekCount > 0 ? "Vencen en ≤7 días" : "Sin entregas próximas"}
+            </div>
+          </div>
+          <div className="kpi ok">
+            <div className="label">Completadas hoy</div>
+            <div className="num">{completedTodayCount ?? 0}</div>
+            <div className="sub">
+              {(completedTodayCount ?? 0) === 0 ? "Aún ninguna" : "Buen ritmo 🎯"}
+            </div>
+          </div>
+        </div>
+
+        <div className="toolbar">
+          <div className="search">
+            <Search width={14} height={14} />
+            <input
+              placeholder="Buscar tareas..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="pill-group">
+            <button
+              type="button"
+              className={statusFilter === "todas" ? "active" : ""}
+              onClick={() => setStatusFilter("todas")}
+            >
+              Todas<span className="count">{openTasks.length}</span>
+            </button>
+            <button
+              type="button"
+              className={statusFilter === "mias" ? "active" : ""}
+              onClick={() => setStatusFilter("mias")}
+            >
+              Mías<span className="count">{miasCount}</span>
+            </button>
+            <button
+              type="button"
+              className={statusFilter === "vencidas" ? "active" : ""}
+              onClick={() => setStatusFilter("vencidas")}
+            >
+              Vencidas<span className="count">{overdueCount}</span>
+            </button>
+            <button
+              type="button"
+              className={statusFilter === "sin_resp" ? "active" : ""}
+              onClick={() => setStatusFilter("sin_resp")}
+            >
+              Sin resp.<span className="count">{sinRespCount}</span>
+            </button>
+          </div>
+          <div className="divider" />
+          <select
+            className="select"
+            value={celula}
+            onChange={(e) => setCelula(e.target.value)}
+          >
+            <option value="todas">Todas las células</option>
+            {areaOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="select"
+            value={orden}
+            onChange={(e) => setOrden(e.target.value as OrderMode)}
+          >
+            <option value="fecha">Ordenar: Fecha ↑</option>
+            <option value="prioridad">Prioridad</option>
+            <option value="responsable">Responsable</option>
+          </select>
+          <div style={{ flex: 1 }} />
+          <div className="pill-group">
+            <button
+              type="button"
+              className={vista === "activas" ? "active" : ""}
+              onClick={() => setVistaAndUrl("activas")}
+            >
+              En curso
+            </button>
+            <button
+              type="button"
+              className={vista === "historial" ? "active" : ""}
+              onClick={() => setVistaAndUrl("historial")}
+            >
+              Historial
+            </button>
+          </div>
+        </div>
+
+        {/* TABLA */}
+        {vista === "activas" ? (
+          <div className="mtable tareas">
+            <div className="thead">
+              <div />
+              <div>Tarea</div>
+              <div>Estado</div>
+              <div>Responsable</div>
+              <div>Célula</div>
+              <div>Vence</div>
+              <div />
+            </div>
+            {isLoading ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                Cargando tareas…
               </div>
+            ) : filteredOpen.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                <CheckSquare className="mx-auto mb-2 h-6 w-6 opacity-40" />
+                Sin tareas con estos filtros.
+              </div>
+            ) : (
+              filteredOpen.map((task) => {
+                const due = formatDueCell(task.due_date, todayYmd);
+                const assigneeName = task.assigned_to
+                  ? profileMap.get(task.assigned_to) ?? null
+                  : null;
+                const avClass = task.assigned_to
+                  ? hashStringToAvatar(task.assigned_to)
+                  : "";
+                const initials = initialsFromName(assigneeName);
+                const clientName = (task as any).clients?.name ?? null;
+                const projectName = (task as any).projects?.name ?? null;
+                const criticality = (task as any).criticality_level ?? null;
+                return (
+                  <div
+                    key={task.id}
+                    className="trow"
+                    onClick={() => openTask(task as any)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openTask(task as any);
+                      }
+                    }}
+                  >
+                    <div
+                      className={`prio-dot ${priorityClass(task.priority)}`}
+                      title={`Prioridad ${task.priority}`}
+                    />
+                    <div className="tname">
+                      <span className="title">{task.title}</span>
+                      <div className="meta">
+                        {criticality === "critico" && (
+                          <>
+                            <span className="flag flag-critico">Crítico</span>
+                            <span className="dot" />
+                          </>
+                        )}
+                        {criticality === "atencion" && (
+                          <>
+                            <span className="flag flag-atencion">Atención</span>
+                            <span className="dot" />
+                          </>
+                        )}
+                        {clientName && <span>{clientName}</span>}
+                        {clientName && projectName && <span className="dot" />}
+                        {projectName && <span>{projectName}</span>}
+                        {!clientName && !projectName && criticality == null && (
+                          <span>Interno</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="status-cell">
+                      <span className={`status-dot ${statusDotClass(task.status)}`} />
+                      <span className="cell-text">
+                        {statusLabels[task.status]?.label ?? task.status}
+                      </span>
+                    </div>
+                    {assigneeName ? (
+                      <div className="assignee">
+                        <span className={`avatar ${avClass}`}>{initials}</span>
+                        <span className="name">{assigneeName}</span>
+                      </div>
+                    ) : (
+                      <div className="assignee empty">
+                        <span
+                          className="avatar"
+                          style={{ background: "hsl(var(--muted-foreground) / 0.3)" }}
+                        >
+                          ?
+                        </span>
+                        <span className="name">Sin asignar</span>
+                      </div>
+                    )}
+                    <div className="cell-muted">
+                      {task.area ? getCelulaLabel(task.area) : "—"}
+                    </div>
+                    <div className={due.className}>{due.label}</div>
+                    {canDeleteTasks ? (
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Eliminar"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget({ id: task.id, title: task.title });
+                        }}
+                      >
+                        <Trash2 width={13} height={13} />
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
-
-          {myAssignedLoading ? (
-            <div className="space-y-2">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-14 rounded-xl bg-secondary/40 animate-pulse" />
-              ))}
+        ) : (
+          <div className="mtable tareas">
+            <div className="thead">
+              <div />
+              <div>Tarea</div>
+              <div>Estado</div>
+              <div>Responsable</div>
+              <div>Célula</div>
+              <div>Cerrada</div>
+              <div />
             </div>
-          ) : myOpenTasks.length === 0 && myClosedTasks.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6 px-2">
-              No tienes tareas del tablero asignadas. Pueden asignártelas desde el detalle de una tarea o al crearla.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {myOpenTasks.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-3">No tienes tareas del tablero en curso.</p>
-              ) : myTasksLayout === "smart" ? (
-                <MyTasksSmartGroups
-                  tasks={myOpenTasks as any}
-                  areaColorMap={areaColorMap}
-                  getCelulaLabel={getCelulaLabel}
-                  onOpen={(t) => openTask(t as any)}
-                />
-              ) : (
-                <>
-                  {(showAllMyOpen ? myOpenTasks : myOpenTasks.slice(0, 10)).map((task, i) => (
-                    <div
-                      key={task.id}
-                      className={cn(
-                        "flex items-center gap-3 py-2.5 px-3 rounded-xl cursor-pointer border border-border/50 bg-background/80 hover:bg-background card-hover-subtle",
-                        getPriorityBar(task.priority),
-                        (task as any).delay_category && "bg-warning/[0.04]"
-                      )}
-                      style={{ animationDelay: `${Math.min(i, 8) * 25}ms` }}
-                      onClick={() => openTask(task)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span
-                            className={cn(
-                              "shrink-0 inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wider",
-                              getPriorityPillClass(task.priority)
-                            )}
-                            title={`Prioridad ${task.priority}`}
-                          >
-                            {getPriorityPillLabel(task.priority)}
-                          </span>
-                          <h3 className="text-sm font-medium text-foreground truncate">{task.title}</h3>
-                          {(task as any).is_subtask && (
-                            <span className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground border border-border/60 rounded px-1 py-0" title="Subtarea">
-                              Sub
-                            </span>
-                          )}
-                          {getSubtaskCount(task) > 0 && (
-                            <span
-                              className="shrink-0 inline-flex items-center gap-0.5 rounded bg-secondary/70 px-1.5 py-0 text-[9px] font-medium text-muted-foreground"
-                              title={`${getSubtaskCount(task)} subtareas`}
-                            >
-                              <ListChecks className="h-2.5 w-2.5" />
-                              {getSubtaskCount(task)}
-                            </span>
-                          )}
-                          {(task as any).criticality_level === "critico" && <span className="text-[10px] shrink-0" title="Crítico">🔴</span>}
-                          {(task as any).criticality_level === "atencion" && <span className="text-[10px] shrink-0" title="Atención">🟡</span>}
-                        </div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge className={cn("text-[10px] border-0 px-1.5 py-0", statusLabels[task.status]?.color)} variant="secondary">
-                            {statusLabels[task.status]?.label}
-                          </Badge>
-                          {task.area && (
-                            <span className="inline-flex items-center gap-1.5 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                              <span
-                                className="inline-block h-1.5 w-1.5 rounded-full"
-                                style={{ background: areaColorMap.get(task.area) || "hsl(var(--primary))" }}
-                              />
-                              {getCelulaLabel(task.area)}
-                            </span>
-                          )}
-                          {(task as any).clients?.name && (
-                            <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{(task as any).clients.name}</span>
-                          )}
-                          {(task as any).projects?.name && (
-                            <span className="text-[10px] text-muted-foreground/80 truncate max-w-[120px]">{(task as any).projects.name}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {task.due_date && (
-                          <span className={cn("text-xs flex items-center gap-1", getDateColor(task.due_date))}>
-                            <Calendar className="h-3 w-3" />
-                            {formatMX(task.due_date, "dd MMM")}
-                          </span>
+            {closedTasks.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                Sin tareas completadas ni canceladas.
+              </div>
+            ) : (
+              closedTasks.map((task: any) => {
+                const closedYmd = (task.updated_at || task.completed_at || task.created_at)?.slice(0, 10);
+                const due = closedYmd
+                  ? { label: `${parseInt(closedYmd.split("-")[2], 10)} ${monthAbbr(parseInt(closedYmd.split("-")[1], 10))}`, className: "cell-date" }
+                  : { label: "—", className: "cell-muted" };
+                const assigneeName = task.assigned_to
+                  ? profileMap.get(task.assigned_to) ?? null
+                  : null;
+                const avClass = task.assigned_to ? hashStringToAvatar(task.assigned_to) : "";
+                const initials = initialsFromName(assigneeName);
+                return (
+                  <div
+                    key={task.id}
+                    className="trow"
+                    onClick={() => openTask(task)}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className={`prio-dot ${priorityClass(task.priority)}`} />
+                    <div className="tname">
+                      <span
+                        className="title"
+                        style={
+                          task.status === "cancelada"
+                            ? { textDecoration: "line-through", opacity: 0.7 }
+                            : undefined
+                        }
+                      >
+                        {task.title}
+                      </span>
+                      <div className="meta">
+                        {task.clients?.name && <span>{task.clients.name}</span>}
+                        {task.projects?.name && (
+                          <>
+                            <span className="dot" />
+                            <span>{task.projects.name}</span>
+                          </>
                         )}
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
                       </div>
                     </div>
-                  ))}
-                  {myOpenTasks.length > 10 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllMyOpen(!showAllMyOpen)}
-                      className="text-xs text-primary hover:text-primary/80 text-center py-1 w-full transition-colors"
-                    >
-                      {showAllMyOpen ? "Mostrar menos" : `+${myOpenTasks.length - 10} tareas más — ver todas`}
-                    </button>
-                  )}
-                </>
-              )}
-
-              {myClosedTasks.length > 0 && (
-                <Collapsible defaultOpen={false} className="group rounded-lg border border-border/40 bg-muted/20 overflow-hidden">
-                  <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors">
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90" />
-                    Mi historial del tablero — completadas o canceladas ({myClosedTasks.length})
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="space-y-1 px-2 pb-2 pt-0 border-t border-border/30">
-                      {myClosedTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className={cn(
-                            "flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-muted/50 text-muted-foreground",
-                            task.status === "cancelada" && "opacity-80"
-                          )}
-                          onClick={() => openTask(task)}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className={cn("text-[13px] font-medium truncate", task.status === "cancelada" && "line-through")}>
-                              {task.title}
-                            </p>
-                            <div className="flex flex-wrap gap-1.5 mt-0.5">
-                              <Badge className={cn("text-[9px] border-0 px-1 py-0", statusLabels[task.status]?.color)} variant="secondary">
-                                {statusLabels[task.status]?.label}
-                              </Badge>
-                              {task.area && (
-                                <span className="text-[10px]">{getCelulaLabel(task.area)}</span>
-                              )}
-                            </div>
-                          </div>
-                          <ArrowRight className="h-3 w-3 shrink-0 opacity-40" />
-                        </div>
-                      ))}
+                    <div className="status-cell">
+                      <span className={`status-dot ${statusDotClass(task.status)}`} />
+                      <span className="cell-text">
+                        {statusLabels[task.status]?.label ?? task.status}
+                      </span>
                     </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-            </div>
-          )}
-        </section>
+                    {assigneeName ? (
+                      <div className="assignee">
+                        <span className={`avatar ${avClass}`}>{initials}</span>
+                        <span className="name">{assigneeName}</span>
+                      </div>
+                    ) : (
+                      <div className="assignee empty">
+                        <span
+                          className="avatar"
+                          style={{ background: "hsl(var(--muted-foreground) / 0.3)" }}
+                        >
+                          ?
+                        </span>
+                        <span className="name">Sin asignar</span>
+                      </div>
+                    )}
+                    <div className="cell-muted">
+                      {task.area ? getCelulaLabel(task.area) : "—"}
+                    </div>
+                    <div className={due.className}>{due.label}</div>
+                    <div />
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
 
+        {/* Pasos de proyecto asignados a ti */}
         {assignedSteps.length > 0 && (
-          <section className="animate-fade-in surface-toolbar p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <ClipboardList className="h-4 w-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Mis pasos de proyecto asignados</h2>
-              <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{assignedSteps.length}</span>
-            </div>
-            <div className="space-y-1">
-              {assignedSteps.slice(0, showAllSteps ? undefined : 10).map((step) => {
-                const isOverdue = isPastDueCalendarMX(step.dueDate);
+          <details className="collapsible" open={false}>
+            <summary>
+              Pasos de proyecto asignados a ti
+              <span className="count-pill">{assignedSteps.length}</span>
+            </summary>
+            <div className="body" style={{ padding: "8px 0 0" }}>
+              {assignedSteps.slice(0, 50).map((step) => {
+                const overdue = step.dueDate && isPastDueCalendarMX(step.dueDate);
+                const due = formatDueCell(step.dueDate ?? null, todayYmd);
                 return (
                   <div
                     key={step.id}
-                    className={cn(
-                      "flex items-center gap-3 text-sm cursor-pointer rounded-lg px-3 py-2.5 card-hover-subtle border border-transparent",
-                      isOverdue && "bg-destructive/5 border-destructive/10"
-                    )}
-                    onClick={() => navigate(`/proyectos/${step.projectId}?tab=${step.sourceType === "contabilidad" ? "contabilidad" : step.sourceType === "declaracion_anual" ? "declaracion_anual" : step.sourceType === "juicio" ? "juicio" : step.sourceType === "gestoria" ? "gestoria" : "general"}&step=${step.stepKey}`)}
+                    onClick={() =>
+                      navigate(
+                        `/proyectos/${step.projectId}?tab=${
+                          step.sourceType === "contabilidad"
+                            ? "contabilidad"
+                            : step.sourceType === "declaracion_anual"
+                              ? "declaracion_anual"
+                              : step.sourceType === "juicio"
+                                ? "juicio"
+                                : step.sourceType === "gestoria"
+                                  ? "gestoria"
+                                  : "general"
+                        }&step=${step.stepKey}`,
+                      )
+                    }
+                    style={{
+                      padding: "10px 16px",
+                      borderTop: "1px solid hsl(var(--border) / 0.4)",
+                      display: "grid",
+                      gridTemplateColumns: "130px 1fr 120px 90px",
+                      gap: 12,
+                      alignItems: "center",
+                      fontSize: 12.5,
+                      cursor: "pointer",
+                    }}
                   >
-                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">{step.sourceLabel}</span>
-                    <span className="flex-1 truncate text-sm font-medium text-foreground">{step.stepLabel}</span>
-                    {step.isCollaborator && (
-                      <span className="text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">Colaborador</span>
-                    )}
-                    {step.clientName && (
-                      <span className="text-xs text-muted-foreground shrink-0">{step.clientName}</span>
-                    )}
-                    {step.dueDate && (
-                      <span className={cn(
-                        "text-xs shrink-0 flex items-center gap-1",
-                        isOverdue ? "text-destructive font-medium" : "text-muted-foreground"
-                      )}>
-                        <Calendar className="h-3 w-3" />
-                        {formatMX(step.dueDate, "dd MMM")}
+                    <span
+                      className="cell-muted"
+                      style={{
+                        background: "hsl(var(--muted))",
+                        padding: "3px 8px",
+                        borderRadius: 6,
+                        width: "fit-content",
+                      }}
+                    >
+                      {step.sourceLabel}
+                    </span>
+                    <span className="cell-text">
+                      {step.stepLabel}
+                      {step.clientName ? ` — ${step.clientName}` : ""}
+                    </span>
+                    <span className={overdue ? "cell-date overdue" : due.className}>
+                      {due.label}
+                    </span>
+                    {overdue ? (
+                      <span className="flag flag-retraso">Retraso</span>
+                    ) : (
+                      <span className="cell-muted" style={{ fontSize: 11 }}>
+                        {stepStatusLabels[step.status] || step.status}
                       </span>
                     )}
-                    <span className="text-[10px] text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded shrink-0">
-                      {stepStatusLabels[step.status] || step.status}
-                    </span>
-                    <ArrowRight className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                   </div>
                 );
               })}
-              {assignedSteps.length > 10 && !showAllSteps && (
-                <button
-                  onClick={() => setShowAllSteps(true)}
-                  className="text-xs text-primary hover:text-primary/80 text-center py-1 w-full transition-colors"
-                >
-                  +{assignedSteps.length - 10} pasos más — ver todos
-                </button>
-              )}
-              {showAllSteps && assignedSteps.length > 10 && (
-                <button
-                  onClick={() => setShowAllSteps(false)}
-                  className="text-xs text-muted-foreground hover:text-foreground text-center py-1 w-full transition-colors"
-                >
-                  Mostrar menos
-                </button>
-              )}
             </div>
-          </section>
-        )}
-
-        <div className="surface-toolbar space-y-3 p-4">
-          <ScrollableFilterTabs
-            options={[{ value: "todas", label: "Todas" }, ...areaOptions]}
-            value={area}
-            onChange={setArea}
-          />
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <div className="relative flex-1 min-w-0 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar tareas..."
-                className="pl-9 h-9 text-sm bg-background/60 border border-border/50 focus-visible:ring-1"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <TaskFiltersDrawer
-                filters={advFilters}
-                onChange={setAdvFilters}
-                onClear={clearAdvFilters}
-                activeCount={advActiveCount}
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant={vistaTareas === "historial" ? "default" : "outline"}
-                className="h-9 text-xs shrink-0"
-                onClick={() =>
-                  setVistaTareasAndUrl(vistaTareas === "historial" ? "activas" : "historial")
-                }
-              >
-                <Archive className="mr-1.5 h-3.5 w-3.5" />
-                Historial
-                <span className="ml-1.5 tabular-nums opacity-80">({closedTasks.length})</span>
-              </Button>
-            </div>
-          </div>
-
-          {vistaTareas === "activas" && (
-            <TaskStatusTabs
-              value={statusFilter}
-              onChange={setStatusFilter}
-              counts={statusCounts}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-            />
-          )}
-        </div>
-
-        {isLoading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-16 rounded-2xl bg-secondary/30 animate-pulse" />
-            ))}
-          </div>
-        ) : vistaTareas === "activas" ? (
-          filteredOpenTasks.length > 0 ? (
-            viewMode === "kanban" ? (
-              <TaskKanbanBoard
-                tasks={filteredOpenTasks}
-                areaColorMap={areaColorMap}
-                profileMap={profileMap}
-                getCelulaLabel={getCelulaLabel}
-                onOpen={openTask}
-              />
-            ) : viewMode === "timeline" ? (
-              <TaskTimelineView
-                tasks={filteredOpenTasks}
-                profileMap={profileMap}
-                onOpen={openTask}
-              />
-            ) : (
-              <TaskGroupedList
-                tasks={filteredOpenTasks}
-                areaColorMap={areaColorMap}
-                profileMap={profileMap}
-                getCelulaLabel={getCelulaLabel}
-                onOpen={openTask}
-                onDelete={canDeleteTasks ? (t) => setDeleteTarget({ id: t.id, title: t.title }) : undefined}
-                canDelete={canDeleteTasks}
-              />
-            )
-          ) : (
-            <div className="text-center py-16 animate-scale-in">
-              <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                <CheckSquare className="h-8 w-8 text-primary/60" />
-              </div>
-              <h3 className="text-sm font-medium text-foreground">
-                {tasks && tasks.length > 0
-                  ? statusFilter === "todas" && advActiveCount === 0
-                    ? "Nada en curso"
-                    : "Sin resultados con estos filtros"
-                  : "Sin tareas aún"}
-              </h3>
-              <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-                {tasks && tasks.length > 0 && (statusFilter !== "todas" || advActiveCount > 0)
-                  ? "Ajusta los filtros o cambia de pestaña para ver más tareas."
-                  : tasks && tasks.length > 0 && closedTasks.length > 0
-                    ? "Todas las tareas visibles están completadas o canceladas. Revísalas en Historial."
-                    : "Crea tu primera tarea para comenzar a organizar el trabajo del equipo."}
-              </p>
-              {advActiveCount > 0 ? (
-                <Button type="button" className="mt-4" size="sm" variant="outline" onClick={clearAdvFilters}>
-                  Limpiar filtros
-                </Button>
-              ) : tasks && tasks.length > 0 && closedTasks.length > 0 ? (
-                <Button type="button" className="mt-4" size="sm" variant="outline" onClick={() => setVistaTareasAndUrl("historial")}>
-                  <Archive className="mr-1.5 h-3.5 w-3.5" /> Ver historial ({closedTasks.length})
-                </Button>
-              ) : (
-                <Button type="button" className="mt-4" size="sm" onClick={() => openNewTaskModal()}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Crear tarea
-                </Button>
-              )}
-            </div>
-          )
-        ) : closedTasks.length > 0 ? (
-          <div className="space-y-2">
-            {closedTasks.map((task, i) => (
-              <div
-                key={task.id}
-                className={cn(
-                  "flex items-center gap-4 py-3 px-4 page-list-card cursor-pointer animate-fade-in opacity-90 hover:opacity-100 border-border/60 bg-muted/20",
-                  task.status === "cancelada" && "border-dashed"
-                )}
-                style={{ animationDelay: `${Math.min(i, 8) * 30}ms`, animationFillMode: "both" }}
-                onClick={() => openTask(task)}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className={cn(
-                        "shrink-0 inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wider opacity-70",
-                        getPriorityPillClass(task.priority)
-                      )}
-                      title={`Prioridad ${task.priority}`}
-                    >
-                      {getPriorityPillLabel(task.priority)}
-                    </span>
-                    <h3 className={cn("text-sm font-medium truncate text-muted-foreground", task.status === "cancelada" && "line-through")}>
-                      {task.title}
-                    </h3>
-                    {getSubtaskCount(task) > 0 && (
-                      <span className="shrink-0 inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1.5 py-0 text-[9px] text-muted-foreground" title={`${getSubtaskCount(task)} subtareas`}>
-                        <ListChecks className="h-2.5 w-2.5" />
-                        {getSubtaskCount(task)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className={cn("text-[10px] border-0 px-1.5 py-0", statusLabels[task.status]?.color)} variant="secondary">
-                      {statusLabels[task.status]?.label}
-                    </Badge>
-                    {task.area && <span className="text-xs text-muted-foreground">{getCelulaLabel(task.area)}</span>}
-                    {task.assigned_to && profileMap.get(task.assigned_to) && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <User className="h-3 w-3" />{profileMap.get(task.assigned_to)}
-                      </span>
-                    )}
-                    {(task as any).clients?.name && (
-                      <span className="text-xs text-muted-foreground/70">{(task as any).clients.name}</span>
-                    )}
-                    {(task as any).projects?.name && <span className="text-xs text-muted-foreground">{(task as any).projects.name}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-0.5 shrink-0 text-[10px] text-muted-foreground">
-                  {(task as any).completed_at && task.status === "completada" && (
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {formatMX((task as any).completed_at, "dd MMM yyyy")}
-                    </span>
-                  )}
-                  {task.due_date && (
-                    <span className="flex items-center gap-1 opacity-80">
-                      Vence: {formatMX(task.due_date, "dd MMM")}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-14">
-            <Archive className="mx-auto h-9 w-9 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground">No hay tareas completadas ni canceladas en esta vista.</p>
-            <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => setVistaTareasAndUrl("activas")}>
-              Volver a En curso
-            </Button>
-          </div>
+          </details>
         )}
       </div>
 
@@ -899,7 +858,12 @@ const Tareas = () => {
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title={`¿Eliminar tarea "${deleteTarget?.title}"?`}
         description="Se eliminará la tarea permanentemente junto con sus comentarios y asignaciones."
-        onConfirm={async () => { if (deleteTarget) { await deleteTask.mutateAsync(deleteTarget.id); setDeleteTarget(null); } }}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteTask.mutateAsync(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
         isPending={deleteTask.isPending}
       />
     </AppLayout>

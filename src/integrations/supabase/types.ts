@@ -500,6 +500,53 @@ export type Database = {
           },
         ]
       }
+      ai_module_briefings: {
+        Row: {
+          briefing_date: string
+          content: string
+          created_at: string
+          id: string
+          metadata: Json
+          module: string
+          organization_id: string
+          payload_hash: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          briefing_date: string
+          content: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          module: string
+          organization_id: string
+          payload_hash: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          briefing_date?: string
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          module?: string
+          organization_id?: string
+          payload_hash?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_module_briefings_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_feedback: {
         Row: {
           chat_message_id: string | null
