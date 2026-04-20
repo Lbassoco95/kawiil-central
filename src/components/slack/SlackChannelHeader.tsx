@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { SlackMessage } from "@/lib/slackApi";
 import { toast } from "sonner";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 
 type Props = {
   title: string;
@@ -30,6 +31,9 @@ type Props = {
   onJumpToMessage: (ts: string) => void;
   aiPanelOpen?: boolean;
   onToggleAiPanel?: () => void;
+  /** Banner inline "KAWIIL · RESUMEN DEL CANAL" (v2.4). */
+  summaryBannerOpen?: boolean;
+  onToggleSummaryBanner?: () => void;
   /** Tipo de conversación para elegir icono (DM, MPIM, canal). Si no se provee se usa Hash. */
   conversationType?: "channel" | "private" | "im" | "mpim";
 };
@@ -56,6 +60,8 @@ export function SlackChannelHeader({
   onJumpToMessage,
   aiPanelOpen,
   onToggleAiPanel,
+  summaryBannerOpen,
+  onToggleSummaryBanner,
   conversationType,
 }: Props) {
   const [searchQ, setSearchQ] = useState("");
@@ -144,6 +150,26 @@ export function SlackChannelHeader({
               />
             </div>
           </div>
+          {onToggleSummaryBanner ? (
+            <Button
+              type="button"
+              size="sm"
+              className={cn(
+                "h-8 px-2.5 gap-1.5 text-[11px] text-white shadow-sm hover:opacity-95",
+                summaryBannerOpen && "ring-2 ring-sky-300/60",
+              )}
+              style={{ background: KAWIIL_AI_GRADIENT }}
+              onClick={onToggleSummaryBanner}
+              title={
+                summaryBannerOpen
+                  ? "Cerrar resumen del canal"
+                  : "Resumir este canal con Kawiil AI"
+              }
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Resumir con Kawiil</span>
+            </Button>
+          ) : null}
           {onToggleAiPanel ? (
             <Button
               type="button"

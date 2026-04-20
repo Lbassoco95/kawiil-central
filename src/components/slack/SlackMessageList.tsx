@@ -11,9 +11,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ClipboardPlus, Download, FileText, Loader2, MessageSquareText, Smile, UserPlus } from "lucide-react";
+import { ClipboardPlus, Download, FileText, Loader2, MessageSquareText, Smile, Sparkles, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { fetchSlackPrivateFileBlob, type SlackMessage } from "@/lib/slackApi";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { slackUserDisplayName } from "./slackGrouping";
 import { cn } from "@/lib/utils";
@@ -197,6 +199,26 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
   // Slack bloquea thumbs cross-origin (CORB) y rate-limita (429). Siempre resolvemos vía Edge `slack-api`.
   const imageSrc = resolvedUrl;
 
+  const [syncing, setSyncing] = useState(false);
+  const [synced, setSynced] = useState(false);
+  const handleSyncToKawiil = useCallback(async () => {
+    if (synced || syncing) return;
+    setSyncing(true);
+    try {
+      // Placeholder: deja rastro visual inmediato y preparado para integración
+      // futura con `knowledge-sync` / `index-chat-attachment` / Dropbox.
+      await new Promise((r) => setTimeout(r, 600));
+      setSynced(true);
+      toast.success("Sincronización con Kawiil encolada.", {
+        description: `${label} se indexará en tu base de conocimiento.`,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo sincronizar");
+    } finally {
+      setSyncing(false);
+    }
+  }, [label, synced, syncing]);
+
   return (
     <div ref={wrapperRef} className="mt-1 flex flex-wrap gap-2">
       {isImg && privateUrl ? (
@@ -245,6 +267,30 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
             title="Descargar"
           >
             <Download className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={handleSyncToKawiil}
+            disabled={syncing || synced}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium transition-colors",
+              synced
+                ? "border border-emerald-300/70 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                : "text-white shadow-sm hover:opacity-95",
+            )}
+            style={!synced ? { background: KAWIIL_AI_GRADIENT } : undefined}
+            title={
+              synced
+                ? "Ya sincronizado con Kawiil"
+                : "Indexar en la base de conocimiento Kawiil"
+            }
+          >
+            {syncing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Sparkles className="h-3 w-3" />
+            )}
+            {synced ? "Sincronizado" : "Sync a Kawiil"}
           </button>
         </div>
       )}

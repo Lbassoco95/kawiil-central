@@ -42,6 +42,7 @@ import { SlackMessageList } from "@/components/slack/SlackMessageList";
 import { SlackComposer } from "@/components/slack/SlackComposer";
 import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackAiPanel } from "@/components/slack/SlackAiPanel";
+import { SlackChannelInlineSummary } from "@/components/slack/SlackChannelInlineSummary";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,7 @@ export default function Comunicacion() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [summaryBannerOpen, setSummaryBannerOpen] = useState(false);
   const [taskFromSlackMessage, setTaskFromSlackMessage] = useState<SlackMessage | null>(null);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
@@ -337,6 +339,55 @@ export default function Comunicacion() {
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["slack-sidebar-groups", user?.id] }),
+  });
+
+  /** Añadir canal a un grupo custom (arrastrar-y-soltar en el sidebar). */
+  const addChannelToGroupMutation = useMutation({
+    mutationFn: async ({ groupId, channelId }: { groupId: string; channelId: string }) => {
+      const { data: existing, error: existErr } = await supabase
+        .from("slack_sidebar_group_channels")
+        .select("channel_id, sort_order")
+        .eq("group_id", groupId);
+      if (existErr) throw existErr;
+      const rows = (existing || []) as { channel_id: string; sort_order: number }[];
+      if (rows.some((r) => r.channel_id === channelId)) {
+        return { already: true };
+      }
+      const nextOrder = rows.length > 0 ? Math.max(...rows.map((r) => r.sort_order)) + 1 : 0;
+      const { error } = await supabase.from("slack_sidebar_group_channels").insert({
+        group_id: groupId,
+        channel_id: channelId,
+        sort_order: nextOrder,
+      });
+      if (error) throw error;
+      return { already: false };
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["slack-sidebar-groups", user?.id] });
+      if (!res?.already) toast.success("Conversación añadida al grupo.");
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "No se pudo añadir al grupo.");
+    },
+  });
+
+  /** Quitar canal de un grupo custom (desde el organizador o desde el sidebar). */
+  const removeChannelFromGroupMutation = useMutation({
+    mutationFn: async ({ groupId, channelId }: { groupId: string; channelId: string }) => {
+      const { error } = await supabase
+        .from("slack_sidebar_group_channels")
+        .delete()
+        .eq("group_id", groupId)
+        .eq("channel_id", channelId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["slack-sidebar-groups", user?.id] });
+      toast.success("Conversación quitada del grupo.");
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "No se pudo quitar del grupo.");
+    },
   });
 
   const conversationsQuery = useQuery({
@@ -1164,6 +1215,12 @@ export default function Comunicacion() {
       customGroups={customGroupsVm}
       channelsInCustomGroups={channelsInCustomGroups}
       onReorderCustomGroup={handleReorderCustomGroup}
+      onAddChannelToGroup={(groupId, channelId) =>
+        addChannelToGroupMutation.mutate({ groupId, channelId })
+      }
+      onRemoveChannelFromGroup={(groupId, channelId) =>
+        removeChannelFromGroupMutation.mutate({ groupId, channelId })
+      }
       unreadByChannel={displayUnreadByChannel}
       headerActions={
         <div className="flex flex-col gap-1.5">
@@ -1392,6 +1449,8 @@ export default function Comunicacion() {
               }}
               aiPanelOpen={aiPanelOpen}
               onToggleAiPanel={() => setAiPanelOpen((v) => !v)}
+              summaryBannerOpen={summaryBannerOpen}
+              onToggleSummaryBanner={() => setSummaryBannerOpen((v) => !v)}
               conversationType={
                 selectedMeta?.is_im
                   ? "im"
@@ -1401,6 +1460,32 @@ export default function Comunicacion() {
                       ? "private"
                       : "channel"
               }
+            />
+            <SlackChannelInlineSummary
+              open={summaryBannerOpen && !!selectedChannel}
+              onClose={() => setSummaryBannerOpen(false)}
+              channelId={selectedChannel}
+              channelTitle={headerTitle}
+              messages={messages}
+              userMap={userMap}
+              selfUserId={connection?.slack_user_id ?? null}
+              conversationType={
+                selectedMeta?.is_im
+                  ? "im"
+                  : selectedMeta?.is_mpim
+                    ? "mpim"
+                    : selectedMeta?.is_private
+                      ? "private"
+                      : "channel"
+              }
+              unreadCount={slackUnreadByChannel[selectedChannel] ?? 0}
+              onJumpToFirst={() => {
+                const first = messages[0];
+                if (first) {
+                  const el = document.getElementById(`slack-msg-${first.ts.replace(/\./g, "-")}`);
+                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+              }}
             />
             <SlackMessageList
               messages={messages}

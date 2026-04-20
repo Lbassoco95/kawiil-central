@@ -24,11 +24,15 @@ import { cn } from "@/lib/utils";
 import {
   DndContext,
   closestCenter,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -65,6 +69,15 @@ type Props = {
   customGroups?: Array<{ id: string; title: string; conversations: SlackConversation[] }>;
   channelsInCustomGroups?: Set<string>;
   onReorderCustomGroup?: (groupId: string, orderedChannelIds: string[]) => void;
+  /**
+   * Arrastrar-y-soltar cross-zone (v2.4): se invoca cuando el usuario suelta
+   * cualquier conversación (canal público/privado/DM/destacado) encima del
+   * cuerpo de un grupo personalizado. La mutación debe ser idempotente:
+   * si el canal ya está en el grupo, no hace nada.
+   */
+  onAddChannelToGroup?: (groupId: string, channelId: string) => void;
+  /** Quitar un canal de un grupo custom (opcional). */
+  onRemoveChannelFromGroup?: (groupId: string, channelId: string) => void;
   headerActions?: ReactNode;
   /** Notificaciones Slack no leídas por channel_id (Kawiil). */
   unreadByChannel?: Record<string, number>;
@@ -106,12 +119,30 @@ function SectionHeader({
   );
 }
 
-function SortableConvRow(props: Parameters<typeof ConvRow>[0] & { id: string; unreadCount?: number }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.id });
+/**
+ * Fila sortable (dentro de Destacados o de un grupo custom). Permite reordenar
+ * con el handle y también funciona como fuente para drag cross-zone: el padre
+ * detecta el drop sobre un droppable de otro grupo y hace la mutación
+ * correspondiente.
+ */
+function SortableConvRow(
+  props: Parameters<typeof ConvRow>[0] & {
+    id: string;
+    unreadCount?: number;
+    /** Id del SortableContext al que pertenece (para decidir reorder vs. cross-zone). */
+    listId: string;
+    /** Channel id puro, útil para el payload cross-zone. */
+    channelId: string;
+  },
+) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: props.id,
+    data: { type: "conv", listId: props.listId, channelId: props.channelId },
+  });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.85 : 1,
+    opacity: isDragging ? 0.4 : 1,
   };
   const u = props.unreadCount ?? 0;
   const rowHighlight = u > 0 && !props.selected;
@@ -132,13 +163,77 @@ function SortableConvRow(props: Parameters<typeof ConvRow>[0] & { id: string; un
           rowHighlight ? "text-muted-foreground/80 hover:text-foreground" : "text-muted-foreground/60 hover:text-foreground",
         )}
         {...listeners}
-        aria-label="Arrastrar para reordenar"
+        aria-label="Arrastrar para mover o reordenar"
       >
         <GripVertical className="h-3.5 w-3.5" />
       </button>
       <div className="flex-1 min-w-0">
         <ConvRow {...props} embedUnreadChrome={rowHighlight} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Fila draggable (solo origen) para canales/DMs/privados fuera de Destacados
+ * y de grupos custom. Al arrastrar al cuerpo de un grupo custom, se asigna.
+ */
+function DraggableConvRow(
+  props: Parameters<typeof ConvRow>[0] & {
+    id: string;
+    unreadCount?: number;
+    channelId: string;
+  },
+) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: props.id,
+    data: { type: "conv", listId: "__flat__", channelId: props.channelId },
+  });
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="rounded-md cursor-grab active:cursor-grabbing touch-none"
+      title="Arrastra a un grupo personalizado para organizarlo"
+    >
+      <ConvRow {...props} />
+    </div>
+  );
+}
+
+/**
+ * Wrapper droppable alrededor del cuerpo de un grupo custom: acepta drops
+ * desde cualquier parte del sidebar para asignar el canal al grupo.
+ */
+function CustomGroupDropZone({
+  groupId,
+  disabled,
+  children,
+}: {
+  groupId: string;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `group-${groupId}`,
+    data: { type: "customGroup", groupId },
+    disabled,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-md transition-colors",
+        isOver && "bg-sky-50 ring-1 ring-sky-300 dark:bg-sky-500/10 dark:ring-sky-700/50",
+      )}
+    >
+      {children}
     </div>
   );
 }
@@ -285,10 +380,13 @@ export function SlackConversationList({
   customGroups = [],
   channelsInCustomGroups = new Set<string>(),
   onReorderCustomGroup,
+  onAddChannelToGroup,
+  onRemoveChannelFromGroup,
   headerActions,
   unreadByChannel = {},
 }: Props) {
   const [q, setQ] = useState("");
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const unreadFor = (channelId: string) => unreadByChannel[channelId] || 0;
   const sumUnread = (convs: SlackConversation[]) =>
@@ -328,29 +426,76 @@ export function SlackConversationList({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const onDragEndStarred = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = starredOrdered.map((c) => c.id);
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex < 0 || newIndex < 0) return;
-    onReorderStarred(arrayMove(ids, oldIndex, newIndex));
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
   };
 
-  const onDragEndCustomGroup =
-    (groupId: string, groupConvs: SlackConversation[]) => (event: DragEndEvent) => {
-      if (!onReorderCustomGroup) return;
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      const ids = groupConvs.map((c) => c.id);
-      const oldIndex = ids.indexOf(String(active.id));
-      const newIndex = ids.indexOf(String(over.id));
-      if (oldIndex < 0 || newIndex < 0) return;
-      onReorderCustomGroup(groupId, arrayMove(ids, oldIndex, newIndex));
-    };
+  /**
+   * Handler unificado:
+   *  1) Drop sobre el droppable de un grupo custom (`group-<gid>`) → asignar.
+   *  2) Drop entre dos items del mismo `listId` → reordenar dentro de ese grupo.
+   *  3) Cualquier otra combinación → no-op (se queda en su sitio).
+   */
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const overData = over.data.current as { type?: string; groupId?: string } | undefined;
+    const activeData = active.data.current as
+      | { type?: string; listId?: string; channelId?: string }
+      | undefined;
+    const channelId = activeData?.channelId || String(active.id);
 
-  const renderConv = (c: SlackConversation, isPublicChannel: boolean, sortable: boolean) => {
+    // Drop sobre un grupo custom: asignar.
+    if (overData?.type === "customGroup" && overData.groupId && onAddChannelToGroup) {
+      const gid = overData.groupId;
+      // Si ya está en ese grupo, no hacer nada.
+      const already = (customGroups.find((g) => g.id === gid)?.conversations || []).some(
+        (c) => c.id === channelId,
+      );
+      if (!already) onAddChannelToGroup(gid, channelId);
+      return;
+    }
+
+    // Drop entre items del mismo listId → reordenar.
+    const overDataConv = over.data.current as { type?: string; listId?: string } | undefined;
+    if (
+      activeData?.type === "conv" &&
+      overDataConv?.type === "conv" &&
+      activeData.listId &&
+      activeData.listId === overDataConv.listId &&
+      active.id !== over.id
+    ) {
+      const listId = activeData.listId;
+      if (listId === "__starred__") {
+        const ids = starredOrdered.map((c) => c.id);
+        const oldIndex = ids.indexOf(String(active.id));
+        const newIndex = ids.indexOf(String(over.id));
+        if (oldIndex >= 0 && newIndex >= 0) {
+          onReorderStarred(arrayMove(ids, oldIndex, newIndex));
+        }
+        return;
+      }
+      if (listId.startsWith("__group__:") && onReorderCustomGroup) {
+        const gid = listId.slice("__group__:".length);
+        const group = customGroups.find((g) => g.id === gid);
+        if (!group) return;
+        const ids = group.conversations.map((c) => c.id);
+        const oldIndex = ids.indexOf(String(active.id));
+        const newIndex = ids.indexOf(String(over.id));
+        if (oldIndex >= 0 && newIndex >= 0) {
+          onReorderCustomGroup(gid, arrayMove(ids, oldIndex, newIndex));
+        }
+      }
+    }
+  };
+
+  const renderConv = (
+    c: SlackConversation,
+    isPublicChannel: boolean,
+    mode: "sortable" | "draggable" | "static",
+    listId?: string,
+  ) => {
     const p = commPrefsByChannel[c.id];
     const common = {
       c,
@@ -364,8 +509,19 @@ export function SlackConversationList({
       onToggleNotificationsMuted: () => onToggleNotificationsMuted(c.id),
       unreadCount: unreadFor(c.id),
     };
-    if (sortable) {
-      return <SortableConvRow key={c.id} id={c.id} {...common} />;
+    if (mode === "sortable" && listId) {
+      return (
+        <SortableConvRow
+          key={c.id}
+          id={c.id}
+          listId={listId}
+          channelId={c.id}
+          {...common}
+        />
+      );
+    }
+    if (mode === "draggable") {
+      return <DraggableConvRow key={c.id} id={c.id} channelId={c.id} {...common} />;
     }
     return (
       <div key={c.id} className="rounded-md">
@@ -439,88 +595,132 @@ export function SlackConversationList({
         </div>
       </div>
       <ScrollArea className="flex-1 min-h-0">
-        <div className="p-2 pb-6 space-y-1">
-          {starFiltered.length > 0 && (
-            <Collapsible open={openStar} onOpenChange={setOpenStar}>
-              <SectionHeader label="Destacados" unreadInSection={sumUnread(starFiltered)} sectionId="slack-destacados" />
-              <CollapsibleContent>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEndStarred}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveDragId(null)}
+        >
+          <div className="p-2 pb-6 space-y-1">
+            {starFiltered.length > 0 && (
+              <Collapsible open={openStar} onOpenChange={setOpenStar}>
+                <SectionHeader label="Destacados" unreadInSection={sumUnread(starFiltered)} sectionId="slack-destacados" />
+                <CollapsibleContent>
                   <SortableContext items={starFiltered.map((c) => c.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-0.5 mt-1">
                       {starFiltered.map((c) => {
                         const isPub = !c.is_private && !c.is_im && !c.is_mpim;
-                        return renderConv(c, isPub, true);
+                        return renderConv(c, isPub, "sortable", "__starred__");
                       })}
                     </div>
                   </SortableContext>
-                </DndContext>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
-          {customGroupsFiltered.map((g) => (
-            <Collapsible key={g.id} defaultOpen>
-              <div className="flex items-stretch gap-0.5 px-1">
-                <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80 hover:text-foreground [&[data-state=closed]_svg]:-rotate-90 rounded-md transition-colors">
-                  <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
-                  <span className="truncate min-w-0 flex-1 text-left">{g.title}</span>
-                  <UnreadBadge count={sumUnread(g.conversations)} />
-                </CollapsibleTrigger>
-                <Link
-                  to={`/asistente-ia?slackGroup=${encodeURIComponent(g.id)}`}
-                  className="inline-flex items-center gap-0.5 shrink-0 rounded-md px-2 py-1.5 text-[10px] font-medium text-primary bg-primary/10 hover:bg-primary/15 border border-primary/20 self-center transition-colors"
-                  title="Analizar mensajes recientes de este grupo con Kawiil IA"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  IA
-                </Link>
-              </div>
-              <CollapsibleContent>
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={onDragEndCustomGroup(g.id, g.conversations)}
-                >
-                  <SortableContext items={g.conversations.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-0.5 mt-1">
-                      {g.conversations.map((c) => {
-                        const isPub = !c.is_private && !c.is_im && !c.is_mpim;
-                        return renderConv(c, isPub, !!onReorderCustomGroup);
-                      })}
+            {customGroupsFiltered.map((g) => (
+              <Collapsible key={g.id} defaultOpen>
+                <div className="flex items-stretch gap-0.5 px-1">
+                  <CollapsibleTrigger className="flex flex-1 min-w-0 items-center gap-1.5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80 hover:text-foreground [&[data-state=closed]_svg]:-rotate-90 rounded-md transition-colors">
+                    <ChevronDown className="h-3 w-3 shrink-0 transition-transform" />
+                    <span className="truncate min-w-0 flex-1 text-left">{g.title}</span>
+                    <UnreadBadge count={sumUnread(g.conversations)} />
+                  </CollapsibleTrigger>
+                  <Link
+                    to={`/asistente-ia?slackGroup=${encodeURIComponent(g.id)}`}
+                    className="inline-flex items-center gap-0.5 shrink-0 rounded-md px-2 py-1.5 text-[10px] font-medium text-primary bg-primary/10 hover:bg-primary/15 border border-primary/20 self-center transition-colors"
+                    title="Analizar mensajes recientes de este grupo con Kawiil IA"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    IA
+                  </Link>
+                </div>
+                <CollapsibleContent>
+                  <CustomGroupDropZone groupId={g.id} disabled={!onAddChannelToGroup}>
+                    <SortableContext
+                      items={g.conversations.map((c) => c.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <div className="space-y-0.5 mt-1 min-h-[28px]">
+                        {g.conversations.length === 0 && onAddChannelToGroup ? (
+                          <p className="mx-2 my-1 rounded-md border border-dashed border-sky-300/60 bg-sky-50/50 px-2 py-1.5 text-[11px] text-sky-700/80 dark:border-sky-700/50 dark:bg-sky-500/5 dark:text-sky-300/80">
+                            Suelta aquí una conversación para añadirla a este grupo.
+                          </p>
+                        ) : null}
+                        {g.conversations.map((c) => {
+                          const isPub = !c.is_private && !c.is_im && !c.is_mpim;
+                          return renderConv(
+                            c,
+                            isPub,
+                            onReorderCustomGroup ? "sortable" : "static",
+                            `__group__:${g.id}`,
+                          );
+                        })}
+                      </div>
+                    </SortableContext>
+                  </CustomGroupDropZone>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
+
+            {publicFiltered.length > 0 && (
+              <Collapsible open={openPub} onOpenChange={setOpenPub}>
+                <SectionHeader label="Canales" unreadInSection={sumUnread(publicFiltered)} />
+                <CollapsibleContent className="space-y-0.5 mt-1">
+                  {publicFiltered.map((c) =>
+                    renderConv(c, true, onAddChannelToGroup ? "draggable" : "static"),
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {privateFiltered.length > 0 && (
+              <Collapsible open={openPriv} onOpenChange={setOpenPriv}>
+                <SectionHeader label="Canales privados" unreadInSection={sumUnread(privateFiltered)} />
+                <CollapsibleContent className="space-y-0.5 mt-1">
+                  {privateFiltered.map((c) =>
+                    renderConv(c, false, onAddChannelToGroup ? "draggable" : "static"),
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {dmFiltered.length > 0 && (
+              <Collapsible open={openDm} onOpenChange={setOpenDm}>
+                <SectionHeader label="Mensajes directos" unreadInSection={sumUnread(dmFiltered)} />
+                <CollapsibleContent className="space-y-0.5 mt-1">
+                  {dmFiltered.map((c) =>
+                    renderConv(c, false, onAddChannelToGroup ? "draggable" : "static"),
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {activeDragId
+              ? (() => {
+                  const c = conversations.find((x) => x.id === activeDragId);
+                  if (!c) return null;
+                  const isPub = !c.is_private && !c.is_im && !c.is_mpim;
+                  return (
+                    <div className="pointer-events-none rounded-md border border-sky-300/80 bg-white/95 px-2 py-1 text-[12.5px] font-medium text-foreground shadow-md ring-1 ring-sky-200/60 dark:bg-background/95 dark:ring-sky-800/50">
+                      {c.is_im ? (
+                        <MessageCircle className="mr-1 inline h-3 w-3 opacity-70" />
+                      ) : c.is_mpim ? (
+                        <Users className="mr-1 inline h-3 w-3 opacity-70" />
+                      ) : isPub ? (
+                        <Hash className="mr-1 inline h-3 w-3 opacity-70" />
+                      ) : (
+                        <Lock className="mr-1 inline h-3 w-3 opacity-70" />
+                      )}
+                      {isPub && c.name ? `#${c.name}` : conversationTitle(c, userMap, titleOpts)}
                     </div>
-                  </SortableContext>
-                </DndContext>
-              </CollapsibleContent>
-            </Collapsible>
-          ))}
-
-          {publicFiltered.length > 0 && (
-            <Collapsible open={openPub} onOpenChange={setOpenPub}>
-              <SectionHeader label="Canales" unreadInSection={sumUnread(publicFiltered)} />
-              <CollapsibleContent className="space-y-0.5 mt-1">
-                {publicFiltered.map((c) => renderConv(c, true, false))}
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-
-          {privateFiltered.length > 0 && (
-            <Collapsible open={openPriv} onOpenChange={setOpenPriv}>
-              <SectionHeader label="Canales privados" unreadInSection={sumUnread(privateFiltered)} />
-              <CollapsibleContent className="space-y-0.5 mt-1">
-                {privateFiltered.map((c) => renderConv(c, false, false))}
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-
-          {dmFiltered.length > 0 && (
-            <Collapsible open={openDm} onOpenChange={setOpenDm}>
-              <SectionHeader label="Mensajes directos" unreadInSection={sumUnread(dmFiltered)} />
-              <CollapsibleContent className="space-y-0.5 mt-1">
-                {dmFiltered.map((c) => renderConv(c, false, false))}
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-        </div>
+                  );
+                })()
+              : null}
+          </DragOverlay>
+        </DndContext>
       </ScrollArea>
     </div>
   );
