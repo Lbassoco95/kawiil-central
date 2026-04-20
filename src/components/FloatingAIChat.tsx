@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sparkles, Send, Loader2, X, Minus, Plus, FileText } from "lucide-react";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
 import { ChatProcessingPanel } from "@/components/ai/ChatProcessingPanel";
+import { AiAssistantWelcome } from "@/components/ai/AiAssistantWelcome";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { chatLimits } from "@/lib/fileIntake/limits";
 import { cn } from "@/lib/utils";
@@ -131,19 +132,17 @@ export function FloatingAIChat() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="rounded-xl bg-primary/5 p-3 mb-3">
-              <Sparkles className="h-6 w-6 text-primary" />
-            </div>
-            <p className="text-sm font-medium text-foreground mb-1">¿En qué te ayudo?</p>
-            <p className="text-xs text-muted-foreground">
-              Consulta tareas, redacta correos o pide ayuda con cualquier cosa.
-            </p>
-          </div>
+          <AiAssistantWelcome
+            onSendPrompt={(prompt) => {
+              if (isStreaming) return;
+              sendMessage(prompt);
+            }}
+          />
         ) : (
-          <div className="space-y-3">
+          <div className="px-3 py-3">
+            <div className="space-y-3">
             {messages.map((msg, i) => {
               const showProgressBeforeAssistant =
                 isStreaming &&
@@ -257,6 +256,7 @@ export function FloatingAIChat() {
                 </div>
               ))}
             <div ref={messagesEndRef} />
+            </div>
           </div>
         )}
       </div>
