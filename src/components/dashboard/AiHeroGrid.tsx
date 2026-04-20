@@ -50,6 +50,10 @@ interface AiHeroGridProps {
   remindersCount?: number;
   /** Requerido en `module="clientes"`. */
   clientes?: AiHeroClientesContext;
+  /** Mostrar la card derecha con la "frase de hoy". Default `true` para `tareas`. */
+  showQuote?: boolean;
+  /** Mostrar el bloque MoodCheckin debajo de la frase. Default `true` para `tareas`. */
+  showMoodCheckin?: boolean;
 }
 
 const PHRASE_FALLBACK =
@@ -81,6 +85,8 @@ export function AiHeroGrid({
   overdueCount = 0,
   remindersCount = 0,
   clientes,
+  showQuote = true,
+  showMoodCheckin = true,
 }: AiHeroGridProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -162,12 +168,13 @@ export function AiHeroGrid({
   );
 
   const phrase = splitPhrase(phraseQuery.data || PHRASE_FALLBACK, PHRASE_FALLBACK);
+  const showRightColumn = !isClientes && (showQuote || showMoodCheckin);
 
   return (
     <div
       className={cn(
         "kw-ai-hero-grid",
-        isClientes && "kw-ai-hero-grid--brief-only",
+        (isClientes || !showRightColumn) && "kw-ai-hero-grid--brief-only",
         className,
       )}
     >
@@ -281,34 +288,38 @@ export function AiHeroGrid({
         </div>
       </div>
 
-      {!isClientes && (
+      {showRightColumn && (
         <div className="kw-ai-right">
-          <div className="kw-ai-card kw-ai-quote">
-            <div className="kw-ai-eyebrow kw-ai-eyebrow-accent">
-              <Quote className="h-3 w-3" />
-              <span>Tu frase de hoy</span>
+          {showQuote && (
+            <div className="kw-ai-card kw-ai-quote">
+              <div className="kw-ai-eyebrow kw-ai-eyebrow-accent">
+                <Quote className="h-3 w-3" />
+                <span>Tu frase de hoy</span>
+              </div>
+              <blockquote className="kw-ai-quote-text">
+                «{phrase.quote.replace(/^[«"]|[»"]$/g, "").trim()}»
+              </blockquote>
+              <div className="kw-ai-quote-foot">
+                <span className="truncate">{phrase.author ? `— ${phrase.author}` : "Curada para ti"}</span>
+                <button
+                  type="button"
+                  onClick={regeneratePhrase}
+                  disabled={phraseQuery.isFetching}
+                  className="kw-ai-quote-refresh"
+                  aria-label="Otra frase"
+                  title="Otra frase"
+                >
+                  <RotateCw className={cn("h-3 w-3", phraseQuery.isFetching && "animate-spin")} />
+                </button>
+              </div>
             </div>
-            <blockquote className="kw-ai-quote-text">
-              «{phrase.quote.replace(/^[«"]|[»"]$/g, "").trim()}»
-            </blockquote>
-            <div className="kw-ai-quote-foot">
-              <span className="truncate">{phrase.author ? `— ${phrase.author}` : "Curada para ti"}</span>
-              <button
-                type="button"
-                onClick={regeneratePhrase}
-                disabled={phraseQuery.isFetching}
-                className="kw-ai-quote-refresh"
-                aria-label="Otra frase"
-                title="Otra frase"
-              >
-                <RotateCw className={cn("h-3 w-3", phraseQuery.isFetching && "animate-spin")} />
-              </button>
-            </div>
-          </div>
+          )}
 
-          <div className="kw-ai-mood">
-            <MoodCheckin userCelula={userCelula ?? null} />
-          </div>
+          {showMoodCheckin && (
+            <div className="kw-ai-mood">
+              <MoodCheckin userCelula={userCelula ?? null} />
+            </div>
+          )}
         </div>
       )}
     </div>

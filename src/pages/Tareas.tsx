@@ -18,7 +18,6 @@ import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
-import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { MyTasksSmartGroups } from "@/components/tareas/MyTasksSmartGroups";
 import { QuickCreateInput } from "@/components/tareas/QuickCreateInput";
 import { TaskStatusTabs, type TaskStatusFilter, type TaskViewMode } from "@/components/tareas/TaskStatusTabs";
@@ -59,7 +58,6 @@ const Tareas = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const { data: profile } = useCurrentProfile();
   useTasksRealtime();
   const [area, setArea] = useState(() => searchParams.get("area") || "todas");
   const [search, setSearch] = useState("");
@@ -400,7 +398,6 @@ const Tareas = () => {
 
         <AiHeroGrid
           module="tareas"
-          userCelula={profile?.area ?? null}
           tasksCount={openTasks.length}
           completedToday={completedTodayCount ?? 0}
           overdueCount={
@@ -409,6 +406,8 @@ const Tareas = () => {
             ).length
           }
           remindersCount={reminders.filter((r) => !r.is_completed).length}
+          showQuote={false}
+          showMoodCheckin={false}
         />
 
         <section className="animate-fade-in surface-glass-subtle p-4 ring-1 ring-primary/10">
