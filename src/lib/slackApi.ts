@@ -262,6 +262,10 @@ export type SlackMessage = {
   type?: string;
   reply_count?: number;
   reply_users_count?: number;
+  /** IDs Slack de los autores del hilo (máx. ~5 que devuelve Slack). */
+  reply_users?: string[];
+  /** ts del último reply del hilo, útil para mostrar "hace X". */
+  latest_reply?: string;
   reactions?: SlackReaction[];
   files?: SlackFile[];
   attachments?: Record<string, unknown>[];

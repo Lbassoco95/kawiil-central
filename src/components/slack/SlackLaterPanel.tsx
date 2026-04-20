@@ -7,6 +7,7 @@ import {
   Trash2,
   RotateCcw,
   Clock,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,7 +27,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   initialTab?: SlackSavedStatus;
-  onJumpToMessage?: (channelId: string, ts: string) => void;
+  /**
+   * `threadTs` se envía cuando el guardado pertenece a un hilo, para que el
+   * consumidor pueda abrir el panel del hilo junto con el scroll al mensaje.
+   */
+  onJumpToMessage?: (channelId: string, ts: string, threadTs?: string | null) => void;
   resolveChannelTitle?: (channelId: string) => string | undefined;
 }
 
@@ -144,8 +149,15 @@ export function SlackLaterPanel({
             </div>
           ) : (
             items.map((m) => {
+              const inThread = !!m.thread_ts && m.thread_ts !== m.message_ts;
               const jump = () => {
-                if (m.channel_id && m.message_ts) onJumpToMessage?.(m.channel_id, m.message_ts);
+                if (m.channel_id && m.message_ts) {
+                  onJumpToMessage?.(
+                    m.channel_id,
+                    m.message_ts,
+                    inThread ? m.thread_ts : null,
+                  );
+                }
               };
               return (
                 <div
@@ -166,6 +178,15 @@ export function SlackLaterPanel({
                         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
                           {channelLabel(m, resolveChannelTitle)}
                         </span>
+                        {inThread && (
+                          <span
+                            className="inline-flex items-center gap-0.5 rounded-full border border-[#611f69]/40 bg-[#611f69]/10 px-1.5 py-0 text-[9.5px] font-semibold uppercase tracking-wider text-[#611f69] dark:text-violet-300 shrink-0"
+                            title="Pertenece a un hilo — al abrir se mostrará el hilo completo"
+                          >
+                            <MessageCircle className="h-2.5 w-2.5" />
+                            hilo
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
                         {formatDistanceToNow(new Date(m.saved_at), {

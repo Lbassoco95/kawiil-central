@@ -33,6 +33,26 @@ export function formatSlackTooltipFull(ts: string): string {
   return format(slackTsToDate(ts), "EEEE, d 'de' MMMM yyyy 'a las' HH:mm:ss", { locale: es });
 }
 
+/**
+ * Versión corta/ligera usada en mini-hilos: "hace 3 min", "hoy 14:30",
+ * "ayer 18:47", "lun 09:15", "12 mar". Siempre devuelve ≤ 12 caracteres.
+ */
+export function formatSlackRelativeShort(ts: string): string {
+  const d = slackTsToDate(ts);
+  const now = Date.now();
+  const diffMs = now - d.getTime();
+  const sec = Math.max(0, Math.floor(diffMs / 1000));
+  if (sec < 45) return "ahora";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `hace ${min} min`;
+  if (isToday(d)) return `hoy ${format(d, "HH:mm", { locale: es })}`;
+  if (isYesterday(d)) return `ayer ${format(d, "HH:mm", { locale: es })}`;
+  if (isThisWeek(d, { weekStartsOn: 1 })) {
+    return format(d, "EEE HH:mm", { locale: es });
+  }
+  return format(d, "d MMM", { locale: es });
+}
+
 export function formatDaySeparatorLabel(ts: string): string {
   const d = slackTsToDate(ts);
   return format(d, "d 'de' MMMM yyyy", { locale: es });

@@ -21,9 +21,11 @@ interface Props {
   initialTab?: SlackActivityTab;
   /**
    * Saltar al mensaje original al hacer click en un item. Si no está disponible,
-   * el panel solo marca como leído.
+   * el panel solo marca como leído. `threadTs` se envía cuando el item parece
+   * pertenecer a un hilo (p.ej. `slack_thread_reply`) para que el consumidor
+   * pueda abrir el panel de hilo además del scroll al mensaje.
    */
-  onJumpToMessage?: (channelId: string, ts: string) => void;
+  onJumpToMessage?: (channelId: string, ts: string, threadTs?: string | null) => void;
   /** Resolver etiqueta amable para el channel_id (nombre de canal o contraparte de DM). */
   resolveChannelTitle?: (channelId: string) => string | undefined;
 }
@@ -80,7 +82,16 @@ export function SlackActivityPanel({
   const handleItemClick = (item: SlackActivityItem) => {
     if (!item.is_read) markRead.mutate({ ids: [item.id] });
     if (item.channel_id && item.message_ts) {
-      onJumpToMessage?.(item.channel_id, item.message_ts);
+      // Para respuestas en hilo no tenemos el ts raíz del padre en la
+      // notificación, pero Slack acepta el ts de cualquier reply como
+      // identificador del hilo en `conversations.replies`, así que pasamos
+      // el propio `message_ts` como `threadTs` para abrir el panel del hilo.
+      const isThreadLike =
+        item.type === "slack_thread_reply" ||
+        /hilo|thread/i.test(item.title || "") ||
+        /hilo|thread/i.test(item.body || "");
+      const threadTs = isThreadLike ? item.message_ts : null;
+      onJumpToMessage?.(item.channel_id, item.message_ts, threadTs);
     }
   };
 

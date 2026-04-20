@@ -1185,13 +1185,23 @@ export default function Comunicacion() {
   );
 
   const handleJumpToSlackMessage = useCallback(
-    (channelId: string, ts: string) => {
+    (channelId: string, ts: string, threadTs?: string | null) => {
       if (channelId !== selectedChannel) {
         switchChannel(channelId, false);
         setSearchParams({ channel: channelId, ts });
       } else {
         const el = document.getElementById(`slack-msg-${ts.replace(/\./g, "-")}`);
         el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      // Si el mensaje pertenece a un hilo (thread_ts distinto del ts raíz),
+      // abrimos también el panel de hilo para que sea más fácil de visualizar.
+      // Slack acepta tanto el ts del padre como el de cualquier reply como
+      // identificador del hilo en `conversations.replies`, así que pasamos
+      // lo que tengamos.
+      if (threadTs && threadTs !== ts) {
+        setThreadRootTs(threadTs);
+      } else {
+        setThreadRootTs(null);
       }
       setActivityPanelOpen(false);
       setLaterPanelOpen(false);
