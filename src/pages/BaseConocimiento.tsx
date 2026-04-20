@@ -42,12 +42,14 @@ const BaseConocimiento = () => {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 animate-fade-in">
+        <PageHeader
+          variant="hero"
+          breadcrumb={["Kawiil OS", "Conocimiento", "Base"]}
+          icon={<BookOpen />}
+          title="Conocimiento"
+          description="Dashboard de inteligencia: monitorea qué está aprendiendo el sistema, por cliente, proyecto y célula"
+        />
         <div className="surface-toolbar space-y-4 p-4 md:p-5 rounded-xl border border-border/50">
-          <PageHeader
-            title="Conocimiento"
-            description="Dashboard de inteligencia: monitorea qué está aprendiendo el sistema, por cliente, proyecto y célula"
-            icon={<BookOpen className="h-6 w-6" />}
-          />
           <div className="flex gap-1 overflow-x-auto rounded-lg border border-border/40 bg-background/40 p-1 backdrop-blur-sm">
             {tabs.map((t) => {
               const Icon = t.icon;

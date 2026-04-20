@@ -4,7 +4,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CalendarView } from "@/components/microsoft/CalendarView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
-import { Calendar, Loader2 } from "lucide-react";
+import { Calendar } from "lucide-react";
 
 const Microsoft365Calendario = () => {
   const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
@@ -39,14 +39,13 @@ const Microsoft365Calendario = () => {
     <AppLayout>
       <ErrorBoundary>
         <div className="space-y-4 animate-fade-in">
-          <div className="surface-toolbar p-4 md:p-5">
-            <PageHeader
-              variant="minimal"
-              title="Calendario"
-              description={`Outlook · ${profile?.displayName || profile?.mail || ""} — con tareas de Kawiil`}
-              icon={<Calendar className="h-6 w-6" />}
-            />
-          </div>
+          <PageHeader
+            variant="hero"
+            breadcrumb={["Kawiil OS", "Microsoft 365", "Calendario"]}
+            icon={<Calendar />}
+            title="Calendario"
+            description={`Outlook · ${profile?.displayName || profile?.mail || "Conectado"} — con tareas de Kawiil`}
+          />
           <CalendarView />
         </div>
       </ErrorBoundary>

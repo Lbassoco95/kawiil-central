@@ -17,7 +17,7 @@ import {
   AtSign, CheckCheck, MessageSquare, ClipboardList, DollarSign, Activity,
   Bot, BrainCircuit, Settings, Sparkles, Lightbulb, Bell,
 } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -733,9 +733,37 @@ export default function Notificaciones() {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
-          variant="minimal"
+          variant="hero"
+          breadcrumb={["Kawiil OS", "Avisos", "Notificaciones"]}
+          icon={<Bell />}
           title="Notificaciones"
           description="Menciones, actividad del equipo y alertas de vencimiento"
+          stats={[
+            {
+              label: "Sin leer",
+              value: unreadMentions.length + unreadActivity.length + unreadSistema.length,
+              tone: (unreadMentions.length + unreadActivity.length + unreadSistema.length) > 0 ? "primary" : "default",
+              sub: "Total en bandeja",
+            },
+            {
+              label: "Menciones",
+              value: unreadMentions.length,
+              tone: unreadMentions.length > 0 ? "warning" : "default",
+              sub: `${mentions.length} totales`,
+            },
+            {
+              label: "Vencidas",
+              value: (alerts?.overdue?.length ?? 0) + (alerts?.stepsOverdue?.length ?? 0),
+              tone: hasOverdue ? "warning" : "default",
+              sub: hasOverdue ? "Atender hoy" : "Sin vencidas",
+            },
+            {
+              label: "Por vencer",
+              value: (alerts?.dueSoon?.length ?? 0) + (alerts?.stepsDueSoon?.length ?? 0),
+              tone: hasDueSoon ? "primary" : "default",
+              sub: "Próximos 3 días",
+            },
+          ] satisfies PageHeaderStat[]}
         />
 
         <NotificationDeliveryPreferences />

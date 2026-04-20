@@ -34,7 +34,7 @@ import {
   Shield,
   Search,
 } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
 
@@ -62,6 +62,26 @@ export default function Hub() {
   const createComunicado = useCreateInternalComunicado();
   const deleteComunicado = useDeleteInternalComunicado();
 
+  const pinnedComunicados = comunicados.filter((c: any) => c.is_pinned).length;
+  const heroStats: PageHeaderStat[] = [
+    {
+      label: "Procedimientos",
+      value: procedures.length,
+      sub: proceduresLoading ? "Cargando..." : "En biblioteca",
+    },
+    {
+      label: "Comunicados",
+      value: comunicados.length,
+      sub: comunicadosLoading ? "Cargando..." : `${pinnedComunicados} fijados`,
+      tone: pinnedComunicados > 0 ? "primary" : "default",
+    },
+    {
+      label: "Acceso",
+      value: isAdminOrManager ? "Admin" : "Equipo",
+      sub: isAdminOrManager ? "Puedes publicar" : "Solo lectura",
+    },
+  ];
+
   const handleUploadProcedure = () => {
     if (!procedureTitle.trim() || !procedureFile) return;
     createProcedure.mutate(
@@ -82,8 +102,26 @@ export default function Hub() {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="hero"
+          breadcrumb={["Kawiil OS", "Conocimiento", "Hub"]}
+          icon={<Library />}
           title="Hub"
-          description="Manuales, procedimientos y comunicados"
+          description="Manuales, procedimientos y comunicados internos"
+          stats={heroStats}
+          actions={
+            isAdminOrManager ? (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setComunicadoDialogOpen(true)}>
+                  <Megaphone className="mr-1.5 h-3.5 w-3.5" />
+                  Comunicado
+                </Button>
+                <Button size="sm" onClick={() => setProcedureDialogOpen(true)}>
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  Subir procedimiento
+                </Button>
+              </>
+            ) : null
+          }
         />
 
         {/* Tab pills */}

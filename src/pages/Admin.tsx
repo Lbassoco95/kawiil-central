@@ -16,6 +16,7 @@ import {
   Palette,
   Sun,
   Moon,
+  Settings,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { MoffinIntegrationCard } from "@/components/admin/MoffinIntegrationCard";
@@ -69,6 +70,9 @@ const Configuracion = () => {
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
         <PageHeader
+          variant="hero"
+          breadcrumb={["Kawiil OS", "Sistema", "Configuración"]}
+          icon={<Settings />}
           title="Configuración"
           description="Gestión de Kawiilers, células, catálogos, integraciones y apariencia"
         />
