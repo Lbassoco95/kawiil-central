@@ -73,10 +73,17 @@ const Microsoft365Calendario = () => {
     const first = upcoming[0] as { event: any; start: number };
     const subject: string = first.event?.subject || "Sin título";
     const startMs = first.start;
-    const isToday = startMs >= dayRange.start ? new Date(startMs).getTime() < new Date(dayRange.endExclusive).getTime() : false;
+    const dayStart = new Date(dayRange.start).getTime();
+    const dayEnd = new Date(dayRange.endExclusive).getTime();
+    const tomorrowEnd = dayEnd + 24 * 60 * 60 * 1000;
+    const isToday = startMs >= dayStart && startMs < dayEnd;
+    const isTomorrow = startMs >= dayEnd && startMs < tomorrowEnd;
+    const hh = formatMX(new Date(startMs), "HH:mm");
     const label = isToday
-      ? `Hoy ${formatMX(new Date(startMs), "HH:mm")}`
-      : formatMX(new Date(startMs), "EEE d MMM HH:mm");
+      ? `Hoy ${hh}`
+      : isTomorrow
+        ? `Mañana ${hh}`
+        : formatMX(new Date(startMs), "EEE d MMM HH:mm");
     return { subject, label };
   }, [todayEvents, weekEvents, dayRange.start, dayRange.endExclusive]);
 
@@ -149,6 +156,7 @@ const Microsoft365Calendario = () => {
             variant="hero"
             breadcrumb={["Kawiil OS", "Integraciones", "Calendario"]}
             icon={<Calendar />}
+            iconAccent="linear-gradient(135deg, hsl(210 100% 50%), hsl(220 90% 55%))"
             title="Calendario"
             description={`Outlook · ${profile?.displayName || profile?.mail || "Conectado"} — sincronizado con Microsoft 365, superpuesto con tareas y vencimientos de Kawiil.`}
             stats={heroStats}
