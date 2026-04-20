@@ -46,9 +46,12 @@ import { AiMessageFeedback } from "@/components/ai/AiMessageFeedback";
 import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-
-const KAWIIL_AI_GRADIENT =
-  "linear-gradient(135deg, hsl(220 100% 55%) 0%, hsl(210 100% 45%) 100%)";
+import { Badge } from "@/components/ui/badge";
+import {
+  KAWIIL_AI_GRADIENT,
+  KAWIIL_AI_HEADER_BG,
+  KAWIIL_AI_SOFT_BG,
+} from "@/lib/kawiilAi";
 
 const FALLBACK_SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
@@ -595,58 +598,75 @@ const AsistenteIA = () => {
           hint="Suelta archivos para adjuntar al chat"
           className="flex-1 flex flex-col min-w-0 border-l border-border/40"
         >
-          <div className="surface-toolbar shrink-0 border-b border-border/50 px-3 py-2.5 sm:px-4 sm:py-3">
-            <div className="flex flex-col gap-2 min-w-0">
-              <div className="flex items-start gap-2 min-w-0">
-                <Button size="sm" variant="ghost" onClick={() => setShowSidebar(!showSidebar)} className="h-8 w-8 shrink-0 p-0 mt-0.5">
-                  {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
-                </Button>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
+          <div
+            className="shrink-0 border-b border-sky-200/60 px-3 py-2.5 sm:px-4 sm:py-3 dark:border-sky-800/40"
+            style={{ background: KAWIIL_AI_HEADER_BG }}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowSidebar(!showSidebar)}
+                className="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10"
+                aria-label={showSidebar ? "Ocultar panel" : "Mostrar panel"}
+              >
+                {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+              </Button>
+              <span
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+                style={{ background: KAWIIL_AI_GRADIENT }}
+                aria-hidden
+              >
+                {activeProject ? <BrainCircuit className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-tight">
+                    Kawiil{" "}
                     <span
-                      className="grid h-7 w-7 place-items-center rounded-lg text-white shadow-sm shrink-0"
-                      style={{ background: KAWIIL_AI_GRADIENT }}
-                      aria-hidden
+                      className="bg-clip-text text-transparent"
+                      style={{ backgroundImage: KAWIIL_AI_GRADIENT }}
                     >
-                      <Sparkles className="h-3.5 w-3.5" />
+                      AI
                     </span>
-                    <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">
-                      Kawiil <span className="bg-clip-text text-transparent" style={{ backgroundImage: KAWIIL_AI_GRADIENT }}>AI</span>
-                    </h1>
-                    <span className="hidden sm:inline-flex items-center rounded-full border border-blue-200/70 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-300">
-                      v2.4
-                    </span>
-                    {activeProject ? (
-                      <span className="text-[10px] sm:text-xs text-blue-700 bg-blue-50 ring-1 ring-blue-200/70 dark:text-blue-300 dark:bg-blue-950/40 dark:ring-blue-900/40 px-2 py-0.5 rounded-full flex items-center gap-1 max-w-[min(100%,14rem)] truncate">
-                        <BrainCircuit className="h-3 w-3 shrink-0" /> <span className="truncate">{activeProject.name}</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] sm:text-xs text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full">
-                        Asistente interno
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 leading-snug max-w-2xl">
-                    Chat con contexto de proyectos, documentos y memorias del equipo.
-                  </p>
-                </div>
-                {activeProject && (
-                  <Button
-                    size="sm"
-                    variant={showKnowledge ? "secondary" : "ghost"}
-                    onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
-                    className={cn(
-                      "h-8 shrink-0 text-xs gap-1.5 self-start",
-                      showKnowledge
-                        ? "bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300"
-                        : "",
-                    )}
+                  </h1>
+                  <Badge
+                    variant="outline"
+                    className="h-4 border-sky-300/70 bg-sky-50/70 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
                   >
-                    {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">Conocimiento</span>
-                  </Button>
-                )}
+                    v2.4
+                  </Badge>
+                  {activeProject ? (
+                    <span className="inline-flex max-w-[min(100%,14rem)] items-center gap-1 truncate rounded-full border border-sky-300/70 bg-sky-50/80 px-2 py-0.5 text-[10px] sm:text-[11px] text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
+                      <BrainCircuit className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{activeProject.name}</span>
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-white/60 px-2 py-0.5 text-[10px] sm:text-[11px] text-muted-foreground dark:bg-white/10">
+                      Asistente interno
+                    </span>
+                  )}
+                </div>
+                <p className="hidden sm:block mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
+                  Chat con contexto de proyectos, documentos y memorias del equipo.
+                </p>
               </div>
+              {activeProject && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
+                  className={cn(
+                    "h-8 shrink-0 gap-1.5 text-[11px]",
+                    showKnowledge
+                      ? "bg-sky-100/80 text-sky-700 hover:bg-sky-100 dark:bg-sky-400/15 dark:text-sky-300"
+                      : "text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10",
+                  )}
+                >
+                  {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">Conocimiento</span>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -756,11 +776,16 @@ const AsistenteIA = () => {
                             className={cn(
                               "rounded-2xl px-4 py-3",
                               msg.role === "user"
-                                ? "bg-primary text-primary-foreground"
+                                ? "text-white shadow-sm shadow-sky-500/20"
                                 : msg.isError
                                   ? "bg-destructive/10 border border-destructive/25 text-foreground"
-                                  : "bg-secondary/40"
+                                  : "bg-secondary/40 border border-border/40"
                             )}
+                            style={
+                              msg.role === "user"
+                                ? { background: KAWIIL_AI_GRADIENT }
+                                : undefined
+                            }
                           >
                             {renderMessageContent(msg.content, msg.role, msg.attachments, {
                               isError: msg.isError,
@@ -832,9 +857,9 @@ const AsistenteIA = () => {
           </div>
 
           {pdfIndexingStatus && (
-            <div className="shrink-0 border-t border-primary/15 bg-primary/5 px-4 py-2">
+            <div className="shrink-0 border-t border-sky-300/40 bg-sky-50/60 px-4 py-2 dark:border-sky-800/40 dark:bg-sky-950/30">
               <div className="max-w-3xl mx-auto flex items-center gap-2 text-[11px] text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600 dark:text-sky-400 shrink-0" />
                 <span className="min-w-0">
                   {pdfIndexingStatus.phase === "extracting"
                     ? `Leyendo «${pdfIndexingStatus.fileName}» para indexar búsqueda semántica…`
@@ -852,7 +877,10 @@ const AsistenteIA = () => {
           )}
 
           {/* Input */}
-          <div className="border-t border-border/30 px-4 py-3">
+          <div
+            className="border-t border-sky-200/50 px-4 py-3 dark:border-sky-800/30"
+            style={{ background: KAWIIL_AI_SOFT_BG }}
+          >
             <div className="max-w-3xl mx-auto flex flex-col gap-2">
               <ChatAttachmentChips
                 files={pendingFiles}
@@ -873,7 +901,7 @@ const AsistenteIA = () => {
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
                   placeholder="Escribe tu mensaje o adjunta archivos…"
-                  className="resize-none min-h-[80px] max-h-[200px] text-sm bg-secondary/30 border-0 rounded-xl flex-1 min-w-0"
+                  className="resize-none min-h-[80px] max-h-[200px] text-sm bg-card border border-sky-200/50 rounded-xl flex-1 min-w-0 shadow-sm focus-visible:ring-sky-400 focus-visible:ring-offset-0 dark:border-sky-800/40"
                   rows={3}
                   disabled={isStreaming}
                 />
@@ -881,7 +909,7 @@ const AsistenteIA = () => {
                   size="sm"
                   onClick={handleSend}
                   disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
-                  className="h-[42px] w-[42px] rounded-xl shrink-0 text-white shadow-sm hover:opacity-90 disabled:opacity-50"
+                  className="h-[42px] w-[42px] rounded-xl shrink-0 text-white shadow-md shadow-sky-500/30 hover:opacity-95 disabled:opacity-50 disabled:shadow-none"
                   style={{ background: KAWIIL_AI_GRADIENT }}
                 >
                   {isStreaming ? (
@@ -998,48 +1026,77 @@ const AsistenteIA = () => {
       </Dialog>
 
       <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BrainCircuit className="h-5 w-5 text-primary" />
-              Nuevo Proyecto de IA
-            </DialogTitle>
-            <DialogDescription>
-              Crea un espacio con instrucciones personalizadas y documentos vinculados para que la IA tenga contexto persistente.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
+        <DialogContent className="sm:max-w-md overflow-hidden p-0">
+          <div
+            className="flex items-center gap-3 px-5 py-4 text-white"
+            style={{ background: KAWIIL_AI_HEADER_BG }}
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
+              <BrainCircuit className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <DialogHeader className="space-y-0">
+                <DialogTitle className="flex items-center gap-2 text-white text-[15px] font-semibold">
+                  Nuevo Proyecto de IA
+                  <Badge
+                    variant="outline"
+                    className="h-4 border-white/40 bg-white/15 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-white"
+                  >
+                    v2.4
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription className="mt-0.5 text-[11.5px] text-white/85">
+                  Crea un espacio con contexto persistente: instrucciones, documentos y memorias.
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+          </div>
+          <div className="space-y-4 px-5 pb-2 pt-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">Nombre</label>
+              <label className="text-xs font-medium mb-1 block">Nombre</label>
               <Input
                 placeholder="Ej: Cumplimiento PLD, Declaraciones Anuales..."
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
+                className="h-9 text-sm"
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Descripcion (opcional)</label>
+              <label className="text-xs font-medium mb-1 block">Descripción (opcional)</label>
               <Input
-                placeholder="Breve descripcion del proposito del proyecto"
+                placeholder="Breve descripción del propósito del proyecto"
                 value={newProjectDesc}
                 onChange={(e) => setNewProjectDesc(e.target.value)}
+                className="h-9 text-sm"
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Instrucciones para la IA (opcional)</label>
+              <label className="text-xs font-medium mb-1 block">Instrucciones para la IA (opcional)</label>
               <Textarea
                 placeholder="Ej: Siempre referencia la Ley Federal de PLD. Enfocate en el marco regulatorio mexicano..."
                 value={newProjectInstructions}
                 onChange={(e) => setNewProjectInstructions(e.target.value)}
                 rows={3}
-                className="resize-none"
+                className="resize-none text-sm"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateProject(false)}>Cancelar</Button>
-            <Button onClick={handleCreateAiProject} disabled={!newProjectName.trim() || createAiProject.isPending}>
-              {createAiProject.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <BrainCircuit className="h-4 w-4 mr-2" />}
+          <DialogFooter className="px-5 pb-5 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setShowCreateProject(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              className="text-white shadow-sm hover:opacity-95"
+              style={{ background: KAWIIL_AI_GRADIENT }}
+              onClick={handleCreateAiProject}
+              disabled={!newProjectName.trim() || createAiProject.isPending}
+            >
+              {createAiProject.isPending ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <BrainCircuit className="mr-1.5 h-3.5 w-3.5" />
+              )}
               Crear proyecto
             </Button>
           </DialogFooter>
