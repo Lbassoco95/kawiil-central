@@ -484,23 +484,11 @@ div[id*="lovable" i] {
 .kw-sb-brand-mark {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, hsl(260 85% 68%), hsl(217 91% 60%) 55%, hsl(38 95% 60%));
-  box-shadow: 0 2px 10px hsl(260 85% 68% / 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  position: relative;
-}
-.kw-sb-brand-mark::after {
-  content: "K";
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 15px;
-  letter-spacing: -0.02em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  background-image: url("/images/kawiil-logo.png?v=3");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 /* Search pill */

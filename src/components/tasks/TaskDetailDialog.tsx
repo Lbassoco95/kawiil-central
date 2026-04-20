@@ -553,34 +553,42 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const projectChip = (task as any)?.projects?.name as string | undefined;
   const clientChip = (task as any)?.clients?.name as string | undefined;
 
+  const priorityTagLabel =
+    currentPriority === "urgente" ? "P1 · URGENTE" :
+    currentPriority === "alta" ? "P2 · ALTA" :
+    currentPriority === "media" ? "P3 · MEDIA" : "P4 · BAJA";
+  const priorityPillClass =
+    currentPriority === "urgente" ? "prio-pill p1" :
+    currentPriority === "alta" ? "prio-pill p2" :
+    currentPriority === "media" ? "prio-pill p3" : "prio-pill p4";
+
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-[min(1180px,96vw)] w-full h-[92vh] sm:h-[92vh] sm:max-h-[92vh] gap-0 p-0 sm:p-0 pt-0 sm:pt-0 overflow-hidden flex flex-col">
+      <DialogContent className="kwv24 sm:max-w-[min(1180px,96vw)] w-full h-[92vh] sm:h-[92vh] sm:max-h-[92vh] gap-0 p-0 sm:p-0 pt-0 sm:pt-0 overflow-hidden flex flex-col">
         <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">Cargando...</div>
         ) : task ? (
-          <div className="flex flex-col flex-1 min-h-0">
-            {/* ── Header sticky v2.5 ── */}
-            <div className="shrink-0 border-b bg-background/80 backdrop-blur-md px-5 sm:px-7 pr-14 sm:pr-16 py-4 space-y-3">
-              {/* Breadcrumb */}
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="kwv24-dr flex-1 min-h-0">
+            {/* ── Header v2.4 (dr-head) ── */}
+            <div className="dr-head">
+              <div className="bc">
                 {clientChip && (
                   <>
-                    <span className="font-medium text-foreground/70">{clientChip}</span>
-                    <ChevronRight className="h-3 w-3 opacity-60" />
+                    <strong title={clientChip}>{clientChip}</strong>
+                    <span className="sep">›</span>
                   </>
                 )}
                 {projectChip && (
                   <>
-                    <span className="font-medium text-foreground/70">{projectChip}</span>
-                    <ChevronRight className="h-3 w-3 opacity-60" />
+                    <strong title={projectChip}>{projectChip}</strong>
+                    <span className="sep">›</span>
                   </>
                 )}
-                <span className="truncate text-foreground">Tarea</span>
+                <span>Tarea</span>
                 {parentTask && (
                   <>
-                    <ChevronRight className="h-3 w-3 opacity-60" />
+                    <span className="sep">›</span>
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 text-primary hover:underline"
@@ -588,103 +596,99 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       title="Abrir tarea principal"
                     >
                       <GitBranch className="h-3 w-3" />
-                      Sub de «{parentTask.title.length > 28 ? parentTask.title.slice(0, 28) + "…" : parentTask.title}»
+                      Sub de «{parentTask.title.length > 26 ? parentTask.title.slice(0, 26) + "…" : parentTask.title}»
                     </button>
                   </>
                 )}
               </div>
-
-              {/* Row: priority pill + title + actions */}
-              <div className="flex items-start gap-3">
-                <span
-                  className={`mt-1.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${priorityLabels[currentPriority as keyof typeof priorityLabels] ? "" : ""} ${
-                    currentPriority === "urgente"
-                      ? "bg-red-500/15 text-red-700 dark:text-red-300"
-                      : currentPriority === "alta"
-                      ? "bg-orange-500/15 text-orange-700 dark:text-orange-300"
-                      : currentPriority === "media"
-                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                      : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                  }`}
-                >
-                  {currentPriority === "urgente" ? "P1 · URGENTE" :
-                   currentPriority === "alta" ? "P2 · ALTA" :
-                   currentPriority === "media" ? "P3 · MEDIA" : "P4 · BAJA"}
-                </span>
-
-                <div className="flex-1 min-w-0">
-                  <Input
-                    value={currentTitle}
-                    onChange={(e) => setPending("title", e.target.value)}
-                    className="text-lg sm:text-xl font-semibold leading-tight border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
-                    placeholder="Nombre de la tarea"
-                  />
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                    {areaLabel && (
-                      <span className="font-medium text-foreground/70">{areaLabel}</span>
-                    )}
-                    {task.due_date && (
-                      <span className={`inline-flex items-center gap-1 ${overdueBadge ? "text-red-600 dark:text-red-400 font-medium" : ""}`}>
-                        <Calendar className="h-3 w-3" />
-                        Vence {formatMX(task.due_date, "dd MMM yyyy")}
-                        {overdueBadge && <span className="ml-1 rounded-sm bg-red-500/15 px-1 text-[9px] uppercase tracking-wide">Vencida</span>}
-                      </span>
-                    )}
-                    {(task as any).creator_profile && (
-                      <span className="inline-flex items-center gap-1">
-                        <UserCheck className="h-3 w-3" /> {(task as any).creator_profile.full_name}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <Select value={currentStatus} onValueChange={handleStatusChange}>
-                    <SelectTrigger className="h-8 text-xs w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(statusLabels).map(([key, { label }]) => (
-                        <SelectItem key={key} value={key}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {currentStatus !== "completada" && (
-                    <Button
-                      size="sm"
-                      className="h-8 gap-1 text-xs"
-                      onClick={() => updateTask.mutate({ id: taskId, status: "completada" })}
-                      disabled={updateTask.isPending}
-                      title="Marcar como completada"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Completar
-                    </Button>
-                  )}
-                  {hasPendingChanges && (
-                    <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-8 text-xs gap-1">
-                      {updateTask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                      Guardar
-                    </Button>
-                  )}
-                  {hasPendingChanges && (
-                    <Button size="sm" variant="ghost" onClick={() => setPendingChanges({})} className="h-8 text-xs">
-                      Descartar
-                    </Button>
-                  )}
-                  {canDeleteTasks && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+              <div className="actions">
+                <Select value={currentStatus} onValueChange={handleStatusChange}>
+                  <SelectTrigger className="h-8 text-xs w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(statusLabels).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {currentStatus !== "completada" && (
+                  <Button
+                    size="sm"
+                    className="h-8 gap-1 text-xs"
+                    onClick={() => updateTask.mutate({ id: taskId, status: "completada" })}
+                    disabled={updateTask.isPending}
+                    title="Marcar como completada"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Completar
+                  </Button>
+                )}
+                {hasPendingChanges && (
+                  <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-8 text-xs gap-1">
+                    {updateTask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Guardar
+                  </Button>
+                )}
+                {hasPendingChanges && (
+                  <Button size="sm" variant="ghost" onClick={() => setPendingChanges({})} className="h-8 text-xs">
+                    Descartar
+                  </Button>
+                )}
+                {canDeleteTasks && (
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
 
-            {/* ── Body 2-column v2.5 ── */}
-            <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px]">
+            {/* ── Body 2-column v2.4 ── */}
+            <div className="dr-body">
 
-            {/* ── Main column (scrollable) ── */}
-            <div className="overflow-y-auto px-5 sm:px-7 py-5 space-y-6 border-r border-border/60">
+            {/* ── Main column (dr-main) ── */}
+            <div className="dr-main">
+              {/* Title block v2.4 */}
+              <div className="dr-title">
+                <div className="prio-strip">
+                  <span className={priorityPillClass}>
+                    <span className="dot" />
+                    {priorityTagLabel}
+                  </span>
+                  {areaLabel && <span style={{ opacity: 0.6 }}>· {areaLabel}</span>}
+                </div>
+                <h1>
+                  <input
+                    value={currentTitle}
+                    onChange={(e) => setPending("title", e.target.value)}
+                    placeholder="Nombre de la tarea"
+                  />
+                </h1>
+                <div className="meta-pills">
+                  {task.due_date && (
+                    <span className={`pill ${overdueBadge ? "overdue" : ""}`}>
+                      <Calendar className="h-3 w-3" />
+                      <strong>Vence</strong>
+                      {formatMX(task.due_date, "dd MMM yyyy")}
+                      {overdueBadge && <span>· VENCIDA</span>}
+                    </span>
+                  )}
+                  {(task as any).creator_profile && (
+                    <span className="pill">
+                      <UserCheck className="h-3 w-3" />
+                      {(task as any).creator_profile.full_name}
+                    </span>
+                  )}
+                  {subtaskTotal > 0 && (
+                    <span className="pill">
+                      <ListChecks className="h-3 w-3" />
+                      <strong>Subtareas</strong>
+                      {subtaskClosed}/{subtaskTotal}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-5">
               {/* Due date edit */}
               {editingDueDate && (
                 <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
@@ -1094,15 +1098,16 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                 </TabsContent>
               </Tabs>
 
+              </div>
             </div>
 
-            {/* ── Sidebar v2.5 ── */}
-            <aside className="hidden md:flex flex-col gap-4 overflow-y-auto bg-muted/20 px-4 py-5">
+            {/* ── Sidebar v2.4 (dr-rail) ── */}
+            <aside className="dr-rail hidden md:flex">
               {/* Asignación */}
-              <section className="rounded-lg border bg-background p-3 space-y-2.5">
-                <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <section className="rc space-y-2.5">
+                <h4>
                   <UserCheck className="h-3 w-3" /> Asignación
-                </h5>
+                </h4>
                 <div className="space-y-2">
                   <div>
                     <label className="text-[10px] text-muted-foreground block mb-0.5">Responsable</label>
@@ -1158,10 +1163,10 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
               </section>
 
               {/* Tiempo */}
-              <section className="rounded-lg border bg-background p-3 space-y-2.5">
-                <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <section className="rc space-y-2.5">
+                <h4>
                   <Clock className="h-3 w-3" /> Tiempo
-                </h5>
+                </h4>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -1268,21 +1273,20 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
               {/* Actividad reciente */}
               {taskActivity.length > 0 && (
-                <section className="rounded-lg border bg-background p-3 space-y-2">
-                  <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <section className="rc">
+                  <h4>
                     <ActivityIcon className="h-3 w-3" /> Actividad
-                  </h5>
-                  <ul className="space-y-1.5 text-[11px] text-muted-foreground max-h-[180px] overflow-y-auto">
-                    {taskActivity.slice(0, 8).map((a: any) => (
-                      <li key={a.id} className="flex items-start gap-1.5">
-                        <span className="mt-1 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
-                        <div className="min-w-0">
-                          <span className="text-foreground/80">{a.action}</span>
-                          <span className="block text-[10px] opacity-70">{formatMX(a.created_at, "dd MMM HH:mm")}</span>
+                  </h4>
+                  <div className="activity" style={{ maxHeight: 200, overflowY: "auto" }}>
+                    {taskActivity.slice(0, 8).map((a: any, i: number) => (
+                      <div key={a.id} className={`act-item ${i === 0 ? "highlight" : ""}`}>
+                        <div className="who">
+                          <span>{a.action}</span>
                         </div>
-                      </li>
+                        <div className="when">{formatMX(a.created_at, "dd MMM HH:mm")}</div>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </section>
               )}
             </aside>
