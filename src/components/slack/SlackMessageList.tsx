@@ -11,10 +11,28 @@ import { UserAvatar } from "@/components/shared/UserAvatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ClipboardPlus, Download, FileText, Loader2, MessageSquareText, Smile, Sparkles, UserPlus } from "lucide-react";
+import {
+  ClipboardPlus,
+  Copy,
+  Download,
+  ExternalLink,
+  FileText,
+  Loader2,
+  MessageSquareText,
+  MoreHorizontal,
+  Smile,
+  Sparkles,
+  UserPlus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { fetchSlackPrivateFileBlob, type SlackMessage } from "@/lib/slackApi";
+import { fetchSlackPrivateFileBlob, type SlackFile, type SlackMessage } from "@/lib/slackApi";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { slackUserDisplayName } from "./slackGrouping";
@@ -22,6 +40,7 @@ import { cn } from "@/lib/utils";
 import {
   formatDaySeparatorLabel,
   formatSlackMessageTime,
+  formatSlackRelativeShort,
   formatSlackTooltipFull,
   isSlackSystemSubtype,
   sameSlackDay,
@@ -33,6 +52,8 @@ import {
 } from "@/lib/slackFormatting";
 import { SLACK_EMOJI } from "@/lib/slackFormatting";
 import { SlackSaveForLaterButton } from "@/components/slack/SlackSaveForLaterButton";
+import { slackDeepLinkPath } from "@/lib/slackDeepLink";
+import { SlackAttachmentPreviewDialog } from "@/components/slack/SlackAttachmentPreviewDialog";
 
 type Props = {
   messages: SlackMessage[];
@@ -59,7 +80,17 @@ type Props = {
   savedMessageKeys?: Set<string>;
   /** Etiqueta amable del canal actual para persistir con el guardado. */
   currentChannelName?: string | null;
+  /**
+   * TS del último mensaje leído por el usuario en este canal. Si se provee,
+   * se pinta un divisor "Nuevos" antes del primer mensaje posterior.
+   * TODO: aún no cableado desde Supabase/estado de canal; prop listo para
+   * consumirlo cuando tengamos persistencia de last_read por conversación.
+   */
+  lastReadTs?: string | null;
 };
+
+/** Reacciones rápidas inline del toolbar hover (antes del picker completo). */
+const QUICK_REACTION_KEYS = ["thumbsup", "heart", "white_check_mark", "eyes"] as const;
 
 const REACTION_PICKER_KEYS = [
   "thumbsup",
@@ -108,7 +139,13 @@ function formatFileSize(size: number | undefined): string | null {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[number] }) {
+function FileAttachmentPreview({
+  f,
+  onPreview,
+}: {
+  f: SlackFile;
+  onPreview: (file: SlackFile) => void;
+}) {
   const isImg = f.mimetype?.startsWith("image/");
   const label = f.title || f.name || "Archivo";
   const privateUrl = f.url_private_download || f.url_private || "";
@@ -176,11 +213,10 @@ function FileAttachmentPreview({ f }: { f: NonNullable<SlackMessage["files"]>[nu
     void resolvePrivateUrl();
   }, [isImg, privateUrl, isVisible, resolvedUrl, resolvePrivateUrl]);
 
-  const openAttachment = useCallback(async () => {
-    const next = (await resolvePrivateUrl()) || f.permalink || privateUrl;
-    if (!next) return;
-    window.open(next, "_blank", "noopener,noreferrer");
-  }, [resolvePrivateUrl, f.permalink, privateUrl]);
+  const openAttachment = useCallback(() => {
+    if (!privateUrl && !f.permalink) return;
+    onPreview(f);
+  }, [f, onPreview, privateUrl]);
 
   const downloadAttachment = useCallback(async () => {
     const next = (await resolvePrivateUrl()) || f.permalink || privateUrl;
@@ -316,10 +352,12 @@ export function SlackMessageList({
   onCreateTaskFromMessage,
   savedMessageKeys,
   currentChannelName = null,
+  lastReadTs = null,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [mentionUserId, setMentionUserId] = useState<string | null>(null);
   const [reactionPickerTs, setReactionPickerTs] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
   const prevLenRef = useRef(0);
   const stickBottomRef = useRef(true);
 
@@ -399,6 +437,8 @@ export function SlackMessageList({
   }
 
   let prevTs: string | undefined;
+  let newDividerRendered = false;
+  const lastReadMs = lastReadTs ? slackTsToMs(lastReadTs) : null;
 
   const rows: ReactNode[] = [];
 
@@ -413,12 +453,36 @@ export function SlackMessageList({
 
     if (prevTs && !sameSlackDay(prevTs, m.ts)) {
       rows.push(
-        <div key={`day-${m.ts}`} className="flex justify-center my-4">
-          <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-3 py-1 rounded-full">
+        <div key={`day-${m.ts}`} className="flex items-center gap-3 my-4 px-1" aria-hidden>
+          <div className="flex-1 h-px bg-border/60" />
+          <span className="text-[11px] font-semibold text-muted-foreground bg-background border border-border/60 px-3 py-1 rounded-full">
             {formatDaySeparatorLabel(m.ts)}
           </span>
+          <div className="flex-1 h-px bg-border/60" />
         </div>,
       );
+    }
+
+    if (
+      lastReadMs != null &&
+      !newDividerRendered &&
+      slackTsToMs(m.ts) > lastReadMs
+    ) {
+      rows.push(
+        <div
+          key={`new-divider-${m.ts}`}
+          className="flex items-center gap-2 my-2 px-1"
+          role="separator"
+          aria-label="Nuevos mensajes"
+        >
+          <div className="flex-1 h-px bg-destructive/50" />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-destructive">
+            Nuevos
+          </span>
+          <div className="flex-1 h-px bg-destructive/50" />
+        </div>,
+      );
+      newDividerRendered = true;
     }
 
     if (isSlackSystemSubtype(m.subtype)) {
@@ -459,16 +523,24 @@ export function SlackMessageList({
     const threadActiveHere = !!activeThreadRootTs && activeThreadRootTs === rootTs;
     const hasThreadActivity = (m.reply_count ?? 0) > 0 || threadActiveHere;
 
+    const canReact = !!(slackReactionChannelId && slackSelfUserId && onToggleReaction);
+    const reactionsList = m.reactions ?? [];
+    const replyCount = m.reply_count ?? 0;
+    const hasReplies = replyCount > 0;
+    const replyUserIds = (m.reply_users ?? []).slice(0, 3);
+    const latestReplyTs = m.latest_reply ?? null;
+    const isSaved = !!(selectedChannelId && savedMessageKeys?.has(`${selectedChannelId}|${m.ts}`));
+
     rows.push(
       <div
         key={m.ts}
         id={`slack-msg-${idSafe}`}
         className={cn(
-          "group flex gap-3 rounded-lg px-2 py-0.5 -mx-2 transition-colors",
+          "group relative flex gap-3 rounded-lg px-2 -mx-2 transition-colors",
+          group ? "py-px" : "py-0.5",
           showHeader ? "pt-1.5" : "pt-0",
           highlight ? "bg-primary/[0.08] ring-1 ring-primary/20" : "hover:bg-muted/40",
-          hasThreadActivity && "border-l-2 border-[#611f69]/45 pl-2 -ml-0.5 rounded-l-md bg-muted/20",
-          threadActiveHere && "ring-1 ring-[#611f69]/30",
+          threadActiveHere && "ring-1 ring-[#611f69]/25",
         )}
       >
         {showHeader ? (
@@ -477,14 +549,15 @@ export function SlackMessageList({
             avatarUrl={av}
             userId={uid || undefined}
             size="lg"
-            className="h-9 w-9 shrink-0 mt-0.5"
+            className="h-9 w-9 shrink-0 mt-0.5 rounded-md"
+            fallbackClassName="rounded-md"
           />
         ) : (
-          <div className="w-9 shrink-0 flex justify-end pr-1">
+          <div className="w-9 shrink-0 flex items-start justify-center">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="text-[10px] text-muted-foreground/0 group-hover:text-muted-foreground/80 tabular-nums cursor-default pt-1">
+                  <span className="text-[10.5px] text-transparent group-hover:text-muted-foreground tabular-nums cursor-default pt-1 select-none">
                     {formatSlackMessageTime(m.ts).split(" ").pop()}
                   </span>
                 </TooltipTrigger>
@@ -509,39 +582,50 @@ export function SlackMessageList({
               </TooltipProvider>
             </div>
           )}
-          <div className="text-sm text-foreground/95 whitespace-pre-wrap break-words leading-relaxed mt-0.5">
+          <div className="text-sm text-foreground/95 whitespace-pre-wrap break-words leading-[1.45] mt-0.5">
             {bodyText ? slackMrkdwnToReact(bodyText, formatCtx) : null}
             {m.files?.map((f) => (
-              <FileAttachmentPreview key={f.id || f.name} f={f} />
+              <FileAttachmentPreview
+                key={f.id || f.name}
+                f={f}
+                onPreview={setPreviewFile}
+              />
             ))}
             {!bodyText && !hasFiles && (
               <span className="text-muted-foreground italic text-xs">Sin texto ni adjuntos</span>
             )}
           </div>
-          {slackReactionChannelId && slackSelfUserId && onToggleReaction ? (
+          {reactionsList.length > 0 && (
             <div className="flex flex-wrap items-center gap-1 mt-1">
-              {(m.reactions || []).map((r) => {
+              {reactionsList.map((r) => {
                 const userReacted = !!(slackSelfUserId && r.users?.includes(slackSelfUserId));
                 const rowPending =
                   reactionPending?.messageTs === m.ts &&
                   slackReactionNamesMatch(reactionPending.name, r.name);
+                const interactive = canReact;
                 return (
                   <button
                     key={r.name}
                     type="button"
-                    disabled={!!reactionPending && reactionPending.messageTs === m.ts}
+                    disabled={
+                      !interactive ||
+                      (!!reactionPending && reactionPending.messageTs === m.ts)
+                    }
                     title={
                       userReacted
                         ? "Quitar tu reacción"
-                        : `Añadir :${r.name}: · ${r.users?.map((id) => slackUserDisplayName(id, userMap)).join(", ") || "Slack"}`
+                        : `:${r.name}: · ${r.users?.map((id) => slackUserDisplayName(id, userMap)).join(", ") || "Slack"}`
                     }
-                    onClick={() => onToggleReaction(m.ts, r.name, !userReacted)}
+                    onClick={() =>
+                      interactive && onToggleReaction?.(m.ts, r.name, !userReacted)
+                    }
                     className={cn(
-                      "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] transition-colors disabled:opacity-50",
+                      "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-[1px] text-[10.5px] transition-colors disabled:opacity-60",
                       userReacted
                         ? "border-[#611f69]/55 bg-[#611f69]/12 hover:bg-[#611f69]/20"
                         : "border-border/60 bg-muted/40 hover:bg-muted/65",
                       rowPending && "ring-1 ring-primary/40",
+                      !interactive && "cursor-default",
                     )}
                   >
                     <span>{reactionLabel(r.name)}</span>
@@ -549,95 +633,165 @@ export function SlackMessageList({
                   </button>
                 );
               })}
-              <Popover
-                open={reactionPickerTs === m.ts}
-                onOpenChange={(open) => setReactionPickerTs(open ? m.ts : null)}
-              >
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                    disabled={!!reactionPending && reactionPending.messageTs === m.ts}
-                    title="Añadir reacción"
-                  >
-                    <Smile className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-2" align="start" side="top">
-                  <p className="text-[10px] text-muted-foreground px-1 pb-1">Reaccionar como en Slack</p>
-                  <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto">
-                    {REACTION_PICKER_KEYS.map((key) => (
-                      <button
-                        key={key}
-                        type="button"
-                        className="text-lg p-1.5 rounded-md hover:bg-muted"
-                        title={`:${key}:`}
-                        onClick={() => {
-                          const existing = m.reactions?.find((r) => slackReactionNamesMatch(r.name, key));
-                          const userHas =
-                            !!slackSelfUserId && !!(existing?.users?.includes(slackSelfUserId));
-                          const apiName = existing?.name ?? key;
-                          onToggleReaction(m.ts, apiName, !userHas);
-                          setReactionPickerTs(null);
-                        }}
-                      >
-                        {SLACK_EMOJI[key]}
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
             </div>
-          ) : (
-            m.reactions &&
-            m.reactions.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {m.reactions.map((r) => (
-                  <span
-                    key={r.name}
-                    className="inline-flex items-center gap-0.5 rounded-full border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[11px]"
-                    title={r.users?.join(", ")}
-                  >
-                    <span>{reactionLabel(r.name)}</span>
-                    <span className="text-muted-foreground">{r.count}</span>
-                  </span>
-                ))}
-              </div>
-            )
           )}
-          {(onOpenThread || onCreateTaskFromMessage || selectedChannelId) && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {onOpenThread && (
-              <Button
-                type="button"
-                variant={threadActiveHere ? "default" : "secondary"}
-                size="sm"
-                className={cn(
-                  "h-7 gap-1.5 text-xs font-medium shrink-0",
-                  threadActiveHere && "bg-[#611f69] hover:bg-[#4a154b]",
-                )}
-                onClick={() => onOpenThread(rootTs)}
-              >
-                <MessageSquareText className="h-3.5 w-3.5 shrink-0" />
-                {(m.reply_count ?? 0) > 0
-                  ? `${m.reply_count} en el hilo`
-                  : threadActiveHere
-                    ? "Hilo abierto"
-                    : "Responder en hilo"}
-              </Button>
+          {onOpenThread && hasReplies && (
+            <button
+              type="button"
+              onClick={() => onOpenThread(rootTs)}
+              className={cn(
+                "mt-1 flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 transition-colors group/thread",
+                threadActiveHere
+                  ? "bg-[#611f69]/10 hover:bg-[#611f69]/15"
+                  : "hover:bg-muted/60",
               )}
-              {onCreateTaskFromMessage && (
+              title={threadActiveHere ? "Hilo abierto" : "Ver hilo"}
+            >
+              <div className="flex -space-x-1.5">
+                {replyUserIds.length > 0
+                  ? replyUserIds.map((id) => {
+                      const p = userMap[id];
+                      return (
+                        <UserAvatar
+                          key={id}
+                          name={slackUserDisplayName(id, userMap)}
+                          avatarUrl={p?.avatar_url}
+                          userId={id}
+                          size="xs"
+                          showTooltip={false}
+                          className="ring-2 ring-background rounded-md"
+                          fallbackClassName="rounded-md"
+                        />
+                      );
+                    })
+                  : (
+                      <MessageSquareText className="h-3.5 w-3.5 text-[#611f69]" />
+                    )}
+              </div>
+              <span className="text-xs font-semibold text-[#611f69] dark:text-sky-300">
+                {replyCount} {replyCount === 1 ? "respuesta" : "respuestas"}
+              </span>
+              {latestReplyTs && (
+                <span className="text-[11px] text-muted-foreground">
+                  Última {formatSlackRelativeShort(latestReplyTs)}
+                </span>
+              )}
+              <span className="ml-auto text-[11px] text-muted-foreground opacity-0 group-hover/thread:opacity-100 transition-opacity">
+                Ver hilo →
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* Toolbar flotante al hover, al estilo Slack-nativo */}
+        {(canReact || onOpenThread || onCreateTaskFromMessage || selectedChannelId) && (
+          <div
+            className={cn(
+              "absolute -top-3 right-3 z-10",
+              "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+              "group-focus-within:opacity-100 group-focus-within:pointer-events-auto",
+              "transition-opacity",
+            )}
+          >
+            <div className="flex items-center gap-0.5 rounded-md border border-border/70 bg-popover shadow-md px-0.5 py-0.5">
+              {canReact &&
+                QUICK_REACTION_KEYS.map((key) => {
+                  const existing = m.reactions?.find((r) =>
+                    slackReactionNamesMatch(r.name, key),
+                  );
+                  const userHas =
+                    !!slackSelfUserId && !!existing?.users?.includes(slackSelfUserId);
+                  const pending =
+                    reactionPending?.messageTs === m.ts &&
+                    slackReactionNamesMatch(reactionPending.name, key);
+                  return (
+                    <button
+                      key={`quick-${key}`}
+                      type="button"
+                      title={userHas ? "Quitar tu reacción" : `Reaccionar :${key}:`}
+                      className={cn(
+                        "h-7 w-7 rounded text-base leading-none grid place-items-center hover:bg-muted transition-colors disabled:opacity-50",
+                        userHas && "bg-[#611f69]/12",
+                        pending && "animate-pulse",
+                      )}
+                      disabled={!!reactionPending && reactionPending.messageTs === m.ts}
+                      onClick={() => {
+                        const apiName = existing?.name ?? key;
+                        onToggleReaction?.(m.ts, apiName, !userHas);
+                      }}
+                    >
+                      {SLACK_EMOJI[key]}
+                    </button>
+                  );
+                })}
+              {canReact && (
+                <Popover
+                  open={reactionPickerTs === m.ts}
+                  onOpenChange={(open) => setReactionPickerTs(open ? m.ts : null)}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      disabled={!!reactionPending && reactionPending.messageTs === m.ts}
+                      title="Más reacciones"
+                    >
+                      <Smile className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 p-2" align="end" side="top">
+                    <p className="text-[10px] text-muted-foreground px-1 pb-1">
+                      Reaccionar como en Slack
+                    </p>
+                    <div className="grid grid-cols-8 gap-1 max-h-52 overflow-y-auto">
+                      {REACTION_PICKER_KEYS.map((key) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className="text-lg p-1.5 rounded-md hover:bg-muted"
+                          title={`:${key}:`}
+                          onClick={() => {
+                            const existing = m.reactions?.find((r) =>
+                              slackReactionNamesMatch(r.name, key),
+                            );
+                            const userHas =
+                              !!slackSelfUserId &&
+                              !!existing?.users?.includes(slackSelfUserId);
+                            const apiName = existing?.name ?? key;
+                            onToggleReaction?.(m.ts, apiName, !userHas);
+                            setReactionPickerTs(null);
+                          }}
+                        >
+                          {SLACK_EMOJI[key]}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+              {onOpenThread && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  className="h-7 gap-1.5 text-xs"
-                  onClick={() => onCreateTaskFromMessage(m)}
+                  className={cn(
+                    "h-7 w-7 p-0",
+                    threadActiveHere
+                      ? "text-[#611f69] hover:text-[#4a154b]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  title={
+                    hasReplies
+                      ? `${replyCount} en el hilo`
+                      : threadActiveHere
+                        ? "Hilo abierto"
+                        : "Responder en hilo"
+                  }
+                  onClick={() => onOpenThread(rootTs)}
                 >
-                  <ClipboardPlus className="h-3.5 w-3.5 shrink-0" />
-                  Crear tarea
+                  <MessageSquareText className="h-4 w-4" />
                 </Button>
               )}
               {selectedChannelId && (
@@ -649,13 +803,76 @@ export function SlackMessageList({
                   authorSlackUserId={m.user ?? null}
                   authorName={slackUserDisplayName(m.user, userMap)}
                   channelName={currentChannelName}
-                  isSaved={!!savedMessageKeys?.has(`${selectedChannelId}|${m.ts}`)}
+                  isSaved={isSaved}
                   variant="compact"
                 />
               )}
+              {(onCreateTaskFromMessage || selectedChannelId || onOpenThread) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      title="Más acciones"
+                      aria-label="Más acciones"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" side="top" className="w-56">
+                    {onCreateTaskFromMessage && (
+                      <DropdownMenuItem onSelect={() => onCreateTaskFromMessage(m)}>
+                        <ClipboardPlus className="h-4 w-4 mr-2" />
+                        Crear tarea
+                      </DropdownMenuItem>
+                    )}
+                    {onOpenThread && (
+                      <DropdownMenuItem onSelect={() => onOpenThread(rootTs)}>
+                        <MessageSquareText className="h-4 w-4 mr-2" />
+                        {hasReplies ? "Ir al hilo" : "Responder en hilo"}
+                      </DropdownMenuItem>
+                    )}
+                    {selectedChannelId && (
+                      <DropdownMenuItem
+                        onSelect={async () => {
+                          const path = slackDeepLinkPath(`${selectedChannelId}|${m.ts}`);
+                          if (!path) return;
+                          const url = `${window.location.origin}${path}`;
+                          try {
+                            await navigator.clipboard.writeText(url);
+                            toast.success("Enlace al mensaje copiado");
+                          } catch {
+                            toast.error("No se pudo copiar el enlace");
+                          }
+                        }}
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copiar enlace al mensaje
+                      </DropdownMenuItem>
+                    )}
+                    {bodyText && (
+                      <DropdownMenuItem
+                        onSelect={async () => {
+                          try {
+                            await navigator.clipboard.writeText(bodyText);
+                            toast.success("Texto copiado");
+                          } catch {
+                            toast.error("No se pudo copiar el texto");
+                          }
+                        }}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Copiar texto
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>,
     );
 
@@ -681,6 +898,11 @@ export function SlackMessageList({
           {bottomRef && <div ref={bottomRef} className="h-2" />}
         </div>
       </div>
+      <SlackAttachmentPreviewDialog
+        file={previewFile}
+        open={!!previewFile}
+        onOpenChange={(o) => !o && setPreviewFile(null)}
+      />
       <Dialog open={!!mentionUserId} onOpenChange={(o) => !o && setMentionUserId(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { SlackMessage, SlackFile } from "@/lib/slackApi";
 import { fetchSlackPrivateFileBlob } from "@/lib/slackApi";
+import { SlackAttachmentPreviewDialog } from "@/components/slack/SlackAttachmentPreviewDialog";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { slackUserDisplayName } from "@/components/slack/slackGrouping";
 import { Input } from "@/components/ui/input";
@@ -136,6 +137,7 @@ export function SlackChannelFilesPanel({
   const [synced, setSynced] = useState<Record<string, boolean>>({});
   const [savingToDropbox, setSavingToDropbox] = useState<Record<string, boolean>>({});
   const [savedToDropbox, setSavedToDropbox] = useState<Record<string, boolean>>({});
+  const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
 
   const items: FileItem[] = useMemo(() => {
     const list: FileItem[] = [];
@@ -163,23 +165,17 @@ export function SlackChannelFilesPanel({
     });
   }, [items, q]);
 
-  const handleOpen = useCallback(async (file: SlackFile) => {
+  const handleOpen = useCallback((file: SlackFile) => {
     const url = file.url_private_download || file.url_private || "";
-    if (!url) {
-      if (file.permalink) {
-        window.open(file.permalink, "_blank", "noopener,noreferrer");
-      } else {
-        toast.error("Este archivo no tiene URL accesible.");
-      }
+    if (!url && !file.permalink) {
+      toast.error("Este archivo no tiene URL accesible.");
       return;
     }
-    try {
-      const blob = await fetchSlackPrivateFileBlob(url);
-      const obj = URL.createObjectURL(blob);
-      window.open(obj, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "No se pudo abrir el archivo.");
+    if (!url && file.permalink) {
+      window.open(file.permalink, "_blank", "noopener,noreferrer");
+      return;
     }
+    setPreviewFile(file);
   }, []);
 
   const handleSync = useCallback(async (key: string, file: SlackFile) => {
@@ -383,6 +379,11 @@ export function SlackChannelFilesPanel({
           </ul>
         </ScrollArea>
       )}
+      <SlackAttachmentPreviewDialog
+        file={previewFile}
+        open={!!previewFile}
+        onOpenChange={(o) => !o && setPreviewFile(null)}
+      />
     </section>
   );
 }
