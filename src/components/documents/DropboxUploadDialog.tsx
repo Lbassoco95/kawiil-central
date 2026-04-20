@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
+import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
 import { toast } from "sonner";
 import {
   Folder,
@@ -43,7 +44,7 @@ export function DropboxUploadDialog({
   initialPath,
   onUploaded,
 }: DropboxUploadDialogProps) {
-  const basePath = useMemo(() => (initialPath ?? "/Kawiil Mx").trim(), [initialPath]);
+  const basePath = useMemo(() => (initialPath ?? KAWIIL_TEAM_ROOT).trim(), [initialPath]);
 
   const [currentPath, setCurrentPath] = useState(basePath);
   const [entries, setEntries] = useState<DropboxEntry[]>([]);

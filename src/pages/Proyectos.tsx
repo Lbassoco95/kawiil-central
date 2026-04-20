@@ -40,11 +40,6 @@ const STATUS_LABELS: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.label])
 ) as Record<ProjectStatus, string>;
 
-const AREA_ORDER: string[] = [
-  "contabilidad", "legal", "softlanding", "pld_ft",
-  "cumplimiento", "juicios", "gestoria", "constitucion_nacional",
-];
-
 type StatusFilterTab = "activo" | "completado" | "pausado" | "todos";
 type SortKey = "activity" | "name" | "created_at" | "progress";
 
@@ -79,7 +74,7 @@ const Proyectos = () => {
   const { data: projects, isLoading } = useProjects();
   const deleteProject = useDeleteProject();
   const { isAdminOrManager } = useUserRole();
-  const { getCelulaLabel } = useAreaOptions();
+  const { areaOptions, getCelulaLabel } = useAreaOptions();
   const { data: orgUsers = [] } = useOrgUsers();
   const [search, setSearch] = useState("");
   const [lawsuitOpen, setLawsuitOpen] = useState(false);
@@ -107,8 +102,16 @@ const Proyectos = () => {
     if (!projectsByStatus.length) return [];
     const areaSet = new Set<string>();
     for (const p of projectsByStatus) areaSet.add(p.area || "sin_area");
-    return AREA_ORDER.filter((a) => areaSet.has(a)).concat(areaSet.has("sin_area") ? ["sin_area"] : []);
-  }, [projectsByStatus]);
+    const orderedFromCatalog = areaOptions
+      .map((o) => o.value)
+      .filter((slug) => areaSet.has(slug));
+    const inCatalog = new Set(orderedFromCatalog);
+    const extras = [...areaSet]
+      .filter((slug) => slug !== "sin_area" && !inCatalog.has(slug))
+      .sort((a, b) => getCelulaLabel(a).localeCompare(getCelulaLabel(b)));
+    const tail = areaSet.has("sin_area") ? ["sin_area"] : [];
+    return [...orderedFromCatalog, ...extras, ...tail];
+  }, [projectsByStatus, areaOptions, getCelulaLabel]);
 
   const narrowedIds = useMemo(() => {
     let result = projectsByStatus;

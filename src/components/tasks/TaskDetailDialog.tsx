@@ -28,6 +28,7 @@ import {
   Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2, GitBranch
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
+import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -119,7 +120,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const { data: orgProfiles } = useProfiles();
   const [scannedFile, setScannedFile] = useState<File | null>(null);
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
-  const [scanInitialPath, setScanInitialPath] = useState("/Kawiil Mx");
+  const [scanInitialPath, setScanInitialPath] = useState(KAWIIL_TEAM_ROOT);
   const [previewDoc, setPreviewDoc] = useState<any>(null);
   const [newSubtask, setNewSubtask] = useState("");
   const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null);
@@ -651,8 +652,21 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="w-full sm:w-[200px]" />
                   <Textarea value={dueDateReason} onChange={(e) => setDueDateReason(e.target.value)} placeholder="Motivo del cambio de fecha (obligatorio)..." rows={2} className="text-sm" />
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={handleDueDateSave} disabled={!dueDateReason.trim()}>Guardar</Button>
-                    <Button size="sm" variant="outline" onClick={() => setEditingDueDate(false)}>Cancelar</Button>
+                    <Button
+                      size="sm"
+                      onClick={handleDueDateSave}
+                      disabled={!dueDateReason.trim() || updateTask.isPending || addComment.isPending}
+                    >
+                      {updateTask.isPending || addComment.isPending ? "Guardando..." : "Guardar"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingDueDate(false)}
+                      disabled={updateTask.isPending || addComment.isPending}
+                    >
+                      Cancelar
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1021,7 +1035,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                         const capturedFile = e.target.files?.[0];
                         if (!capturedFile || !task) return;
                         e.target.value = "";
-                        let initPath = "/Kawiil Mx";
+                        let initPath = KAWIIL_TEAM_ROOT;
                         if (task.client_id) {
                           const { data: client } = await supabase.from("clients").select("dropbox_folder_path").eq("id", task.client_id).single();
                           if (client?.dropbox_folder_path) initPath = client.dropbox_folder_path;
@@ -1047,7 +1061,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
         )}
       </DialogContent>
       {task && <BlockTimeDialog open={showBlockTime} onOpenChange={setShowBlockTime} taskTitle={task.title} taskDueDate={task.due_date || undefined} />}
-      <DropboxFilePicker open={showDropboxPicker} onClose={() => setShowDropboxPicker(false)} initialPath="/Kawiil Mx" onSelect={handleDropboxPickerSelect} />
+      <DropboxFilePicker open={showDropboxPicker} onClose={() => setShowDropboxPicker(false)} initialPath={KAWIIL_TEAM_ROOT} onSelect={handleDropboxPickerSelect} />
       <DropboxUploadDialog
         open={showDropboxUpload}
         onClose={() => { setShowDropboxUpload(false); setScannedFile(null); }}

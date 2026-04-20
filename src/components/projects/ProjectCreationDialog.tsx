@@ -13,6 +13,7 @@ import {
   Layers, Users, CheckCircle2, Loader2, Wand2, X,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useClients";
@@ -302,7 +303,7 @@ export function ProjectCreationDialog() {
       {isCumplimiento && clientId && !hasComplianceConfig && (
         <div className="flex items-center gap-2 text-sm text-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md p-3">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>Este cliente no tiene tipo de entidad regulada configurado. <a href={`/clientes/${clientId}`} className="underline font-medium">Configurar ahora</a></span>
+          <span>Este cliente no tiene tipo de entidad regulada configurado. <Link to={`/clientes/${clientId}`} className="underline font-medium">Configurar ahora</Link></span>
         </div>
       )}
 

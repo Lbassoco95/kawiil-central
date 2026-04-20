@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +20,6 @@ interface MoodCheckinProps {
 export function MoodCheckin({ userCelula }: MoodCheckinProps) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [selectedMood, setSelectedMood] = useState<number | null>(null);
 
   const { timeOfDay, checkDate } = getMexicoTimeSlot();
   const timeLabel = timeOfDay === "morning" ? "mañana" : "tarde";
@@ -104,7 +102,6 @@ export function MoodCheckin({ userCelula }: MoodCheckinProps) {
       qc.invalidateQueries({ queryKey: ["ai-hero-phrase"] });
 
       toast.success("Registrado");
-      setSelectedMood(null);
     },
     onError: () => toast.error("Error al guardar"),
   });

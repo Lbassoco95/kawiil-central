@@ -48,6 +48,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 const SECTION_LABELS: Record<string, string> = {
   inicio: "Inicio",
@@ -356,6 +357,14 @@ export function PersonalDashboard() {
   // Reminders
   const { reminders, addReminder, toggleReminder, deleteReminder } = useReminders();
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
+  const [reminderToDelete, setReminderToDelete] = useState<string | null>(null);
+
+  const confirmDeleteReminder = () => {
+    if (!reminderToDelete) return;
+    deleteReminder.mutate(reminderToDelete, {
+      onSettled: () => setReminderToDelete(null),
+    });
+  };
 
   const pendingReminders = reminders.filter((r) => !r.is_completed);
   const completedReminders = reminders.filter((r) => r.is_completed);
@@ -524,8 +533,9 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           </AlertDescription>
           <button
             type="button"
-            className="absolute right-3 top-3 p-1 rounded-md text-muted-foreground hover:bg-secondary"
+            className="absolute right-3 top-3 p-1 rounded-md text-muted-foreground hover:bg-secondary disabled:opacity-50"
             aria-label="Cerrar"
+            disabled={dismissProactive.isPending}
             onClick={() => dismissProactive.mutate(proactiveTip.id)}
           >
             <X className="h-4 w-4" />
@@ -863,6 +873,17 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
             isPending={addReminder.isPending}
           />
 
+          <DeleteConfirmDialog
+            open={!!reminderToDelete}
+            onOpenChange={(open) => {
+              if (!open) setReminderToDelete(null);
+            }}
+            title="¿Eliminar este recordatorio?"
+            description="El recordatorio se borrará y no recibirás más avisos sobre él."
+            onConfirm={confirmDeleteReminder}
+            isPending={deleteReminder.isPending}
+          />
+
           {pendingReminders.length === 0 && completedReminders.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">Sin recordatorios</p>
           ) : (
@@ -902,7 +923,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
                   </div>
                   <button
                     type="button"
-                    onClick={() => deleteReminder.mutate(r.id)}
+                    onClick={() => setReminderToDelete(r.id)}
                     className="self-end text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors sm:self-start shrink-0 p-1"
                     aria-label="Eliminar recordatorio"
                   >
@@ -922,8 +943,10 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
                       />
                       <span className="text-sm text-muted-foreground line-through flex-1 truncate">{r.title}</span>
                       <button
-                        onClick={() => deleteReminder.mutate(r.id)}
+                        type="button"
+                        onClick={() => setReminderToDelete(r.id)}
                         className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive transition-colors"
+                        aria-label="Eliminar recordatorio"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

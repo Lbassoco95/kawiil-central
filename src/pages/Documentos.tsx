@@ -29,6 +29,7 @@ import { DocumentTile, extensionAccent, inferExtension } from "@/components/docu
 import { DocumentsTreeNav, type TreeNode } from "@/components/documentos/DocumentsTreeNav";
 import { useDocumentFavorites, useToggleDocumentFavorite } from "@/hooks/useDocumentFavorites";
 import { cn } from "@/lib/utils";
+import { KAWIIL_TEAM_ROOT, KAWIIL_TEAM_ROOT_NAME } from "@/lib/dropboxConfig";
 
 // ─── File icon helper ─────────────────────────────────────────
 function getFileIcon(name: string, source?: string) {
@@ -123,7 +124,7 @@ function DropboxLiveBrowser() {
       const allEntries: DropboxEntry[] = data.entries || [];
       setPickerEntries(
         allEntries
-          .filter((e) => e.type === "folder" && e.name !== "Kawiil Mx")
+          .filter((e) => e.type === "folder" && e.name !== KAWIIL_TEAM_ROOT_NAME)
           .sort((a, b) => a.name.localeCompare(b.name))
       );
     } catch (e: any) {
@@ -437,10 +438,10 @@ function DropboxLiveBrowser() {
             </button>
             <button
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-              onClick={() => openFolder("/Kawiil Mx")}
+              onClick={() => openFolder(KAWIIL_TEAM_ROOT)}
             >
               <Folder className="h-5 w-5 text-primary shrink-0" />
-              <span className="text-sm font-medium truncate flex-1">Kawiil Mx</span>
+              <span className="text-sm font-medium truncate flex-1">{KAWIIL_TEAM_ROOT_NAME}</span>
               <Badge variant="secondary" className="text-xs">Equipo</Badge>
             </button>
           </>
@@ -736,9 +737,19 @@ function OrganizedView({
         </div>
       )}
 
-      <DeleteConfirmDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-        onConfirm={() => { if (deleteTarget) { deleteDocument.mutate(deleteTarget); setDeleteTarget(null); } }}
-        title="Eliminar documento" description="¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer." />
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteDocument.mutate(deleteTarget, {
+            onSettled: () => setDeleteTarget(null),
+          });
+        }}
+        isPending={deleteDocument.isPending}
+        title="Eliminar documento"
+        description="¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer."
+      />
 
       <DocumentPreviewDialog open={!!previewDoc} onOpenChange={(o) => { if (!o) setPreviewDoc(null); }} document={previewDoc} />
     </>
@@ -873,7 +884,13 @@ function FlatGridView({
       <DeleteConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-        onConfirm={() => { if (deleteTarget) { deleteDocument.mutate(deleteTarget); setDeleteTarget(null); } }}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteDocument.mutate(deleteTarget, {
+            onSettled: () => setDeleteTarget(null),
+          });
+        }}
+        isPending={deleteDocument.isPending}
         title="Eliminar documento"
         description="¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer."
       />

@@ -13,6 +13,7 @@ import { formatDateMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { logActivity } from "@/lib/activityLog";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
@@ -85,7 +86,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const handleCreateDoc = (docType: "docx" | "xlsx" | "pptx") => {
     const labels = { docx: "Word", xlsx: "Excel", pptx: "PowerPoint" };
     const docName = `${labels[docType]} - ${new Date().toLocaleDateString("es-MX")}.${docType}`;
-    const folderPath = clientDropboxPath || "/Kawiil Mx";
+    const folderPath = clientDropboxPath || KAWIIL_TEAM_ROOT;
     createDropboxDoc.mutate({ docType, docName, folderPath });
   };
 
@@ -425,7 +426,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
         open={showDropboxUpload}
         onClose={() => { setShowDropboxUpload(false); setDropboxUploadFile(null); }}
         file={dropboxUploadFile}
-        initialPath={clientDropboxPath || "/Kawiil Mx"}
+        initialPath={clientDropboxPath || KAWIIL_TEAM_ROOT}
         onUploaded={handleDropboxUploaded}
       />
 
@@ -461,7 +462,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
       <DropboxFilePicker
         open={showDropboxPicker}
         onClose={() => setShowDropboxPicker(false)}
-        initialPath={clientDropboxPath || "/Kawiil Mx"}
+        initialPath={clientDropboxPath || KAWIIL_TEAM_ROOT}
         onSelect={handleDropboxPickerSelect}
       />
     </div>

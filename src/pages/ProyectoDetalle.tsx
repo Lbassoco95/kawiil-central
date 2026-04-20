@@ -25,6 +25,7 @@ import type { LucideIcon } from "lucide-react";
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
+import { kawiilTeamPath } from "@/lib/dropboxConfig";
 import { PROJECT_STATUS_CONFIG } from "@/lib/statusStyles";
 import { useProfiles, useDeleteTask, useUpdateTask } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -315,11 +316,10 @@ const ProyectoDetalle = () => {
   const clientDropboxPath = (project as any).clients?.dropbox_folder_path as string | null | undefined;
   const normalizedClientName = clientName?.trim();
   const fallbackDropboxPath = normalizedClientName
-    ? `/Kawiil Mx/CLIENTES/${normalizedClientName}`
-    : "/Kawiil Mx/CLIENTES";
-  // For lawsuit projects, default to /Kawiil Mx/JUICIOS folder
+    ? kawiilTeamPath("CLIENTES", normalizedClientName)
+    : kawiilTeamPath("CLIENTES");
   const effectiveDropboxPath = isLawsuit
-    ? (clientDropboxPath?.trim() || "/Kawiil Mx/JUICIOS")
+    ? (clientDropboxPath?.trim() || kawiilTeamPath("JUICIOS"))
     : (clientDropboxPath?.trim() || fallbackDropboxPath);
   const lockDropboxToInitialPath = Boolean(clientDropboxPath?.trim());
 

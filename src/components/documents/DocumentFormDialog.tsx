@@ -9,6 +9,7 @@ import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
+import { kawiilTeamPath } from "@/lib/dropboxConfig";
 import { toast } from "sonner";
 import { Loader2, Cloud, HardDrive } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -52,7 +53,7 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
     // 1) Try uploading to Dropbox first
     try {
       const selectedClient = clients?.find((c) => c.id === clientId);
-      const basePath = selectedClient?.dropbox_folder_path || "/Kawiil Mx/DOCUMENTOS";
+      const basePath = selectedClient?.dropbox_folder_path || kawiilTeamPath("DOCUMENTOS");
       const uploadPath = `${basePath}/${file.name}`;
 
       const result = await uploadFileToDropbox(file, uploadPath);
