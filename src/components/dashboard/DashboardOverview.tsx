@@ -20,14 +20,31 @@ import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { toDateStringMX } from "@/lib/dateUtils";
 import { TASK_STATUS_CONFIG } from "@/lib/statusStyles";
 import { cn } from "@/lib/utils";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 
 type Tone = "info" | "success" | "warn" | "danger";
 
-const TONE_STYLES: Record<Tone, { bar: string; text: string }> = {
-  info: { bar: "border-l-primary", text: "text-primary" },
-  success: { bar: "border-l-accent", text: "text-accent" },
-  warn: { bar: "border-l-[hsl(var(--warning))]", text: "text-[hsl(var(--warning))]" },
-  danger: { bar: "border-l-destructive", text: "text-destructive" },
+const TONE_STYLES: Record<Tone, { bar: string; text: string; iconBg: string }> = {
+  info: {
+    bar: "border-l-sky-500",
+    text: "text-sky-600 dark:text-sky-400",
+    iconBg: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  },
+  success: {
+    bar: "border-l-emerald-500",
+    text: "text-emerald-600 dark:text-emerald-400",
+    iconBg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  },
+  warn: {
+    bar: "border-l-amber-500",
+    text: "text-amber-600 dark:text-amber-400",
+    iconBg: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  },
+  danger: {
+    bar: "border-l-rose-500",
+    text: "text-rose-600 dark:text-rose-400",
+    iconBg: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  },
 };
 
 function priorityBarClass(p?: string | null) {
@@ -59,13 +76,15 @@ function StatCard({
   const t = TONE_STYLES[tone];
   return (
     <div className={cn("stat-card border-l-[3px]", t.bar)}>
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
           <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums">{value}</p>
           {delta && <p className={cn("text-[11px] mt-1", t.text)}>{delta}</p>}
         </div>
-        <Icon className="h-[18px] w-[18px] text-muted-foreground/40" />
+        <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", t.iconBg)}>
+          <Icon className="h-4 w-4" />
+        </span>
       </div>
     </div>
   );

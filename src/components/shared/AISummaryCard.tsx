@@ -3,11 +3,18 @@ import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { nowMX, toDateStringMX } from "@/lib/dateUtils";
 import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
+import { Badge } from "@/components/ui/badge";
+import {
+  KAWIIL_AI_GRADIENT,
+  KAWIIL_AI_HEADER_BG,
+} from "@/lib/kawiilAi";
 
 interface Props {
   cacheKey: string;
   contextPrompt: string;
   title?: string;
+  /** Subtítulo opcional bajo el título (eyebrow). Default según contexto. */
+  subtitle?: string;
   ready: boolean;
   userId?: string;
   accentClass?: string;
@@ -15,16 +22,17 @@ interface Props {
   requestDelayMs?: number;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 export function AISummaryCard({
   cacheKey,
   contextPrompt,
   title = "Resumen Kawiil AI",
+  subtitle = "Analizado con tus datos en vivo",
   ready,
   userId,
   requestDelayMs = 0,
 }: Props) {
+  void userId;
+  void requestDelayMs;
   const [content, setContent] = useState<string | null>(() => {
     try {
       const cached = localStorage.getItem(`kawiil-summary-${cacheKey}`);
@@ -32,7 +40,9 @@ export function AISummaryCard({
         const { date, content: c } = JSON.parse(cached);
         if (date === toDateStringMX(nowMX())) return c;
       }
-    } catch {}
+    } catch {
+      /* localStorage no disponible o JSON inválido: regenerar a demanda */
+    }
     return null;
   });
   const [loading, setLoading] = useState(false);
@@ -55,71 +65,107 @@ export function AISummaryCard({
         try {
           localStorage.setItem(
             `kawiil-summary-${cacheKey}`,
-            JSON.stringify({ date: toDateStringMX(nowMX()), content: fullContent })
+            JSON.stringify({ date: toDateStringMX(nowMX()), content: fullContent }),
           );
-        } catch {}
+        } catch {
+          /* ignorar fallo de cache */
+        }
       }
-    } catch (err: any) {
-      setError(err.message || "Error al generar resumen");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al generar resumen");
     } finally {
       setLoading(false);
     }
-  }, [contextPrompt, ready, cacheKey, requestDelayMs]);
+  }, [contextPrompt, ready, cacheKey]);
 
-  // Auto-generate on mount if no cached content
   useEffect(() => {
     if (ready && !content && !loading) {
-      generate();
+      void generate();
     }
+    // Solo dispara la primera vez tras estar listo, sin re-disparar al cambiar `generate`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, content]);
 
   return (
-    <section>
-      <div className="flex items-center gap-2">
+    <section
+      className="overflow-hidden rounded-2xl border border-sky-200/70 shadow-sm dark:border-sky-800/40"
+      aria-label={title}
+    >
+      <div
+        className="flex items-center justify-between gap-3 border-b border-sky-200/40 px-4 py-2.5 dark:border-sky-800/30"
+        style={{ background: KAWIIL_AI_HEADER_BG }}
+      >
         <button
-          onClick={() => content ? setExpanded(!expanded) : generate()}
-          className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          type="button"
+          onClick={() => (content ? setExpanded((v) => !v) : void generate())}
+          className="flex min-w-0 items-center gap-2.5 text-left"
         >
-          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span>{title}</span>
+          <span
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+            style={{ background: KAWIIL_AI_GRADIENT }}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+          </span>
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-[12.5px] font-semibold leading-tight tracking-tight text-foreground">
+              <span className="truncate">{title}</span>
+              <Badge
+                variant="outline"
+                className="ml-0.5 h-4 border-sky-300/70 bg-sky-50/70 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+              >
+                v2.4
+              </Badge>
+            </span>
+            <span className="mt-0.5 block truncate text-[10.5px] leading-tight text-muted-foreground">
+              {subtitle}
+            </span>
+          </span>
+          <span className="ml-1 shrink-0 text-muted-foreground">
+            {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </span>
         </button>
-        {content && (
+        {content ? (
           <button
-            onClick={generate}
+            type="button"
+            onClick={() => void generate()}
             disabled={loading || !ready}
-            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-white/60 hover:text-foreground disabled:opacity-50 dark:hover:bg-white/10"
+            title="Regenerar resumen con Kawiil AI"
+            aria-label="Regenerar resumen"
           >
             {loading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <RefreshCw className="h-3 w-3" />
+              <RefreshCw className="h-3.5 w-3.5" />
             )}
           </button>
-        )}
+        ) : null}
       </div>
 
       {expanded && (
-        <div className="mt-3 pl-7">
+        <div className="bg-gradient-to-br from-sky-50/60 via-white to-blue-50/30 px-4 py-3 dark:from-sky-950/15 dark:via-card dark:to-blue-950/10">
           {error && (
-            <p className="text-xs text-destructive mb-2">{error}</p>
+            <p className="mb-2 text-xs text-destructive">{error}</p>
           )}
 
           {content ? (
-            <KawiilAiMarkdown className="rounded-lg border border-border/40 bg-muted/10 px-3 py-2.5">
+            <KawiilAiMarkdown className="text-[13px] leading-relaxed">
               {content}
             </KawiilAiMarkdown>
           ) : loading ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Analizando datos...
+            <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-500" />
+              Kawiil AI está analizando tus datos…
             </div>
           ) : (
             <button
-              onClick={generate}
+              type="button"
+              onClick={() => void generate()}
               disabled={!ready}
-              className="text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11.5px] font-medium text-white shadow-sm hover:opacity-95 disabled:opacity-50"
+              style={{ background: KAWIIL_AI_GRADIENT }}
             >
+              <Sparkles className="h-3.5 w-3.5" />
               Generar resumen
             </button>
           )}

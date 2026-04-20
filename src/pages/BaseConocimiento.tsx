@@ -3,10 +3,13 @@ import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   BookOpen, Building2, FolderKanban, Bot, BarChart3, Users, Lightbulb,
 } from "lucide-react";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
+import { KnowledgeKawiilCard } from "@/components/knowledge/KnowledgeKawiilCard";
 import { ClientsLearningTab } from "@/components/knowledge/ClientsLearningTab";
 import { ProjectsLearningTab } from "@/components/knowledge/ProjectsLearningTab";
 import { CelulasLearningTab } from "@/components/knowledge/CelulasLearningTab";
@@ -46,9 +49,19 @@ const BaseConocimiento = () => {
           variant="hero"
           breadcrumb={["Kawiil OS", "Conocimiento", "Base"]}
           icon={<BookOpen />}
+          iconAccent={KAWIIL_AI_GRADIENT}
           title="Conocimiento"
           description="Dashboard de inteligencia: monitorea qué está aprendiendo el sistema, por cliente, proyecto y célula"
+          actions={
+            <Badge
+              variant="outline"
+              className="hidden sm:inline-flex border-sky-300/70 bg-sky-50/70 text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+            >
+              v2.4
+            </Badge>
+          }
         />
+        <KnowledgeKawiilCard activeTab={activeTab} onGoToTab={(t) => setActiveTab(t)} />
         <div className="surface-toolbar space-y-4 p-4 md:p-5 rounded-xl border border-border/50">
           <div className="flex gap-1 overflow-x-auto rounded-lg border border-border/40 bg-background/40 p-1 backdrop-blur-sm">
             {tabs.map((t) => {

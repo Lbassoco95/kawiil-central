@@ -373,11 +373,11 @@ INSTRUCCIONES:
             }`}
             style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
           >
-            <div className={`absolute inset-0 opacity-[0.05] bg-gradient-to-br ${stat.highlight ? "from-destructive to-destructive/50" : "from-primary to-accent"}`} />
+            <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${stat.highlight ? "from-rose-500 to-rose-500/40" : "from-sky-500 to-indigo-500"}`} />
             <div className={`relative h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
-              stat.highlight ? "bg-destructive/10" : "bg-primary/10"
+              stat.highlight ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-sky-500/10 text-sky-600 dark:text-sky-400"
             }`}>
-              <stat.icon className={`h-4.5 w-4.5 ${stat.highlight ? "text-destructive" : "text-primary"}`} />
+              <stat.icon className="h-4 w-4" />
             </div>
             <div className="relative min-w-0">
               <div className="text-2xl font-bold text-foreground leading-none animate-count-up">{stat.value}</div>
