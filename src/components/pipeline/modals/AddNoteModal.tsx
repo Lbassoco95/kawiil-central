@@ -6,13 +6,13 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { StickyNote } from "lucide-react";
+import { PipelineModalHeader } from "@/components/pipeline/modals/PipelineModalHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -65,11 +65,13 @@ export function AddNoteModal({ open, onOpenChange, leadId }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Agregar nota</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-md overflow-hidden p-0 [&>button.absolute]:text-white [&>button.absolute]:hover:bg-white/15 [&>button.absolute]:top-3 [&>button.absolute]:right-3">
+        <PipelineModalHeader
+          icon={<StickyNote className="h-4 w-4" />}
+          title="Agregar nota"
+          subtitle="Queda en el historial del lead"
+        />
+        <form onSubmit={onSubmit} className="space-y-4 px-4 pb-4 pt-3 sm:px-5">
           <div>
             <Label>Contenido *</Label>
             <Textarea rows={5} {...form.register("content")} placeholder="Escribe tu nota aquí…" />

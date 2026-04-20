@@ -31,7 +31,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
+import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LeadActivityPanel } from "@/components/pipeline/LeadActivityPanel";
@@ -230,17 +231,68 @@ export default function LeadDetailPage() {
 
   return (
     <div className="space-y-6 max-w-5xl pb-24 md:pb-8">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/pipeline">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Tablero
-          </Link>
-        </Button>
-        <h2 className="text-xl font-semibold flex-1 min-w-0 truncate">{lead.full_name}</h2>
-        <Badge>{lead.priority}</Badge>
-        <Badge variant="outline">score {lead.score}</Badge>
+      {/* Header v2.4 — paleta Kawiil AI */}
+      <header
+        className="relative overflow-hidden rounded-2xl px-4 py-3 sm:px-5 sm:py-4 text-white shadow-md"
+        style={{ background: KAWIIL_AI_HEADER_BG }}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="h-8 gap-1 px-2 text-white hover:bg-white/15"
+          >
+            <Link to="/pipeline">
+              <ArrowLeft className="h-4 w-4" />
+              Tablero
+            </Link>
+          </Button>
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/15 backdrop-blur-sm">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <h2 className="truncate text-lg sm:text-xl font-semibold">{lead.full_name}</h2>
+              <span className="rounded-full border border-white/40 bg-white/10 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-white">
+                v2.4
+              </span>
+            </div>
+            <p className="text-[11.5px] text-white/80 truncate">
+              {lead.company_name || "Sin empresa"}
+              {lead.email ? ` · ${lead.email}` : ""}
+            </p>
+          </div>
+          <Badge className="bg-white/15 text-white border-white/20 hover:bg-white/20">
+            {lead.priority}
+          </Badge>
+          <Badge variant="outline" className="border-white/40 bg-white/10 text-white">
+            score {lead.score}
+          </Badge>
+        </div>
+      </header>
+
+      <div
+        className="flex items-start gap-2.5 rounded-xl border border-sky-200/70 bg-gradient-to-r from-sky-50 to-blue-50 px-3 py-2.5 text-[12px] text-sky-800 shadow-sm dark:border-sky-800/40 dark:from-sky-950/30 dark:to-blue-950/20 dark:text-sky-200"
+      >
+        <span
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white shadow-sm"
+          style={{ background: KAWIIL_AI_GRADIENT }}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">
+            KAWIIL AI · Insights del lead
+          </p>
+          <p className="mt-0.5 text-[12px] leading-snug">
+            {lead.priority === "urgent"
+              ? "Lead marcado como urgente. Recomiendo registrar una llamada o WhatsApp hoy mismo y mover de etapa cuando confirmes interés."
+              : lead.score >= 70
+                ? "Score alto: el lead está caliente. Aprovecha para enviar una propuesta concreta y agendar reunión."
+                : "Mantén el seguimiento con notas y correos breves. Kawiil te recordará si pasa demasiado tiempo sin actividad."}
+          </p>
+        </div>
       </div>
 
       {/* Activity action buttons */}

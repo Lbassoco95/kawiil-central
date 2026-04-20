@@ -6,9 +6,9 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
+import { MessageCircle } from "lucide-react";
+import { PipelineModalHeader } from "@/components/pipeline/modals/PipelineModalHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,11 +94,13 @@ export function LogWhatsAppModal({ open, onOpenChange, leadId, leadName }: Props
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Registrar WhatsApp</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-md overflow-hidden p-0 [&>button.absolute]:text-white [&>button.absolute]:hover:bg-white/15 [&>button.absolute]:top-3 [&>button.absolute]:right-3">
+        <PipelineModalHeader
+          icon={<MessageCircle className="h-4 w-4" />}
+          title="Registrar WhatsApp"
+          subtitle="Resumen de la conversación"
+        />
+        <form onSubmit={onSubmit} className="space-y-4 px-4 pb-4 pt-3 sm:px-5">
           <div>
             <Label>Dirección</Label>
             <Select

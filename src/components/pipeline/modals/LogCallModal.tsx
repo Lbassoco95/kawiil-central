@@ -6,9 +6,9 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
+import { Phone } from "lucide-react";
+import { PipelineModalHeader } from "@/components/pipeline/modals/PipelineModalHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -121,11 +121,13 @@ export function LogCallModal({ open, onOpenChange, leadId, leadName, currentStag
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Registrar llamada</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-md overflow-hidden p-0 [&>button.absolute]:text-white [&>button.absolute]:hover:bg-white/15 [&>button.absolute]:top-3 [&>button.absolute]:right-3">
+        <PipelineModalHeader
+          icon={<Phone className="h-4 w-4" />}
+          title="Registrar llamada"
+          subtitle={leadName ? `Para ${leadName}` : "Queda en el historial del lead"}
+        />
+        <form onSubmit={onSubmit} className="space-y-4 px-4 pb-4 pt-3 sm:px-5">
           <div>
             <Label>Resultado *</Label>
             <Select

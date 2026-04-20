@@ -413,14 +413,14 @@ export default function PipelineDashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Hero ejecutivo: Sala de control comercial */}
+      {/* Hero ejecutivo: Sala de control comercial — paleta Kawiil AI v2.4 */}
       <header
         className="relative overflow-hidden rounded-2xl px-5 py-5 sm:px-7 sm:py-6 text-primary-foreground shadow-md"
         style={{
           background:
-            "radial-gradient(ellipse 600px 220px at 0% 0%, hsl(217 91% 60% / 0.95), transparent 70%), " +
-            "radial-gradient(ellipse 500px 180px at 100% 100%, hsl(262 83% 58% / 0.85), transparent 70%), " +
-            "linear-gradient(135deg, hsl(217 91% 50%), hsl(262 70% 45%))",
+            "radial-gradient(ellipse 600px 220px at 0% 0%, hsl(200 100% 60% / 0.95), transparent 70%), " +
+            "radial-gradient(ellipse 500px 180px at 100% 100%, hsl(220 100% 55% / 0.9), transparent 70%), " +
+            "linear-gradient(135deg, hsl(200 100% 50%), hsl(220 100% 50%))",
         }}
       >
         <div
@@ -433,11 +433,16 @@ export default function PipelineDashboard() {
         />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-              Sala de control comercial
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                Sala de control comercial
+              </h1>
+              <span className="rounded-full border border-white/40 bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                v2.4
+              </span>
+            </div>
             <p className="mt-1 text-sm sm:text-base text-white/85 max-w-2xl">
-              Tu embudo, en vivo. La IA ya filtró lo urgente por ti.
+              Tu embudo, en vivo. Kawiil AI ya filtró lo urgente por ti.
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">

@@ -11,10 +11,10 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { PipelineModalHeader } from "@/components/pipeline/modals/PipelineModalHeader";
+import { FileText } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -115,11 +115,13 @@ export default function EmailTemplates() {
               Nueva plantilla
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editId ? "Editar plantilla" : "Nueva plantilla"}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden p-0 [&>button.absolute]:text-white [&>button.absolute]:hover:bg-white/15 [&>button.absolute]:top-3 [&>button.absolute]:right-3 flex flex-col">
+            <PipelineModalHeader
+              icon={<FileText className="h-4 w-4" />}
+              title={editId ? "Editar plantilla" : "Nueva plantilla"}
+              subtitle="Reusable en correos del pipeline"
+            />
+            <div className="space-y-3 px-4 pb-4 pt-3 sm:px-5 overflow-y-auto">
               <div>
                 <Label>Nombre interno</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />

@@ -6,9 +6,9 @@ import {
   Dialog,
   DialogContent,
   DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
+import { CalendarClock } from "lucide-react";
+import { PipelineModalHeader } from "@/components/pipeline/modals/PipelineModalHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,11 +99,13 @@ export function ScheduleMeetingModal({ open, onOpenChange, leadId, leadName }: P
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Agendar reunión</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+      <DialogContent className="sm:max-w-md overflow-hidden p-0 [&>button.absolute]:text-white [&>button.absolute]:hover:bg-white/15 [&>button.absolute]:top-3 [&>button.absolute]:right-3">
+        <PipelineModalHeader
+          icon={<CalendarClock className="h-4 w-4" />}
+          title="Agendar reunión"
+          subtitle="Quedará registrada en el lead"
+        />
+        <form onSubmit={onSubmit} className="space-y-4 px-4 pb-4 pt-3 sm:px-5">
           <div>
             <Label>Título *</Label>
             <Input {...form.register("title")} />

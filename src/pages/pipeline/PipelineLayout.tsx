@@ -3,7 +3,10 @@ import { AppLayout } from "@/components/AppLayout";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Search, X, Filter } from "lucide-react";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 
 const tabs = [
   { to: "/pipeline/dashboard", label: "Dashboard" },
@@ -37,12 +40,22 @@ export default function PipelineLayout() {
     <AppLayout>
       <div className="flex flex-col gap-4 p-4 md:p-6 max-w-[1600px] mx-auto w-full">
         {!isDashboard && (
-          <div className="surface-toolbar p-4 md:p-5">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Pipeline y leads</h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-1">
-              Embudo comercial, seguimiento y correos automatizados.
-            </p>
-          </div>
+          <PageHeader
+            variant="hero"
+            breadcrumb={["Kawiil OS", "Comercial", "Pipeline"]}
+            icon={<Filter />}
+            iconAccent={KAWIIL_AI_GRADIENT}
+            title="Pipeline y leads"
+            description="Embudo comercial, seguimiento y correos automatizados."
+            actions={
+              <Badge
+                variant="outline"
+                className="hidden sm:inline-flex border-sky-300/70 bg-sky-50/70 text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+              >
+                v2.4
+              </Badge>
+            }
+          />
         )}
         {!hideTabs && !isDashboard && (
           <div className="surface-toolbar max-w-xl space-y-1.5 rounded-xl p-3">
