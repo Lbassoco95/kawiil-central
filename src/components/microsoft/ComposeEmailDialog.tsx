@@ -14,7 +14,22 @@ import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection } f
 import { useOrgUsers, type OrgUser } from "@/hooks/useOrgUsers";
 import { useMailDirectoryContacts, useSyncMailDirectory, type MailDirectoryContact } from "@/hooks/useMailDirectory";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, ChevronDown, ChevronUp, Sparkles, RefreshCw, BookUser, Pencil, X, Wand2 } from "lucide-react";
+import {
+  Loader2,
+  Send,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  BookUser,
+  Pencil,
+  X,
+  Wand2,
+  Wand,
+  CalendarCheck,
+  HandCoins,
+  FileSpreadsheet,
+  Mail as MailIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -24,12 +39,47 @@ import {
   type ComposerAttachment,
 } from "@/lib/emailComposer";
 import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
-
-const KAWIIL_AI_GRADIENT = "linear-gradient(135deg, hsl(200 100% 50%), hsl(220 100% 55%))";
-const KAWIIL_AI_HEADER_BG =
-  "linear-gradient(135deg, hsl(220 100% 55%) 0%, hsl(210 100% 45%) 100%)";
+import { Badge } from "@/components/ui/badge";
+import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 
 type ImproveMode = "improve" | "shorter" | "formal" | "friendly";
+
+/** Plantillas rápidas mostradas en el panel IA y como pills cuando el editor está vacío. */
+const QUICK_DRAFT_TEMPLATES: Array<{
+  id: string;
+  label: string;
+  icon: typeof Sparkles;
+  instruction: string;
+}> = [
+  {
+    id: "confirm-meeting",
+    label: "Confirmar reunión",
+    icon: CalendarCheck,
+    instruction:
+      "Redacta un correo breve y cordial para confirmar la reunión propuesta. Incluye fecha, hora y un cierre amable.",
+  },
+  {
+    id: "request-info",
+    label: "Pedir información",
+    icon: MailIcon,
+    instruction:
+      "Redacta un correo profesional pidiendo la información o documentación pendiente al destinatario, con tono cordial y un cierre claro.",
+  },
+  {
+    id: "send-report",
+    label: "Enviar reporte semanal",
+    icon: FileSpreadsheet,
+    instruction:
+      "Redacta un correo presentando el reporte semanal adjunto: resume 2-3 hitos del avance y cierra con un próximo paso.",
+  },
+  {
+    id: "follow-up-payment",
+    label: "Seguimiento de pago",
+    icon: HandCoins,
+    instruction:
+      "Redacta un correo cordial para dar seguimiento al pago de una factura pendiente, agradeciendo de antemano y ofreciendo apoyo si necesitan algo.",
+  },
+];
 
 export interface ComposeDefaultTemplateContext {
   razon_social?: string;
@@ -206,6 +256,7 @@ export function ComposeEmailDialog({
   const [aiLoading, setAiLoading] = useState(false);
   const [hasAiDraft, setHasAiDraft] = useState(false);
   const [improveBusy, setImproveBusy] = useState<ImproveMode | null>(null);
+  const [subjectSuggesting, setSubjectSuggesting] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [keepZips, setKeepZips] = useState(true);
   const lastInstructionRef = useRef("");
@@ -401,6 +452,39 @@ export function ComposeEmailDialog({
     [subject, to],
   );
 
+  const runSuggestSubject = useCallback(async () => {
+    const bodyHtml = (bodyRef.current || "").trim();
+    const bodyText = bodyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (!bodyText) {
+      toast.error("Escribe primero un borrador para que Kawiil sugiera un asunto.");
+      return;
+    }
+    setSubjectSuggesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-email-draft", {
+        body: {
+          action: "draft",
+          tone: "formal",
+          context: { subject: subject.trim(), to: to.trim() },
+          instruction:
+            "Sugiere SOLO un asunto breve (máximo 70 caracteres) y profesional para este correo. Devuelve únicamente el asunto, sin comillas, sin la palabra 'Asunto:'. Cuerpo del correo:\n\n" +
+            bodyText.slice(0, 2000),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(typeof data.message === "string" ? data.message : data.error);
+      const raw = (data?.text ?? "").trim();
+      if (!raw) throw new Error("La IA no devolvió un asunto");
+      const firstLine = raw.split("\n")[0].replace(/^["'`]+|["'`]+$/g, "").replace(/^Asunto:\s*/i, "").slice(0, 90);
+      setSubject(firstLine);
+      toast.success("Asunto sugerido por Kawiil AI");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo sugerir un asunto");
+    } finally {
+      setSubjectSuggesting(false);
+    }
+  }, [subject, to]);
+
   const applyAccountingTemplate = useCallback(
     (result: { subject: string; bodyHtml: string }) => {
       setSubject(result.subject);
@@ -435,6 +519,11 @@ export function ComposeEmailDialog({
     </div>
   );
 
+  const recipientCount =
+    parseRecipients(to).length + parseRecipients(cc).length + parseRecipients(bcc).length;
+  const bodyTextLen = (bodyRef.current || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
+  const bodyEmpty = bodyTextLen === 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -445,19 +534,49 @@ export function ComposeEmailDialog({
           style={{ background: KAWIIL_AI_HEADER_BG }}
         >
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white/15 backdrop-blur-sm">
-              <Pencil className="h-3.5 w-3.5" />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/15 backdrop-blur-sm">
+              <Pencil className="h-4 w-4" />
             </span>
-            <p className="truncate text-sm font-semibold">Nuevo mensaje</p>
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 truncate text-sm font-semibold leading-tight">
+                Nuevo mensaje
+                <Badge
+                  variant="outline"
+                  className="ml-0.5 h-4 border-white/40 bg-white/10 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-white"
+                >
+                  v2.4
+                </Badge>
+              </p>
+              <p className="mt-0.5 truncate text-[11px] leading-tight text-white/80">
+                {subject?.trim()
+                  ? subject.trim()
+                  : recipientCount > 0
+                    ? `${recipientCount} destinatario${recipientCount === 1 ? "" : "s"} · sin asunto`
+                    : "Asistente Kawiil listo para ayudarte a redactar"}
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            className="rounded-md p-1.5 text-white/90 hover:bg-white/15"
-            onClick={() => onOpenChange(false)}
-            aria-label="Cerrar"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 px-2 text-[11px] text-white hover:bg-white/15 disabled:opacity-50"
+              onClick={() => setAiPanelOpen((v) => !v)}
+              title="Abrir asistente Kawiil para redactar"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {aiPanelOpen ? "Cerrar IA" : "Asistente"}
+            </Button>
+            <button
+              type="button"
+              className="rounded-md p-1.5 text-white/90 hover:bg-white/15"
+              onClick={() => onOpenChange(false)}
+              aria-label="Cerrar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </header>
         <div
           className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6"
@@ -566,13 +685,39 @@ export function ComposeEmailDialog({
                 placeholder="Asunto del correo"
                 className="flex-1"
               />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 shrink-0 gap-1.5 border-sky-200/70 bg-sky-50/60 px-2.5 text-[11.5px] text-sky-700 hover:bg-sky-100/70 disabled:opacity-60 dark:border-sky-800/40 dark:bg-sky-950/30 dark:text-sky-300 dark:hover:bg-sky-950/50"
+                onClick={() => void runSuggestSubject()}
+                disabled={subjectSuggesting || bodyEmpty}
+                title={
+                  bodyEmpty
+                    ? "Escribe primero el cuerpo del correo para que Kawiil sugiera un asunto."
+                    : "Sugerir asunto con Kawiil AI"
+                }
+              >
+                {subjectSuggesting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wand className="h-3.5 w-3.5" />
+                )}
+                Sugerir asunto
+              </Button>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col space-y-2">
               {aiPanelOpen && (
-                <div className="rounded-xl border border-sky-200/60 bg-gradient-to-r from-sky-50 to-blue-50 p-3 space-y-2 shadow-sm shrink-0 dark:border-sky-800/40 dark:from-sky-950/30 dark:to-blue-950/20">
+                <div className="rounded-xl border border-sky-200/60 bg-gradient-to-r from-sky-50 to-blue-50 p-3 space-y-2.5 shadow-sm shrink-0 dark:border-sky-800/40 dark:from-sky-950/30 dark:to-blue-950/20">
+                  <div className="flex items-center justify-between">
+                    <p className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">
+                      <Sparkles className="h-3 w-3" />
+                      Asistente Kawiil · ¿Qué quieres decir?
+                    </p>
+                  </div>
                   <Input
-                    placeholder="¿Qué quieres decir? Ej: confirma la reunión del martes"
+                    placeholder="Ej: confirma la reunión del martes a las 10am con Juan"
                     value={aiInstruction}
                     onChange={(e) => setAiInstruction(e.target.value)}
                     disabled={aiLoading}
@@ -584,11 +729,34 @@ export function ComposeEmailDialog({
                     }}
                     className="bg-background"
                   />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                      Plantillas:
+                    </span>
+                    {QUICK_DRAFT_TEMPLATES.map((tpl) => {
+                      const Icon = tpl.icon;
+                      return (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          disabled={aiLoading}
+                          onClick={() => {
+                            setAiInstruction(tpl.instruction);
+                            void runAiDraft(tpl.instruction);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-full border border-sky-200/70 bg-white px-2 py-0.5 text-[11px] font-medium text-sky-700 shadow-sm hover:bg-sky-100/70 disabled:opacity-50 dark:border-sky-800/40 dark:bg-background/60 dark:text-sky-300 dark:hover:bg-sky-500/10"
+                        >
+                          <Icon className="h-3 w-3" />
+                          {tpl.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       size="sm"
-                      disabled={aiLoading}
+                      disabled={aiLoading || !aiInstruction.trim()}
                       onClick={() => void runAiDraft(aiInstruction)}
                       className="gap-1.5 text-white shadow-sm"
                       style={{ background: KAWIIL_AI_GRADIENT }}
@@ -596,6 +764,38 @@ export function ComposeEmailDialog({
                       {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" /> : <Sparkles className="h-3.5 w-3.5" />}
                       Generar borrador
                     </Button>
+                    <span className="text-[10.5px] text-muted-foreground">
+                      También puedes elegir una plantilla y se generará al instante.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {!aiPanelOpen && bodyEmpty && (
+                <div className="shrink-0 rounded-xl border border-sky-200/50 bg-gradient-to-r from-sky-50/70 to-blue-50/50 px-3 py-2.5 dark:border-sky-800/30 dark:from-sky-950/20 dark:to-blue-950/15">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">
+                      <Sparkles className="h-3 w-3" />
+                      Empieza con una plantilla Kawiil
+                    </span>
+                    {QUICK_DRAFT_TEMPLATES.map((tpl) => {
+                      const Icon = tpl.icon;
+                      return (
+                        <button
+                          key={tpl.id}
+                          type="button"
+                          onClick={() => {
+                            setAiPanelOpen(true);
+                            setAiInstruction(tpl.instruction);
+                            void runAiDraft(tpl.instruction);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-full border border-sky-200/70 bg-white px-2 py-0.5 text-[11px] font-medium text-sky-700 shadow-sm hover:bg-sky-100/70 dark:border-sky-800/40 dark:bg-background/60 dark:text-sky-300 dark:hover:bg-sky-500/10"
+                        >
+                          <Icon className="h-3 w-3" />
+                          {tpl.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
