@@ -19,7 +19,10 @@ import {
   Settings,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { MoffinIntegrationCard } from "@/components/admin/MoffinIntegrationCard";
+import { AdminKawiilCard } from "@/components/admin/AdminKawiilCard";
+import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 
 type TabKey =
   | "usuarios"
@@ -73,8 +76,23 @@ const Configuracion = () => {
           variant="hero"
           breadcrumb={["Kawiil OS", "Sistema", "Configuración"]}
           icon={<Settings />}
+          iconAccent={KAWIIL_AI_GRADIENT}
           title="Configuración"
           description="Gestión de Kawiilers, células, catálogos, integraciones y apariencia"
+          actions={
+            <Badge
+              variant="outline"
+              className="hidden sm:inline-flex border-sky-300/70 bg-sky-50/70 text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+            >
+              v2.4
+            </Badge>
+          }
+        />
+
+        <AdminKawiilCard
+          activeTab={tab}
+          onGoToTab={(t) => setTab(t)}
+          isTransformador={isTransformador}
         />
 
         <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
@@ -103,49 +121,94 @@ const Configuracion = () => {
           {tab === "adopcion" && <AdoptionAnalyticsTab />}
           {tab === "integraciones" && isTransformador && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Plug className="h-4 w-4" />
-                <span>Estado de integraciones externas (solo transformadores).</span>
-              </div>
-              <MoffinIntegrationCard />
+              <section className="overflow-hidden rounded-2xl border border-sky-200/70 shadow-sm dark:border-sky-800/40">
+                <header
+                  className="flex items-center gap-3 px-4 py-2.5 text-white"
+                  style={{ background: KAWIIL_AI_HEADER_BG }}
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/15 backdrop-blur">
+                    <Plug className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold leading-tight">
+                      Integraciones externas
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] leading-tight text-white/80">
+                      Configuración solo visible para transformadores
+                    </p>
+                  </div>
+                </header>
+                <div className="space-y-3 bg-card/60 px-4 py-4">
+                  <p className="text-xs text-muted-foreground">
+                    Conecta servicios externos como Moffin (SAT), Microsoft 365, Slack o
+                    Dropbox. Cada integración expone su propio panel de salud y
+                    credenciales.
+                  </p>
+                  <MoffinIntegrationCard />
+                </div>
+              </section>
             </div>
           )}
           {tab === "apariencia" && (
             <div className="space-y-4">
-              <div className="surface-toolbar p-4 sm:p-5">
-                <h3 className="text-sm font-semibold">Tema</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Elige el modo claro u oscuro para toda la aplicación.
-                </p>
-                <div className="mt-4 inline-flex rounded-lg border border-border/50 bg-background/40 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setTheme("light")}
-                    className={`tab-pill inline-flex items-center gap-1.5 ${
-                      (theme ?? "light") === "light" ? "tab-pill-active" : "tab-pill-inactive"
-                    }`}
-                  >
-                    <Sun className="h-3.5 w-3.5" />
-                    Claro
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTheme("dark")}
-                    className={`tab-pill inline-flex items-center gap-1.5 ${
-                      theme === "dark" ? "tab-pill-active" : "tab-pill-inactive"
-                    }`}
-                  >
-                    <Moon className="h-3.5 w-3.5" />
-                    Oscuro
-                  </button>
+              <section className="overflow-hidden rounded-2xl border border-sky-200/70 shadow-sm dark:border-sky-800/40">
+                <header
+                  className="flex items-center gap-3 px-4 py-2.5 text-white"
+                  style={{ background: KAWIIL_AI_HEADER_BG }}
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/15 backdrop-blur">
+                    <Palette className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold leading-tight">
+                      Apariencia · v2.4
+                    </p>
+                    <p className="mt-0.5 truncate text-[11px] leading-tight text-white/80">
+                      Tema claro/oscuro y opciones visuales de Kawiil OS
+                    </p>
+                  </div>
+                </header>
+                <div className="space-y-4 bg-card/60 px-4 py-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">Tema</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Elige el modo claro u oscuro para toda la aplicación.
+                    </p>
+                    <div className="mt-3 inline-flex rounded-full border border-border/50 bg-background/60 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setTheme("light")}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          (theme ?? "light") === "light"
+                            ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Sun className="h-3.5 w-3.5" />
+                        Claro
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTheme("dark")}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          theme === "dark"
+                            ? "bg-card text-foreground shadow-sm ring-1 ring-border/50"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Moon className="h-3.5 w-3.5" />
+                        Oscuro
+                      </button>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-dashed border-border/60 bg-background/30 p-3">
+                    <h3 className="text-sm font-semibold">Próximamente</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Densidad de tablas, idioma y atajos de teclado personalizados.
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="surface-toolbar p-4 sm:p-5">
-                <h3 className="text-sm font-semibold">Próximamente</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Densidad de tablas, idioma y atajos de teclado personalizados.
-                </p>
-              </div>
+              </section>
             </div>
           )}
         </div>
