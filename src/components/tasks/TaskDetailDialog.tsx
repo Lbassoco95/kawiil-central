@@ -20,15 +20,19 @@ import { useAddTaskAssignee, useRemoveTaskAssignee } from "@/hooks/useTaskAssign
 import { useCelulaOptions } from "@/hooks/useCelulaOptions";
 import { ACTIVE_SUPABASE_URL, supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   MessageSquare, Paperclip, Link, Calendar, User, Clock,
-  Upload, ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
-  Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2, GitBranch
+  ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
+  Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2, GitBranch,
+  ChevronRight, Activity as ActivityIcon, CheckCircle2,
 } from "lucide-react";
-import { formatMX } from "@/lib/dateUtils";
+import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import { TaskDependenciesPanel } from "./TaskDependenciesPanel";
+import { TaskKawiilAiCard } from "./TaskKawiilAiCard";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -207,6 +211,38 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     () => (orgProfiles ?? []).map((p) => ({ value: p.user_id, label: p.full_name })).sort((a, b) => a.label.localeCompare(b.label, "es")),
     [orgProfiles]
   );
+
+  // Subtareas reales (children por parent_task_id) — fuente de verdad para "Subtareas N/total" v2.5
+  const { data: childSubtasks = [] } = useQuery({
+    queryKey: ["task-subtasks", taskId],
+    enabled: !!user && !!taskId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("id, title, status, due_date, assigned_to, completed_at, priority")
+        .eq("parent_task_id", taskId!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Actividad de la tarea (activity_log)
+  const { data: taskActivity = [] } = useQuery({
+    queryKey: ["task-activity", taskId],
+    enabled: !!user && !!taskId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("activity_log")
+        .select("id, user_id, action, details, created_at")
+        .eq("entity_type", "task")
+        .eq("entity_id", taskId!)
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   if (!taskId) return null;
 
@@ -503,39 +539,141 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     if (nested) onClose();
   };
 
+  // ── v2.5 derived UI helpers ──
+  const currentEstimatedHours = pendingChanges.estimated_hours !== undefined
+    ? pendingChanges.estimated_hours
+    : (task as any)?.estimated_hours ?? null;
+  const registeredHours = (displaySeconds || 0) / 3600;
+  const overdueBadge = task?.due_date && isPastDueCalendarMX(task.due_date) && !isTaskClosedStatus(currentStatus);
+  const subtaskTotal = childSubtasks.length;
+  const subtaskClosed = childSubtasks.filter((s: any) => isTaskClosedStatus(s.status)).length;
+  const subtaskProgressPct = subtaskTotal === 0 ? 0 : Math.round((subtaskClosed / subtaskTotal) * 100);
+
+  const fileExtIcon = (name?: string) => {
+    const ext = (name?.split(".").pop() || "").toLowerCase();
+    if (["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(ext)) return FileImage;
+    if (["zip", "rar", "7z"].includes(ext)) return FileArchive;
+    if (["xlsx", "xls", "csv"].includes(ext)) return FileSpreadsheet;
+    return FileText;
+  };
+
+  const allAttachments = [
+    ...documents.map((d: any) => ({
+      kind: "doc" as const,
+      id: d.id,
+      name: d.name,
+      size: d.file_size,
+      created_at: d.created_at,
+      raw: d,
+    })),
+    ...dropboxLinks.map((l: any, i: number) => ({
+      kind: "dropbox" as const,
+      id: `dbx-${i}`,
+      name: l.name || (() => {
+        try {
+          return new URL(l.url).pathname.split("/").pop() || l.url;
+        } catch {
+          return l.url;
+        }
+      })(),
+      size: null as number | null,
+      created_at: l.added_at || null,
+      url: l.url,
+      index: i,
+    })),
+  ];
+
+  const projectChip = (task as any)?.projects?.name as string | undefined;
+  const clientChip = (task as any)?.clients?.name as string | undefined;
+
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-3xl gap-0 p-0 overflow-hidden">
+      <DialogContent className="max-w-[min(1180px,96vw)] w-full h-[92vh] gap-0 p-0 overflow-hidden flex flex-col">
+        <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
         {isLoading ? (
           <div className="py-12 text-center text-muted-foreground">Cargando...</div>
         ) : task ? (
-          <div className="flex flex-col max-h-[85vh]">
-            {/* ── Header ── */}
-            <div className="px-6 pt-5 pb-3 space-y-4">
-              {/* Row 1: Editable title */}
-              <DialogHeader className="p-0">
-                <DialogTitle className="sr-only">Detalle de tarea</DialogTitle>
-                <div className="flex items-center gap-2">
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* ── Header sticky v2.5 ── */}
+            <div className="shrink-0 border-b bg-background/80 backdrop-blur-md px-5 sm:px-7 py-4 space-y-3">
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                {clientChip && (
+                  <>
+                    <span className="font-medium text-foreground/70">{clientChip}</span>
+                    <ChevronRight className="h-3 w-3 opacity-60" />
+                  </>
+                )}
+                {projectChip && (
+                  <>
+                    <span className="font-medium text-foreground/70">{projectChip}</span>
+                    <ChevronRight className="h-3 w-3 opacity-60" />
+                  </>
+                )}
+                <span className="truncate text-foreground">Tarea</span>
+                {parentTask && (
+                  <>
+                    <ChevronRight className="h-3 w-3 opacity-60" />
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      onClick={() => goToParentTask(parentTask.id)}
+                      title="Abrir tarea principal"
+                    >
+                      <GitBranch className="h-3 w-3" />
+                      Sub de «{parentTask.title.length > 28 ? parentTask.title.slice(0, 28) + "…" : parentTask.title}»
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Row: priority pill + title + actions */}
+              <div className="flex items-start gap-3">
+                <span
+                  className={`mt-1.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${priorityLabels[currentPriority as keyof typeof priorityLabels] ? "" : ""} ${
+                    currentPriority === "urgente"
+                      ? "bg-red-500/15 text-red-700 dark:text-red-300"
+                      : currentPriority === "alta"
+                      ? "bg-orange-500/15 text-orange-700 dark:text-orange-300"
+                      : currentPriority === "media"
+                      ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                      : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                  }`}
+                >
+                  {currentPriority === "urgente" ? "P1 · URGENTE" :
+                   currentPriority === "alta" ? "P2 · ALTA" :
+                   currentPriority === "media" ? "P3 · MEDIA" : "P4 · BAJA"}
+                </span>
+
+                <div className="flex-1 min-w-0">
                   <Input
                     value={currentTitle}
                     onChange={(e) => setPending("title", e.target.value)}
-                    className="flex-1 text-base font-semibold border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
+                    className="text-lg sm:text-xl font-semibold leading-tight border-0 border-b border-transparent hover:border-border focus-visible:border-primary focus-visible:ring-0 px-0 h-auto py-1 rounded-none bg-transparent"
                     placeholder="Nombre de la tarea"
                   />
-                  {canDeleteTasks && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    {areaLabel && (
+                      <span className="font-medium text-foreground/70">{areaLabel}</span>
+                    )}
+                    {task.due_date && (
+                      <span className={`inline-flex items-center gap-1 ${overdueBadge ? "text-red-600 dark:text-red-400 font-medium" : ""}`}>
+                        <Calendar className="h-3 w-3" />
+                        Vence {formatMX(task.due_date, "dd MMM yyyy")}
+                        {overdueBadge && <span className="ml-1 rounded-sm bg-red-500/15 px-1 text-[9px] uppercase tracking-wide">Vencida</span>}
+                      </span>
+                    )}
+                    {(task as any).creator_profile && (
+                      <span className="inline-flex items-center gap-1">
+                        <UserCheck className="h-3 w-3" /> {(task as any).creator_profile.full_name}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </DialogHeader>
 
-              {/* Row 2: Main controls — Status, Priority, Assignee */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Estado</label>
+                <div className="flex items-center gap-1.5 shrink-0">
                   <Select value={currentStatus} onValueChange={handleStatusChange}>
-                    <SelectTrigger className="h-8 text-xs w-full">
+                    <SelectTrigger className="h-8 text-xs w-[140px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -544,107 +682,42 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Prioridad</label>
-                  <Select value={currentPriority} onValueChange={(v) => setPending("priority", v)}>
-                    <SelectTrigger className="h-8 text-xs w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(priorityLabels).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>{label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Responsable</label>
-                  <SearchableSelect
-                    options={sortedProfiles}
-                    value={currentAssignedTo || ""}
-                    onValueChange={(uid) => setPending("assigned_to", uid || null)}
-                    placeholder="Sin asignar"
-                    searchPlaceholder="Buscar..."
-                    className="h-8 w-full text-xs"
-                  />
-                </div>
-              </div>
-
-              {parentTask && (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
-                  <GitBranch className="h-3.5 w-3.5 shrink-0 text-primary" />
-                  <span className="text-muted-foreground">Subtarea de</span>
-                  <Button
-                    type="button"
-                    variant="link"
-                    className="h-auto p-0 text-xs font-medium text-primary"
-                    onClick={() => goToParentTask(parentTask.id)}
-                  >
-                    {parentTask.title}
-                  </Button>
-                </div>
-              )}
-
-              {/* Row 3: Context info */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                {areaLabel && <span className="font-medium text-foreground/80">{areaLabel}</span>}
-                {(task as any).clients?.name && (
-                  <span className="flex items-center gap-1"><User className="h-3 w-3" />{(task as any).clients.name}</span>
-                )}
-                {(task as any).creator_profile && (
-                  <span className="flex items-center gap-1"><UserCheck className="h-3 w-3" />Creada por: {(task as any).creator_profile.full_name}</span>
-                )}
-                {(task as any).started_at && <span>Inicio: {formatMX((task as any).started_at, "dd MMM HH:mm")}</span>}
-                {(task as any).completed_at && <span>Completada: {formatMX((task as any).completed_at, "dd MMM HH:mm")}</span>}
-              </div>
-
-              {/* Row 4: Secondary actions — Date, Timer, Block time */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
-                  <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs">{task.due_date ? formatMX(task.due_date, "dd MMM yyyy") : "Sin fecha"}</span>
-                  </div>
-                  {(isAssignedUser || canEditDueDates) && (
-                    <button className="hover:text-foreground text-muted-foreground" onClick={() => { setNewDueDate(task.due_date || ""); setDueDateReason(""); setEditingDueDate(true); }}>
-                      <Pencil className="h-3 w-3" />
-                    </button>
+                  {currentStatus !== "completada" && (
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1 text-xs"
+                      onClick={() => updateTask.mutate({ id: taskId, status: "completada" })}
+                      disabled={updateTask.isPending}
+                      title="Marcar como completada"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Completar
+                    </Button>
+                  )}
+                  {hasPendingChanges && (
+                    <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-8 text-xs gap-1">
+                      {updateTask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      Guardar
+                    </Button>
+                  )}
+                  {hasPendingChanges && (
+                    <Button size="sm" variant="ghost" onClick={() => setPendingChanges({})} className="h-8 text-xs">
+                      Descartar
+                    </Button>
+                  )}
+                  {canDeleteTasks && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => setShowDeleteConfirm(true)} title="Eliminar tarea">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   )}
                 </div>
-                <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/30">
-                  <Timer className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-mono tabular-nums flex-1">{formatTimer(displaySeconds)}</span>
-                  <button
-                    className={`h-5 w-5 inline-flex items-center justify-center rounded ${timerRunning ? "text-destructive" : "hover:text-foreground text-muted-foreground"}`}
-                    onClick={handleTimerToggle}
-                  >
-                    {timerRunning ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                  </button>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setShowBlockTime(true)} className="gap-1.5 text-xs h-auto py-2">
-                  <Clock className="h-3.5 w-3.5" /> Bloquear tiempo
-                </Button>
               </div>
-
-              {/* Save bar */}
-              {hasPendingChanges && (
-                <div className="flex items-center gap-2 p-2 rounded-md bg-primary/5 border border-primary/20">
-                  <Button size="sm" onClick={handleSaveChanges} disabled={updateTask.isPending} className="h-7 text-xs gap-1">
-                    {updateTask.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                    Guardar cambios
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setPendingChanges({})} className="h-7 text-xs">
-                    Descartar
-                  </Button>
-                </div>
-              )}
             </div>
 
-            <Separator />
+            {/* ── Body 2-column v2.5 ── */}
+            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
 
-            {/* ── Scrollable body ── */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {/* ── Main column (scrollable) ── */}
+            <div className="overflow-y-auto px-5 sm:px-7 py-5 space-y-6 border-r border-border/60">
               {/* Due date edit */}
               {editingDueDate && (
                 <div className="p-3 rounded-lg border bg-muted/20 space-y-2">
@@ -1054,6 +1127,198 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                 </TabsContent>
               </Tabs>
 
+            </div>
+
+            {/* ── Sidebar v2.5 ── */}
+            <aside className="hidden lg:flex flex-col gap-4 overflow-y-auto bg-muted/20 px-4 py-5">
+              {/* Asignación */}
+              <section className="rounded-lg border bg-background p-3 space-y-2.5">
+                <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <UserCheck className="h-3 w-3" /> Asignación
+                </h5>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Responsable</label>
+                    <SearchableSelect
+                      options={sortedProfiles}
+                      value={currentAssignedTo || ""}
+                      onValueChange={(uid) => setPending("assigned_to", uid || null)}
+                      placeholder="Sin responsable"
+                      searchPlaceholder="Buscar persona..."
+                      className="h-8 w-full text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Área / Célula</label>
+                    <Select value={task.area || "__none__"} onValueChange={(v) => setPending("area", v === "__none__" ? null : v)}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sin área" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sin área</SelectItem>
+                        {Array.from(celulaLabelMap.entries()).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-0.5">Prioridad</label>
+                    <Select value={currentPriority} onValueChange={(v) => setPending("priority", v)}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="urgente">P1 · Urgente</SelectItem>
+                        <SelectItem value="alta">P2 · Alta</SelectItem>
+                        <SelectItem value="media">P3 · Media</SelectItem>
+                        <SelectItem value="baja">P4 · Baja</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {assignees.length > 0 && (
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Colaboradores ({assignees.length})</label>
+                      <div className="flex flex-wrap gap-1">
+                        {assignees.map((a: any) => {
+                          const initials = (a.profile?.full_name || "?").split(" ").slice(0, 2).map((p: string) => p[0]).join("").toUpperCase();
+                          return (
+                            <Avatar key={a.id} className="h-6 w-6 border border-background -ml-1 first:ml-0" title={a.profile?.full_name}>
+                              <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
+                            </Avatar>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Tiempo */}
+              <section className="rounded-lg border bg-background p-3 space-y-2.5">
+                <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="h-3 w-3" /> Tiempo
+                </h5>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-muted-foreground">Registrado</span>
+                    {(task as any).estimated_hours ? (
+                      <span className="text-[10px] text-muted-foreground">de {(task as any).estimated_hours}h estimadas</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono text-base font-semibold tabular-nums">{formatTimer(displaySeconds)}</span>
+                    {timerRunning && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium animate-pulse">● en curso</span>}
+                  </div>
+                  {(task as any).estimated_hours ? (
+                    (() => {
+                      const estSec = Number((task as any).estimated_hours) * 3600;
+                      const pct = estSec > 0 ? Math.min(100, Math.round((displaySeconds / estSec) * 100)) : 0;
+                      const over = displaySeconds > estSec;
+                      return (
+                        <div className="mt-1.5">
+                          <div className="h-1 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                over ? "bg-red-500" : pct > 80 ? "bg-amber-500" : "bg-emerald-500",
+                              )}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{pct}%{over ? " · sobrepasado" : ""}</p>
+                        </div>
+                      );
+                    })()
+                  ) : null}
+                </div>
+
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant={timerRunning ? "default" : "outline"}
+                    className="flex-1 h-8 text-xs gap-1"
+                    onClick={handleTimerToggle}
+                  >
+                    {timerRunning ? <><Pause className="h-3 w-3" /> Pausar</> : <><Play className="h-3 w-3" /> Iniciar</>}
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 px-2 text-xs gap-1" onClick={() => setShowBlockTime(true)} title="Bloquear tiempo en Outlook">
+                    <Timer className="h-3 w-3" />
+                  </Button>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-0.5">Horas estimadas</label>
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    inputMode="decimal"
+                    placeholder="—"
+                    className="h-8 text-xs"
+                    value={pendingChanges.estimated_hours ?? (task as any).estimated_hours ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPending("estimated_hours", v === "" ? null : Number(v));
+                    }}
+                  />
+                </div>
+
+                {task.due_date && (
+                  <div className="pt-1.5 border-t border-border/50">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-muted-foreground">Vencimiento</span>
+                      {canEditDueDates && (
+                        <button
+                          type="button"
+                          onClick={() => { setEditingDueDate(true); setNewDueDate(task.due_date || ""); }}
+                          className="text-[10px] text-primary hover:underline"
+                        >
+                          Cambiar
+                        </button>
+                      )}
+                    </div>
+                    <span className={cn(
+                      "inline-flex items-center gap-1 text-xs font-medium",
+                      overdueBadge ? "text-red-600 dark:text-red-400" : "text-foreground",
+                    )}>
+                      <Calendar className="h-3 w-3" />
+                      {formatMX(task.due_date, "dd MMM yyyy")}
+                    </span>
+                  </div>
+                )}
+              </section>
+
+              {/* Dependencias */}
+              <TaskDependenciesPanel
+                taskId={taskId}
+                projectId={task.project_id || null}
+                onOpenTask={(id) => setSelectedSubtaskId(id)}
+              />
+
+              {/* Kawiil IA */}
+              <TaskKawiilAiCard
+                task={task as any}
+                subtasks={childSubtasks as any}
+              />
+
+              {/* Actividad reciente */}
+              {taskActivity.length > 0 && (
+                <section className="rounded-lg border bg-background p-3 space-y-2">
+                  <h5 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <ActivityIcon className="h-3 w-3" /> Actividad
+                  </h5>
+                  <ul className="space-y-1.5 text-[11px] text-muted-foreground max-h-[180px] overflow-y-auto">
+                    {taskActivity.slice(0, 8).map((a: any) => (
+                      <li key={a.id} className="flex items-start gap-1.5">
+                        <span className="mt-1 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-foreground/80">{a.action}</span>
+                          <span className="block text-[10px] opacity-70">{formatMX(a.created_at, "dd MMM HH:mm")}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </aside>
             </div>
           </div>
         ) : (

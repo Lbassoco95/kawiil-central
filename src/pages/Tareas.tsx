@@ -5,7 +5,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, Archive, UserCheck, ChevronRight } from "lucide-react";
+import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, ArrowRight, Archive, UserCheck, ChevronRight, ListChecks } from "lucide-react";
 import { useTasks, useMyAssignedTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
@@ -351,6 +351,30 @@ const Tareas = () => {
     }
   };
 
+  /** Pill compacto v2.5 P1-P4 (consistente con TaskDetailDialog header). */
+  const getPriorityPillClass = (priority: string) => {
+    switch (priority) {
+      case "urgente":
+        return "bg-red-500/15 text-red-700 dark:text-red-300";
+      case "alta":
+        return "bg-orange-500/15 text-orange-700 dark:text-orange-300";
+      case "media":
+        return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
+      default:
+        return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+    }
+  };
+  const getPriorityPillLabel = (priority: string) => {
+    switch (priority) {
+      case "urgente": return "P1";
+      case "alta": return "P2";
+      case "media": return "P3";
+      default: return "P4";
+    }
+  };
+  const getSubtaskCount = (task: any) =>
+    Array.isArray(task?.checklist) ? task.checklist.length : 0;
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
@@ -500,7 +524,30 @@ const Tareas = () => {
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
+                          <span
+                            className={cn(
+                              "shrink-0 inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wider",
+                              getPriorityPillClass(task.priority)
+                            )}
+                            title={`Prioridad ${task.priority}`}
+                          >
+                            {getPriorityPillLabel(task.priority)}
+                          </span>
                           <h3 className="text-sm font-medium text-foreground truncate">{task.title}</h3>
+                          {(task as any).is_subtask && (
+                            <span className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground border border-border/60 rounded px-1 py-0" title="Subtarea">
+                              Sub
+                            </span>
+                          )}
+                          {getSubtaskCount(task) > 0 && (
+                            <span
+                              className="shrink-0 inline-flex items-center gap-0.5 rounded bg-secondary/70 px-1.5 py-0 text-[9px] font-medium text-muted-foreground"
+                              title={`${getSubtaskCount(task)} subtareas`}
+                            >
+                              <ListChecks className="h-2.5 w-2.5" />
+                              {getSubtaskCount(task)}
+                            </span>
+                          )}
                           {(task as any).criticality_level === "critico" && <span className="text-[10px] shrink-0" title="Crítico">🔴</span>}
                           {(task as any).criticality_level === "atencion" && <span className="text-[10px] shrink-0" title="Atención">🟡</span>}
                         </div>
@@ -784,9 +831,24 @@ const Tareas = () => {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className={cn(
+                        "shrink-0 inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wider opacity-70",
+                        getPriorityPillClass(task.priority)
+                      )}
+                      title={`Prioridad ${task.priority}`}
+                    >
+                      {getPriorityPillLabel(task.priority)}
+                    </span>
                     <h3 className={cn("text-sm font-medium truncate text-muted-foreground", task.status === "cancelada" && "line-through")}>
                       {task.title}
                     </h3>
+                    {getSubtaskCount(task) > 0 && (
+                      <span className="shrink-0 inline-flex items-center gap-0.5 rounded bg-secondary/60 px-1.5 py-0 text-[9px] text-muted-foreground" title={`${getSubtaskCount(task)} subtareas`}>
+                        <ListChecks className="h-2.5 w-2.5" />
+                        {getSubtaskCount(task)}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge className={cn("text-[10px] border-0 px-1.5 py-0", statusLabels[task.status]?.color)} variant="secondary">

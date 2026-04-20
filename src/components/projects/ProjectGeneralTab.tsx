@@ -24,6 +24,8 @@ import { formatDateMX } from "@/lib/dateUtils";
 import type { Database } from "@/integrations/supabase/types";
 import { MeetingMinutesDialog } from "./MeetingMinutesDialog";
 import { CRITICALITY_OPTIONS, DELAY_CATEGORIES } from "./CriticalityDelayCard";
+import { ProjectTeamCard } from "./ProjectTeamCard";
+import { ProjectKawiilAiCard } from "./ProjectKawiilAiCard";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
@@ -365,14 +367,29 @@ INSTRUCCIONES:
 
   return (
     <div className="space-y-4">
-      {/* AI Project Summary — siempre arriba para que la lectura inicie en la IA */}
-      <AISummaryCard
-        cacheKey={`project-${project.id}`}
-        contextPrompt={projectSummaryPrompt}
-        title="Resumen del proyecto — Kawiil AI"
-        ready={!!projectTasks}
-        userId={user?.id}
-      />
+      {/* Fila superior v2.5: AI Summary (LLM) + heurística rápida + equipo */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-4">
+          <AISummaryCard
+            cacheKey={`project-${project.id}`}
+            contextPrompt={projectSummaryPrompt}
+            title="Resumen del proyecto — Kawiil AI"
+            ready={!!projectTasks}
+            userId={user?.id}
+          />
+        </div>
+        <div className="space-y-4">
+          <ProjectKawiilAiCard
+            projectId={project.id}
+            projectName={project.name}
+            status={project.status}
+            endDate={project.end_date}
+            criticalityLevel={(project as any).criticality_level}
+            variant="compact"
+          />
+          <ProjectTeamCard projectId={project.id} variant="compact" />
+        </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
       <Card>

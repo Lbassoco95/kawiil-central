@@ -490,7 +490,23 @@ const Proyectos = () => {
                   </div>
 
                   {/* Col 11-12: status + trash */}
-                  <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-2">
+                  <div className="col-span-4 md:col-span-2 flex items-center justify-end gap-1.5">
+                    {(project as any).criticality_level === "critico" && (
+                      <span
+                        className="shrink-0 inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wider bg-red-500/15 text-red-700 dark:text-red-300"
+                        title="Semáforo crítico"
+                      >
+                        CRÍTICO
+                      </span>
+                    )}
+                    {(project as any).criticality_level === "atencion" && (
+                      <span
+                        className="shrink-0 inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                        title="Semáforo atención"
+                      >
+                        ATENCIÓN
+                      </span>
+                    )}
                     <Badge
                       variant="outline"
                       className={cn("text-[10px] border-0 px-1.5 py-0", STATUS_STYLES[project.status])}

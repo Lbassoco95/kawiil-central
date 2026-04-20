@@ -4093,6 +4093,89 @@ export type Database = {
           },
         ]
       }
+      task_dependencies: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          depends_on_task_id: string
+          id: string
+          kind: string
+          organization_id: string
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          depends_on_task_id: string
+          id?: string
+          kind?: string
+          organization_id: string
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          depends_on_task_id?: string
+          id?: string
+          kind?: string
+          organization_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_dependencies_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_dependencies_depends_on_task_id_fkey"
+            columns: ["depends_on_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_team: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          organization_id: string
+          project_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id: string
+          project_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          organization_id?: string
+          project_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_team_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_comments: {
         Row: {
           content: string
@@ -4156,6 +4239,7 @@ export type Database = {
           description: string | null
           dropbox_links: Json | null
           due_date: string | null
+          estimated_hours: number | null
           id: string
           is_recurring: boolean
           is_subtask: boolean
@@ -4190,6 +4274,7 @@ export type Database = {
           description?: string | null
           dropbox_links?: Json | null
           due_date?: string | null
+          estimated_hours?: number | null
           id?: string
           is_recurring?: boolean
           is_subtask?: boolean
@@ -4224,6 +4309,7 @@ export type Database = {
           description?: string | null
           dropbox_links?: Json | null
           due_date?: string | null
+          estimated_hours?: number | null
           id?: string
           is_recurring?: boolean
           is_subtask?: boolean

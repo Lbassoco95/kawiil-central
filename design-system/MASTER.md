@@ -36,6 +36,61 @@ Actualizadas al estilo "Kawiil OS v2.4" con superficies AI en azul Kawiil unific
 - **Pipeline** (`PipelineLayout`, `PipelineDashboard`, `LeadDetailPage`, `EmailSequences`, `EmailTemplates`, modales `AddNoteModal`/`CreateTaskModal`/`LogCallModal`/`LogWhatsAppModal`/`ScheduleMeetingModal`/`SendEmailModal`) — `PipelineLayout` usa `PageHeader` hero v2.4 con `iconAccent={KAWIIL_AI_GRADIENT}` y badge "v2.4"; el hero ejecutivo "Sala de control comercial" pasó del morado/violeta al azul Kawiil + badge "v2.4"; `LeadDetailPage` estrena header gradiente azul con avatar `Sparkles` + ficha **"KAWIIL AI · Insights del lead"** que sugiere próxima acción según prioridad/score. Todos los modales del pipeline usan el helper compartido `PipelineModalHeader` (gradiente azul Kawiil + icono blanco + subtítulo) para dar consistencia visual y reemplazar los `DialogHeader` simples.
 - **Finanzas** (`Finanzas.tsx`, `FinanceKawiilCard`, `ExpenseFormDialog`, `ExpenseReviewDialog`) — hero v2.4 con `iconAccent={KAWIIL_AI_GRADIENT}` + breadcrumb "Kawiil OS · Operación · Finanzas" + badge "v2.4" junto al CTA "Nueva solicitud"; tarjeta **"KAWIIL AI · Finanzas en un vistazo"** debajo del hero con resumen automático del periodo (pendientes, aprobados, pagados y, si Savio está activo, cartera por cobrar) más mini-stats coloreados que navegan a la tab correspondiente y CTAs "Atender lo prioritario" / "Ver tableros" en gradiente azul; los dialogs `ExpenseFormDialog` (Nueva solicitud) y `ExpenseReviewDialog` (Detalle de gasto) ahora usan **header azul Kawiil** (icono blanco sobre `KAWIIL_AI_HEADER_BG` + subtítulo + cierre custom), homologando la experiencia con Pipeline y Correo.
 
+## Pantallas alineadas (fase v2.5 — Tareas y Proyectos)
+
+Re-skin operativo de Tareas y Proyectos para acercarlos al feeling de los nuevos mockups (sticky headers, layout 2-col, sidebars con secciones colapsables, mini-IA heurística). Toda la lógica/back se conserva (`useTasks`, `useTaskDetail`, `useProjects`, `useProjectDetail`, `useUpdateTask`, `task_assignees`, `task_comments`, `documents`, `dropbox_links`, `activity_log`, `PhaseManager`, dashboards de servicio).
+
+### Migración de base de datos
+
+Archivo: [`supabase/migrations/20260420120000_tasks_projects_v25.sql`](../supabase/migrations/20260420120000_tasks_projects_v25.sql) (idempotente).
+
+| Cambio | Tabla | Notas |
+|--------|-------|-------|
+| `estimated_hours numeric(6,2)` | `tasks` | Horas estimadas. Se compara contra `time_spent_seconds` en la sidebar Tiempo del detalle de tarea. |
+| `task_dependencies` | nueva | `task_id` depende de `depends_on_task_id` (`kind` `blocks` por defecto). RLS org-scoped. |
+| `project_team` | nueva | Miembros explícitos de un proyecto con `role` (`lead`/`senior`/`revision`/`junior`/`colaborador`). RLS org-scoped. |
+
+### Hooks nuevos
+
+- `useTaskDependencies(taskId)` → `{ dependsOn, blocks }` + `useAddTaskDependency`, `useRemoveTaskDependency`. Carga las dos direcciones (qué bloquea esta tarea / a quién bloquea) con `related_task` joined manual.
+- `useProjectTeam(projectId)` → lista ordenada por rol + perfiles. `useAddProjectTeamMember`, `useUpdateProjectTeamMember`, `useRemoveProjectTeamMember` con toasts.
+
+### TaskDetailDialog v2.5 (`src/components/tasks/TaskDetailDialog.tsx`)
+
+Conserva el `Dialog` (no se cambió a página), pero el contenido pasa a:
+
+- **Width** `min(1180px,96vw)` × **height** `92vh`, sin scroll exterior.
+- **Header sticky** con breadcrumb (`cliente › proyecto › Sub de «...»`), pill de prioridad (P1·URGENTE / P2·ALTA / P3·MEDIA / P4·BAJA), título inline editable, fecha de vencimiento con badge "Vencida" en rojo cuando aplica, selector de estado, botón **Completar** (CTA azul) y atajo de eliminación.
+- **Body 2-col** `[minmax(0,1fr)_340px]`:
+  - **Columna principal**: descripción, **Subtareas** (checklist + creación rápida con responsable y fecha), **Colaboradores** (`task_assignees`), bloque colapsable **Semáforo y atraso** (`criticality_level`, `delay_category`, `delay_notes`) y `Tabs` `Comentarios` / `Enlaces` (Dropbox) / `Archivos` con `MentionTextarea`, `FileDropzone`, `DropboxFilePicker`, `DropboxUploadDialog` (escanear), `DocumentPreviewDialog`, etc. — todo el plumbing existente reutilizado.
+  - **Sidebar (lg+)** con cards: **Asignación** (responsable, área/célula, prioridad, avatares de colaboradores), **Tiempo** (timer Start/Pause + `time_spent_seconds` vs `estimated_hours` con barra y color, atajo a `BlockTimeDialog`, edición de fecha límite), **Dependencias** (`TaskDependenciesPanel`: depende de / bloquea a, click navega a la tarea con `setSelectedSubtaskId`), **Kawiil IA** (`TaskKawiilAiCard`, heurístico, sin LLM) y **Actividad reciente** (`activity_log` filtrado por `entity_type=task`).
+
+### TaskDependenciesPanel y TaskKawiilAiCard
+
+- `src/components/tasks/TaskDependenciesPanel.tsx`: chips por tarea con icono según estado, `+` agrega buscando candidatos del **mismo proyecto** (o globales si no hay proyecto), excluye la tarea actual y dependencias ya creadas. `kind=blocks` por defecto.
+- `src/components/tasks/TaskKawiilAiCard.tsx`: header con `KAWIIL_AI_GRADIENT`, deriva 1-3 frases (vencida, semáforo, subtareas pendientes, dependencias bloqueantes abiertas, sobre presupuesto de horas) y cierra con stats `Subtareas N/M · Bloquean K · Horas X/Y`. **No** consume tokens de LLM.
+
+### ProjectGeneralTab v2.5 (`src/components/projects/ProjectGeneralTab.tsx`)
+
+Sobre la pestaña General se añade una fila superior `lg:grid-cols-3`:
+
+- **Col 1-2**: `AISummaryCard` (LLM existente, sin cambios) — sigue como vista principal de "Resumen del proyecto".
+- **Col 3**: `ProjectKawiilAiCard` (heurístico, lee `tasks` del proyecto) + `ProjectTeamCard` (CRUD de `project_team` con selector de rol inline).
+
+El resto de la pestaña (Detalles del proyecto, Descripción, Notas de atraso, Guardar plantilla, Minutas) queda intacto.
+
+### ProjectTeamCard y ProjectKawiilAiCard
+
+- `src/components/projects/ProjectTeamCard.tsx`: variantes `compact` (sidebar) y `full` (Card). Lista ordenada por `lead → senior → revision → junior → colaborador` con badge de rol coloreado e inline-edit. Filtro de candidatos vía `useProfiles` excluyendo a quienes ya son miembros.
+- `src/components/projects/ProjectKawiilAiCard.tsx`: header gradient azul Kawiil + frases priorizadas (proyecto vencido, tareas vencidas, semáforo crítico/atención, urgentes, avance) y stats `Total / Cerradas / Vencidas`. Recordatorio explícito de que el análisis con LLM completo vive en el card "Resumen del proyecto".
+
+### Reglas v2.5
+
+- **Reusar** componentes y hooks existentes antes de crear (Dropbox, comments, attachments, time tracking, AI cards LLM, PhaseManager, dashboards de servicio).
+- **Nuevas tablas siempre con RLS** `organization_id = get_user_org_id(auth.uid())` (mismo patrón que `task_assignees` / `client_collaborators`).
+- **Heurística vs. LLM**: las mini-cards "Kawiil IA" del detalle de tarea/proyecto son **heurísticas** (sin invocar Edge Functions ni Anthropic). Para análisis profundo seguir usando `AISummaryCard`.
+- **Tipografía**: títulos de sección en sidebar usan `text-[11px] font-semibold uppercase tracking-wider text-muted-foreground`; cards de sidebar usan `rounded-lg border bg-background p-3 space-y-2.5`.
+
 ## Tokens de Kawiil AI (v2.4)
 
 Ubicación canónica: [`src/lib/kawiilAi.ts`](../src/lib/kawiilAi.ts).
