@@ -20,8 +20,10 @@ import { SavioFinanceDashboard } from "@/components/finanzas/SavioFinanceDashboa
 import { FinanceExecutiveSummary } from "@/components/finanzas/FinanceExecutiveSummary";
 import { FinanceIntelligenceBoards } from "@/components/finanzas/FinanceIntelligenceBoards";
 import { KpiTile } from "@/components/finanzas/KpiTile";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { useClients } from "@/hooks/useClients";
+import { useFinanceDashboardData } from "@/hooks/useFinanceDashboardData";
+import { yearMonthFromDate } from "@/lib/financeMonthMetrics";
 
 const STATUS_FILTERS = [
   { value: "todos", label: "Todos" },
@@ -128,6 +130,86 @@ export default function Finanzas() {
   const fmtMoney = (n: number) =>
     `$${n.toLocaleString("es-MX", { minimumFractionDigits: 2 })}`;
 
+  // ─── Hero stats ──────────────────────────────────────────────
+  const currentYm = useMemo(() => yearMonthFromDate(new Date()), []);
+  const financeData = useFinanceDashboardData(currentYm, expenses, {
+    enableSavio: hasFinanceAccess && canViewSavioIncome,
+  });
+
+  const fmtMoneyShort = (n: number) =>
+    new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency: "MXN",
+      maximumFractionDigits: 0,
+    }).format(n);
+
+  const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
+    if (!hasFinanceAccess) return [];
+
+    if (canViewSavioIncome) {
+      const k = financeData.kpis;
+      return [
+        {
+          label: "Gastos mes",
+          value: fmtMoneyShort(k.gastosMes.sum),
+          sub:
+            k.gastosMes.count > 0
+              ? `${k.gastosMes.count} pago${k.gastosMes.count === 1 ? "" : "s"} liquidado${k.gastosMes.count === 1 ? "" : "s"}`
+              : "sin pagos liquidados",
+          tone: "default" as const,
+        },
+        {
+          label: "Pendiente cobro",
+          value: fmtMoneyShort(k.cartera.sum),
+          sub:
+            k.cartera.count > 0
+              ? `${k.cartera.count} factura${k.cartera.count === 1 ? "" : "s"}`
+              : "cartera al día",
+          tone: k.cartera.sum > 0 ? ("warning" as const) : ("default" as const),
+        },
+        {
+          label: "Ingresos mes",
+          value: fmtMoneyShort(k.cobradoMes.sum),
+          sub:
+            k.cobradoMes.count > 0
+              ? `${k.cobradoMes.count} pago${k.cobradoMes.count === 1 ? "" : "s"} cobrado${k.cobradoMes.count === 1 ? "" : "s"}`
+              : "sin cobros",
+          tone: "success" as const,
+        },
+        {
+          label: "Facturación mes",
+          value: fmtMoneyShort(k.facturadoMes.sum),
+          sub:
+            k.facturadoMes.count > 0
+              ? `${k.facturadoMes.count} factura${k.facturadoMes.count === 1 ? "" : "s"} emitida${k.facturadoMes.count === 1 ? "" : "s"}`
+              : "sin emisión",
+          tone: "primary" as const,
+        },
+      ];
+    }
+
+    return [
+      {
+        label: "Gastos pagados",
+        value: fmtMoneyShort(totals.paid),
+        sub: `${totals.paidCount} pago${totals.paidCount === 1 ? "" : "s"} este periodo`,
+        tone: "default" as const,
+      },
+      {
+        label: "Aprobados",
+        value: fmtMoneyShort(totals.approved),
+        sub: `${totals.approvedCount} listos para pago`,
+        tone: "success" as const,
+      },
+      {
+        label: "Pendientes",
+        value: fmtMoneyShort(totals.pending),
+        sub: `${totals.pendingCount} en revisión`,
+        tone: totals.pendingCount > 0 ? ("warning" as const) : ("default" as const),
+      },
+    ];
+  }, [hasFinanceAccess, canViewSavioIncome, financeData.kpis, totals]);
+
   const gastosSection = (
     <div className="space-y-4 mt-0">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -224,6 +306,7 @@ export default function Finanzas() {
           title="Finanzas"
           description={pageDescription}
           icon={<Wallet />}
+          stats={heroStats}
           actions={
             <Button size="sm" onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4 mr-1" /> Nueva solicitud

@@ -9,6 +9,10 @@ import { Plus, Search, CheckSquare, Calendar, User, Trash2, ClipboardList, Arrow
 import { useTasks, useMyAssignedTasks, useDeleteTask, useProfiles } from "@/hooks/useTasks";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAssignedSteps } from "@/hooks/useAssignedSteps";
+import { useReminders } from "@/hooks/useReminders";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { openNewTaskModal } from "@/lib/openNewTaskModal";
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog";
@@ -23,10 +27,16 @@ import {
 import { TaskGroupedList } from "@/components/tareas/TaskGroupedList";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEntryButton";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
+import {
+  formatMX,
+  isPastDueCalendarMX,
+  toDateStringMX,
+  mexicoDayRangeISO,
+  addDaysToYmd,
+} from "@/lib/dateUtils";
 import { TaskKanbanBoard } from "@/components/tareas/TaskKanbanBoard";
 import { TaskTimelineView } from "@/components/tareas/TaskTimelineView";
 import { TASK_STATUS_CONFIG, STEP_STATUS_CONFIG } from "@/lib/statusStyles";
@@ -224,6 +234,82 @@ const Tareas = () => {
     );
   }, [tasks]);
 
+  // ─── Hero stats: contadores por usuario, en zona CDMX ────────
+  const today = useMexicoToday();
+  const todayYmd = useMemo(() => toDateStringMX(today), [today]);
+  const { reminders } = useReminders();
+
+  const { data: completedTodayCount } = useQuery({
+    queryKey: ["tareas-hero-completed-today", user?.id, todayYmd],
+    enabled: !!user,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { start, endExclusive } = mexicoDayRangeISO(todayYmd);
+      const byCompleted = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", user!.id)
+        .eq("status", "completada")
+        .gte("completed_at", start)
+        .lt("completed_at", endExclusive);
+      if (byCompleted.error) throw byCompleted.error;
+      const baseCount = byCompleted.count ?? 0;
+      const byUpdated = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", user!.id)
+        .eq("status", "completada")
+        .is("completed_at", null)
+        .gte("updated_at", start)
+        .lt("updated_at", endExclusive);
+      if (byUpdated.error) throw byUpdated.error;
+      return baseCount + (byUpdated.count ?? 0);
+    },
+  });
+
+  const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
+    const myPending = myAssignedLoading ? null : myOpenTasks.length;
+    const myOverdue = myAssignedLoading
+      ? null
+      : myOpenTasks.filter((t: any) => t.due_date && isPastDueCalendarMX(t.due_date)).length;
+
+    const sevenDaysFromTodayYmd = addDaysToYmd(todayYmd, 7);
+    const upcomingReminders = reminders.filter((r) => {
+      if (r.is_completed) return false;
+      if (!r.due_date) return false;
+      return r.due_date <= sevenDaysFromTodayYmd;
+    }).length;
+
+    const teamPending = openTasks.length;
+
+    return [
+      myPending != null && {
+        label: "Mis pendientes",
+        value: myPending,
+        sub: teamPending > 0 ? `${teamPending} de equipo` : "asignadas a mí",
+        tone: "default" as const,
+      },
+      myOverdue != null && {
+        label: "Vencidas",
+        value: myOverdue,
+        sub: myOverdue > 0 ? "atender hoy" : "sin atrasos",
+        tone: myOverdue > 0 ? ("warning" as const) : ("default" as const),
+      },
+      completedTodayCount != null && {
+        label: "Completadas hoy",
+        value: completedTodayCount,
+        sub: completedTodayCount === 0 ? "aún ninguna" : "buen ritmo",
+        tone: "success" as const,
+      },
+      {
+        label: "Recordatorios",
+        value: upcomingReminders,
+        sub: upcomingReminders > 0 ? "próximos 7 días" : "ninguno próximo",
+        tone: "primary" as const,
+      },
+    ];
+  }, [myAssignedLoading, myOpenTasks, openTasks.length, reminders, todayYmd, completedTodayCount]);
+
   const tasksSummaryPrompt = useMemo(() => {
     if (!tasks) return "";
     const pending = tasks.filter((t: any) => !isTaskClosedStatus(t.status));
@@ -296,6 +382,7 @@ INSTRUCCIONES:
           icon={<CheckSquare />}
           title="Tareas"
           description="Gestión de tareas y actividades internas"
+          stats={heroStats}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <RecordatoriosEntryButton />

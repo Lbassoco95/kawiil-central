@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { Search, FolderKanban, Scale, Trash2, Sparkles } from "lucide-react";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { ScrollableFilterTabs } from "@/components/shared/ScrollableFilterTabs";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { useProjects, useDeleteProject } from "@/hooks/useProjects";
 import { ProjectCreationDialog } from "@/components/projects/ProjectCreationDialog";
 import { LawsuitFormDialog } from "@/components/projects/LawsuitFormDialog";
@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatDateMX } from "@/lib/dateUtils";
+import { formatDateMX, toDateStringMX, mexicoDayRangeISO, nowMX } from "@/lib/dateUtils";
 
 type ProjectStatus = Database["public"]["Enums"]["project_status"];
 
@@ -198,6 +198,106 @@ const Proyectos = () => {
     return getCelulaLabel(slug);
   };
 
+  // ─── Hero stats ──────────────────────────────────────────────
+  const monthRange = useMemo(() => {
+    const today = nowMX();
+    const y = today.getFullYear();
+    const m = today.getMonth();
+    const firstYmd = toDateStringMX(new Date(y, m, 1));
+    const nextFirstYmd = toDateStringMX(new Date(y, m + 1, 1));
+    return {
+      start: mexicoDayRangeISO(firstYmd).start,
+      endExclusive: mexicoDayRangeISO(nextFirstYmd).start,
+    };
+  }, []);
+
+  const activeProjectIds = useMemo(
+    () => (projects ?? []).filter((p) => p.status === "activo").map((p) => p.id),
+    [projects],
+  );
+  const activeProjectIdsKey = activeProjectIds.slice().sort().join(",");
+
+  const { data: completedThisMonth } = useQuery({
+    queryKey: ["proyectos-hero-completed-month", monthRange.start, monthRange.endExclusive],
+    enabled: !!projects,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("projects")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "completado")
+        .gte("updated_at", monthRange.start)
+        .lt("updated_at", monthRange.endExclusive);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const { data: projectsWithPendingTasks } = useQuery({
+    queryKey: ["proyectos-hero-with-pending-tasks", activeProjectIdsKey],
+    enabled: activeProjectIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const seen = new Set<string>();
+      for (let i = 0; i < activeProjectIds.length; i += CHUNK) {
+        const slice = activeProjectIds.slice(i, i + CHUNK);
+        const { data, error } = await supabase
+          .from("tasks")
+          .select("project_id")
+          .in("project_id", slice)
+          .not("status", "in", "(completada,cancelada)");
+        if (error) throw error;
+        for (const row of data ?? []) {
+          if (row.project_id) seen.add(row.project_id);
+        }
+      }
+      return seen.size;
+    },
+  });
+
+  const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
+    if (!projects) return [];
+    const activos = projects.filter((p) => p.status === "activo");
+    const internos = activos.filter((p) => !(p as any).client_id).length;
+    const deCliente = activos.length - internos;
+
+    const enRiesgo = activos.filter((p) => {
+      const crit = (p as any).criticality_level === "critico";
+      const delay = (p as any).delay_category === "retrasado";
+      return crit || delay;
+    }).length;
+
+    return [
+      {
+        label: "Activos",
+        value: activos.length,
+        sub:
+          activos.length > 0
+            ? `${internos} internos · ${deCliente} de cliente`
+            : "sin proyectos activos",
+        tone: "default" as const,
+      },
+      {
+        label: "En riesgo",
+        value: enRiesgo,
+        sub: enRiesgo > 0 ? "atención urgente" : "sin alertas",
+        tone: enRiesgo > 0 ? ("warning" as const) : ("default" as const),
+      },
+      completedThisMonth != null && {
+        label: "Completados",
+        value: completedThisMonth,
+        sub: "este mes",
+        tone: "success" as const,
+      },
+      projectsWithPendingTasks != null && {
+        label: "Con pendientes",
+        value: projectsWithPendingTasks,
+        sub: "tareas activas",
+        tone: "primary" as const,
+      },
+    ];
+  }, [projects, completedThisMonth, projectsWithPendingTasks]);
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
@@ -206,6 +306,7 @@ const Proyectos = () => {
           icon={<FolderKanban />}
           title="Proyectos"
           description="Proyectos por cliente o internos"
+          stats={heroStats}
           actions={
             <>
               <Button variant="outline" size="sm" onClick={() => setMinutesOpen(true)}>

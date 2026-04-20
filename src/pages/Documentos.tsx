@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { AppLayout } from "@/components/AppLayout";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { useDocuments, useDeleteDocument } from "@/hooks/useDocuments";
 import { DocumentFormDialog } from "@/components/documents/DocumentFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
-import { formatMX } from "@/lib/dateUtils";
+import { formatMX, mexicoWeekRangeISOContaining, toDateStringMX, nowMX } from "@/lib/dateUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -989,6 +989,56 @@ const Documentos = () => {
     return documents.filter((d: any) => favorites.has(d.id));
   }, [documents, favorites, viewMode]);
 
+  const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
+    const total = documents?.length ?? null;
+
+    let thisWeek: number | null = null;
+    if (documents) {
+      const { start, endExclusive } = mexicoWeekRangeISOContaining(toDateStringMX(nowMX()));
+      const startMs = new Date(start).getTime();
+      const endMs = new Date(endExclusive).getTime();
+      thisWeek = documents.filter((d: any) => {
+        if (!d.created_at) return false;
+        const ts = new Date(d.created_at).getTime();
+        return ts >= startMs && ts < endMs;
+      }).length;
+    }
+
+    const fav = favorites?.size ?? null;
+
+    let dropbox: number | null = null;
+    if (documents) {
+      dropbox = documents.filter((d: any) => d.source === "dropbox").length;
+    }
+
+    return [
+      total != null && {
+        label: "Total",
+        value: total,
+        sub: "en biblioteca",
+        tone: "default" as const,
+      },
+      thisWeek != null && {
+        label: "Esta semana",
+        value: thisWeek,
+        sub: thisWeek === 1 ? "documento nuevo" : "documentos nuevos",
+        tone: "success" as const,
+      },
+      fav != null && {
+        label: "Favoritos",
+        value: fav,
+        sub: "marcados con estrella",
+        tone: "primary" as const,
+      },
+      dropbox != null && {
+        label: "Dropbox",
+        value: dropbox,
+        sub: total ? `de ${total} totales` : "enlaces sincronizados",
+        tone: "default" as const,
+      },
+    ];
+  }, [documents, favorites]);
+
   return (
     <AppLayout>
       <div className="space-y-6 animate-fade-in">
@@ -1005,6 +1055,7 @@ const Documentos = () => {
                   : "Documentos registrados en la aplicación"
           }
           icon={<FileText />}
+          stats={heroStats}
           actions={
             <Button size="sm" onClick={() => setFormOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
