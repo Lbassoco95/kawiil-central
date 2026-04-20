@@ -217,12 +217,6 @@ const Proyectos = () => {
     };
   }, []);
 
-  const activeProjectIds = useMemo(
-    () => (projects ?? []).filter((p) => p.status === "activo").map((p) => p.id),
-    [projects],
-  );
-  const activeProjectIdsKey = activeProjectIds.slice().sort().join(",");
-
   const { data: completedThisMonth } = useQuery({
     queryKey: ["proyectos-hero-completed-month", monthRange.start, monthRange.endExclusive],
     enabled: !!projects,
@@ -239,39 +233,20 @@ const Proyectos = () => {
     },
   });
 
-  const { data: projectsWithPendingTasks } = useQuery({
-    queryKey: ["proyectos-hero-with-pending-tasks", activeProjectIdsKey],
-    enabled: activeProjectIds.length > 0,
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      const seen = new Set<string>();
-      for (let i = 0; i < activeProjectIds.length; i += CHUNK) {
-        const slice = activeProjectIds.slice(i, i + CHUNK);
-        const { data, error } = await supabase
-          .from("tasks")
-          .select("project_id")
-          .in("project_id", slice)
-          .not("status", "in", "(completada,cancelada)");
-        if (error) throw error;
-        for (const row of data ?? []) {
-          if (row.project_id) seen.add(row.project_id);
-        }
-      }
-      return seen.size;
-    },
-  });
-
   const heroStats = useMemo<Array<PageHeaderStat | false>>(() => {
     if (!projects) return [];
     const activos = projects.filter((p) => p.status === "activo");
     const internos = activos.filter((p) => !(p as any).client_id).length;
     const deCliente = activos.length - internos;
 
+    const criticos = activos.filter((p) => (p as any).criticality_level === "critico").length;
     const enRiesgo = activos.filter((p) => {
       const crit = (p as any).criticality_level === "critico";
       const delay = (p as any).delay_category === "retrasado";
-      return crit || delay;
+      const atencion = (p as any).criticality_level === "atencion";
+      return (crit || delay || atencion) && !(crit && atencion);
     }).length;
+    const enTiempo = Math.max(activos.length - enRiesgo, 0);
 
     return [
       {
@@ -279,15 +254,27 @@ const Proyectos = () => {
         value: activos.length,
         sub:
           activos.length > 0
-            ? `${internos} internos · ${deCliente} de cliente`
+            ? `${deCliente} de cliente · ${internos} internos`
             : "sin proyectos activos",
         tone: "default" as const,
       },
       {
+        label: "En tiempo",
+        value: enTiempo,
+        sub: enTiempo > 0 ? "sin riesgo de atraso" : "sin proyectos al día",
+        tone: enTiempo > 0 ? ("success" as const) : ("default" as const),
+      },
+      {
         label: "En riesgo",
         value: enRiesgo,
-        sub: enRiesgo > 0 ? "atención urgente" : "sin alertas",
+        sub: enRiesgo > 0 ? "atención antes de 7 días" : "sin alertas",
         tone: enRiesgo > 0 ? ("warning" as const) : ("default" as const),
+      },
+      {
+        label: "Críticos",
+        value: criticos,
+        sub: criticos > 0 ? "vencen esta semana" : "sin críticos",
+        tone: criticos > 0 ? ("warning" as const) : ("default" as const),
       },
       completedThisMonth != null && {
         label: "Completados",
@@ -295,14 +282,8 @@ const Proyectos = () => {
         sub: "este mes",
         tone: "success" as const,
       },
-      projectsWithPendingTasks != null && {
-        label: "Con pendientes",
-        value: projectsWithPendingTasks,
-        sub: "tareas activas",
-        tone: "primary" as const,
-      },
     ];
-  }, [projects, completedThisMonth, projectsWithPendingTasks]);
+  }, [projects, completedThisMonth]);
 
   return (
     <AppLayout>
@@ -310,8 +291,10 @@ const Proyectos = () => {
         <PageHeader
           variant="hero"
           icon={<FolderKanban />}
+          breadcrumb={["Kawiil OS", "Trabajo", "Proyectos"]}
+          iconAccent="linear-gradient(135deg, hsl(270 70% 55%), hsl(310 70% 55%))"
           title="Proyectos"
-          description="Proyectos por cliente o internos"
+          description="Trabajos por cliente o internos: contabilidad, PLD, softlanding, juicios y consultorías. Cada proyecto agrupa tareas, documentos, tiempo y finanzas."
           stats={heroStats}
           actions={
             <>
