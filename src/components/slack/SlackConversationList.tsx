@@ -310,13 +310,13 @@ function ConvRow({
           />
         )}
         {c.is_im ? (
-          <MessageCircle className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <MessageCircle className="h-3.5 w-3.5 shrink-0 text-emerald-300/80" />
         ) : c.is_mpim ? (
-          <Users className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <Users className="h-3.5 w-3.5 shrink-0 text-violet-300/80" />
         ) : isPublicChannel ? (
-          <Hash className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <Hash className="h-3.5 w-3.5 shrink-0 text-sky-300/85" />
         ) : (
-          <Lock className="h-3.5 w-3.5 shrink-0 opacity-70" />
+          <Lock className="h-3.5 w-3.5 shrink-0 text-amber-300/80" />
         )}
         <span className="truncate min-w-0">{isPublicChannel && c.name ? `#${c.name}` : title}</span>
         <UnreadBadge count={unreadCount} />
