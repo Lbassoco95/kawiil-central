@@ -1174,7 +1174,240 @@ const anthropicTools = [
       },
     },
   },
+  {
+    name: "update_task",
+    description:
+      "Actualiza una tarea existente: estatus, fecha límite, prioridad, título, descripción o responsable principal. " +
+      "Úsala cuando el usuario pida marcar como completada, cambiar vencimiento, prioridad, etc. Los cambios quedan auditados como acción vía Kawiil AI.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "UUID de la tarea" },
+        status: {
+          type: "string",
+          enum: ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"],
+        },
+        due_date: { type: "string", description: "YYYY-MM-DD (opcional)" },
+        clear_due_date: { type: "boolean", description: "Si true, quita la fecha límite" },
+        priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
+        title: { type: "string" },
+        description: { type: "string" },
+        assigned_to: { type: "string", description: "UUID del responsable; cadena vacía para quitar asignación" },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "update_tasks",
+    description:
+      "Actualiza varias tareas en un solo paso (mismo formato que update_task por ítem). Ideal para cambios masivos de fecha o estatus.",
+    input_schema: {
+      type: "object",
+      properties: {
+        updates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              task_id: { type: "string" },
+              status: {
+                type: "string",
+                enum: ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"],
+              },
+              due_date: { type: "string", description: "YYYY-MM-DD" },
+              clear_due_date: { type: "boolean", description: "Si true, quita la fecha límite" },
+              priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
+              title: { type: "string" },
+              description: { type: "string" },
+              assigned_to: { type: "string", description: "UUID; vacío para quitar" },
+            },
+            required: ["task_id"],
+          },
+        },
+      },
+      required: ["updates"],
+    },
+  },
+  {
+    name: "add_task_comment",
+    description:
+      "Añade un comentario a una tarea existente (aparece en el hilo de la tarea). La auditoría registra que el comentario se añadió vía Kawiil AI.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "UUID de la tarea" },
+        content: { type: "string", description: "Texto del comentario" },
+      },
+      required: ["task_id", "content"],
+    },
+  },
 ];
+
+const TASK_STATUS_AI = ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"] as const;
+const TASK_PRIORITY_AI = ["urgente", "alta", "media", "baja"] as const;
+
+/** Igual que en el cliente: no completar padre si checklist o subtareas enlazadas abiertas. */
+async function assertCanCompleteParentTaskEdge(supabase: any, taskId: string): Promise<string | null> {
+  const { data: row, error } = await supabase.from("tasks").select("checklist").eq("id", taskId).single();
+  if (error || !row) return error?.message || "No se pudo verificar la tarea.";
+  const checklist = (row.checklist as unknown as Record<string, unknown>[]) ?? [];
+  const childIds: string[] = [];
+  for (const raw of checklist) {
+    const item = raw as { completed?: boolean; task_id?: string | null };
+    if (item.task_id) {
+      childIds.push(item.task_id);
+      continue;
+    }
+    if (!item.completed) {
+      return "No puedes marcar la tarea como completada mientras haya subtareas sin marcar en la lista.";
+    }
+  }
+  if (childIds.length === 0) return null;
+  const unique = [...new Set(childIds)];
+  const { data: children, error: cErr } = await supabase.from("tasks").select("id, status").in("id", unique);
+  if (cErr) return cErr.message;
+  const byId = new Map((children ?? []).map((c: { id: string; status: string }) => [c.id, c.status]));
+  for (const cid of unique) {
+    const st = byId.get(cid);
+    if (st !== "completada" && st !== "cancelada") {
+      return "No puedes marcar la tarea como completada mientras haya subtareas abiertas. Complétalas o cancélalas antes.";
+    }
+  }
+  return null;
+}
+
+async function logAiTaskActivity(
+  supabase: any,
+  opts: {
+    userId: string;
+    orgId: string;
+    taskId: string;
+    action: string;
+    tool: string;
+    conversationId: string | null;
+    details?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const details: Record<string, unknown> = {
+    source: "kawiil_ai",
+    tool: opts.tool,
+    ...(opts.conversationId ? { conversation_id: opts.conversationId } : {}),
+    ...(opts.details ?? {}),
+  };
+  const { error } = await supabase.from("activity_log").insert({
+    user_id: opts.userId,
+    organization_id: opts.orgId,
+    entity_type: "task",
+    entity_id: opts.taskId,
+    action: opts.action,
+    details,
+  });
+  if (error) console.warn("[ai-chat] activity_log insert failed:", error.message);
+}
+
+type TaskUpdatePatch = {
+  task_id: string;
+  status?: string;
+  due_date?: string | null;
+  priority?: string;
+  title?: string;
+  description?: string;
+  assigned_to?: string | null;
+};
+
+async function applyTaskPatchFromAi(
+  supabase: any,
+  userId: string,
+  orgId: string,
+  conversationId: string | null,
+  tool: "update_task" | "update_tasks",
+  patch: TaskUpdatePatch,
+): Promise<Record<string, unknown>> {
+  const taskId = patch.task_id;
+  if (!taskId || typeof taskId !== "string") {
+    return { task_id: taskId, error: "task_id inválido." };
+  }
+
+  const { data: row, error: fetchErr } = await supabase
+    .from("tasks")
+    .select("id, organization_id, started_at, status, due_date")
+    .eq("id", taskId)
+    .single();
+
+  if (fetchErr || !row) return { task_id: taskId, error: fetchErr?.message || "Tarea no encontrada." };
+  if (row.organization_id !== orgId) return { task_id: taskId, error: "No autorizado para esta tarea." };
+
+  const updates: Record<string, unknown> = {};
+
+  if (patch.status !== undefined && patch.status !== null) {
+    if (!TASK_STATUS_AI.includes(patch.status as (typeof TASK_STATUS_AI)[number])) {
+      return { task_id: taskId, error: `status inválido: ${patch.status}` };
+    }
+    updates.status = patch.status;
+  }
+  if (patch.priority !== undefined && patch.priority !== null) {
+    if (!TASK_PRIORITY_AI.includes(patch.priority as (typeof TASK_PRIORITY_AI)[number])) {
+      return { task_id: taskId, error: `priority inválida: ${patch.priority}` };
+    }
+    updates.priority = patch.priority;
+  }
+  if (patch.title !== undefined) updates.title = patch.title;
+  if (patch.description !== undefined) updates.description = patch.description;
+  if (patch.assigned_to !== undefined) {
+    updates.assigned_to = patch.assigned_to === "" ? null : patch.assigned_to;
+  }
+
+  if (patch.due_date !== undefined) {
+    if (patch.due_date === null || patch.due_date === "") updates.due_date = null;
+    else updates.due_date = patch.due_date;
+  }
+
+  const changeKeys = Object.keys(updates);
+  if (changeKeys.length === 0) return { task_id: taskId, error: "No hay campos para actualizar." };
+
+  if (updates.status === "completada") {
+    const block = await assertCanCompleteParentTaskEdge(supabase, taskId);
+    if (block) return { task_id: taskId, error: block };
+  }
+
+  const newStatus = updates.status as string | undefined;
+  if (newStatus && newStatus !== "pendiente" && newStatus !== "cancelada") {
+    if (!row.started_at) updates.started_at = new Date().toISOString();
+  }
+  if (newStatus === "completada") {
+    updates.completed_at = new Date().toISOString();
+  }
+  if (newStatus && newStatus !== "completada") {
+    updates.completed_at = null;
+  }
+
+  const logDetails: Record<string, unknown> = {
+    changes: changeKeys,
+  };
+  if (updates.status !== undefined) {
+    logDetails.previous_status = row.status;
+    logDetails.new_status = updates.status;
+  }
+  if (updates.due_date !== undefined) {
+    logDetails.previous_due_date = row.due_date ?? null;
+    logDetails.new_due_date = updates.due_date;
+  }
+
+  const { error: upErr } = await supabase.from("tasks").update(updates).eq("id", taskId);
+  if (upErr) return { task_id: taskId, error: upErr.message };
+
+  await logAiTaskActivity(supabase, {
+    userId,
+    orgId,
+    taskId,
+    action: "updated",
+    tool,
+    conversationId,
+    details: logDetails,
+  });
+
+  return { task_id: taskId, success: true, updated: changeKeys };
+}
 
 // ─── Tool executor ───
 async function executeTool(
@@ -1183,6 +1416,7 @@ async function executeTool(
   supabase: any,
   userId: string,
   orgId: string,
+  conversationId: string | null = null,
 ) {
   switch (name) {
     case "get_my_tasks": {
@@ -1728,6 +1962,83 @@ async function executeTool(
       return { success: true, created: results.filter((r) => !r.error).length, tasks: results };
     }
 
+    case "update_task": {
+      let due_date: string | null | undefined = args.due_date;
+      if (args.clear_due_date === true) due_date = null;
+      const r = await applyTaskPatchFromAi(supabase, userId, orgId, conversationId, "update_task", {
+        task_id: args.task_id,
+        status: args.status,
+        due_date,
+        priority: args.priority,
+        title: args.title,
+        description: args.description,
+        assigned_to: args.assigned_to,
+      });
+      return r.error ? r : { success: true, ...r };
+    }
+
+    case "update_tasks": {
+      const list = Array.isArray(args.updates) ? args.updates.slice(0, 80) : [];
+      if (list.length === 0) return { error: "updates vacío o inválido." };
+      const results: Record<string, unknown>[] = [];
+      let ok = 0;
+      for (const p of list) {
+        let due_date: string | null | undefined = p.due_date;
+        if (p.clear_due_date === true) due_date = null;
+        const r = await applyTaskPatchFromAi(supabase, userId, orgId, conversationId, "update_tasks", {
+          task_id: p.task_id,
+          status: p.status,
+          due_date,
+          priority: p.priority,
+          title: p.title,
+          description: p.description,
+          assigned_to: p.assigned_to,
+        });
+        results.push(r);
+        if (!r.error) ok++;
+      }
+      return { success: true, updated_count: ok, results };
+    }
+
+    case "add_task_comment": {
+      const taskId = args.task_id;
+      const content = typeof args.content === "string" ? args.content.trim() : "";
+      if (!taskId || !content) return { error: "task_id y content son obligatorios." };
+      if (content.length > 12_000) {
+        return { error: "El comentario es demasiado largo (máx. 12000 caracteres)." };
+      }
+
+      const { data: trow, error: tErr } = await supabase
+        .from("tasks")
+        .select("id, organization_id")
+        .eq("id", taskId)
+        .single();
+      if (tErr || !trow) return { error: tErr?.message || "Tarea no encontrada." };
+      if (trow.organization_id !== orgId) return { error: "No autorizado para esta tarea." };
+
+      const { error: cErr } = await supabase.from("task_comments").insert({
+        task_id: taskId,
+        user_id: userId,
+        content,
+        mentions: [],
+      });
+      if (cErr) return { error: cErr.message };
+
+      await logAiTaskActivity(supabase, {
+        userId,
+        orgId,
+        taskId,
+        action: "commented",
+        tool: "add_task_comment",
+        conversationId,
+        details: {
+          comment_preview: content.length > 240 ? content.slice(0, 240) + "…" : content,
+        },
+      });
+
+      return { success: true, task_id: taskId };
+    }
+
     case "suggest_template": {
       let q = supabase.from("project_templates").select("id, name, description, area, phases, suggested_tasks, service_tags, client_type, avg_duration_days, usage_count").eq("organization_id", orgId);
       if (args.service_area) q = q.eq("area", args.service_area);
@@ -1931,6 +2242,13 @@ Los artifacts aparecen en un panel lateral con preview real del PDF y descargas 
 - Al crear tareas, asigna prioridades inteligentemente según la urgencia y la naturaleza de la tarea.
 - **IMPORTANTE:** Cuando crees un proyecto exitosamente, SIEMPRE incluye en tu respuesta el marcador [project:UUID_DEL_PROYECTO|NOMBRE_DEL_PROYECTO|AREA] para que aparezca una tarjeta visual del proyecto en el chat. Ejemplo: [project:abc-123|Contabilidad Grupo Dazon|contabilidad]
 
+### 5c. Actualización de tareas existentes (no digas que no puedes)
+- **USA update_task** para cambiar una sola tarea: estatus (p. ej. completada), fecha límite (\`due_date\` en YYYY-MM-DD), \`clear_due_date: true\` para quitar vencimiento, prioridad, título, descripción o responsable (\`assigned_to\` UUID; cadena vacía para quitar).
+- **USA update_tasks** cuando haya muchas tareas con el mismo cambio (p. ej. reprogramar varias al mismo día): envía un arreglo \`updates\` con un objeto por tarea (mismos campos que \`update_task\`).
+- **USA add_task_comment** cuando el usuario quiera dejar notas o cierre en el hilo de la tarea.
+- Antes de tocar muchas tareas o si los IDs no están claros, usa **get_my_tasks**, **get_all_org_tasks** o **get_task_details** y confirma con el usuario si la petición es ambigua o destructiva.
+- Los cambios quedan registrados en el historial de la tarea como acciones vía Kawiil AI; nunca afirmes que no tienes herramientas para actualizar tareas.
+
 ### 6. Comunicación profesional
 - Redacta correos, mensajes y documentos en español formal mexicano.
 - Adapta el tono: formal para clientes/SAT, cercano para comunicación interna.
@@ -2032,7 +2350,13 @@ serve(async (req) => {
       insightLite,
       indexed_attachment_names,
       systemPrompt: clientSystemPrompt,
+      conversationId: bodyConversationId,
     } = body;
+
+    const conversationIdForTools =
+      typeof bodyConversationId === "string" && bodyConversationId.trim().length > 0
+        ? bodyConversationId.trim()
+        : null;
 
     const svcUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -2210,7 +2534,7 @@ serve(async (req) => {
 
     // ─── Direct search mode (structured results + optional AI summary) ───
     if (searchMode && searchQuery) {
-      const results = await executeTool("search_across", { query: searchQuery }, supabase, user.id, orgId);
+      const results = await executeTool("search_across", { query: searchQuery }, supabase, user.id, orgId, null);
 
       // Try to generate a brief AI summary of the results
       let summary = "";
@@ -2345,6 +2669,7 @@ serve(async (req) => {
           ai_project_id || null,
           sseWriter,
           authHeader!,
+          conversationIdForTools,
         );
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
@@ -3435,6 +3760,7 @@ async function handleClaudeChat(
   supabase: any, userId: string, orgId: string, aiProjectId: string | null,
   sseWriter: LiveSseWriter,
   authHeader: string,
+  conversationId: string | null,
 ): Promise<void> {
   let anthropicMsgs = pruneClaudeMessages(
     toAnthropicMessages(userMessages),
@@ -3705,7 +4031,7 @@ async function handleClaudeChat(
         } else {
           console.log(`Tool [Claude]: ${tu.name}`, tu.input);
           sseWriter.writeProgress("tool", `Ejecutando herramienta: ${tu.name}…`);
-          result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId);
+          result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId, conversationId);
         }
 
         const rawToolStr = typeof result === "string" ? result : JSON.stringify(result);

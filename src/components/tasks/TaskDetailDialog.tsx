@@ -1418,14 +1418,25 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                     <ActivityIcon className="h-3 w-3" /> Actividad
                   </h4>
                   <div className="activity" style={{ maxHeight: 200, overflowY: "auto" }}>
-                    {taskActivity.slice(0, 8).map((a: any, i: number) => (
-                      <div key={a.id} className={`act-item ${i === 0 ? "highlight" : ""}`}>
-                        <div className="who">
-                          <span>{a.action}</span>
+                    {taskActivity.slice(0, 8).map((a: any, i: number) => {
+                      const det = a.details && typeof a.details === "object" ? a.details as Record<string, unknown> : null;
+                      const viaAi = det?.source === "kawiil_ai";
+                      const convId = typeof det?.conversation_id === "string" ? det.conversation_id : null;
+                      return (
+                        <div key={a.id} className={`act-item ${i === 0 ? "highlight" : ""}`}>
+                          <div className="who">
+                            <span>{a.action}</span>
+                            {viaAi ? (
+                              <span className="block text-xs font-normal text-muted-foreground">
+                                vía Kawiil AI
+                                {convId ? ` · ref. chat ${convId.slice(0, 8)}…` : ""}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="when">{formatMX(a.created_at, "dd MMM HH:mm")}</div>
                         </div>
-                        <div className="when">{formatMX(a.created_at, "dd MMM HH:mm")}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               )}
