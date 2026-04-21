@@ -35,8 +35,10 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import { NotificationsKawiilCard } from "@/components/notifications/NotificationsKawiilCard";
+import { PersonalRemindersPanel } from "@/components/reminders/PersonalRemindersPanel";
+import { useReminders } from "@/hooks/useReminders";
 
-type Tab = "menciones" | "actividad" | "sistema" | "vencimientos";
+type Tab = "menciones" | "actividad" | "sistema" | "vencimientos" | "recordatorios";
 
 const MENTION_TYPES = ["mention", "slack_mention"];
 const ACTIVITY_TYPES = [
@@ -682,10 +684,18 @@ export default function Notificaciones() {
   const markAsRead = useMarkAsRead();
   const markAllAsRead = useMarkAllAsRead();
   const [tab, setTab] = useState<Tab>("menciones");
+  const { reminders } = useReminders();
+  const pendingRemindersCount = reminders.filter((r) => !r.is_completed).length;
 
   useEffect(() => {
     const t = searchParams.get("tab");
-    if (t === "sistema" || t === "actividad" || t === "menciones" || t === "vencimientos") {
+    if (
+      t === "sistema" ||
+      t === "actividad" ||
+      t === "menciones" ||
+      t === "vencimientos" ||
+      t === "recordatorios"
+    ) {
       setTab(t as Tab);
     }
   }, [searchParams]);
@@ -767,6 +777,7 @@ export default function Notificaciones() {
     { key: "actividad", label: "Actividad", icon: <Activity className="h-3 w-3" />, badge: unreadActivity.length },
     { key: "sistema", label: "Sistema", icon: <BrainCircuit className="h-3 w-3" />, badge: unreadSistema.length },
     { key: "vencimientos", label: "Vencimientos", icon: <CalendarClock className="h-3 w-3" /> },
+    { key: "recordatorios", label: "Recordatorios", icon: <Bell className="h-3 w-3" />, badge: pendingRemindersCount },
   ];
 
   return (
@@ -778,7 +789,7 @@ export default function Notificaciones() {
           icon={<Bell />}
           iconAccent={KAWIIL_AI_GRADIENT}
           title="Notificaciones"
-          description="Menciones, actividad del equipo y alertas de vencimiento"
+          description="Menciones, actividad del equipo, alertas de vencimiento y tus recordatorios personales"
           actions={
             <Badge
               variant="outline"
@@ -1009,6 +1020,12 @@ export default function Notificaciones() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {tab === "recordatorios" && (
+              <div className="space-y-4 animate-fade-in">
+                <PersonalRemindersPanel showConfigureNotificationsButton={false} />
               </div>
             )}
 
