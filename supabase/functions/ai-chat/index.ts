@@ -3754,6 +3754,53 @@ async function embedSharedMemory(
   }
 }
 
+/** Acumula resultados de herramientas de mutación de tareas para un mensaje de respaldo si el modelo cierra en end_turn sin texto. */
+type TaskMutationTally = { updateSingles: number; updateBatchOk: number; comments: number; errors: number };
+
+function tallyTaskMutationTool(toolName: string, result: Record<string, unknown> | null | undefined, t: TaskMutationTally): void {
+  if (toolName === "update_task") {
+    if (result?.error) t.errors++;
+    else if (result?.success === true) t.updateSingles++;
+    return;
+  }
+  if (toolName === "update_tasks") {
+    if (result?.error) {
+      t.errors++;
+      return;
+    }
+    const n = typeof result?.updated_count === "number" ? result.updated_count : 0;
+    t.updateBatchOk += n;
+    const rows = result?.results;
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        if (row && typeof row === "object" && "error" in row && (row as { error?: unknown }).error) t.errors++;
+      }
+    }
+    return;
+  }
+  if (toolName === "add_task_comment") {
+    if (result?.error) t.errors++;
+    else if (result?.success === true) t.comments++;
+  }
+}
+
+function buildTaskMutationFallbackMessage(t: TaskMutationTally): string {
+  const taskEdits = t.updateSingles + t.updateBatchOk;
+  const parts: string[] = [];
+  if (taskEdits > 0) parts.push(`actualicé **${taskEdits}** tarea(s)`);
+  if (t.comments > 0) parts.push(`añadí **${t.comments}** comentario(s) en el hilo`);
+  let msg =
+    "**Listo.** " +
+    (parts.length ? parts.join(" y ") + ". " : "") +
+    "Los cambios ya están guardados en Kawiil; en cada tarea verás el historial **vía Kawiil AI** cuando aplique.";
+  if (t.errors > 0) {
+    msg +=
+      ` Hubo **${t.errors}** operación(es) con error (p. ej. ID incorrecto o regla de negocio); revisa esa tarea o dime cuál falló.`;
+  }
+  msg += "\n\nSi quieres otro ajuste, dímelo en una frase.";
+  return msg;
+}
+
 // ─── Claude (Anthropic) handler ───
 async function handleClaudeChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
@@ -3767,6 +3814,7 @@ async function handleClaudeChat(
     MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
   );
   const MAX_ROUNDS = 8;
+  const taskMutationTally: TaskMutationTally = { updateSingles: 0, updateBatchOk: 0, comments: 0, errors: 0 };
   const createdArtifacts: { id: string; title: string; content_type: string; office_kind?: string; template_key?: string; primary_format?: string }[] = [];
 
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
@@ -4044,6 +4092,9 @@ async function handleClaudeChat(
           console.log(`Tool [Claude]: ${tu.name}`, tu.input);
           sseWriter.writeProgress("tool", `Ejecutando herramienta: ${tu.name}…`);
           result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId, conversationId);
+          if (result && typeof result === "object" && !Array.isArray(result)) {
+            tallyTaskMutationTool(tu.name, result as Record<string, unknown>, taskMutationTally);
+          }
         }
 
         const rawToolStr = typeof result === "string" ? result : JSON.stringify(result);
@@ -4110,6 +4161,26 @@ async function handleClaudeChat(
           "**La IA rechazó la solicitud por sus políticas.** Reformula el pedido o proporciona más contexto.",
         );
       } else {
+        const mutationSuccesses =
+          taskMutationTally.updateSingles + taskMutationTally.updateBatchOk + taskMutationTally.comments;
+        // Tras varias rondas de tools, la última llamada (sin tools) a veces devuelve end_turn sin texto;
+        // si ya aplicamos cambios en tareas, respondemos con un resumen en lugar de error genérico.
+        if (mutationSuccesses > 0 && stopReason === "end_turn") {
+          console.warn(
+            "Claude end_turn sin texto tras mutaciones de tareas; emitiendo resumen de respaldo.",
+          );
+          sseWriter.writeProgress("response", "Resumen de lo ejecutado…");
+          sseWriter.writeTextChunks(buildTaskMutationFallbackMessage(taskMutationTally));
+          sseWriter.close();
+          return;
+        }
+        if (mutationSuccesses === 0 && taskMutationTally.errors > 0 && stopReason === "end_turn") {
+          sseWriter.fail(
+            "**No se pudieron aplicar los cambios en las tareas** (revisa los errores en el historial o los IDs). " +
+              "Reintenta con menos tareas a la vez o confirma los UUID en el tablero.",
+          );
+          return;
+        }
         sseWriter.fail(
           `**La IA no devolvió texto en esta respuesta** (stop_reason: ${stopReason ?? "desconocido"}). ` +
             "Puede ser un fallo temporal del proveedor o que el mensaje excedió el contexto. " +
