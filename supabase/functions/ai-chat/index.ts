@@ -960,7 +960,11 @@ const anthropicTools = [
   {
     name: "create_ai_document",
     description:
-      "Genera un documento PROFESIONAL con diseño Kawiil (portada, tipografía, tablas con color, paginación). ÚSALA para cualquier documento largo/formal: informes ejecutivos, minutas de reunión, propuestas/cotizaciones, facturas/remisiones, reportes financieros. El PDF es el formato primario (con diseño tipo Claude); opcionalmente se generan DOCX/XLSX/PPTX para edición posterior.\n\n" +
+      "Genera un documento PROFESIONAL con diseño Kawiil (portada, tipografía, tablas con color, paginación). ÚSALA para cualquier documento largo/formal: informes ejecutivos, minutas de reunión, propuestas/cotizaciones, facturas/remisiones, reportes financieros.\n\n" +
+      "FORMATO DE SALIDA (MUY IMPORTANTE):\n" +
+      "- Si el usuario pide Word / DOCX / editable → incluye 'docx' y 'pdf' y pon 'primary_format': 'docx'. Orden sugerido en requested_formats: primero docx, luego pdf (el primario es el que verá como principal en la app).\n" +
+      "- Si pide solo PDF o no especifica y conviene entregar PDF de presentación → 'primary_format': 'pdf' y requested_formats puede ser ['pdf','docx'] o ['pdf'].\n" +
+      "- Si el usuario NO ha indicado en qué formato quiere el entregable (PDF, Word, Excel, PowerPoint), NO llames a esta herramienta todavía: pregúntale en una frase qué formato prefiere (PDF para presentar, Word para editar, Excel para tablas, PowerPoint para diapositivas, o combinación).\n\n" +
       "REGLAS:\n" +
       "1) Elige 'template_key' según la intención del usuario:\n" +
       "   - 'informe_ejecutivo' → reporte formal con resumen ejecutivo, secciones y recomendaciones.\n" +
@@ -969,7 +973,7 @@ const anthropicTools = [
       "   - 'factura_remision' → documento fiscal con emisor, receptor, conceptos y totales.\n" +
       "   - 'reporte_financiero' → reporte con KPIs, tablas y notas del periodo.\n" +
       "   - 'generico' → fallback sin template específico.\n" +
-      "2) SIEMPRE incluye 'pdf' en 'requested_formats' salvo que el usuario pida explícitamente SOLO Excel o Word.\n" +
+      "2) Incluye 'pdf' en requested_formats salvo que el usuario pida explícitamente SOLO otro formato (p. ej. solo Excel). El backend puede añadir pdf al final si falta.\n" +
       "3) 'content' debe seguir EXACTAMENTE el shape del template elegido (ver descripción de cada template en este documento).\n" +
       "4) Si confidence < 0.55, pide aclaración al usuario en lugar de generar el archivo.\n\n" +
       "SHAPES DE CONTENT POR TEMPLATE (ejemplos abreviados):\n" +
@@ -1000,7 +1004,13 @@ const anthropicTools = [
           type: "array",
           items: { type: "string", enum: ["pdf", "docx", "xlsx", "pptx"] },
           description:
-            "Lista de formatos a generar. El primero es el primario (mostrado en preview). Default e incluir siempre: ['pdf'].",
+            "Formatos a generar. El orden importa junto con primary_format: el primario debe coincidir con primary_format (p. ej. Word: ['docx','pdf']). Incluye normalmente pdf+docx para informes editables.",
+        },
+        primary_format: {
+          type: "string",
+          enum: ["pdf", "docx", "xlsx", "pptx"],
+          description:
+            "Formato que el usuario verá como principal en la app (preview/badge). Debe estar incluido en requested_formats. Si pidió Word → docx. Si pidió PDF o no especificó → pdf. Si pidió Excel/PPT → xlsx o pptx.",
         },
         content: {
           type: "object",
@@ -1815,19 +1825,23 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - Reporte financiero / KPIs / estado de resultados / flujo → \`reporte_financiero\`.
 - Cualquier otro documento formal sin encaje claro → \`generico\` (fallback).
 
-**requested_formats**: SIEMPRE incluye \`"pdf"\` (primario). Añade formatos secundarios cuando sean útiles:
-- Propuestas / facturas / reportes financieros → agrega \`"xlsx"\` para editar montos.
-- Informes / minutas / estudios fiscales → agrega \`"docx"\` para edición en Word (muy útil para revisión del cliente).
-- Presentaciones → agrega \`"pptx"\`.
+**requested_formats** y **primary_format**:
+- Incluye normalmente \`pdf\` y \`docx\` para informes largos (PDF para leer, Word para editar).
+- **Si el usuario pide Word / editable / DOCX** → \`primary_format\` debe ser \`"docx"\` y el orden en \`requested_formats\` debe poner \`docx\` **antes** que \`pdf\` (ej. \`["docx","pdf"]\`). Así la app muestra Word como formato principal.
+- **Si el usuario pide PDF o no especifica formato de entrega** → \`primary_format\`: \`"pdf"\` y puedes usar \`["pdf","docx"]\` o \`["pdf"]\`.
+- **Si el usuario NO ha dicho si quiere PDF, Word, Excel o PowerPoint** para un documento de entrega, **pregunta primero** (una pregunta corta con opciones) y **no** llames a \`create_ai_document\` hasta que responda o quede claro por contexto.
+- Propuestas / facturas / reportes financieros → agrega \`"xlsx"\` si necesitan editar montos en Excel; fija \`primary_format\` al formato que el usuario priorice.
+- Presentaciones → \`"pptx"\` y \`primary_format\` acorde.
 
 **content** debe seguir el shape del template elegido (ver descripción del tool). **Siempre incluye \`metadata\`** (code / emisor / destinatario / fecha / clasificacion / version) cuando tengas datos; mejora mucho la portada del PDF. Para estudios fiscales usa \`clasificacion\` tipo "Confidencial — Uso Fiscal" o "Confidencial — Uso Interno".
 
-**Ejemplo: Estudio de Precios de Transferencia** (→ \`informe_ejecutivo\` + \`requested_formats: ["pdf", "docx"]\`):
+**Ejemplo: Estudio de Precios de Transferencia** cuando el usuario quiere **Word como entrega principal** (→ \`informe_ejecutivo\` + \`requested_formats: ["docx","pdf"]\` + \`primary_format: "docx"\`):
 \`\`\`json
 {
   "title": "Estudio de Precios de Transferencia - Empathy Design S.A.P.I. 2024-2025",
   "template_key": "informe_ejecutivo",
-  "requested_formats": ["pdf", "docx"],
+  "requested_formats": ["docx", "pdf"],
+  "primary_format": "docx",
   "content": {
     "metadata": { "emisor": "Kawiil - Servicios Profesionales", "fecha": "21 de abril de 2026", "clasificacion": "Confidencial — Uso Fiscal" },
     "summary": "El presente estudio documenta y analiza las operaciones controladas de Empathy Design…",
@@ -2774,9 +2788,27 @@ async function handleCreateAiDocument(
   const rawFormats = Array.isArray(input.requested_formats) ? input.requested_formats : ["pdf"];
   const formats: KawiilOutputFormat[] = (rawFormats as string[])
     .filter((f): f is KawiilOutputFormat => (["pdf", "docx", "xlsx", "pptx"] as string[]).includes(f));
-  const requestedFormats: KawiilOutputFormat[] = formats.length ? formats : ["pdf"];
-  // PDF siempre como primario salvo que el usuario haya pedido explícitamente otra cosa.
-  if (!requestedFormats.includes("pdf")) requestedFormats.unshift("pdf");
+  let requestedFormats: KawiilOutputFormat[] = formats.length ? formats : ["pdf"];
+
+  const primaryFmtRaw = typeof (input as Record<string, unknown>).primary_format === "string"
+    ? (input as Record<string, unknown>).primary_format as string
+    : "";
+  const isValidPrimary = (f: string): f is KawiilOutputFormat =>
+    (["pdf", "docx", "xlsx", "pptx"] as const).includes(f as KawiilOutputFormat);
+
+  // Si el modelo envió primary_format pero olvidó incluirlo en la lista, lo añadimos.
+  if (primaryFmtRaw && isValidPrimary(primaryFmtRaw) && !requestedFormats.includes(primaryFmtRaw)) {
+    requestedFormats.unshift(primaryFmtRaw);
+  }
+
+  // PDF como lectura/archivo: si falta, se añade al final para no adelantar el formato
+  // que el usuario pidió como primario (p. ej. Word → docx primero, pdf segundo).
+  if (!requestedFormats.includes("pdf")) requestedFormats.push("pdf");
+
+  if (primaryFmtRaw && isValidPrimary(primaryFmtRaw) && requestedFormats.includes(primaryFmtRaw)) {
+    const pf = primaryFmtRaw as KawiilOutputFormat;
+    requestedFormats = [pf, ...requestedFormats.filter((f) => f !== pf)];
+  }
 
   const renderPayload = {
     title,
