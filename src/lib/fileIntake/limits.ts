@@ -3,6 +3,8 @@
  * Cada modulo elige el preset que mejor le aplique (o pasa overrides).
  */
 
+import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
+
 export type ZipMode = "expand" | "keep" | "auto";
 
 export interface FileIntakeLimits {
@@ -54,7 +56,8 @@ export const documentsLimits: FileIntakeLimits = {
   maxFiles: 50,
   maxBytesPerFile: 50 * MB,
   maxBatchBytes: 500 * MB,
-  accept: ".pdf,.xml,.txt,.md,.docx,.xlsx,.csv,.json,.png,.jpg,.jpeg,.zip",
+  /** Office completo (incl. .ppt/.pptx) + XML/JSON usados en facturación y datos. */
+  accept: `${ACCEPTED_DOCUMENT_EXTENSIONS},.xml,.json`,
   zipMode: "auto",
   clientUnzipMaxBytes: 25 * MB,
   maxZipEntriesForClientExpand: 150,

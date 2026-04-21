@@ -8,7 +8,18 @@ const corsHeaders = {
 };
 
 const BUCKET = "documents";
-const SUPPORTED_EXTENSIONS = [".pdf", ".xml", ".txt", ".md", ".docx", ".xlsx", ".csv", ".json"];
+const SUPPORTED_EXTENSIONS = [
+  ".pdf",
+  ".xml",
+  ".txt",
+  ".md",
+  ".docx",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".csv",
+  ".json",
+];
 const TEXT_EXTENSIONS = [".txt", ".md", ".csv", ".json"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_ENTRIES = 400;
@@ -63,6 +74,8 @@ function getMimeType(ext: string): string {
     ".json": "application/json",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   };
   return map[ext] || "application/octet-stream";
 }
