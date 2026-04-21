@@ -200,6 +200,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const currentCriticality = pendingChanges.criticality_level ?? (task as any)?.criticality_level ?? "normal";
   const currentDelayCategory = pendingChanges.delay_category !== undefined ? pendingChanges.delay_category : (task as any)?.delay_category;
   const currentDelayNotes = pendingChanges.delay_notes !== undefined ? pendingChanges.delay_notes : (task as any)?.delay_notes;
+  const currentArea = pendingChanges.area !== undefined ? pendingChanges.area : task?.area;
 
   // Timer state
   const [timerRunning, setTimerRunning] = useState(false);
@@ -630,7 +631,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   };
 
   const dropboxLinks = (task?.dropbox_links as any[]) ?? [];
-  const areaLabel = task?.area ? getCelulaLabel(task.area) : null;
+  const areaLabel = currentArea ? getCelulaLabel(String(currentArea)) : null;
   const parentTask =
     task != null
       ? ((task as Task & { parent_task?: { id: string; title: string } | null }).parent_task ?? null)
@@ -1265,7 +1266,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   </div>
                   <div>
                     <label className="text-[10px] text-muted-foreground block mb-0.5">Área / Célula</label>
-                    <Select value={task.area || "__none__"} onValueChange={(v) => setPending("area", v === "__none__" ? null : v)}>
+                    <Select value={currentArea ? String(currentArea) : "__none__"} onValueChange={(v) => setPending("area", v === "__none__" ? null : v)}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sin área" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">Sin área</SelectItem>

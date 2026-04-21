@@ -458,6 +458,51 @@ export function useChat() {
     [user, activeConversationId, createConversation, qc],
   );
 
+  /** Persiste el texto del resultado de una tarea de agente en el mismo `chat_messages` (y estado local). Devuelve false si falló el UPDATE. */
+  const patchMessageContent = useCallback(
+    async (messageId: string, content: string): Promise<boolean> => {
+      if (!user) return false;
+      const { error } = await supabase
+        .from("chat_messages" as any)
+        .update({ content } as any)
+        .eq("id", messageId);
+      if (error) {
+        console.error("patchMessageContent", error);
+        toast.error(error.message || "No se pudo actualizar el mensaje");
+        return false;
+      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, content } : m)),
+      );
+      const embedText = content.trim();
+      if (embedText.length > 30) {
+        const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+        if (!orgRes.error) {
+          supabase.functions
+            .invoke("generate-embeddings", {
+              body: {
+                texts: [`[assistant] ${embedText}`],
+                source_type: "chat_message",
+                source_id: messageId,
+                organization_id: orgRes.data,
+                auto_chunk: false,
+              },
+            })
+            .catch(() => {});
+        }
+      }
+      if (activeConversationId) {
+        await supabase
+          .from("chat_conversations" as any)
+          .update({ updated_at: new Date().toISOString() } as any)
+          .eq("id", activeConversationId);
+      }
+      qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+      return true;
+    },
+    [user, activeConversationId, qc],
+  );
+
   const updateConversationFolder = useCallback(
     async (conversationId: string, folder: string | null) => {
       await supabase.from("chat_conversations" as any).update({ folder } as any).eq("id", conversationId);
@@ -1111,6 +1156,7 @@ export function useChat() {
     sendMessage,
     loadConversation,
     addAgentTaskMessage,
+    patchMessageContent,
     startNewChat,
     deleteConversation: deleteConversation.mutate,
     updateConversationFolder,
