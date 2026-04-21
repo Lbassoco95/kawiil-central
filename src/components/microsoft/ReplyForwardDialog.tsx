@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RichTextEditor } from "@/components/microsoft/RichTextEditor";
 import { EmailAIAssistant } from "@/components/microsoft/EmailAIAssistant";
 import {
@@ -23,7 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2, Send, Sparkles, CalendarClock, ChevronDown } from "lucide-react";
+import { Loader2, Send, Sparkles, CalendarClock, ChevronDown, MailCheck } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { Switch } from "@/components/ui/switch";
 import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
@@ -158,21 +159,20 @@ export function ReplyForwardDialog({
 
   const receiptsWrap = (node: ReactNode) =>
     receiptsDisabled ? (
-      <TooltipProvider delayDuration={200}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex cursor-not-allowed opacity-60">{node}</span>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs text-xs">
-            Solo disponible cuando Outlook prepara un borrador. Espera a que termine de cargar o reintenta la acción.
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed opacity-60">{node}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs">
+          Solo disponible cuando Outlook prepara un borrador. Espera a que termine de cargar o reintenta la acción.
+        </TooltipContent>
+      </Tooltip>
     ) : (
       node
     );
 
   return (
+    <TooltipProvider delayDuration={200}>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[min(100vw-1.5rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left sm:px-6">
@@ -248,40 +248,6 @@ export function ReplyForwardDialog({
                       onHtmlChange={setDraftHtml}
                     />
                   </div>
-                </div>
-                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 space-y-2">
-                  <p className="text-[11px] font-medium text-muted-foreground">Confirmaciones (como en Outlook)</p>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
-                    {receiptsWrap(
-                      <label
-                        className={`flex items-center gap-2 text-xs select-none ${receiptsDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-                      >
-                        <Switch
-                          checked={requestDeliveryReceipt}
-                          onCheckedChange={onRequestDeliveryReceiptChange}
-                          disabled={receiptsDisabled}
-                          aria-label="Solicitar confirmación de entrega"
-                        />
-                        <span>Confirmación de entrega (acuse de recibo)</span>
-                      </label>,
-                    )}
-                    {receiptsWrap(
-                      <label
-                        className={`flex items-center gap-2 text-xs select-none ${receiptsDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-                      >
-                        <Switch
-                          checked={requestReadReceipt}
-                          onCheckedChange={onRequestReadReceiptChange}
-                          disabled={receiptsDisabled}
-                          aria-label="Solicitar confirmación de lectura"
-                        />
-                        <span>Confirmación de lectura</span>
-                      </label>,
-                    )}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground leading-snug">
-                    El servidor o el destinatario pueden no enviar confirmaciones.
-                  </p>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -398,21 +364,80 @@ export function ReplyForwardDialog({
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 border-t border-border bg-background px-4 py-3 sm:px-6 gap-2 sm:justify-between">
+        <DialogFooter className="shrink-0 border-t border-border bg-background px-4 py-3 sm:px-6 gap-2 sm:justify-between sm:flex-row flex-col-reverse">
           <Button variant="ghost" size="sm" className="h-9" onClick={onCancel}>
             Cancelar
           </Button>
-          <Button
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={onSend}
-            disabled={isSending || isScheduling || !draftHtml.trim() || preparing}
-          >
-            {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            {action === "forward" ? "Reenviar" : "Enviar"}
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-1.5"
+                  disabled={preparing}
+                  aria-label="Opciones de envío: confirmaciones"
+                >
+                  <MailCheck className="h-3.5 w-3.5" />
+                  Opciones
+                  {(requestDeliveryReceipt || requestReadReceipt) && !receiptsDisabled ? (
+                    <span className="ml-0.5 rounded-full bg-primary/15 px-1.5 py-0 text-[10px] font-medium text-primary tabular-nums">
+                      {(requestDeliveryReceipt ? 1 : 0) + (requestReadReceipt ? 1 : 0)}
+                    </span>
+                  ) : null}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[min(calc(100vw-2rem),20rem)] p-3 sm:w-80" sideOffset={8}>
+                <p className="text-xs font-medium text-foreground mb-2">Confirmaciones (Microsoft 365)</p>
+                <p className="text-[10px] text-muted-foreground mb-3 leading-snug">
+                  Igual que en Outlook: el servidor o el destinatario pueden no enviar acuses.
+                </p>
+                <div className="flex flex-col gap-3">
+                  {receiptsWrap(
+                    <label
+                      className={`flex items-start gap-2.5 text-xs leading-snug select-none ${receiptsDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                    >
+                      <Switch
+                        className="mt-0.5 shrink-0"
+                        checked={requestDeliveryReceipt}
+                        onCheckedChange={onRequestDeliveryReceiptChange}
+                        disabled={receiptsDisabled}
+                        aria-label="Solicitar confirmación de entrega"
+                      />
+                      <span>Confirmación de entrega (acuse de recibo)</span>
+                    </label>,
+                  )}
+                  {receiptsWrap(
+                    <label
+                      className={`flex items-start gap-2.5 text-xs leading-snug select-none ${receiptsDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                    >
+                      <Switch
+                        className="mt-0.5 shrink-0"
+                        checked={requestReadReceipt}
+                        onCheckedChange={onRequestReadReceiptChange}
+                        disabled={receiptsDisabled}
+                        aria-label="Solicitar confirmación de lectura"
+                      />
+                      <span>Confirmación de lectura</span>
+                    </label>,
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+            <Button
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={onSend}
+              disabled={isSending || isScheduling || !draftHtml.trim() || preparing}
+            >
+              {isSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {action === "forward" ? "Reenviar" : "Enviar"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </TooltipProvider>
   );
 }
