@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useCancelScheduledMailJob, usePendingScheduledMailJobs } from "@/hooks/useMicrosoft";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Loader2, Send, Sparkles, CalendarClock, ChevronDown } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { Switch } from "@/components/ui/switch";
@@ -67,6 +73,12 @@ export interface ReplyForwardDialogProps {
   onSend: () => void;
   /** Programar envío (solo con borrador Graph). `scheduledAt` en ISO 8601. */
   onScheduleMail?: (scheduledAtIso: string) => void | Promise<void>;
+  requestDeliveryReceipt: boolean;
+  requestReadReceipt: boolean;
+  onRequestDeliveryReceiptChange: (v: boolean) => void;
+  onRequestReadReceiptChange: (v: boolean) => void;
+  /** Sin borrador de Graph no se pueden aplicar estas solicitudes (envío rápido). */
+  receiptsDisabled: boolean;
 }
 
 export function ReplyForwardDialog({
@@ -91,6 +103,11 @@ export function ReplyForwardDialog({
   onCancel,
   onSend,
   onScheduleMail,
+  requestDeliveryReceipt,
+  requestReadReceipt,
+  onRequestDeliveryReceiptChange,
+  onRequestReadReceiptChange,
+  receiptsDisabled,
 }: ReplyForwardDialogProps) {
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduledOpen, setScheduledOpen] = useState(false);
@@ -138,6 +155,22 @@ export function ReplyForwardDialog({
     }
     await onScheduleMail(local.toISOString());
   };
+
+  const receiptsWrap = (node: ReactNode) =>
+    receiptsDisabled ? (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-not-allowed opacity-60">{node}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs">
+            Solo disponible cuando Outlook prepara un borrador. Espera a que termine de cargar o reintenta la acción.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    ) : (
+      node
+    );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -215,6 +248,40 @@ export function ReplyForwardDialog({
                       onHtmlChange={setDraftHtml}
                     />
                   </div>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 space-y-2">
+                  <p className="text-[11px] font-medium text-muted-foreground">Confirmaciones (como en Outlook)</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+                    {receiptsWrap(
+                      <label
+                        className={`flex items-center gap-2 text-xs select-none ${receiptsDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <Switch
+                          checked={requestDeliveryReceipt}
+                          onCheckedChange={onRequestDeliveryReceiptChange}
+                          disabled={receiptsDisabled}
+                          aria-label="Solicitar confirmación de entrega"
+                        />
+                        <span>Confirmación de entrega (acuse de recibo)</span>
+                      </label>,
+                    )}
+                    {receiptsWrap(
+                      <label
+                        className={`flex items-center gap-2 text-xs select-none ${receiptsDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <Switch
+                          checked={requestReadReceipt}
+                          onCheckedChange={onRequestReadReceiptChange}
+                          disabled={receiptsDisabled}
+                          aria-label="Solicitar confirmación de lectura"
+                        />
+                        <span>Confirmación de lectura</span>
+                      </label>,
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    El servidor o el destinatario pueden no enviar confirmaciones.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">

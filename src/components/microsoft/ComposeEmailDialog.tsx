@@ -259,6 +259,8 @@ export function ComposeEmailDialog({
   const [subjectSuggesting, setSubjectSuggesting] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [keepZips, setKeepZips] = useState(true);
+  const [requestDeliveryReceipt, setRequestDeliveryReceipt] = useState(false);
+  const [requestReadReceipt, setRequestReadReceipt] = useState(false);
   const lastInstructionRef = useRef("");
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -283,6 +285,8 @@ export function ComposeEmailDialog({
   useEffect(() => {
     if (open) {
       signatureAppliedRef.current = false;
+      setRequestDeliveryReceipt(false);
+      setRequestReadReceipt(false);
       if (initialTo) setTo(initialTo);
       if (initialSubject) setSubject(initialSubject);
       if (initialBodyHtml) {
@@ -305,6 +309,8 @@ export function ComposeEmailDialog({
       bodyRef.current = "";
       setPendingFiles([]);
       setKeepZips(true);
+      setRequestDeliveryReceipt(false);
+      setRequestReadReceipt(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -398,6 +404,8 @@ export function ComposeEmailDialog({
       subject: subject || "(Sin asunto)",
       bodyHtml: bodyRef.current || "<p></p>",
       attachments,
+      requestDeliveryReceipt,
+      requestReadReceipt,
     });
 
     onOpenChange(false);
@@ -863,6 +871,31 @@ export function ComposeEmailDialog({
                 className="min-h-[min(40vh,360px)] sm:min-h-[320px]"
                 toolbarEndSlot={iaToolbarButton}
               />
+
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 space-y-2 shrink-0">
+                <p className="text-[11px] font-medium text-muted-foreground">Confirmaciones (como en Outlook)</p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+                  <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                    <Switch
+                      checked={requestDeliveryReceipt}
+                      onCheckedChange={setRequestDeliveryReceipt}
+                      aria-label="Solicitar confirmación de entrega"
+                    />
+                    <span>Solicitar confirmación de entrega (acuse de recibo)</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                    <Switch
+                      checked={requestReadReceipt}
+                      onCheckedChange={setRequestReadReceipt}
+                      aria-label="Solicitar confirmación de lectura"
+                    />
+                    <span>Solicitar confirmación de lectura</span>
+                  </label>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  El servidor o el destinatario pueden no enviar confirmaciones; es el mismo comportamiento que en Outlook.
+                </p>
+              </div>
 
               <div className="space-y-2 shrink-0">
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">

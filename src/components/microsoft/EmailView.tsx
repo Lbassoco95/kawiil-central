@@ -442,6 +442,8 @@ export function EmailView() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreviewState | null>(null);
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [requestDeliveryReceipt, setRequestDeliveryReceipt] = useState(false);
+  const [requestReadReceipt, setRequestReadReceipt] = useState(false);
   const [showFolders, setShowFolders] = useState(false);
   /** Escritorio: panel de carpetas estrecho solo con iconos */
   const [foldersCollapsed, setFoldersCollapsed] = useState(readFoldersCollapsedPref);
@@ -635,6 +637,8 @@ export function EmailView() {
     if (!selectedEmailId || !action) return;
     setEmailAction(action);
     setShowFullAI(false);
+    setRequestDeliveryReceipt(false);
+    setRequestReadReceipt(false);
     setDraftId(null);
     setDraftHtml("");
     setReplyFiles([]);
@@ -716,6 +720,8 @@ export function EmailView() {
         kind: "send_draft",
         payload: {
           body_html: draftHtml,
+          is_delivery_receipt_requested: requestDeliveryReceipt,
+          is_read_receipt_requested: requestReadReceipt,
           ...(toRecipients?.length ? { to_recipients: toRecipients } : {}),
           ...(attachments.length ? { attachments } : {}),
         },
@@ -778,6 +784,8 @@ export function EmailView() {
             body: { contentType: "HTML", content: draftHtml },
             attachments,
             toRecipients: forwardRecipients.map((email) => ({ emailAddress: { address: email } })),
+            requestDeliveryReceipt,
+            requestReadReceipt,
           },
           { onSuccess: resetAction }
         );
@@ -805,7 +813,13 @@ export function EmailView() {
         }
       }
       sendDraft.mutate(
-        { draftId, body: { contentType: "HTML", content: draftHtml }, attachments },
+        {
+          draftId,
+          body: { contentType: "HTML", content: draftHtml },
+          attachments,
+          requestDeliveryReceipt,
+          requestReadReceipt,
+        },
         { onSuccess: resetAction }
       );
     } else {
@@ -823,6 +837,8 @@ export function EmailView() {
     setForwardTo("");
     setShowFullAI(false);
     setReplyFiles([]);
+    setRequestDeliveryReceipt(false);
+    setRequestReadReceipt(false);
   };
 
   const handleArchive = useCallback((emailId: string) => {
@@ -2415,6 +2431,11 @@ export function EmailView() {
           onCancel={resetAction}
           onSend={handleSendReply}
           onScheduleMail={handleScheduleMail}
+          requestDeliveryReceipt={requestDeliveryReceipt}
+          requestReadReceipt={requestReadReceipt}
+          onRequestDeliveryReceiptChange={setRequestDeliveryReceipt}
+          onRequestReadReceiptChange={setRequestReadReceipt}
+          receiptsDisabled={!draftId}
         />
       )}
       <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} />

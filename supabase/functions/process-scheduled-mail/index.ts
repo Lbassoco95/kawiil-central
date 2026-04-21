@@ -77,6 +77,13 @@ async function processSendDraftJob(
     patch.toRecipients = toRecipients;
   }
 
+  if (payload.is_delivery_receipt_requested === true) {
+    patch.isDeliveryReceiptRequested = true;
+  }
+  if (payload.is_read_receipt_requested === true) {
+    patch.isReadReceiptRequested = true;
+  }
+
   if (Object.keys(patch).length > 0) {
     const res = await fetch(`${GRAPH_BASE}/me/messages/${encodeURIComponent(draftId)}`, {
       method: "PATCH",

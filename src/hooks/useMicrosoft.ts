@@ -1033,16 +1033,27 @@ export function useSendDraft() {
       body,
       attachments,
       toRecipients,
+      requestDeliveryReceipt,
+      requestReadReceipt,
     }: {
       draftId: string;
       body?: { contentType: string; content: string };
       attachments?: ComposerAttachment[];
       /** Para reenvíos: destinatarios del borrador antes de enviar. */
       toRecipients?: { emailAddress: { address: string } }[];
+      /** Solicitudes tipo Outlook (Graph: isDeliveryReceiptRequested / isReadReceiptRequested). */
+      requestDeliveryReceipt?: boolean;
+      requestReadReceipt?: boolean;
     }) => {
       const patch: Record<string, unknown> = {};
       if (body) patch.body = body;
       if (toRecipients?.length) patch.toRecipients = toRecipients;
+      if (typeof requestDeliveryReceipt === "boolean") {
+        patch.isDeliveryReceiptRequested = requestDeliveryReceipt;
+      }
+      if (typeof requestReadReceipt === "boolean") {
+        patch.isReadReceiptRequested = requestReadReceipt;
+      }
       if (Object.keys(patch).length > 0) {
         const { error: updateError } = await supabase.functions.invoke("microsoft-api", {
           body: { action: "update-draft", params: { draftId, payload: patch } },
@@ -1307,6 +1318,8 @@ export function useSendNewEmail() {
       subject,
       bodyHtml,
       attachments,
+      requestDeliveryReceipt,
+      requestReadReceipt,
     }: {
       to: string[];
       cc?: string[];
@@ -1314,12 +1327,20 @@ export function useSendNewEmail() {
       subject: string;
       bodyHtml: string;
       attachments?: ComposerAttachment[];
+      requestDeliveryReceipt?: boolean;
+      requestReadReceipt?: boolean;
     }) => {
       const message: any = {
         subject,
         body: { contentType: "HTML", content: bodyHtml },
         toRecipients: to.map((e) => ({ emailAddress: { address: e.trim() } })),
       };
+      if (requestDeliveryReceipt) {
+        message.isDeliveryReceiptRequested = true;
+      }
+      if (requestReadReceipt) {
+        message.isReadReceiptRequested = true;
+      }
       if (cc?.length) {
         message.ccRecipients = cc.map((e) => ({ emailAddress: { address: e.trim() } }));
       }
