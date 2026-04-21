@@ -425,10 +425,29 @@ const AsistenteIA = () => {
     if (id) setShowKnowledge(true);
   }, []);
 
-  /** Tarjeta "Ver" en el hilo del chat: siempre abre visor (incluso sin proyecto IA o artefacto fuera de la lista filtrada). */
+  /**
+   * Tarjeta "Ver" en el hilo del chat: siempre abre visor (incluso sin proyecto IA o artefacto fuera de la lista filtrada).
+   *
+   * Flujo de resolución:
+   *   1. Busca en la lista local `artifacts` (filtrada por proyecto + user_id).
+   *   2. Si no está, intenta `select * from ai_artifacts where id = ?` via PostgREST.
+   *   3. Si PostgREST devuelve 0 filas (posible RLS), llama a la edge `artifact-probe`
+   *      que usa service-role acotado a la organización del usuario para reportar el
+   *      motivo real (owner distinto, org distinta, realmente no existe) y, si es del
+   *      mismo org, devuelve el artefacto para abrirlo de todos modos.
+   */
   const openArtifactFromChat = useCallback(
     async (id: string) => {
+      const idShort = id.slice(0, 8);
       const local = artifacts.find((a) => a.id === id);
+      // Diagnóstico visible en consola del navegador para cruzar con logs del backend.
+      console.log("[openArtifactFromChat] request", {
+        id,
+        idShort,
+        activeAiProjectId,
+        foundInLocalList: !!local,
+        localListSize: artifacts.length,
+      });
       if (local) {
         setArtifactDialogArtifact(local);
         setArtifactDialogOpen(true);
@@ -443,21 +462,66 @@ const AsistenteIA = () => {
           .select("*")
           .eq("id", id)
           .maybeSingle();
-        if (error) throw error;
-        if (data) setArtifactDialogArtifact(data as AiArtifact);
-        else {
-          toast.error("No se encontró el artefacto.");
-          setArtifactDialogOpen(false);
+        if (error) {
+          // Log completo del error de PostgREST para diagnosticar RLS / constraints.
+          console.error("[openArtifactFromChat] postgrest error", {
+            id,
+            code: (error as { code?: string }).code,
+            message: (error as { message?: string }).message,
+            details: (error as { details?: string }).details,
+            hint: (error as { hint?: string }).hint,
+          });
+          throw error;
         }
+        if (data) {
+          console.log("[openArtifactFromChat] found via direct select", { id });
+          setArtifactDialogArtifact(data as AiArtifact);
+          return;
+        }
+
+        // No se encontró directamente: consultamos al probe para saber si la fila
+        // existe en la organización (RLS puede estarla recortando por user_id).
+        console.warn("[openArtifactFromChat] direct select devolvió null; consultando artifact-probe", { id });
+        const probeResp = await (supabase.functions as { invoke: (fn: string, opts: { body: unknown }) => Promise<{ data: unknown; error: unknown }> })
+          .invoke("artifact-probe", { body: { id } });
+        const probeData = probeResp.data as {
+          reason?: string;
+          exists_in_org?: boolean;
+          owner_user_id?: string | null;
+          ai_project_id?: string | null;
+          created_at?: string | null;
+          artifact?: AiArtifact | null;
+        } | null;
+        const probeError = probeResp.error;
+        console.log("[openArtifactFromChat] probe response", { id, probeData, probeError });
+
+        if (probeData?.artifact) {
+          // El artefacto existe en mi org; lo abrimos aunque RLS por user_id haya bloqueado el select.
+          setArtifactDialogArtifact(probeData.artifact);
+          return;
+        }
+
+        const reason = probeData?.reason || "not_found";
+        const reasonLabel =
+          reason === "wrong_org"
+            ? "pertenece a otra organización"
+            : reason === "rls_mismatch_user"
+              ? "no tienes acceso (otro usuario)"
+              : reason === "deleted"
+                ? "fue eliminado"
+                : "no existe";
+        toast.error(`No se encontró el artefacto ${idShort}: ${reasonLabel}.`);
+        setArtifactDialogOpen(false);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Error al cargar el artefacto";
-        toast.error(msg);
+        console.error("[openArtifactFromChat] unexpected error", { id, error: e });
+        toast.error(`${msg} (id ${idShort})`);
         setArtifactDialogOpen(false);
       } finally {
         setArtifactDialogLoading(false);
       }
     },
-    [artifacts],
+    [artifacts, activeAiProjectId],
   );
 
   const renderMessageContent = (
@@ -511,6 +575,10 @@ const AsistenteIA = () => {
       }
 
       if (match[1]) {
+        // `renderStatus` lo resolvemos aquí (donde tenemos la lista `artifacts`)
+        // para que la card pueda mostrar spinner "Generando…" mientras el
+        // reconciliador termina el render multi-formato.
+        const matchedArtifact = artifacts.find((a) => a.id === match![1]);
         parts.push(
           <ArtifactCard
             key={`artifact-${match[1]}`}
@@ -518,6 +586,7 @@ const AsistenteIA = () => {
             title={match[2]}
             contentType={match[3]}
             onView={openArtifactFromChat}
+            renderStatus={matchedArtifact?.render_status ?? "ready"}
           />
         );
       } else if (match[4]) {

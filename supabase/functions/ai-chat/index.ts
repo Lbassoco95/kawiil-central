@@ -2344,7 +2344,11 @@ serve(async (req) => {
 
 // ─── Artifact Tool handler ───
 async function handleCreateArtifact(
-  input: any, userId: string, orgId: string, aiProjectId: string | null,
+  input: any,
+  userId: string,
+  orgId: string,
+  aiProjectId: string | null,
+  opts?: { renderStatus?: "ready" | "pending" | "failed"; renderError?: string | null },
 ): Promise<string> {
   const svcUrlA = Deno.env.get("SUPABASE_URL")!;
   const serviceKeyA = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -2357,6 +2361,12 @@ async function handleCreateArtifact(
     return JSON.stringify({ error: "content_type inválido para create_artifact" });
   }
 
+  // Cuando este handler es invocado como fallback del auto-upgrade a Kawiil,
+  // marcamos render_status='pending' para que el reconciliador lo procese después
+  // (y el UI pueda mostrar un badge "Generando…" sin bloquear la conversación).
+  const renderStatus = opts?.renderStatus || "ready";
+  const renderError = opts?.renderError ?? null;
+
   const { data: artifact, error } = await svc.from("ai_artifacts").insert({
     ai_project_id: aiProjectId || null,
     user_id: userId,
@@ -2364,6 +2374,8 @@ async function handleCreateArtifact(
     title,
     content,
     content_type: normalizedContentType,
+    render_status: renderStatus,
+    render_error: renderError,
   }).select("id").single();
 
   if (error) {
@@ -2402,7 +2414,10 @@ async function handleCreateArtifact(
     artifact_id: artifact.id,
     title,
     content_type: normalizedContentType,
-    message: `Artifact "${title}" creado exitosamente.`,
+    render_status: renderStatus,
+    message: renderStatus === "pending"
+      ? `Artifact "${title}" guardado como markdown; reintentando generación profesional en segundo plano.`
+      : `Artifact "${title}" creado exitosamente.`,
   });
 }
 
@@ -2664,6 +2679,32 @@ function markdownToGenericContent(markdown: string, _title: string): GenericCont
   }
 
   return { summary, sections };
+}
+
+/**
+ * Heurística: a partir del markdown original decide si conviene incluir XLSX
+ * y/o PPTX además de PDF+DOCX en los `requested_formats`.
+ *
+ * - XLSX: hay ≥1 tabla con ≥3 columnas y ≥5 filas de datos (señal fuerte de
+ *   que el usuario querrá manipularla en Excel).
+ * - PPTX: el documento se estructura como slides (headings "Slide N:", "Diapositiva N:",
+ *   o ≥3 separadores horizontales `---` que particionan el doc).
+ */
+function detectExtraFormats(markdown: string, generic: GenericContent): KawiilOutputFormat[] {
+  const extra = new Set<KawiilOutputFormat>();
+
+  const bigTable = (generic.sections || []).some((s) =>
+    (s.tables || []).some((t) => (t.headers?.length || 0) >= 3 && (t.rows?.length || 0) >= 5)
+  );
+  if (bigTable) extra.add("xlsx");
+
+  const raw = markdown || "";
+  const slideHeadings = /\b(?:slide|diapositiva)\s*\d+/i.test(raw);
+  const hrCount = (raw.match(/^\s*---\s*$/gm) || []).length;
+  const slideHeadingCount = (raw.match(/^#{1,6}\s+(?:slide|diapositiva)\b/gim) || []).length;
+  if (slideHeadings || hrCount >= 3 || slideHeadingCount >= 3) extra.add("pptx");
+
+  return Array.from(extra);
 }
 
 async function handleCreateAiDocument(
@@ -3403,23 +3444,72 @@ async function handleClaudeChat(
           // mantenemos el comportamiento legacy (artifact de código plano).
           const canUpgrade = rawContentType === "markdown" || rawContentType === "html" || rawContentType === "csv";
           if (canUpgrade && mdContent.trim()) {
-            try {
-              const genericContent = markdownToGenericContent(mdContent, inputTitle);
-              result = await handleCreateAiDocument(
-                {
-                  title: inputTitle,
-                  template_key: "generico",
-                  requested_formats: ["pdf", "docx"],
-                  content: genericContent as unknown as Record<string, unknown>,
-                  confidence: 0.9,
-                  reason: "Auto-upgrade de create_artifact → pipeline Kawiil (PDF+DOCX)",
-                  preview_markdown: mdContent,
-                },
-                userId,
-                orgId,
-                aiProjectId,
-                authHeader,
-              );
+            const genericContent = markdownToGenericContent(mdContent, inputTitle);
+            // Siempre PDF+DOCX como mínimo. Añadimos XLSX/PPTX solo si la heurística
+            // lo justifica (tablas grandes o estructura de slides): eso evita generar
+            // ppts/xls vacíos y ahorra tiempo de render.
+            const extraFormats = detectExtraFormats(mdContent, genericContent);
+            const requestedFormats: KawiilOutputFormat[] = [
+              "pdf",
+              "docx",
+              ...extraFormats.filter((f) => f !== "pdf" && f !== "docx"),
+            ];
+
+            // 2 reintentos del render completo antes de degradar a markdown plano.
+            // Razón: `render-ai-document` ocasionalmente falla por cold-start de la
+            // edge, timeouts de red o glitches puntuales del runtime Deno; un retry
+            // corto evita bajar artefactos perfectamente válidos a solo-markdown.
+            const MAX_ATTEMPTS = 2;
+            let upgradeResult: { ok: boolean; payload: string; error?: string } = {
+              ok: false,
+              payload: "",
+            };
+            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+              try {
+                const attemptResult = await handleCreateAiDocument(
+                  {
+                    title: inputTitle,
+                    template_key: "generico",
+                    requested_formats: requestedFormats,
+                    content: genericContent as unknown as Record<string, unknown>,
+                    confidence: 0.9,
+                    reason: "Auto-upgrade de create_artifact → pipeline Kawiil",
+                    preview_markdown: mdContent,
+                  },
+                  userId,
+                  orgId,
+                  aiProjectId,
+                  authHeader,
+                );
+                const parsed = JSON.parse(attemptResult) as {
+                  artifact_id?: string;
+                  error?: string;
+                };
+                if (parsed.artifact_id) {
+                  upgradeResult = { ok: true, payload: attemptResult };
+                  break;
+                }
+                upgradeResult = { ok: false, payload: attemptResult, error: parsed.error || "unknown_error" };
+                console.warn(
+                  `Auto-upgrade create_artifact intento ${attempt}/${MAX_ATTEMPTS} falló:`,
+                  parsed.error,
+                );
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                upgradeResult = { ok: false, payload: "", error: msg };
+                console.error(
+                  `Auto-upgrade create_artifact intento ${attempt}/${MAX_ATTEMPTS} threw:`,
+                  msg,
+                );
+              }
+              if (attempt < MAX_ATTEMPTS) {
+                // Backoff exponencial corto: 350ms, 700ms…
+                await new Promise((r) => setTimeout(r, 350 * attempt));
+              }
+            }
+
+            if (upgradeResult.ok) {
+              result = upgradeResult.payload;
               try {
                 const parsed = JSON.parse(result);
                 if (parsed.artifact_id) {
@@ -3430,37 +3520,42 @@ async function handleClaudeChat(
                     template_key: parsed.template_key,
                     primary_format: parsed.primary_format,
                   });
-                } else if (parsed.error) {
-                  // Render falló: caemos al handler legacy para no perder el contenido.
-                  console.warn("Auto-upgrade create_artifact falló, fallback a markdown:", parsed.error);
-                  // Hacemos visible en el chat la razón del fallback para que el
-                  // usuario entienda por qué bajó a markdown (y podamos iterar).
-                  sseWriter.writeProgress(
-                    "warning",
-                    `No se pudo generar PDF/DOCX (${String(parsed.error).slice(0, 140)}). Guardando como markdown.`,
-                  );
-                  result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
-                  const legacyParsed = JSON.parse(result);
-                  if (legacyParsed.artifact_id) {
-                    createdArtifacts.push({
-                      id: legacyParsed.artifact_id,
-                      title: legacyParsed.title,
-                      content_type: legacyParsed.content_type || "markdown",
-                    });
-                  }
                 }
               } catch {
                 /* ignore parse issues */
               }
-            } catch (e) {
-              console.error("Auto-upgrade create_artifact error, fallback a markdown:", e);
-              result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
+            } else {
+              // Todos los reintentos fallaron: guardamos markdown marcado como
+              // `render_status='pending'` para que el reconciliador vuelva a intentar
+              // el render y el UI pueda mostrar el estado.
+              const errSummary = String(upgradeResult.error || "error desconocido").slice(0, 180);
+              console.warn(
+                "Auto-upgrade create_artifact: todos los reintentos fallaron, guardando como markdown pending:",
+                errSummary,
+              );
+              sseWriter.writeProgress(
+                "warning",
+                `Generación PDF/DOCX falló tras ${MAX_ATTEMPTS} intentos (${errSummary}). Se guardó como markdown; reintentando en segundo plano.`,
+              );
+              result = await handleCreateArtifact(
+                tu.input || {},
+                userId,
+                orgId,
+                aiProjectId,
+                { renderStatus: "pending", renderError: errSummary },
+              );
               try {
-                const parsed = JSON.parse(result);
-                if (parsed.artifact_id) {
-                  createdArtifacts.push({ id: parsed.artifact_id, title: parsed.title, content_type: parsed.content_type || "markdown" });
+                const legacyParsed = JSON.parse(result);
+                if (legacyParsed.artifact_id) {
+                  createdArtifacts.push({
+                    id: legacyParsed.artifact_id,
+                    title: legacyParsed.title,
+                    content_type: legacyParsed.content_type || "markdown",
+                  });
                 }
-              } catch {}
+              } catch {
+                /* ignore parse issues */
+              }
             }
           } else {
             // content_type === "code" o contenido vacío: comportamiento legacy.
@@ -3517,11 +3612,22 @@ async function handleClaudeChat(
       .join("");
 
     if (createdArtifacts.length > 0) {
+      // Los marcadores usan `|` como separador y `]` como cierre; si el título los
+      // contiene el regex del cliente puede extraer campos incorrectos o cortar el
+      // título. Los reemplazamos por equivalentes visuales para no romper el parseo.
+      const sanitizeMarkerField = (s: string) =>
+        String(s ?? "")
+          .replace(/\|/g, "/")
+          .replace(/\]/g, ")")
+          .replace(/\[/g, "(")
+          .replace(/\s+/g, " ")
+          .trim();
       const markers = createdArtifacts.map((a) => {
+        const safeTitle = sanitizeMarkerField(a.title);
         if (a.template_key && a.primary_format) {
-          return `[artifact:${a.id}|${a.title}|kawiil:${a.template_key}:${a.primary_format}]`;
+          return `[artifact:${a.id}|${safeTitle}|kawiil:${a.template_key}:${a.primary_format}]`;
         }
-        return `[artifact:${a.id}|${a.title}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`;
+        return `[artifact:${a.id}|${safeTitle}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`;
       }).join("\n");
       textContent = textContent + "\n\n" + markers;
     }

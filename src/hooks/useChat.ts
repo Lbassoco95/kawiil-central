@@ -597,6 +597,48 @@ export function useChat() {
 
       let assistantContent = "";
       const hasArtifactMarker = (text: string) => /\[artifact:[a-f0-9-]{36}\|/.test(text);
+      const ARTIFACT_ID_RE = /\[artifact:([a-f0-9-]{36})\|/gi;
+      const extractArtifactIds = (text: string): string[] => {
+        const ids = new Set<string>();
+        let m: RegExpExecArray | null;
+        ARTIFACT_ID_RE.lastIndex = 0;
+        while ((m = ARTIFACT_ID_RE.exec(text)) !== null) {
+          if (m[1]) ids.add(m[1]);
+        }
+        return Array.from(ids);
+      };
+
+      /**
+       * Tras un turno del chat, si algún artefacto quedó con `render_status='pending'`
+       * (caso típico: `render-ai-document` falló inline), disparamos `reconcile-ai-artifact-formats`
+       * uno por uno. Las llamadas son fire-and-forget: el visor se entera por
+       * Realtime / polling del hook `useAiArtifacts` y refresca el estado sin
+       * bloquear el chat.
+       */
+      const reconcilePendingArtifacts = async (ids: string[]) => {
+        if (!ids.length) return;
+        try {
+          const { data: rows } = await (supabase as any)
+            .from("ai_artifacts")
+            .select("id, render_status")
+            .in("id", ids);
+          const pending = (rows as Array<{ id: string; render_status?: string | null }> | null)
+            ?.filter((r) => r?.render_status === "pending")
+            .map((r) => r.id) || [];
+          for (const id of pending) {
+            void supabase.functions
+              .invoke("reconcile-ai-artifact-formats", { body: { artifact_id: id } })
+              .then((res) => {
+                if (res?.error) {
+                  console.warn("[reconcile-ai-artifact-formats] error", id, res.error);
+                }
+              })
+              .catch((e) => console.warn("[reconcile-ai-artifact-formats] threw", id, e));
+          }
+        } catch (e) {
+          console.warn("reconcilePendingArtifacts lookup failed", e);
+        }
+      };
 
       try {
         const session = await supabase.auth.getSession();
@@ -764,6 +806,7 @@ export function useChat() {
             qc.invalidateQueries({ queryKey: ["chat-conversations"] });
             if (hasArtifactMarker(assistantContent)) {
               qc.invalidateQueries({ queryKey: ["ai-artifacts", activeAiProjectId ?? null] });
+              void reconcilePendingArtifacts(extractArtifactIds(assistantContent));
             }
           } else {
             throw new Error("El servidor respondió sin contenido de texto.");
@@ -885,6 +928,7 @@ export function useChat() {
           qc.invalidateQueries({ queryKey: ["chat-conversations"] });
           if (hasArtifactMarker(assistantContent)) {
             qc.invalidateQueries({ queryKey: ["ai-artifacts", activeAiProjectId ?? null] });
+            void reconcilePendingArtifacts(extractArtifactIds(assistantContent));
           }
         } else {
           const errText =

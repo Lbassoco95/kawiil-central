@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,10 +16,13 @@ import {
   FileType2,
   Presentation,
   FileTextIcon,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { AiArtifact, KawiilArtifactOutput, KawiilOutputFormat } from "@/hooks/useAiArtifacts";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,11 +53,19 @@ function formatIcon(format: KawiilOutputFormat) {
   }
 }
 
+const ALL_FORMATS: KawiilOutputFormat[] = ["pdf", "docx", "xlsx", "pptx"];
+
 export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerProps) {
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(artifact.content);
+  const [generatingFormat, setGeneratingFormat] = useState<KawiilOutputFormat | "all" | null>(null);
+  const qc = useQueryClient();
 
   const templateMeta = getTemplateMeta(artifact.template_key);
+  const renderStatus = artifact.render_status ?? "ready";
+  const isPending = renderStatus === "pending";
+  const isFailed = renderStatus === "failed";
+
   const outputs: KawiilArtifactOutput[] = useMemo(() => {
     if (Array.isArray(artifact.output_formats) && artifact.output_formats.length) {
       return artifact.output_formats as KawiilArtifactOutput[];
@@ -83,7 +94,51 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
   const isKawiilDoc = outputs.length > 0;
   const isLegacyMarkdown = !isKawiilDoc;
 
+  const availableFormats = useMemo(() => new Set(outputs.map((o) => o.format)), [outputs]);
+  const missingFormats = useMemo(
+    () => ALL_FORMATS.filter((f) => !availableFormats.has(f)),
+    [availableFormats],
+  );
+
   const safeTitle = artifact.title.replace(/[^a-zA-Z0-9_-]/g, "_") || "documento";
+
+  /**
+   * Cuando el artefacto está `pending`, forzamos refetch del hook `useAiArtifacts`
+   * cada 3s (además del polling de 5s del hook) para que el badge "Generando…"
+   * se actualice rápido cuando el reconciliador termina.
+   */
+  useEffect(() => {
+    if (!isPending) return;
+    const iv = setInterval(() => {
+      qc.invalidateQueries({ queryKey: ["ai-artifacts"] });
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [isPending, qc]);
+
+  const handleGenerateFormats = async (formats: KawiilOutputFormat[], label: KawiilOutputFormat | "all") => {
+    setGeneratingFormat(label);
+    try {
+      const { data, error } = await (supabase.functions as { invoke: (fn: string, opts: { body: unknown }) => Promise<{ data: unknown; error: unknown }> })
+        .invoke("reconcile-ai-artifact-formats", {
+          body: { artifact_id: artifact.id, formats },
+        });
+      const errObj = error as { message?: string } | null;
+      if (errObj?.message) throw new Error(errObj.message);
+      const respErr = (data as { error?: string } | null)?.error;
+      if (respErr) throw new Error(respErr);
+      toast.success(
+        label === "all"
+          ? "Documento regenerado en todos los formatos."
+          : `Formato ${label.toUpperCase()} generado.`,
+      );
+      qc.invalidateQueries({ queryKey: ["ai-artifacts"] });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "No se pudo generar el formato";
+      toast.error(msg);
+    } finally {
+      setGeneratingFormat(null);
+    }
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(artifact.content);
@@ -136,6 +191,16 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 KAWIIL AI · {templateMeta.shortLabel}
               </Badge>
             ) : null}
+            {isPending ? (
+              <Badge variant="secondary" className="text-[10px] mb-1 ml-1 border-amber-200 bg-amber-50 text-amber-800 gap-1">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Generando PDF/DOCX…
+              </Badge>
+            ) : null}
+            {isFailed ? (
+              <Badge variant="secondary" className="text-[10px] mb-1 ml-1 border-rose-200 bg-rose-50 text-rose-800">
+                Generación falló
+              </Badge>
+            ) : null}
             <h3 className={`text-sm font-semibold leading-tight ${isKawiilDoc ? KAWIIL_AI_TEXT_GRADIENT_CLASS : ""}`}>
               {artifact.title}
             </h3>
@@ -143,6 +208,11 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
               <p className="text-[10px] text-muted-foreground mt-0.5">
                 Formato primario: {FORMAT_LABEL[primaryOutput.format] || primaryOutput.format.toUpperCase()}
                 {outputs.length > 1 ? ` · ${outputs.length} formatos disponibles` : ""}
+              </p>
+            ) : null}
+            {isFailed && artifact.render_error ? (
+              <p className="text-[10px] text-rose-700 mt-0.5 truncate" title={artifact.render_error}>
+                {artifact.render_error}
               </p>
             ) : null}
           </div>
@@ -154,7 +224,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
           {outputs.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2">
+                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" disabled={isPending}>
                   <Download className="h-2.5 w-2.5" /> Descargar
                   <ChevronDown className="h-2.5 w-2.5 ml-0.5" />
                 </Button>
@@ -171,6 +241,12 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     {out.is_primary ? <span className="ml-1 text-[9px] text-muted-foreground">primario</span> : null}
                   </DropdownMenuItem>
                 ))}
+                <DropdownMenuItem
+                  onClick={() => void handleDownloadMarkdown()}
+                  className="gap-2 text-xs border-t mt-1 pt-1"
+                >
+                  <FileTextIcon className="h-3.5 w-3.5" /> Markdown (.md)
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
@@ -178,6 +254,52 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
               <Download className="h-2.5 w-2.5" /> Descargar .md
             </Button>
           )}
+
+          {/*
+            Botón "Generar" a demanda:
+            - Si faltan formatos (el artefacto solo tiene MD, o le falta XLSX/PPTX), mostramos
+              un dropdown con los que faltan + "Regenerar todos".
+            - Si ya tiene los 4 formatos, solo ofrecemos "Regenerar" como submenú.
+          */}
+          {(missingFormats.length > 0 || isFailed) ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-6 text-[10px] gap-1 px-2 bg-sky-600 hover:bg-sky-700"
+                  disabled={isPending || generatingFormat !== null}
+                >
+                  {generatingFormat !== null || isPending ? (
+                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-2.5 w-2.5" />
+                  )}
+                  {isFailed ? "Reintentar" : "Generar"}
+                  <ChevronDown className="h-2.5 w-2.5 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {missingFormats.map((fmt) => (
+                  <DropdownMenuItem
+                    key={fmt}
+                    onClick={() => void handleGenerateFormats([fmt], fmt)}
+                    className="gap-2 text-xs"
+                  >
+                    {formatIcon(fmt)}
+                    Generar {FORMAT_LABEL[fmt] || fmt.toUpperCase()}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem
+                  onClick={() => void handleGenerateFormats(ALL_FORMATS, "all")}
+                  className="gap-2 text-xs border-t mt-1 pt-1"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Regenerar todos (PDF+DOCX+XLSX+PPTX)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+
           {!editing && isLegacyMarkdown ? (
             <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setEditContent(artifact.content); setEditing(true); }}>
               <Pencil className="h-2.5 w-2.5" /> Editar

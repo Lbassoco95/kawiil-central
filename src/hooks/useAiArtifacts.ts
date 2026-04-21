@@ -40,6 +40,14 @@ export interface AiArtifact {
   template_data: Record<string, unknown> | null;
   output_formats: KawiilArtifactOutput[];
   primary_format: KawiilOutputFormat | null;
+  /**
+   * Estado del pipeline multi-formato.
+   * - `ready`: el artefacto está completo (puede ser solo MD o con PDF/DOCX/etc).
+   * - `pending`: el render inicial falló y hay un reintento en curso.
+   * - `failed`: reintentos agotados; el usuario puede relanzar desde el visor.
+   */
+  render_status?: "ready" | "pending" | "failed";
+  render_error?: string | null;
   created_at: string;
   updated_at: string;
 }
