@@ -105,3 +105,5 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = true
   [functions.email-ai-task-suggest]
     verify_jwt = true
+  [functions.dispatch-to-agent]
+    verify_jwt = true
