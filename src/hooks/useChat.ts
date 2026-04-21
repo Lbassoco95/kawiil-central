@@ -61,6 +61,9 @@ export interface SendMessageOptions {
 
 const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
 
+/** Evita que el estado "enviando" quede activo si la Edge Function o la red cuelgan sin cerrar el stream. */
+const AI_CHAT_CLIENT_TIMEOUT_MS = 15 * 60 * 1000;
+
 const MSG_ANTHROPIC_BILLING_FALLBACK =
   "Los créditos del proveedor de IA (Anthropic/Claude) están agotados o son insuficientes. " +
   "Un administrador debe añadir créditos en https://console.anthropic.com (Plans & Billing) y comprobar el secreto ANTHROPIC_API_KEY en Supabase.";
@@ -725,6 +728,11 @@ export function useChat() {
         }
       };
 
+      const chatAbortController = new AbortController();
+      const chatAbortTimer = setTimeout(() => {
+        chatAbortController.abort();
+      }, AI_CHAT_CLIENT_TIMEOUT_MS);
+
       try {
         const session = await supabase.auth.getSession();
         const token = session.data.session?.access_token;
@@ -747,6 +755,7 @@ export function useChat() {
               apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             },
             body: chatBody,
+            signal: chatAbortController.signal,
           });
 
         const fetchChatResilient = async (): Promise<Response> => {
@@ -1029,7 +1038,12 @@ export function useChat() {
         }
       } catch (e: any) {
         console.error("Chat error:", e);
-        const msg = e?.message || "Error al enviar mensaje";
+        const isAbort =
+          e?.name === "AbortError" ||
+          (typeof e?.message === "string" && /aborted|abort/i.test(e.message));
+        const msg = isAbort
+          ? `La solicitud superó ${Math.round(AI_CHAT_CLIENT_TIMEOUT_MS / 60000)} minutos. Prueba con menos adjuntos o divide el mensaje.`
+          : e?.message || "Error al enviar mensaje";
         pushProgress("error", msg);
         toast.error(msg);
         const overloadHint =
@@ -1047,6 +1061,7 @@ export function useChat() {
           },
         ]);
       } finally {
+        clearTimeout(chatAbortTimer);
         setIsStreaming(false);
         setStreamProgressSteps([]);
         progressStepsRef.current = [];

@@ -62,6 +62,10 @@ import {
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 
+/** Si `storage.upload` no responde, el botón "Delegar" quedaría en spinner indefinidamente. */
+const DELEGATE_UPLOAD_TIMEOUT_MS = 150_000;
+const DELEGATE_PROJECT_LINK_TIMEOUT_MS = 120_000;
+
 const FALLBACK_SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
   "No sé cómo hacer una declaración anual, ¿me guías?",
@@ -422,7 +426,24 @@ const AsistenteIA = () => {
       }
       const safe = file.name.replace(/[^\w.\-]+/g, "_");
       const objectPath = `${orgId}/${user.id}/${crypto.randomUUID()}_${safe}`;
-      const { error: upErr } = await supabase.storage.from("chat-uploads").upload(objectPath, file);
+      let upRes: { error: Error | null } | null = null;
+      try {
+        upRes = await Promise.race([
+          supabase.storage.from("chat-uploads").upload(objectPath, file),
+          new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error("DELEGATE_UPLOAD_TIMEOUT")), DELEGATE_UPLOAD_TIMEOUT_MS),
+          ),
+        ]);
+      } catch (e) {
+        if (e instanceof Error && e.message === "DELEGATE_UPLOAD_TIMEOUT") {
+          toast.error(
+            `Tiempo agotado subiendo «${file.name}». Revisa la conexión o prueba con menos archivos.`,
+          );
+          continue;
+        }
+        throw e;
+      }
+      const upErr = upRes?.error ?? null;
       if (upErr) {
         toast.error(`No se pudo subir ${file.name}`);
         continue;
@@ -436,9 +457,14 @@ const AsistenteIA = () => {
       batchBytes += file.size;
       if (linkFilesToProject && activeAiProjectId) {
         try {
-          await uploadToProject(file);
+          await Promise.race([
+            uploadToProject(file),
+            new Promise<never>((_, rej) =>
+              setTimeout(() => rej(new Error("PROJECT_LINK_TIMEOUT")), DELEGATE_PROJECT_LINK_TIMEOUT_MS),
+            ),
+          ]);
         } catch {
-          /* no bloquear delegación */
+          /* no bloquear delegación (timeout u otro error) */
         }
       }
     }
