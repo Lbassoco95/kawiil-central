@@ -61,7 +61,8 @@ export function resolveMoffinPathToAbsolute(pathVal: string, moffinBase: string)
 
 export function keyLooksLikePdfDownloadField(k: string): boolean {
   const n = k.replace(/_/g, "").toLowerCase();
-  return n === "pdfurl" || n === "fileurl" || n === "downloadurl";
+  // Solutions devuelve la URL del PDF como `pdf` (campo plano dentro de response).
+  return n === "pdfurl" || n === "fileurl" || n === "downloadurl" || n === "pdf";
 }
 
 function extraPdfFieldNamesFromEnv(): string[] {
@@ -342,6 +343,13 @@ export function extractPdfBase64FromSatReport(report: Record<string, unknown>): 
 export function extractReportLevelPdfUrl(report: Record<string, unknown>): string | null {
   const resp = report.response as Record<string, unknown> | undefined;
   const data = resp?.data as Record<string, unknown> | undefined;
+  // Solutions: `serviceQuery.response.pdf` directo (GET /query/{id}) o anidado en snapshot.
+  const inner = unwrapMoffinReportInner(report);
+  const innerResp =
+    inner !== report
+      ? (inner.response as Record<string, unknown> | undefined)
+      : undefined;
+  const innerData = innerResp?.data as Record<string, unknown> | undefined;
   const candidates: unknown[] = [
     report.pdfURL,
     report.pdfUrl,
@@ -357,6 +365,16 @@ export function extractReportLevelPdfUrl(report: Record<string, unknown>): strin
     data?.pdf,
     data?.fileURL,
     data?.fileUrl,
+    innerResp?.pdfURL,
+    innerResp?.pdfUrl,
+    innerResp?.pdf,
+    innerResp?.fileURL,
+    innerResp?.fileUrl,
+    innerData?.pdfURL,
+    innerData?.pdfUrl,
+    innerData?.pdf,
+    innerData?.fileURL,
+    innerData?.fileUrl,
     (report.state as Record<string, unknown> | undefined)?.pdfURL,
   ];
   for (const c of candidates) {
