@@ -517,29 +517,37 @@ function AgentCombobox({
                   {groupAgents.map((agent) => (
                     <CommandItem
                       key={`${groupKey}-${agent.template_id}`}
-                      value={`${agent.display_name} ${agent.name} ${agent.role}`}
+                      value={`${agent.display_name} ${agent.name} ${agent.description ?? ""}`}
                       onSelect={() => {
                         onSelect(agent.template_id);
                         onOpenChange(false);
                       }}
+                      className="items-start py-2"
                     >
                       <Check
                         className={cn(
-                          "h-4 w-4 mr-2 shrink-0",
+                          "h-4 w-4 mr-2 mt-1 shrink-0",
                           selected === agent.template_id
                             ? "opacity-100"
                             : "opacity-0",
                         )}
                       />
                       <span
-                        className="h-5 w-5 rounded flex items-center justify-center text-white text-[9px] font-bold mr-2 shrink-0"
+                        className="h-6 w-6 rounded flex items-center justify-center text-white text-[10px] font-bold mr-2 shrink-0 mt-0.5"
                         style={{ backgroundColor: agent.color }}
                       >
                         {agent.display_name.slice(0, 2).toUpperCase()}
                       </span>
-                      <span className="flex-1 min-w-0 truncate">
-                        {agent.display_name}
-                      </span>
+                      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                        <span className="text-sm font-medium truncate">
+                          {agent.display_name}
+                        </span>
+                        {agent.description && (
+                          <span className="text-[11px] text-muted-foreground line-clamp-2 leading-tight">
+                            {agent.description}
+                          </span>
+                        )}
+                      </div>
                     </CommandItem>
                   ))}
                 </CommandGroup>
