@@ -1810,6 +1810,8 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - **GUARDA en memoria** todo insight valioso: conclusiones de análisis, datos clave de clientes, estrategias discutidas, decisiones tomadas. Esto construye conocimiento real que perdura entre conversaciones.
 
 ### 5. Generación de documentos (Artifacts)
+**NUNCA escribas en tu respuesta bloques como \`[artifact:UUID|…|…]\`.** Esos marcadores los añade el servidor al final cuando la herramienta crea el archivo; si los inventas, el usuario verá un error "artefacto no existe".
+
 **TODO artifact que generes sale con diseño Kawiil profesional (PDF + DOCX con portada, tipografía, tablas con color y paginación), igual que los artifacts de Claude.** Ya no existe la salida "markdown plano": incluso si llamas \`create_artifact\`, el backend convierte automáticamente el markdown a documento genérico (template \`generico\`) y genera PDF+DOCX. Por eso:
 
 - **PREFIERE SIEMPRE \`create_ai_document\`** con el \`template_key\` adecuado. El resultado es más rico (portada con metadata, callouts, tablas estructuradas, recomendaciones, firmas, totales, KPIs, etc.).
@@ -2808,6 +2810,18 @@ async function handleCreateAiDocument(
   if (primaryFmtRaw && isValidPrimary(primaryFmtRaw) && requestedFormats.includes(primaryFmtRaw)) {
     const pf = primaryFmtRaw as KawiilOutputFormat;
     requestedFormats = [pf, ...requestedFormats.filter((f) => f !== pf)];
+  } else if (!primaryFmtRaw && requestedFormats.includes("docx") && requestedFormats.includes("pdf")) {
+    // El modelo a menudo manda ["pdf","docx"] sin primary_format: priorizar Word
+    // (orden típico pedido por usuarios para revisar/editar).
+    const idxDocx = requestedFormats.indexOf("docx");
+    const idxPdf = requestedFormats.indexOf("pdf");
+    if (idxDocx > idxPdf) {
+      requestedFormats = [
+        "docx",
+        "pdf",
+        ...requestedFormats.filter((f) => f !== "pdf" && f !== "docx"),
+      ];
+    }
   }
 
   const renderPayload = {
@@ -3470,7 +3484,7 @@ async function handleClaudeChat(
           console.log(`Artifact Tool (auto-upgrade → create_ai_document): ${inputTitle}`);
           sseWriter.writeProgress(
             "tool",
-            `Generando documento: ${inputTitle} (PDF + DOCX con diseño Kawiil)…`,
+            `Generando documento: ${inputTitle} (Word + PDF con diseño Kawiil)…`,
           );
           // Solo tiene sentido auto-upgrade para markdown/html/csv (texto). Para `code`
           // mantenemos el comportamiento legacy (artifact de código plano).
@@ -3481,9 +3495,11 @@ async function handleClaudeChat(
             // lo justifica (tablas grandes o estructura de slides): eso evita generar
             // ppts/xls vacíos y ahorra tiempo de render.
             const extraFormats = detectExtraFormats(mdContent, genericContent);
+            // Word primero + PDF (lectura/archivo): el usuario suele querer editar; el PDF
+            // queda como segundo formato. primary_format docx alinea UI y descargas.
             const requestedFormats: KawiilOutputFormat[] = [
-              "pdf",
               "docx",
+              "pdf",
               ...extraFormats.filter((f) => f !== "pdf" && f !== "docx"),
             ];
 
@@ -3503,6 +3519,7 @@ async function handleClaudeChat(
                     title: inputTitle,
                     template_key: "generico",
                     requested_formats: requestedFormats,
+                    primary_format: "docx",
                     content: genericContent as unknown as Record<string, unknown>,
                     confidence: 0.9,
                     reason: "Auto-upgrade de create_artifact → pipeline Kawiil",
@@ -3643,6 +3660,15 @@ async function handleClaudeChat(
       .map((b: any) => b.text)
       .join("");
 
+    // El modelo a veces escribe bloques [artifact:uuid|...] con UUIDs inventados.
+    // El usuario hace clic y el id no existe en `ai_artifacts`. Solo nosotros añadimos
+    // marcadores válidos al final del turno (desde createdArtifacts).
+    textContent = textContent.replace(
+      /\s*\[artifact:[a-f0-9-]{36}\|[^\]]+\|[^\]]+\]\s*/gi,
+      "\n",
+    );
+    textContent = textContent.replace(/\n{3,}/g, "\n\n").trim();
+
     if (createdArtifacts.length > 0) {
       // Los marcadores usan `|` como separador y `]` como cierre; si el título los
       // contiene el regex del cliente puede extraer campos incorrectos o cortar el
@@ -3656,8 +3682,10 @@ async function handleClaudeChat(
           .trim();
       const markers = createdArtifacts.map((a) => {
         const safeTitle = sanitizeMarkerField(a.title);
-        if (a.template_key && a.primary_format) {
-          return `[artifact:${a.id}|${safeTitle}|kawiil:${a.template_key}:${a.primary_format}]`;
+        // Siempre preferir marcador kawiil cuando hay template (fallback de primary por si el parseo vino incompleto).
+        if (a.template_key) {
+          const pf = (a.primary_format || "pdf") as string;
+          return `[artifact:${a.id}|${safeTitle}|kawiil:${a.template_key}:${pf}]`;
         }
         return `[artifact:${a.id}|${safeTitle}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`;
       }).join("\n");
