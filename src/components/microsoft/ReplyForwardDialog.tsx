@@ -31,6 +31,7 @@ import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export type ReplyForwardAction = "reply" | "reply-all" | "forward";
 
@@ -174,7 +175,7 @@ export function ReplyForwardDialog({
   return (
     <TooltipProvider delayDuration={200}>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] w-[min(100vw-1.5rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent className="flex max-h-[92vh] min-h-0 w-[min(100vw-1.5rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left sm:px-6">
           <DialogTitle className="text-base">{title}</DialogTitle>
           {subject ? (
@@ -184,20 +185,28 @@ export function ReplyForwardDialog({
           ) : null}
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <div className="space-y-3 border-b border-border/60 bg-muted/15 px-4 py-3 sm:px-6">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Asistente</span>
-              <Button
-                variant={showFullAI ? "default" : "outline"}
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={() => setShowFullAI(!showFullAI)}
-              >
-                <Sparkles className="h-3.5 w-3.5" /> Kawiil AI
-              </Button>
-            </div>
-            {showFullAI && (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+          <div
+            className={`border-b border-border/60 bg-muted/15 px-4 sm:px-6 ${showFullAI ? "py-3 min-h-0 flex flex-col" : "space-y-0 py-3"}`}
+          >
+            {!showFullAI ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Asistente</span>
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    Activa Kawiil AI para redactar con ayuda; puedes editar el cuerpo abajo en cualquier momento.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 self-start text-xs gap-1.5 sm:self-center"
+                  onClick={() => setShowFullAI(true)}
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Kawiil AI
+                </Button>
+              </div>
+            ) : (
               <EmailAIAssistant
                 key={draftId || "no-draft"}
                 mode="full"
@@ -218,7 +227,7 @@ export function ReplyForwardDialog({
             )}
           </div>
 
-          <div className="space-y-3 px-4 py-4 sm:px-6 sm:py-5">
+          <div className="space-y-3 px-4 py-4 pb-8 sm:px-6 sm:py-5 sm:pb-10">
             {action === "forward" && (
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Para</Label>
@@ -238,23 +247,40 @@ export function ReplyForwardDialog({
               </div>
             ) : (
               <>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 min-w-0">
                   <Label className="text-xs text-muted-foreground">Cuerpo</Label>
-                  <div className="min-h-[200px] rounded-md border border-input">
+                  {/*
+                    Altura acotada + scroll interno: los hilos citados crecen sin límite y antes
+                    comprimían la zona de adjuntos en el modal (a diferencia de Redactar).
+                  */}
+                  <div
+                    className={cn(
+                      "flex h-[min(48vh,460px)] min-h-[200px] flex-col overflow-hidden rounded-md border border-input bg-background",
+                      "sm:h-[min(46vh,480px)]",
+                    )}
+                  >
                     <RichTextEditor
                       key={draftId || "new"}
                       initialHtml={draftHtml}
                       placeholder={action === "forward" ? "Mensaje al reenviar…" : "Escribe tu respuesta…"}
                       onHtmlChange={setDraftHtml}
+                      className={cn(
+                        "flex h-full min-h-0 flex-col border-0 rounded-none shadow-none",
+                        "[&>div:first-child]:shrink-0",
+                        "[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:overflow-y-auto",
+                      )}
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>Adjuntos</span>
-                    <label className="inline-flex items-center gap-2 shrink-0">
+                <div className="space-y-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                    <span className="font-medium">Adjuntos</span>
+                    <span className="hidden sm:inline text-muted-foreground/35 select-none" aria-hidden>
+                      ·
+                    </span>
+                    <label className="inline-flex cursor-pointer items-center gap-2">
                       <Switch checked={keepZips} onCheckedChange={setKeepZips} />
-                      <span className="text-xs">Mantener .zip</span>
+                      <span>Mantener .zip</span>
                     </label>
                   </div>
                   <FileDropzone
@@ -268,6 +294,7 @@ export function ReplyForwardDialog({
                     hint="Arrastra archivos o haz click"
                     subhint={keepZips ? "Los .zip se envían tal cual" : "Los .zip se expanden y se envían como archivos"}
                     showSize
+                    className="shrink-0"
                   />
                 </div>
 
