@@ -85,6 +85,8 @@ project_id = "qppfampapbxdgednkofc"
     verify_jwt = false
   [functions.render-office-document]
     verify_jwt = true
+  [functions.render-ai-document]
+    verify_jwt = true
   [functions.process-scheduled-mail]
     verify_jwt = false
   [functions.unzip-batch]

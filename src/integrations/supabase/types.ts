@@ -441,8 +441,12 @@ export type Database = {
           mime_type: string | null
           office_kind: string | null
           organization_id: string
+          output_formats: Json
+          primary_format: string | null
           storage_bucket: string | null
           storage_path: string | null
+          template_data: Json | null
+          template_key: string | null
           title: string
           updated_at: string
           user_id: string
@@ -459,8 +463,12 @@ export type Database = {
           mime_type?: string | null
           office_kind?: string | null
           organization_id: string
+          output_formats?: Json
+          primary_format?: string | null
           storage_bucket?: string | null
           storage_path?: string | null
+          template_data?: Json | null
+          template_key?: string | null
           title: string
           updated_at?: string
           user_id: string
@@ -477,8 +485,12 @@ export type Database = {
           mime_type?: string | null
           office_kind?: string | null
           organization_id?: string
+          output_formats?: Json
+          primary_format?: string | null
           storage_bucket?: string | null
           storage_path?: string | null
+          template_data?: Json | null
+          template_key?: string | null
           title?: string
           updated_at?: string
           user_id?: string

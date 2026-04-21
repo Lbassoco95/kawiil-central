@@ -308,13 +308,15 @@ export function KnowledgePanel({
               </p>
             ) : (
               artifacts.map((art) => {
-                const typeLabel = art.content_type === "office"
-                  ? art.office_kind === "spreadsheet"
-                    ? "Excel"
-                    : art.office_kind === "presentation"
-                      ? "PowerPoint"
-                      : "Word"
-                  : art.content_type;
+                const typeLabel = art.template_key
+                  ? `Kawiil · ${(art.primary_format || "pdf").toUpperCase()}`
+                  : art.content_type === "office"
+                    ? art.office_kind === "spreadsheet"
+                      ? "Excel"
+                      : art.office_kind === "presentation"
+                        ? "PowerPoint"
+                        : "Word"
+                    : art.content_type;
                 return (
                 <div
                   key={art.id}

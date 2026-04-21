@@ -939,124 +939,85 @@ const anthropicTools = [
   },
   {
     name: "create_artifact",
-    description: "Crea un documento/artifact estructurado (manual, reporte, análisis, matriz, guía, plantilla). USA ESTA HERRAMIENTA cuando el usuario pida generar un documento largo, manual, reporte o cualquier contenido que merezca su propia vista. El artifact aparecerá en un panel lateral para que el usuario lo vea, copie o descargue.",
+    description:
+      "FALLBACK: crea un documento entregable a partir de markdown libre. El backend lo convierte automáticamente al pipeline Kawiil (PDF + DOCX con portada, tipografía y tablas con color), así que SIEMPRE sale con diseño profesional (igual que los artifacts de Claude), nunca como markdown plano.\n\n" +
+      "PREFIERE `create_ai_document` cuando el documento encaja en uno de los 6 templates (informe_ejecutivo, minuta_reunion, propuesta_cotizacion, factura_remision, reporte_financiero, generico): el resultado es más rico porque incluye portada con metadata/clasificación, callouts, tablas estructuradas, recomendaciones, firmas, totales, KPIs, etc.\n\n" +
+      "Usa `create_artifact` SOLO para contenido muy libre / narrativo que no encaja en ningún template, o para snippets de código (content_type: \"code\").",
     input_schema: {
       type: "object",
       properties: {
-        title: { type: "string", description: "Título del documento" },
+        title: { type: "string", description: "Título del documento (aparecerá en la portada del PDF)." },
         content: {
           type: "string",
           description:
-            "Contenido en Markdown del documento. Prioriza secciones con títulos ## y párrafos explicativos; evita listas largas salvo checklists o documentos explícitamente tabulares.",
+            "Contenido en Markdown. Usa títulos `##` para secciones, párrafos largos, bullets con `-`, y tablas markdown `| col | col |` (se convertirán a tablas profesionales en el PDF). Evita H1 al inicio: el título del documento se toma del campo `title`.",
         },
-        content_type: { type: "string", enum: ["markdown", "code", "html", "csv"], description: "Tipo de contenido (default: markdown)" },
+        content_type: { type: "string", enum: ["markdown", "code", "html", "csv"], description: "Tipo de contenido (default: markdown). Con `code` el artifact queda como snippet plano." },
       },
       required: ["title", "content"],
     },
   },
   {
-    name: "create_office_document",
+    name: "create_ai_document",
     description:
-      "Genera un documento Office REAL (Excel .xlsx, Word .docx, PowerPoint .pptx) con contenido poblado. ÚSALA cuando el usuario pida explícitamente un entregable en Excel/Word/PowerPoint o cuando el formato solicitado implique archivo editable.",
+      "Genera un documento PROFESIONAL con diseño Kawiil (portada, tipografía, tablas con color, paginación). ÚSALA para cualquier documento largo/formal: informes ejecutivos, minutas de reunión, propuestas/cotizaciones, facturas/remisiones, reportes financieros. El PDF es el formato primario (con diseño tipo Claude); opcionalmente se generan DOCX/XLSX/PPTX para edición posterior.\n\n" +
+      "REGLAS:\n" +
+      "1) Elige 'template_key' según la intención del usuario:\n" +
+      "   - 'informe_ejecutivo' → reporte formal con resumen ejecutivo, secciones y recomendaciones.\n" +
+      "   - 'minuta_reunion' → acta con asistentes, temas, acuerdos y plan de acción.\n" +
+      "   - 'propuesta_cotizacion' → propuesta comercial con alcance, conceptos y totales.\n" +
+      "   - 'factura_remision' → documento fiscal con emisor, receptor, conceptos y totales.\n" +
+      "   - 'reporte_financiero' → reporte con KPIs, tablas y notas del periodo.\n" +
+      "   - 'generico' → fallback sin template específico.\n" +
+      "2) SIEMPRE incluye 'pdf' en 'requested_formats' salvo que el usuario pida explícitamente SOLO Excel o Word.\n" +
+      "3) 'content' debe seguir EXACTAMENTE el shape del template elegido (ver descripción de cada template en este documento).\n" +
+      "4) Si confidence < 0.55, pide aclaración al usuario en lugar de generar el archivo.\n\n" +
+      "SHAPES DE CONTENT POR TEMPLATE (ejemplos abreviados):\n" +
+      "• informe_ejecutivo: { metadata?, summary?, sections: [{ heading?, paragraphs?, bullets?, tables?: [{ headers, rows }], callout?: { kind?, title?, body } }], recommendations?: string[], signatures?: [{ role, name? }] }\n" +
+      "• minuta_reunion: { metadata?, attendees?: [{ name, role? }], absentees?: string[], agenda?: string[], topics: [{ title, discussion? }], agreements?: string[], action_items?: [{ task, owner?, due_date? }], next_meeting? }\n" +
+      "• propuesta_cotizacion: { metadata?, client?: [{ label, value }], summary?, scope?: [sections], line_items: [{ description, quantity?, unit?, unit_price?, amount?, notes? }], currency?, subtotal?, taxes?, total?, terms?: string[], validity? }\n" +
+      "• factura_remision: { metadata?, emisor: [{ label, value }], receptor: [{ label, value }], folio?, fecha?, line_items: [...], currency?, subtotal?, taxes?, total?, legal_notes?: string[] }\n" +
+      "• reporte_financiero: { metadata?, period?, kpis?: [{ label, value, delta? }], summary?, tables: [{ headers, rows, caption? }], notes?: string[] }\n" +
+      "• generico: { metadata?, summary?, sections: [...] }\n\n" +
+      "METADATA comun (opcional): { code?, emisor?, destinatario?, fecha?, version?, clasificacion? } — usa 'clasificacion' p. ej. 'Confidencial — Uso Interno'.",
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string", description: "Título del documento final." },
-        requested_kind: {
+        template_key: {
           type: "string",
-          enum: ["spreadsheet", "word_document", "presentation"],
-          description: "Formato Office elegido tras analizar la intención del usuario.",
+          enum: [
+            "informe_ejecutivo",
+            "minuta_reunion",
+            "propuesta_cotizacion",
+            "factura_remision",
+            "reporte_financiero",
+            "generico",
+          ],
+          description: "Template Kawiil que define el diseño y estructura del documento.",
+        },
+        requested_formats: {
+          type: "array",
+          items: { type: "string", enum: ["pdf", "docx", "xlsx", "pptx"] },
+          description:
+            "Lista de formatos a generar. El primero es el primario (mostrado en preview). Default e incluir siempre: ['pdf'].",
+        },
+        content: {
+          type: "object",
+          description:
+            "Estructura del documento según el template elegido. Consulta los shapes documentados en el description del tool.",
         },
         confidence: {
           type: "number",
-          description: "Confianza de clasificación entre 0 y 1. Si es baja, pide aclaración al usuario.",
+          description: "Confianza de clasificación entre 0 y 1. Si < 0.55 pide aclaración al usuario.",
         },
-        reason: { type: "string", description: "Motivo breve de por qué se eligió ese formato." },
-        domain_subtype: { type: "string", description: "Tipo de documento detectado (ej. papel_trabajo, minuta, reporte)." },
+        reason: { type: "string", description: "Motivo breve de por qué se eligió ese template/formato." },
         preview_markdown: {
           type: "string",
-          description: "Resumen corto en Markdown para mostrar como vista previa en el visor.",
-        },
-        spreadsheet: {
-          type: "object",
-          properties: {
-            sheets: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  rows: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        cells: {
-                          type: "array",
-                          items: { type: ["string", "number", "boolean", "null"] },
-                        },
-                      },
-                      required: ["cells"],
-                    },
-                  },
-                },
-                required: ["rows"],
-              },
-            },
-          },
-        },
-        word_document: {
-          type: "object",
-          properties: {
-            sections: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  heading: { type: "string" },
-                  paragraphs: { type: "array", items: { type: "string" } },
-                  tables: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        headers: { type: "array", items: { type: "string" } },
-                        rows: { type: "array", items: { type: "array", items: { type: "string" } } },
-                      },
-                      required: ["rows"],
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        presentation: {
-          type: "object",
-          properties: {
-            slides: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  bullets: { type: "array", items: { type: "string" } },
-                  notes: { type: "string" },
-                  table: {
-                    type: "object",
-                    properties: {
-                      headers: { type: "array", items: { type: "string" } },
-                      rows: { type: "array", items: { type: "array", items: { type: "string" } } },
-                    },
-                    required: ["rows"],
-                  },
-                },
-              },
-            },
-          },
+          description: "Resumen corto en Markdown (1-3 párrafos) para mostrar como texto alterno del artifact.",
         },
       },
-      required: ["title", "requested_kind", "confidence"],
+      required: ["title", "template_key", "content"],
     },
   },
   {
@@ -1839,14 +1800,49 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - **GUARDA en memoria** todo insight valioso: conclusiones de análisis, datos clave de clientes, estrategias discutidas, decisiones tomadas. Esto construye conocimiento real que perdura entre conversaciones.
 
 ### 5. Generación de documentos (Artifacts)
-- Cuando el usuario pida generar un **documento largo** (manual, reporte, análisis, matriz, guía, plantilla, procedimiento), USA la herramienta **create_artifact** en lugar de poner el contenido directamente en el chat.
-- Los artifacts aparecen en un panel lateral donde el usuario puede verlos completos, copiarlos o descargarlos.
-- Usa create_artifact cuando el contenido generado supere ~500 palabras o sea un documento formal/estructurado.
-- El artifact debe estar completo y bien formateado en Markdown.
-- Después de crear un artifact, incluye un breve resumen en el chat de lo que generaste y por qué.
-- Si el usuario pide explícitamente **Excel, Word o PowerPoint**, o el tipo de documento requiere formato editable Office, usa **create_office_document**.
-- Para **papel de trabajo**: si predomina estructura tabular/cálculo, selecciona 'spreadsheet'; si predomina narrativa jurídica/técnica, usa 'word_document'.
-- En create_office_document siempre incluye 'requested_kind', 'confidence', 'reason', 'domain_subtype' y la estructura del archivo ('spreadsheet', 'word_document' o 'presentation'). Si 'confidence < 0.55', primero pide aclaración y no generes archivo.
+**TODO artifact que generes sale con diseño Kawiil profesional (PDF + DOCX con portada, tipografía, tablas con color y paginación), igual que los artifacts de Claude.** Ya no existe la salida "markdown plano": incluso si llamas \`create_artifact\`, el backend convierte automáticamente el markdown a documento genérico (template \`generico\`) y genera PDF+DOCX. Por eso:
+
+- **PREFIERE SIEMPRE \`create_ai_document\`** con el \`template_key\` adecuado. El resultado es más rico (portada con metadata, callouts, tablas estructuradas, recomendaciones, firmas, totales, KPIs, etc.).
+- **Usa \`create_artifact\` solo como fallback** cuando el contenido es tan libre / narrativo que no encaja en ningún template. Igualmente saldrá con diseño Kawiil, pero **pierdes estructura rica** (sin portada con clasificación, sin callouts, sin tablas profesionales con colores por columna).
+- **NUNCA** respondas con un bloque largo de markdown en el chat pensando "es un entregable": lo correcto es llamar a \`create_ai_document\`.
+
+**Elección de \`template_key\` en \`create_ai_document\`** (reglas por intención):
+- **Estudios fiscales / precios de transferencia / papeles de trabajo / dictámenes / análisis jurídicos / opinión contable / informe de hallazgos** → \`informe_ejecutivo\` con \`metadata.clasificacion\` (p. ej. "Confidencial — Uso Fiscal") y secciones con \`paragraphs\`, \`tables\` (obligatorias si hay cifras) y \`recommendations\` (conclusiones del estudio).
+- Reporte / análisis ejecutivo / informe de clientes → \`informe_ejecutivo\`.
+- Acta / minuta / notas de reunión → \`minuta_reunion\`.
+- Propuesta comercial / cotización / oferta → \`propuesta_cotizacion\`.
+- Factura / remisión / nota fiscal → \`factura_remision\`.
+- Reporte financiero / KPIs / estado de resultados / flujo → \`reporte_financiero\`.
+- Cualquier otro documento formal sin encaje claro → \`generico\` (fallback).
+
+**requested_formats**: SIEMPRE incluye \`"pdf"\` (primario). Añade formatos secundarios cuando sean útiles:
+- Propuestas / facturas / reportes financieros → agrega \`"xlsx"\` para editar montos.
+- Informes / minutas / estudios fiscales → agrega \`"docx"\` para edición en Word (muy útil para revisión del cliente).
+- Presentaciones → agrega \`"pptx"\`.
+
+**content** debe seguir el shape del template elegido (ver descripción del tool). **Siempre incluye \`metadata\`** (code / emisor / destinatario / fecha / clasificacion / version) cuando tengas datos; mejora mucho la portada del PDF. Para estudios fiscales usa \`clasificacion\` tipo "Confidencial — Uso Fiscal" o "Confidencial — Uso Interno".
+
+**Ejemplo: Estudio de Precios de Transferencia** (→ \`informe_ejecutivo\` + \`requested_formats: ["pdf", "docx"]\`):
+\`\`\`json
+{
+  "title": "Estudio de Precios de Transferencia - Empathy Design S.A.P.I. 2024-2025",
+  "template_key": "informe_ejecutivo",
+  "requested_formats": ["pdf", "docx"],
+  "content": {
+    "metadata": { "emisor": "Kawiil - Servicios Profesionales", "fecha": "21 de abril de 2026", "clasificacion": "Confidencial — Uso Fiscal" },
+    "summary": "El presente estudio documenta y analiza las operaciones controladas de Empathy Design…",
+    "sections": [
+      { "heading": "Operaciones analizadas", "paragraphs": ["Se analizaron operaciones por USD 38,109.37…"], "tables": [{ "headers": ["Contraparte", "Monto USD", "Margen"], "rows": [["Bold Moves Argentina", "25,000.00", "33.77%"], ["Viernes Peru SAC", "13,109.37", "33.77%"]] }] },
+      { "heading": "Metodología TNMM", "paragraphs": ["Se aplicó el método TNMM…"] }
+    ],
+    "recommendations": ["Mantener documentación contemporánea", "Actualizar análisis anualmente"]
+  },
+  "confidence": 0.95
+}
+\`\`\`
+
+Si \`confidence < 0.55\`, pide aclaración al usuario antes de generar el archivo.
+Los artifacts aparecen en un panel lateral con preview real del PDF y descargas multi-formato.
 
 ### 5b. Creación de proyectos y tareas
 - **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto. Puedes incluir fases y tareas directamente en la herramienta.
@@ -2253,72 +2249,62 @@ serve(async (req) => {
     }
 
     // ─── Main chat with tools (Claude / Anthropic) ───
-    try {
-      return await handleClaudeChat(
-        ANTHROPIC_API_KEY,
-        systemPrompt,
-        forClaude,
-        supabase,
-        user.id,
-        orgId!,
-        ai_project_id || null,
-        sseProgressPreamble,
-        authHeader!,
-      );
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      console.warn("Claude chat failed:", errMsg);
-      if (errMsg.includes("RATE_LIMIT_429")) {
-        const msg = "Demasiadas solicitudes. Intenta de nuevo en unos segundos.";
-        return new Response(
-          JSON.stringify({
-            error: msg,
-            message: msg,
-            retry_after: 20,
-          }),
-          {
-            status: 429,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
+    // IMPORTANTE: abrimos el SSE inmediatamente para mantener viva la conexión
+    // (el runtime de Supabase corta la request si no hay actividad durante 150 s).
+    // A partir de aquí toda la respuesta se entrega por el stream, incluyendo errores
+    // del pipeline (ya no podemos cambiar el status HTTP).
+    const sseWriter = openLiveSseStream(sseProgressPreamble);
+
+    (async () => {
+      try {
+        await handleClaudeChat(
+          ANTHROPIC_API_KEY,
+          systemPrompt,
+          forClaude,
+          supabase,
+          user.id,
+          orgId!,
+          ai_project_id || null,
+          sseWriter,
+          authHeader!,
         );
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.warn("Claude chat failed:", errMsg);
+        if (errMsg.includes("RATE_LIMIT_429")) {
+          sseWriter.fail(
+            "**Demasiadas solicitudes al proveedor de IA.** Espera unos segundos e intenta de nuevo.",
+          );
+        } else if (errMsg.includes("CLAUDE_OVERLOADED")) {
+          sseWriter.fail(
+            "**Claude está temporalmente saturado** (muchas peticiones en Anthropic). Es un fallo temporal; reintenta en unos minutos.",
+          );
+        } else if (errMsg.includes(ANTHROPIC_BILLING_THROW) || textLooksLikeAnthropicBilling(errMsg)) {
+          sseWriter.fail(`**Créditos del proveedor de IA insuficientes.**\n\n${MSG_ANTHROPIC_BILLING_ES}`);
+        } else if (
+          errMsg.includes("CLAUDE_CONTEXT_TOO_LONG") ||
+          errMsg.toLowerCase().includes("prompt is too long")
+        ) {
+          sseWriter.fail(
+            "**El contexto supera el límite del modelo (200k tokens).** " +
+              "Inicia un chat nuevo, acorta el historial o evita varios PDFs enormes en el mismo hilo.",
+          );
+        } else {
+          sseWriter.fail(`**Error del servicio de IA.** ${errMsg}`);
+        }
+      } finally {
+        if (!sseWriter.isClosed()) sseWriter.close();
       }
-      if (errMsg.includes("CLAUDE_OVERLOADED")) {
-        const msg =
-          "Claude está temporalmente saturado (muchas peticiones en Anthropic). Espera unos segundos e inténtalo de nuevo.";
-        return new Response(
-          JSON.stringify({
-            error: msg,
-            message: msg,
-            code: "claude_overloaded",
-            retry_after: 15,
-          }),
-          {
-            status: 503,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          },
-        );
+    })().catch((e) => {
+      console.error("ai-chat background pipeline error:", e);
+      try {
+        sseWriter.fail("**Error interno del pipeline de IA.** Reintenta en unos segundos.");
+      } catch {
+        /* ignore */
       }
-      if (errMsg.includes(ANTHROPIC_BILLING_THROW) || textLooksLikeAnthropicBilling(errMsg)) {
-        return responseAnthropicBilling();
-      }
-      if (
-        errMsg.includes("CLAUDE_CONTEXT_TOO_LONG") ||
-        errMsg.toLowerCase().includes("prompt is too long")
-      ) {
-        const msg =
-          "La conversación o los datos adjuntos superan el límite de contexto del modelo (200k tokens). " +
-          "Inicia un chat nuevo, acorta el historial o evita varios PDFs enormes en el mismo hilo. " +
-          "Los PDFs grandes pueden consultarse por búsqueda semántica tras indexarlos sin cargar todo el texto en cada mensaje.";
-        return new Response(
-          JSON.stringify({ error: msg, message: msg, code: "context_too_long" }),
-          { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      return new Response(JSON.stringify({ error: errMsg }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    });
+
+    return sseWriter.response;
   } catch (e) {
     console.error("ai-chat error:", e);
     const outerMsg = e instanceof Error ? e.message : "Error desconocido";
@@ -2420,22 +2406,53 @@ async function handleCreateArtifact(
   });
 }
 
-type OfficeKind = "spreadsheet" | "word_document" | "presentation";
+type KawiilTemplateKey =
+  | "informe_ejecutivo"
+  | "minuta_reunion"
+  | "propuesta_cotizacion"
+  | "factura_remision"
+  | "reporte_financiero"
+  | "generico";
+type KawiilOutputFormat = "pdf" | "docx" | "xlsx" | "pptx";
 
-const OFFICE_KIND_TO_EXT: Record<OfficeKind, "xlsx" | "docx" | "pptx"> = {
+const KAWIIL_TEMPLATE_KEYS: KawiilTemplateKey[] = [
+  "informe_ejecutivo",
+  "minuta_reunion",
+  "propuesta_cotizacion",
+  "factura_remision",
+  "reporte_financiero",
+  "generico",
+];
+
+const KAWIIL_FORMAT_MIME: Record<KawiilOutputFormat, string> = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+const KAWIIL_FORMAT_EXT: Record<KawiilOutputFormat, string> = {
+  pdf: "pdf",
+  docx: "docx",
+  xlsx: "xlsx",
+  pptx: "pptx",
+};
+
+// Back-compat: mapear office_kind histórico → template key genérico.
+const LEGACY_OFFICE_KIND_TO_TEMPLATE: Record<string, KawiilTemplateKey> = {
+  spreadsheet: "generico",
+  word_document: "generico",
+  presentation: "generico",
+};
+
+const LEGACY_OFFICE_KIND_TO_FORMAT: Record<string, KawiilOutputFormat> = {
   spreadsheet: "xlsx",
   word_document: "docx",
   presentation: "pptx",
 };
 
-const OFFICE_KIND_TO_MIME: Record<OfficeKind, string> = {
-  spreadsheet: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  word_document: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  presentation: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-};
-
-function isValidOfficeKind(value: unknown): value is OfficeKind {
-  return value === "spreadsheet" || value === "word_document" || value === "presentation";
+function isKawiilTemplateKey(value: unknown): value is KawiilTemplateKey {
+  return typeof value === "string" && (KAWIIL_TEMPLATE_KEYS as string[]).includes(value);
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -2446,92 +2463,358 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-async function handleCreateOfficeDocument(
-  input: any,
+// ─── Markdown → generico content parser ───
+// Convierte markdown libre (headings ##, bullets, tablas |col|col|) en la
+// estructura que espera el template `generico` de `render-ai-document`.
+// Se usa como auto-upgrade cuando la IA llama `create_artifact`: así cualquier
+// artifact termina con diseño Kawiil (PDF + DOCX) en vez de markdown plano.
+interface GenericSection {
+  heading?: string;
+  paragraphs?: string[];
+  bullets?: string[];
+  tables?: Array<{ headers: string[]; rows: string[][] }>;
+}
+
+interface GenericContent {
+  summary?: string;
+  sections: GenericSection[];
+}
+
+function parseMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return trimmed.split("|").map((c) => c.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = parseMarkdownTableRow(line);
+  if (!cells.length) return false;
+  return cells.every((c) => /^:?-{2,}:?$/.test(c));
+}
+
+function isTableLine(line: string): boolean {
+  const t = line.trim();
+  if (!t.startsWith("|") || !t.endsWith("|")) return false;
+  return t.length > 2;
+}
+
+function markdownToGenericContent(markdown: string, _title: string): GenericContent {
+  const raw = (markdown || "").replace(/\r\n/g, "\n");
+  const lines = raw.split("\n");
+  const sections: GenericSection[] = [];
+  let summary: string | undefined;
+  let current: GenericSection | null = null;
+
+  let paraBuffer: string[] = [];
+  let bulletBuffer: string[] = [];
+  let tableBuffer: string[][] = [];
+  let tableHeaders: string[] | null = null;
+  let inTable = false;
+  let inCodeFence = false;
+  let codeBuffer: string[] = [];
+
+  const getTarget = (): GenericSection => {
+    if (!current) {
+      current = {};
+      sections.push(current);
+    }
+    return current;
+  };
+
+  const flushParagraph = () => {
+    if (!paraBuffer.length) return;
+    const text = paraBuffer.join(" ").replace(/\s+/g, " ").trim();
+    paraBuffer = [];
+    if (!text) return;
+    if (!current && !sections.length && !summary) {
+      summary = text;
+      return;
+    }
+    const target = getTarget();
+    target.paragraphs = target.paragraphs || [];
+    target.paragraphs.push(text);
+  };
+
+  const flushBullets = () => {
+    if (!bulletBuffer.length) return;
+    const target = getTarget();
+    target.bullets = target.bullets || [];
+    target.bullets.push(...bulletBuffer);
+    bulletBuffer = [];
+  };
+
+  const flushTable = () => {
+    if (!inTable) return;
+    inTable = false;
+    const headers = tableHeaders || [];
+    const rows = tableBuffer;
+    tableHeaders = null;
+    tableBuffer = [];
+    if (!headers.length && !rows.length) return;
+    const target = getTarget();
+    target.tables = target.tables || [];
+    target.tables.push({ headers, rows });
+  };
+
+  const flushCodeBlock = () => {
+    if (!codeBuffer.length) return;
+    const text = codeBuffer.join("\n").trim();
+    codeBuffer = [];
+    if (!text) return;
+    const target = getTarget();
+    target.paragraphs = target.paragraphs || [];
+    target.paragraphs.push(text);
+  };
+
+  const flushAll = () => {
+    flushParagraph();
+    flushBullets();
+    flushTable();
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      if (inCodeFence) {
+        inCodeFence = false;
+        flushCodeBlock();
+      } else {
+        flushAll();
+        inCodeFence = true;
+      }
+      continue;
+    }
+    if (inCodeFence) {
+      codeBuffer.push(line);
+      continue;
+    }
+
+    if (!trimmed) {
+      flushParagraph();
+      flushBullets();
+      flushTable();
+      continue;
+    }
+
+    // Heading
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (headingMatch) {
+      flushAll();
+      const heading = headingMatch[2].trim();
+      // Titulo H1 al inicio: si coincide aproximadamente con title o es la primera línea, ignóralo.
+      if (headingMatch[1].length === 1 && !sections.length && !summary && !current) {
+        // Skip the top-level document title; handler will pass `title` separately.
+        continue;
+      }
+      current = { heading };
+      sections.push(current);
+      continue;
+    }
+
+    // Table line
+    if (isTableLine(trimmed)) {
+      flushParagraph();
+      flushBullets();
+      const cells = parseMarkdownTableRow(trimmed);
+      if (!inTable) {
+        const next = (lines[i + 1] || "").trim();
+        if (isTableLine(next) && isTableSeparator(next)) {
+          inTable = true;
+          tableHeaders = cells;
+          i += 1; // skip separator row
+          continue;
+        }
+      } else {
+        if (isTableSeparator(trimmed)) continue;
+        tableBuffer.push(cells);
+        continue;
+      }
+    } else if (inTable) {
+      flushTable();
+    }
+
+    // Bullet list item
+    const bulletMatch = trimmed.match(/^(?:[-*+]|\d+\.)\s+(.+)$/);
+    if (bulletMatch) {
+      flushParagraph();
+      bulletBuffer.push(bulletMatch[1].trim());
+      continue;
+    } else if (bulletBuffer.length) {
+      flushBullets();
+    }
+
+    // Callout / blockquote → párrafo normal (el template genérico no tiene callouts).
+    if (trimmed.startsWith(">")) {
+      paraBuffer.push(trimmed.replace(/^>\s?/, ""));
+      continue;
+    }
+
+    paraBuffer.push(trimmed);
+  }
+
+  flushAll();
+  if (inCodeFence) flushCodeBlock();
+
+  if (!sections.length) {
+    sections.push({
+      paragraphs: summary ? [summary] : ["(Sin contenido.)"],
+    });
+    if (summary) summary = undefined;
+  }
+
+  return { summary, sections };
+}
+
+async function handleCreateAiDocument(
+  input: Record<string, unknown>,
   userId: string,
   orgId: string,
   aiProjectId: string | null,
   authHeader: string,
 ): Promise<string> {
+  // Back-compat: si la IA sigue llamando con shape viejo (requested_kind + word_document / spreadsheet / presentation),
+  // lo normalizamos a template_key + content antes de seguir.
+  const legacyKind = typeof input?.requested_kind === "string" ? input.requested_kind : undefined;
+  if (legacyKind && !input.template_key) {
+    input.template_key = LEGACY_OFFICE_KIND_TO_TEMPLATE[legacyKind] || "generico";
+    input.requested_formats = ["pdf", LEGACY_OFFICE_KIND_TO_FORMAT[legacyKind] || "docx"];
+    // Convertir data legacy a `generico.sections`.
+    const legacySections: Array<{ heading?: string; paragraphs?: string[]; tables?: unknown[] }> = [];
+    if (input.word_document && typeof input.word_document === "object") {
+      const wd = input.word_document as { sections?: Array<{ heading?: string; paragraphs?: string[]; tables?: Array<{ headers?: string[]; rows: string[][] }> }> };
+      for (const s of wd.sections || []) legacySections.push(s);
+    }
+    if (input.spreadsheet && typeof input.spreadsheet === "object") {
+      const sp = input.spreadsheet as { sheets?: Array<{ name?: string; rows?: Array<{ cells?: unknown[] }> }> };
+      for (const sh of sp.sheets || []) {
+        legacySections.push({
+          heading: sh.name || "Hoja",
+          tables: [{
+            headers: [],
+            rows: (sh.rows || []).map((r) => (r.cells || []).map((c) => String(c ?? ""))),
+          }],
+        });
+      }
+    }
+    if (input.presentation && typeof input.presentation === "object") {
+      const pr = input.presentation as { slides?: Array<{ title?: string; bullets?: string[]; notes?: string }> };
+      for (const sl of pr.slides || []) {
+        legacySections.push({ heading: sl.title || "Diapositiva", paragraphs: sl.bullets });
+      }
+    }
+    input.content = { sections: legacySections.length ? legacySections : [{ heading: "Documento", paragraphs: ["Sin contenido."] }] };
+  }
+
   const title = typeof input?.title === "string" ? input.title.trim() : "";
-  const requestedKind = input?.requested_kind;
-  const confidence = typeof input?.confidence === "number" ? input.confidence : NaN;
+  const templateKey = input?.template_key;
+  const confidenceRaw = typeof input?.confidence === "number" ? input.confidence : 0.9;
   const reason = typeof input?.reason === "string" ? input.reason : "";
-  const domainSubtype = typeof input?.domain_subtype === "string" ? input.domain_subtype : null;
   const previewMarkdown = typeof input?.preview_markdown === "string" ? input.preview_markdown.trim() : "";
 
   if (!title) return JSON.stringify({ error: "title es obligatorio" });
-  if (!isValidOfficeKind(requestedKind)) return JSON.stringify({ error: "requested_kind inválido" });
-  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+  if (!isKawiilTemplateKey(templateKey)) {
+    return JSON.stringify({ error: "template_key inválido. Opciones: " + KAWIIL_TEMPLATE_KEYS.join(", ") });
+  }
+  if (!input.content || typeof input.content !== "object") {
+    return JSON.stringify({ error: "content (objeto con la estructura del template) es obligatorio" });
+  }
+  if (!Number.isFinite(confidenceRaw) || confidenceRaw < 0 || confidenceRaw > 1) {
     return JSON.stringify({ error: "confidence debe estar entre 0 y 1" });
   }
-  if (confidence < 0.55) {
+  if (confidenceRaw < 0.55) {
     return JSON.stringify({
-      error:
-        "confidence baja para generar Office real; pide aclaración del formato al usuario antes de crear el archivo.",
+      error: "confidence baja para generar documento; pide aclaración al usuario antes de crearlo.",
       code: "low_confidence",
-      confidence,
+      confidence: confidenceRaw,
     });
   }
 
-  const officePayload = {
+  const rawFormats = Array.isArray(input.requested_formats) ? input.requested_formats : ["pdf"];
+  const formats: KawiilOutputFormat[] = (rawFormats as string[])
+    .filter((f): f is KawiilOutputFormat => (["pdf", "docx", "xlsx", "pptx"] as string[]).includes(f));
+  const requestedFormats: KawiilOutputFormat[] = formats.length ? formats : ["pdf"];
+  // PDF siempre como primario salvo que el usuario haya pedido explícitamente otra cosa.
+  if (!requestedFormats.includes("pdf")) requestedFormats.unshift("pdf");
+
+  const renderPayload = {
     title,
-    requested_kind: requestedKind,
-    confidence,
+    template_key: templateKey,
+    requested_formats: requestedFormats,
+    content: input.content,
+    confidence: confidenceRaw,
     reason,
-    domain_subtype: domainSubtype,
     preview_markdown: previewMarkdown,
-    spreadsheet: input?.spreadsheet,
-    word_document: input?.word_document,
-    presentation: input?.presentation,
   };
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const renderResp = await fetch(`${supabaseUrl}/functions/v1/render-office-document`, {
+  const renderResp = await fetch(`${supabaseUrl}/functions/v1/render-ai-document`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: authHeader,
       apikey: anonKey,
     },
-    body: JSON.stringify(officePayload),
+    body: JSON.stringify(renderPayload),
   });
-
   const renderJson = await renderResp.json().catch(() => null);
   if (!renderResp.ok || !renderJson?.success) {
-    const reasonMsg = renderJson?.error || `render-office-document error ${renderResp.status}`;
-    return JSON.stringify({ error: reasonMsg, code: "office_render_failed" });
+    const reasonMsg = renderJson?.error || `render-ai-document error ${renderResp.status}`;
+    return JSON.stringify({ error: reasonMsg, code: "document_render_failed" });
   }
 
-  const fileBase64 = typeof renderJson.content_base64 === "string" ? renderJson.content_base64 : "";
-  if (!fileBase64) return JSON.stringify({ error: "render-office-document no devolvió contenido binario." });
-  const fileBytes = base64ToUint8Array(fileBase64);
+  const renderedFormats: Array<{ format: KawiilOutputFormat; file_name: string; file_ext: string; mime_type: string; content_base64: string }>
+    = Array.isArray(renderJson.formats) ? renderJson.formats : [];
+  if (!renderedFormats.length) {
+    return JSON.stringify({ error: "render-ai-document no devolvió archivos." });
+  }
 
-  const fileExt = OFFICE_KIND_TO_EXT[requestedKind];
-  const mimeType = OFFICE_KIND_TO_MIME[requestedKind];
+  const primaryFormat: KawiilOutputFormat = (renderJson.primary_format as KawiilOutputFormat) || renderedFormats[0].format;
   const artifactId = crypto.randomUUID();
   const safeTitle = title.replace(/[^\w\- ]+/g, "_").trim().replace(/\s+/g, "_").slice(0, 80) || "documento";
-  const storagePath = `ai-artifacts/${orgId}/${userId}/${artifactId}_${safeTitle}.${fileExt}`;
   const storageBucket = "documents";
 
   const svcUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const svc = createClient(svcUrl, serviceKey);
 
-  const { error: uploadErr } = await svc.storage.from(storageBucket).upload(storagePath, fileBytes, {
-    contentType: mimeType,
-    upsert: false,
-  });
-  if (uploadErr) {
-    console.error("Office upload error:", uploadErr);
-    return JSON.stringify({ error: uploadErr.message, code: "office_upload_failed" });
+  const outputFormats: Array<{ format: string; storage_bucket: string; storage_path: string; file_name: string; mime_type: string; is_primary: boolean }> = [];
+  let primaryPath: string | null = null;
+  let primaryMime: string | null = null;
+  let primaryExt: string | null = null;
+
+  for (const fmt of renderedFormats) {
+    const fileBytes = base64ToUint8Array(fmt.content_base64);
+    const storagePath = `ai-artifacts/${orgId}/${userId}/${artifactId}_${safeTitle}.${fmt.file_ext}`;
+    const { error: uploadErr } = await svc.storage.from(storageBucket).upload(storagePath, fileBytes, {
+      contentType: fmt.mime_type,
+      upsert: false,
+    });
+    if (uploadErr) {
+      console.error(`Kawiil doc upload error (${fmt.format}):`, uploadErr);
+      return JSON.stringify({ error: uploadErr.message, code: "document_upload_failed" });
+    }
+    const isPrimary = fmt.format === primaryFormat;
+    outputFormats.push({
+      format: fmt.format,
+      storage_bucket: storageBucket,
+      storage_path: storagePath,
+      file_name: `${safeTitle}.${fmt.file_ext}`,
+      mime_type: fmt.mime_type,
+      is_primary: isPrimary,
+    });
+    if (isPrimary) {
+      primaryPath = storagePath;
+      primaryMime = fmt.mime_type;
+      primaryExt = fmt.file_ext;
+    }
   }
 
-  const preview = previewMarkdown ||
-    `# ${title}\n\nDocumento generado en formato ${
-      requestedKind === "spreadsheet" ? "Excel" : requestedKind === "word_document" ? "Word" : "PowerPoint"
-    }.\n\nMotivo de formato: ${reason || "Selección automática por intención del usuario."}`;
+  const contentType = primaryFormat === "pdf" ? "pdf" : "office";
+  const previewBody = typeof renderJson.preview_markdown === "string" && renderJson.preview_markdown.trim()
+    ? renderJson.preview_markdown
+    : previewMarkdown || `# ${title}\n\n_Documento generado con template **${templateKey}** (Kawiil AI)._`;
 
   const { error: insertErr } = await svc.from("ai_artifacts").insert({
     id: artifactId,
@@ -2539,28 +2822,38 @@ async function handleCreateOfficeDocument(
     user_id: userId,
     organization_id: orgId,
     title,
-    content: preview,
-    content_type: "office",
-    office_kind: requestedKind,
-    file_ext: fileExt,
-    mime_type: mimeType,
-    storage_bucket: storageBucket,
-    storage_path: storagePath,
+    content: previewBody,
+    content_type: contentType,
+    template_key: templateKey,
+    template_data: input.content,
+    output_formats: outputFormats,
+    primary_format: primaryFormat,
+    // Rellenamos los campos "legacy" para que UI vieja siga funcionando.
+    office_kind: primaryFormat === "docx"
+      ? "word_document"
+      : primaryFormat === "xlsx"
+      ? "spreadsheet"
+      : primaryFormat === "pptx"
+      ? "presentation"
+      : null,
+    file_ext: primaryExt,
+    mime_type: primaryMime,
+    storage_bucket: primaryPath ? storageBucket : null,
+    storage_path: primaryPath,
   });
-
   if (insertErr) {
-    console.error("Office artifact insert error:", insertErr);
-    return JSON.stringify({ error: insertErr.message, code: "office_artifact_insert_failed" });
+    console.error("AI document artifact insert error:", insertErr);
+    return JSON.stringify({ error: insertErr.message, code: "document_artifact_insert_failed" });
   }
 
   return JSON.stringify({
     artifact_id: artifactId,
     title,
-    content_type: "office",
-    office_kind: requestedKind,
-    file_ext: fileExt,
-    mime_type: mimeType,
-    message: `Documento Office "${title}" generado exitosamente.`,
+    content_type: contentType,
+    template_key: templateKey,
+    primary_format: primaryFormat,
+    formats: outputFormats.map((o) => o.format),
+    message: `Documento "${title}" (${templateKey}) generado en ${outputFormats.length} formato(s).`,
   });
 }
 
@@ -2989,15 +3282,15 @@ async function embedSharedMemory(
 async function handleClaudeChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
   supabase: any, userId: string, orgId: string, aiProjectId: string | null,
-  progressPreamble: Array<{ phase: string; message: string }>,
+  sseWriter: LiveSseWriter,
   authHeader: string,
-): Promise<Response> {
+): Promise<void> {
   let anthropicMsgs = pruneClaudeMessages(
     toAnthropicMessages(userMessages),
     MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
   );
   const MAX_ROUNDS = 8;
-  const createdArtifacts: { id: string; title: string; content_type: string; office_kind?: string }[] = [];
+  const createdArtifacts: { id: string; title: string; content_type: string; office_kind?: string; template_key?: string; primary_format?: string }[] = [];
 
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
   const memoryToolDef = {
@@ -3027,6 +3320,13 @@ async function handleClaudeChat(
     const isLastChance = round === MAX_ROUNDS - 1;
 
     anthropicMsgs = pruneClaudeMessages(anthropicMsgs, MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS);
+
+    sseWriter.writeProgress(
+      "claude_round",
+      round === 0
+        ? "Consultando a Kawiil AI (Claude)…"
+        : `Procesando pasos intermedios con Kawiil AI (${round + 1}/${MAX_ROUNDS})…`,
+    );
 
     const resp = await anthropicMessagesFetch(apiKey, {
       model: "claude-sonnet-4-20250514",
@@ -3076,28 +3376,110 @@ async function handleClaudeChat(
 
         if (tu.name === "memory") {
           console.log(`Memory Tool: ${tu.input?.command} ${tu.input?.path || ""}`);
+          sseWriter.writeProgress(
+            "tool",
+            `Memoria persistente: ${tu.input?.command || "acción"}${tu.input?.path ? ` ${tu.input.path}` : ""}`,
+          );
           const memResult = await handleMemoryToolCall(tu.input || {}, userId, orgId, aiProjectId);
           result = memResult;
         } else if (tu.name === "create_artifact") {
-          console.log(`Artifact Tool: ${tu.input?.title}`);
-          result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
-          try {
-            const parsed = JSON.parse(result);
-            if (parsed.artifact_id) {
-              createdArtifacts.push({ id: parsed.artifact_id, title: parsed.title, content_type: parsed.content_type || "markdown" });
+          // Auto-upgrade: toda llamada a create_artifact se re-rutea al pipeline Kawiil
+          // (render-ai-document con template `generico`), de forma que el artifact
+          // resultante siempre salga con diseño profesional (PDF + DOCX) en vez de
+          // markdown plano. Si la conversión falla, hacemos fallback al handler legacy
+          // para no romper la conversación.
+          const inputTitle = typeof tu.input?.title === "string" ? tu.input.title : "Documento";
+          const mdContent = typeof tu.input?.content === "string" ? tu.input.content : "";
+          const rawContentType = typeof tu.input?.content_type === "string" ? tu.input.content_type : "markdown";
+          console.log(`Artifact Tool (auto-upgrade → create_ai_document): ${inputTitle}`);
+          sseWriter.writeProgress(
+            "tool",
+            `Generando documento: ${inputTitle} (PDF + DOCX con diseño Kawiil)…`,
+          );
+          // Solo tiene sentido auto-upgrade para markdown/html/csv (texto). Para `code`
+          // mantenemos el comportamiento legacy (artifact de código plano).
+          const canUpgrade = rawContentType === "markdown" || rawContentType === "html" || rawContentType === "csv";
+          if (canUpgrade && mdContent.trim()) {
+            try {
+              const genericContent = markdownToGenericContent(mdContent, inputTitle);
+              result = await handleCreateAiDocument(
+                {
+                  title: inputTitle,
+                  template_key: "generico",
+                  requested_formats: ["pdf", "docx"],
+                  content: genericContent as unknown as Record<string, unknown>,
+                  confidence: 0.9,
+                  reason: "Auto-upgrade de create_artifact → pipeline Kawiil (PDF+DOCX)",
+                  preview_markdown: mdContent,
+                },
+                userId,
+                orgId,
+                aiProjectId,
+                authHeader,
+              );
+              try {
+                const parsed = JSON.parse(result);
+                if (parsed.artifact_id) {
+                  createdArtifacts.push({
+                    id: parsed.artifact_id,
+                    title: parsed.title,
+                    content_type: parsed.content_type || "pdf",
+                    template_key: parsed.template_key,
+                    primary_format: parsed.primary_format,
+                  });
+                } else if (parsed.error) {
+                  // Render falló: caemos al handler legacy para no perder el contenido.
+                  console.warn("Auto-upgrade create_artifact falló, fallback a markdown:", parsed.error);
+                  result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
+                  const legacyParsed = JSON.parse(result);
+                  if (legacyParsed.artifact_id) {
+                    createdArtifacts.push({
+                      id: legacyParsed.artifact_id,
+                      title: legacyParsed.title,
+                      content_type: legacyParsed.content_type || "markdown",
+                    });
+                  }
+                }
+              } catch {
+                /* ignore parse issues */
+              }
+            } catch (e) {
+              console.error("Auto-upgrade create_artifact error, fallback a markdown:", e);
+              result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
+              try {
+                const parsed = JSON.parse(result);
+                if (parsed.artifact_id) {
+                  createdArtifacts.push({ id: parsed.artifact_id, title: parsed.title, content_type: parsed.content_type || "markdown" });
+                }
+              } catch {}
             }
-          } catch {}
-        } else if (tu.name === "create_office_document") {
-          console.log(`Office Tool: ${tu.input?.title} (${tu.input?.requested_kind})`);
-          result = await handleCreateOfficeDocument(tu.input || {}, userId, orgId, aiProjectId, authHeader);
+          } else {
+            // content_type === "code" o contenido vacío: comportamiento legacy.
+            result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
+            try {
+              const parsed = JSON.parse(result);
+              if (parsed.artifact_id) {
+                createdArtifacts.push({ id: parsed.artifact_id, title: parsed.title, content_type: parsed.content_type || "markdown" });
+              }
+            } catch {}
+          }
+        } else if (tu.name === "create_ai_document" || tu.name === "create_office_document") {
+          // create_office_document se acepta por back-compat; handleCreateAiDocument lo normaliza.
+          console.log(`AI Document Tool: ${tu.input?.title} (template=${tu.input?.template_key || "legacy:" + tu.input?.requested_kind})`);
+          sseWriter.writeProgress(
+            "tool",
+            `Generando documento: ${typeof tu.input?.title === "string" ? tu.input.title : "sin título"} (puede tardar unos segundos)…`,
+          );
+          result = await handleCreateAiDocument(tu.input || {}, userId, orgId, aiProjectId, authHeader);
           try {
             const parsed = JSON.parse(result);
             if (parsed.artifact_id) {
               createdArtifacts.push({
                 id: parsed.artifact_id,
                 title: parsed.title,
-                content_type: "office",
-                office_kind: parsed.office_kind,
+                content_type: parsed.content_type || "pdf",
+                template_key: parsed.template_key,
+                primary_format: parsed.primary_format,
               });
             }
           } catch {
@@ -3105,6 +3487,7 @@ async function handleClaudeChat(
           }
         } else {
           console.log(`Tool [Claude]: ${tu.name}`, tu.input);
+          sseWriter.writeProgress("tool", `Ejecutando herramienta: ${tu.name}…`);
           result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId);
         }
 
@@ -3125,57 +3508,136 @@ async function handleClaudeChat(
       .join("");
 
     if (createdArtifacts.length > 0) {
-      const markers = createdArtifacts.map(
-        (a) => `[artifact:${a.id}|${a.title}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`
-      ).join("\n");
+      const markers = createdArtifacts.map((a) => {
+        if (a.template_key && a.primary_format) {
+          return `[artifact:${a.id}|${a.title}|kawiil:${a.template_key}:${a.primary_format}]`;
+        }
+        return `[artifact:${a.id}|${a.title}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`;
+      }).join("\n");
       textContent = textContent + "\n\n" + markers;
     }
 
-    return streamProgressAndText(progressPreamble, textContent);
+    sseWriter.writeProgress("response", "Generando la respuesta final…");
+    sseWriter.writeTextChunks(textContent);
+    sseWriter.close();
+    return;
   }
 
-  return new Response(JSON.stringify({ error: "Demasiadas consultas internas" }), {
-    status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  // Se agotaron los rounds sin texto final: responde algo legible.
+  sseWriter.fail(
+    "La IA usó demasiadas herramientas sin cerrar la respuesta. Prueba con una instrucción más directa o reintenta.",
+  );
 }
 
-// ─── SSE: pasos de progreso (cliente) + texto tipo OpenAI ───
-function streamProgressAndText(
+// ─── SSE "en vivo": mantiene viva la conexión con heartbeats mientras se procesa ───
+// Supabase Edge Runtime corta la request si no hay actividad en el socket durante 150 s
+// ("Request idle timeout limit (150s) reached"). Si el trabajo (rounds de Claude,
+// tool calls, render-ai-document, etc.) tarda más que eso sin escribir nada al cliente,
+// la respuesta se aborta. Por eso abrimos el stream inmediatamente y emitimos:
+//   - kawiil_progress en tiempo real a medida que avanza el pipeline.
+//   - Comentarios SSE `: keepalive ...\n\n` cada HEARTBEAT_INTERVAL_MS (el cliente
+//     ignora líneas que empiezan con ":", ver useChat.ts).
+const SSE_HEARTBEAT_INTERVAL_MS = 20_000;
+
+interface LiveSseWriter {
+  response: Response;
+  writeProgress: (phase: string, message: string) => void;
+  writeTextChunks: (text: string) => void;
+  close: () => void;
+  /** Escribe un mensaje como texto del asistente y cierra. Usar cuando falla el pipeline
+   *  después de abrir el stream (ya no podemos emitir un HTTP status distinto). */
+  fail: (message: string) => void;
+  isClosed: () => boolean;
+}
+
+function openLiveSseStream(
   preamble: Array<{ phase: string; message: string }>,
-  text: string,
-): Response {
+): LiveSseWriter {
   const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
+  let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let closed = false;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+  const writeRaw = (data: string) => {
+    if (closed || !controller) return;
+    try {
+      controller.enqueue(encoder.encode(data));
+    } catch {
+      closed = true;
+      stopHeartbeat();
+    }
+  };
+
+  const stopHeartbeat = () => {
+    if (heartbeat != null) {
+      clearInterval(heartbeat);
+      heartbeat = null;
+    }
+  };
+
+  const writeProgress = (phase: string, message: string) => {
+    writeRaw(`data: ${JSON.stringify({ type: "kawiil_progress", phase, message })}\n\n`);
+  };
+
+  const writeTextChunks = (text: string) => {
+    if (!text) return;
+    const chunkSize = 24;
+    for (let i = 0; i < text.length; i += chunkSize) {
+      const chunk = text.slice(i, i + chunkSize);
+      writeRaw(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`);
+    }
+  };
+
+  const close = () => {
+    if (closed) return;
+    writeRaw("data: [DONE]\n\n");
+    stopHeartbeat();
+    try {
+      controller?.close();
+    } catch {
+      /* ignore */
+    }
+    closed = true;
+  };
+
+  const fail = (message: string) => {
+    if (closed) return;
+    writeProgress("error", message.slice(0, 200));
+    writeTextChunks(message);
+    close();
+  };
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      controller = ctrl;
       for (const p of preamble) {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ type: "kawiil_progress", phase: p.phase, message: p.message })}\n\n`,
-          ),
-        );
+        writeProgress(p.phase, p.message);
       }
-      controller.enqueue(
-        encoder.encode(
-          `data: ${JSON.stringify({
-            type: "kawiil_progress",
-            phase: "response",
-            message: "Generando la respuesta final…",
-          })}\n\n`,
-        ),
-      );
-      const chunkSize = 24;
-      for (let i = 0; i < text.length; i += chunkSize) {
-        const chunk = text.slice(i, i + chunkSize);
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`),
-        );
-      }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      controller.close();
+      // Heartbeat: mantiene viva la conexión mientras procesa el pipeline.
+      heartbeat = setInterval(() => {
+        writeRaw(`: keepalive ${Date.now()}\n\n`);
+      }, SSE_HEARTBEAT_INTERVAL_MS);
+    },
+    cancel() {
+      closed = true;
+      stopHeartbeat();
     },
   });
 
-  return new Response(stream, {
-    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-  });
+  return {
+    response: new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        // Por si algún proxy intenta bufferear: desactivamos el buffering.
+        "X-Accel-Buffering": "no",
+      },
+    }),
+    writeProgress,
+    writeTextChunks,
+    close,
+    fail,
+    isClosed: () => closed,
+  };
 }
