@@ -3847,7 +3847,19 @@ async function handleClaudeChat(
 
     const toolUseBlocks = contentBlocks.filter((b: any) => b.type === "tool_use");
 
-    if (toolUseBlocks.length > 0 && stopReason === "tool_use") {
+    if (toolUseBlocks.length > 0 && isLastChance) {
+      console.warn("Claude devolvió tool_use en la última ronda (sin herramientas en el request); no se pueden ejecutar.");
+      sseWriter.fail(
+        "**La IA intentó usar una herramienta en el último paso** y ya no hay ronda disponible. " +
+          "Reintenta con una instrucción más corta o abre un chat nuevo.",
+      );
+      return;
+    }
+
+    // Ejecutar tool_use siempre que vengan bloques, aunque stop_reason sea "end_turn".
+    // Anthropic a veces devuelve end_turn con tool_use en content; si exigíamos solo
+    // stop_reason==="tool_use", las herramientas no corrían y el usuario veía "sin texto".
+    if (toolUseBlocks.length > 0) {
       anthropicMsgs.push({ role: "assistant", content: clampToolUseInputsInAssistantBlocks(contentBlocks) });
 
       const toolResults: any[] = [];
