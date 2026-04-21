@@ -166,43 +166,76 @@ export function CalendarView() {
     if (isMobile) setViewMode("day");
   }, [isMobile]);
 
-  // Persist & restore scroll position of the calendar area; si no hay scroll guardado,
-  // hacer scroll automáticamente a la hora actual (cuando hoy está visible).
+  // Persist & restore scroll position de la PÁGINA; si no hay scroll guardado,
+  // scrollear automáticamente a la hora actual (cuando hoy está visible).
+  // Detectamos el contenedor scrollable ancestro (AppLayout usa overflow-auto en <main>)
+  // porque no siempre es window el que scrollea.
   useEffect(() => {
-    const el = scrollAreaRef.current;
-    if (!el || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
+    const anchor = scrollAreaRef.current;
+    if (!anchor) return;
+
+    const getScrollParent = (node: HTMLElement | null): HTMLElement | Window => {
+      let current = node?.parentElement ?? null;
+      while (current) {
+        const style = window.getComputedStyle(current);
+        const oy = style.overflowY;
+        if ((oy === "auto" || oy === "scroll") && current.scrollHeight > current.clientHeight) {
+          return current;
+        }
+        current = current.parentElement;
+      }
+      return window;
+    };
+
+    const scroller = getScrollParent(anchor);
+    const getScrollTop = () =>
+      scroller === window ? window.scrollY : (scroller as HTMLElement).scrollTop;
+    const setScrollTop = (top: number) => {
+      if (scroller === window) window.scrollTo({ top });
+      else (scroller as HTMLElement).scrollTop = top;
+    };
+    const getClientHeight = () =>
+      scroller === window ? window.innerHeight : (scroller as HTMLElement).clientHeight;
+
     const key = `kawiil-cal-scroll-${viewMode}`;
     let restored = false;
     try {
       const saved = window.sessionStorage.getItem(key);
       if (saved) {
-        el.scrollTop = parseInt(saved, 10) || 0;
+        setScrollTop(parseInt(saved, 10) || 0);
         restored = true;
       }
     } catch { /* ignore */ }
+
+    let cancelInitialScroll = false;
     if (!restored) {
       // Scroll a la hora actual: dejarla a ~1/3 desde la parte superior del viewport.
       const t = window.setTimeout(() => {
+        if (cancelInitialScroll) return;
         const indicator = nowIndicatorRef.current;
-        if (!indicator || !el) return;
-        const elRect = el.getBoundingClientRect();
-        const indRect = indicator.getBoundingClientRect();
-        const offset = indRect.top - elRect.top;
-        el.scrollTop = el.scrollTop + offset - el.clientHeight / 3;
+        if (!indicator) return;
+        const rect = indicator.getBoundingClientRect();
+        const top = getScrollTop() + rect.top - getClientHeight() / 3;
+        setScrollTop(Math.max(0, top));
       }, 120);
-      // No retornamos el cleanup aquí porque registraremos el scroll listener abajo.
-      // Pero es seguro limpiar si el componente se desmonta antes:
-      const cleanupTimeout = () => window.clearTimeout(t);
-      el.addEventListener("scroll", function onceScroll() {
-        cleanupTimeout();
-        el.removeEventListener("scroll", onceScroll);
-      }, { passive: true, once: true });
+      const onUserScrollOnce = () => {
+        cancelInitialScroll = true;
+        window.clearTimeout(t);
+      };
+      const target: EventTarget = scroller === window ? window : (scroller as HTMLElement);
+      target.addEventListener("scroll", onUserScrollOnce, { passive: true, once: true });
     }
+
     const onScroll = () => {
-      try { window.sessionStorage.setItem(key, String(el.scrollTop)); } catch { /* ignore */ }
+      try { window.sessionStorage.setItem(key, String(getScrollTop())); } catch { /* ignore */ }
     };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    const target: EventTarget = scroller === window ? window : (scroller as HTMLElement);
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelInitialScroll = true;
+      target.removeEventListener("scroll", onScroll);
+    };
   }, [viewMode]);
   const [newEvent, setNewEvent] = useState({
     subject: "", startTime: "09:00", endTime: "10:00", attendees: "",
@@ -344,15 +377,33 @@ export function CalendarView() {
   };
   const goToday = () => {
     setCurrentDate(new Date());
-    // Tras renderizar el cambio de fecha, hacer scroll al indicador de "ahora".
+    // Tras renderizar el cambio de fecha, hacer scroll de la PÁGINA al indicador de "ahora".
+    // Detectamos el contenedor scrollable ancestro porque el scroll vive en <main> (AppLayout).
     window.setTimeout(() => {
-      const el = scrollAreaRef.current;
+      const anchor = scrollAreaRef.current;
       const indicator = nowIndicatorRef.current;
-      if (!el || !indicator) return;
-      const elRect = el.getBoundingClientRect();
-      const indRect = indicator.getBoundingClientRect();
-      const offset = indRect.top - elRect.top;
-      el.scrollTo({ top: el.scrollTop + offset - el.clientHeight / 3, behavior: "smooth" });
+      if (!anchor || !indicator) return;
+
+      let current: HTMLElement | null = anchor.parentElement;
+      let scroller: HTMLElement | Window = window;
+      while (current) {
+        const style = window.getComputedStyle(current);
+        if ((style.overflowY === "auto" || style.overflowY === "scroll") && current.scrollHeight > current.clientHeight) {
+          scroller = current;
+          break;
+        }
+        current = current.parentElement;
+      }
+
+      const rect = indicator.getBoundingClientRect();
+      const clientHeight = scroller === window ? window.innerHeight : (scroller as HTMLElement).clientHeight;
+      const scrollTop = scroller === window ? window.scrollY : (scroller as HTMLElement).scrollTop;
+      const top = Math.max(0, scrollTop + rect.top - clientHeight / 3);
+      if (scroller === window) {
+        window.scrollTo({ top, behavior: "smooth" });
+      } else {
+        (scroller as HTMLElement).scrollTo({ top, behavior: "smooth" });
+      }
     }, 80);
   };
 
@@ -548,9 +599,9 @@ export function CalendarView() {
     ) : null;
 
   return (
-    <div className="flex gap-4 animate-fade-in h-full">
+    <div className="flex gap-4 animate-fade-in">
       {/* Main calendar area */}
-      <div ref={scrollAreaRef} className="flex-1 min-w-0 space-y-4 overflow-y-auto pb-4">
+      <div ref={scrollAreaRef} className="flex-1 min-w-0 space-y-4">
         {isMobile && (
           <div className="space-y-3">
             {todayAgendaCard}
@@ -594,7 +645,7 @@ export function CalendarView() {
             <CardContent className="p-0 overflow-x-auto">
               <div className={getMinWidth()}>
                 {/* Day headers */}
-                <div className="grid border-b border-border sticky top-0 z-10 bg-card"
+                <div className="grid border-b border-border sticky top-16 z-10 bg-card"
                   style={{ gridTemplateColumns: `56px repeat(${colCount}, 1fr)` }}>
                   <div className="p-2 text-[10px] text-muted-foreground text-center border-r border-border flex items-center justify-center">
                     CDMX
@@ -851,7 +902,7 @@ export function CalendarView() {
 
       {/* Right sidebar — Mini cal + Filters + Agenda / Kawiil tasks */}
       {!isMobile && (
-        <div className="w-72 shrink-0 space-y-4 overflow-y-auto pb-4">
+        <div className="w-72 shrink-0 space-y-4 self-start sticky top-20 max-h-[calc(100vh-5rem)] overflow-y-auto">
           <Card>
             <CardContent className="p-3 space-y-2">
               <div className="flex items-center justify-between">

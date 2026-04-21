@@ -226,13 +226,7 @@ const Microsoft365Calendario = () => {
             tasksDue={aiTasksDue}
             cacheKey={`${monYmd}_${sunYmd}`}
           />
-          {/* Altura propia del módulo: ocupa casi todo el viewport pero con un mínimo
-              que evita que se quede "aplastado" cuando el header + resumen AI están
-              arriba. El usuario hace scroll de página para bajar hasta el calendario,
-              y dentro del calendario existe su propio scroll para las horas 06:00–23:00. */}
-          <div className="h-[calc(100vh-10rem)] min-h-[680px]">
-            <CalendarView />
-          </div>
+          <CalendarView />
         </div>
       </ErrorBoundary>
     </AppLayout>
