@@ -96,7 +96,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
+  emailsToGraphRecipients,
+  fallbackReplyRecipientsFromDetail,
   filesToComposerAttachments,
+  graphRecipientsToInputString,
   parseRecipients,
   validateRecipientGroups,
   type ComposerAttachment,
@@ -421,6 +424,11 @@ export function EmailView() {
   const [aiInboxOpen, setAiInboxOpen] = useState(false);
   const [emailAction, setEmailAction] = useState<EmailAction>(null);
   const [forwardTo, setForwardTo] = useState("");
+  const [forwardCc, setForwardCc] = useState("");
+  const [forwardBcc, setForwardBcc] = useState("");
+  const [replyTo, setReplyTo] = useState("");
+  const [replyCc, setReplyCc] = useState("");
+  const [replyBcc, setReplyBcc] = useState("");
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [sendToSlackOpen, setSendToSlackOpen] = useState(false);
   const [emailAiSummary, setEmailAiSummary] = useState<{
@@ -639,12 +647,26 @@ export function EmailView() {
     setDraftId(null);
     setDraftHtml("");
     setReplyFiles([]);
+    setReplyTo("");
+    setReplyCc("");
+    setReplyBcc("");
+    setForwardTo("");
+    setForwardCc("");
+    setForwardBcc("");
     if (action === "forward") {
       try {
         const draft = await createForwardDraft.mutateAsync({ messageId: selectedEmailId });
         if (draft?.id) {
           setDraftId(draft.id);
           setDraftHtml(draft.body?.content || "");
+          const fd = draft as {
+            toRecipients?: unknown;
+            ccRecipients?: unknown;
+            bccRecipients?: unknown;
+          };
+          setForwardTo(graphRecipientsToInputString(fd.toRecipients));
+          setForwardCc(graphRecipientsToInputString(fd.ccRecipients));
+          setForwardBcc(graphRecipientsToInputString(fd.bccRecipients));
         }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "No se pudo preparar el reenvío con firma");
@@ -661,10 +683,31 @@ export function EmailView() {
         toast.warning(String((draft as { message?: unknown }).message ?? "No soportado"));
         return;
       }
-      const d = draft as { id?: string; body?: { content?: string } };
+      const d = draft as {
+        id?: string;
+        body?: { content?: string };
+        toRecipients?: unknown;
+        ccRecipients?: unknown;
+        bccRecipients?: unknown;
+      };
       if (d?.id) {
         setDraftId(d.id);
         setDraftHtml(d.body?.content || "");
+        let to = graphRecipientsToInputString(d.toRecipients);
+        let cc = graphRecipientsToInputString(d.ccRecipients);
+        let bcc = graphRecipientsToInputString(d.bccRecipients);
+        if ((!to || (!cc && action === "reply-all")) && emailDetail) {
+          const fb = fallbackReplyRecipientsFromDetail(
+            emailDetail as Record<string, unknown>,
+            action === "reply-all",
+          );
+          if (!to) to = fb.to;
+          if (!cc) cc = fb.cc;
+          if (!bcc) bcc = fb.bcc;
+        }
+        setReplyTo(to);
+        setReplyCc(cc);
+        setReplyBcc(bcc);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo preparar la respuesta");
@@ -681,9 +724,23 @@ export function EmailView() {
       toast.error("Elige una fecha y hora al menos un minuto en el futuro.");
       return;
     }
+    let scheduleTo: string[] = [];
+    let scheduleCc: string[] = [];
+    let scheduleBcc: string[] = [];
     if (emailAction === "forward") {
-      const forwardRecipients = parseRecipients(forwardTo);
-      const err = validateRecipientGroups({ to: forwardRecipients });
+      scheduleTo = parseRecipients(forwardTo);
+      scheduleCc = parseRecipients(forwardCc);
+      scheduleBcc = parseRecipients(forwardBcc);
+      const err = validateRecipientGroups({ to: scheduleTo, cc: scheduleCc, bcc: scheduleBcc });
+      if (err) {
+        toast.error(err);
+        return;
+      }
+    } else if (emailAction === "reply" || emailAction === "reply-all") {
+      scheduleTo = parseRecipients(replyTo);
+      scheduleCc = parseRecipients(replyCc);
+      scheduleBcc = parseRecipients(replyBcc);
+      const err = validateRecipientGroups({ to: scheduleTo, cc: scheduleCc, bcc: scheduleBcc });
       if (err) {
         toast.error(err);
         return;
@@ -705,10 +762,9 @@ export function EmailView() {
     }
     setScheduleSubmitting(true);
     try {
-      const toRecipients =
-        emailAction === "forward"
-          ? parseRecipients(forwardTo).map((email) => ({ emailAddress: { address: email } }))
-          : undefined;
+      const graphTo = emailsToGraphRecipients(scheduleTo);
+      const graphCc = emailsToGraphRecipients(scheduleCc);
+      const graphBcc = emailsToGraphRecipients(scheduleBcc);
 
       const { error } = await supabase.from("scheduled_mail_jobs").insert({
         user_id: user.id,
@@ -719,7 +775,9 @@ export function EmailView() {
           body_html: draftHtml,
           is_delivery_receipt_requested: requestDeliveryReceipt,
           is_read_receipt_requested: requestReadReceipt,
-          ...(toRecipients?.length ? { to_recipients: toRecipients } : {}),
+          to_recipients: graphTo,
+          cc_recipients: graphCc,
+          bcc_recipients: graphBcc,
           ...(attachments.length ? { attachments } : {}),
         },
       });
@@ -759,8 +817,14 @@ export function EmailView() {
   const handleSendReply = async () => {
     if (!selectedEmailId) return;
     if (emailAction === "forward") {
-      const forwardRecipients = parseRecipients(forwardTo);
-      const error = validateRecipientGroups({ to: forwardRecipients });
+      const forwardToList = parseRecipients(forwardTo);
+      const forwardCcList = parseRecipients(forwardCc);
+      const forwardBccList = parseRecipients(forwardBcc);
+      const error = validateRecipientGroups({
+        to: forwardToList,
+        cc: forwardCcList,
+        bcc: forwardBccList,
+      });
       if (error) {
         toast.error(error);
         return;
@@ -780,18 +844,26 @@ export function EmailView() {
             draftId,
             body: { contentType: "HTML", content: draftHtml },
             attachments,
-            toRecipients: forwardRecipients.map((email) => ({ emailAddress: { address: email } })),
+            toRecipients: emailsToGraphRecipients(forwardToList),
+            ccRecipients: emailsToGraphRecipients(forwardCcList),
+            bccRecipients: emailsToGraphRecipients(forwardBccList),
             requestDeliveryReceipt,
             requestReadReceipt,
           },
           { onSuccess: resetAction }
         );
       } else {
+        if (forwardCcList.length > 0 || forwardBccList.length > 0) {
+          toast.error(
+            "CC y CCO solo aplican con el borrador de Outlook. Cierra y vuelve a abrir el reenvío o comprueba la conexión con Microsoft.",
+          );
+          return;
+        }
         forwardEmail.mutate(
           {
             messageId: selectedEmailId,
             comment: stripTags(draftHtml),
-            toRecipients: forwardRecipients,
+            toRecipients: forwardToList,
             attachments,
           },
           { onSuccess: resetAction }
@@ -800,6 +872,18 @@ export function EmailView() {
       return;
     }
     if (draftId) {
+      const replyToList = parseRecipients(replyTo);
+      const replyCcList = parseRecipients(replyCc);
+      const replyBccList = parseRecipients(replyBcc);
+      const recErr = validateRecipientGroups({
+        to: replyToList,
+        cc: replyCcList,
+        bcc: replyBccList,
+      });
+      if (recErr) {
+        toast.error(recErr);
+        return;
+      }
       let attachments: ComposerAttachment[] = [];
       if (replyFiles.length > 0) {
         try {
@@ -814,6 +898,9 @@ export function EmailView() {
           draftId,
           body: { contentType: "HTML", content: draftHtml },
           attachments,
+          toRecipients: emailsToGraphRecipients(replyToList),
+          ccRecipients: emailsToGraphRecipients(replyCcList),
+          bccRecipients: emailsToGraphRecipients(replyBccList),
           requestDeliveryReceipt,
           requestReadReceipt,
         },
@@ -832,6 +919,11 @@ export function EmailView() {
     setDraftHtml("");
     setDraftId(null);
     setForwardTo("");
+    setForwardCc("");
+    setForwardBcc("");
+    setReplyTo("");
+    setReplyCc("");
+    setReplyBcc("");
     setReplyFiles([]);
     setRequestDeliveryReceipt(false);
     setRequestReadReceipt(false);
@@ -2416,6 +2508,16 @@ export function EmailView() {
           setDraftHtml={setDraftHtml}
           forwardTo={forwardTo}
           setForwardTo={setForwardTo}
+          forwardCc={forwardCc}
+          setForwardCc={setForwardCc}
+          forwardBcc={forwardBcc}
+          setForwardBcc={setForwardBcc}
+          replyTo={replyTo}
+          setReplyTo={setReplyTo}
+          replyCc={replyCc}
+          setReplyCc={setReplyCc}
+          replyBcc={replyBcc}
+          setReplyBcc={setReplyBcc}
           replyFiles={replyFiles}
           onReplyFilesChange={setReplyFiles}
           createReplyDraftPending={createReplyDraft.isPending}

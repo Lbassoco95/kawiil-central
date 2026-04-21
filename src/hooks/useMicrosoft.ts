@@ -1033,21 +1033,27 @@ export function useSendDraft() {
       body,
       attachments,
       toRecipients,
+      ccRecipients,
+      bccRecipients,
       requestDeliveryReceipt,
       requestReadReceipt,
     }: {
       draftId: string;
       body?: { contentType: string; content: string };
       attachments?: ComposerAttachment[];
-      /** Para reenvíos: destinatarios del borrador antes de enviar. */
+      /** Destinatarios del borrador antes de enviar (respuesta, reenvío, etc.). */
       toRecipients?: { emailAddress: { address: string } }[];
+      ccRecipients?: { emailAddress: { address: string } }[];
+      bccRecipients?: { emailAddress: { address: string } }[];
       /** Solicitudes tipo Outlook (Graph: isDeliveryReceiptRequested / isReadReceiptRequested). */
       requestDeliveryReceipt?: boolean;
       requestReadReceipt?: boolean;
     }) => {
       const patch: Record<string, unknown> = {};
       if (body) patch.body = body;
-      if (toRecipients?.length) patch.toRecipients = toRecipients;
+      if (toRecipients !== undefined) patch.toRecipients = toRecipients;
+      if (ccRecipients !== undefined) patch.ccRecipients = ccRecipients;
+      if (bccRecipients !== undefined) patch.bccRecipients = bccRecipients;
       if (typeof requestDeliveryReceipt === "boolean") {
         patch.isDeliveryReceiptRequested = requestDeliveryReceipt;
       }

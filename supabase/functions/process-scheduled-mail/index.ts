@@ -72,9 +72,14 @@ async function processSendDraftJob(
   if (bodyHtml) {
     patch.body = { contentType: "HTML", content: bodyHtml };
   }
-  const toRecipients = payload.to_recipients;
-  if (Array.isArray(toRecipients) && toRecipients.length > 0) {
-    patch.toRecipients = toRecipients;
+  if ("to_recipients" in payload && Array.isArray(payload.to_recipients)) {
+    patch.toRecipients = payload.to_recipients;
+  }
+  if ("cc_recipients" in payload && Array.isArray(payload.cc_recipients)) {
+    patch.ccRecipients = payload.cc_recipients;
+  }
+  if ("bcc_recipients" in payload && Array.isArray(payload.bcc_recipients)) {
+    patch.bccRecipients = payload.bcc_recipients;
   }
 
   if (payload.is_delivery_receipt_requested === true) {

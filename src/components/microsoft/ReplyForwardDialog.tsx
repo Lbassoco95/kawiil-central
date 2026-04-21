@@ -16,7 +16,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2, Send, Sparkles, CalendarClock, ChevronDown, Pencil, X, Wand2 } from "lucide-react";
+import {
+  Loader2,
+  Send,
+  Sparkles,
+  CalendarClock,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+  X,
+  Wand2,
+} from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { Switch } from "@/components/ui/switch";
 import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
@@ -49,6 +59,16 @@ export interface ReplyForwardDialogProps {
   setDraftHtml: (v: string | ((prev: string) => string)) => void;
   forwardTo: string;
   setForwardTo: (v: string) => void;
+  forwardCc: string;
+  setForwardCc: (v: string) => void;
+  forwardBcc: string;
+  setForwardBcc: (v: string) => void;
+  replyTo: string;
+  setReplyTo: (v: string) => void;
+  replyCc: string;
+  setReplyCc: (v: string) => void;
+  replyBcc: string;
+  setReplyBcc: (v: string) => void;
   replyFiles: File[];
   onReplyFilesChange: (files: File[]) => void;
   createReplyDraftPending: boolean;
@@ -80,6 +100,16 @@ export function ReplyForwardDialog({
   setDraftHtml,
   forwardTo,
   setForwardTo,
+  forwardCc,
+  setForwardCc,
+  forwardBcc,
+  setForwardBcc,
+  replyTo,
+  setReplyTo,
+  replyCc,
+  setReplyCc,
+  replyBcc,
+  setReplyBcc,
   replyFiles,
   onReplyFilesChange,
   createReplyDraftPending,
@@ -100,6 +130,10 @@ export function ReplyForwardDialog({
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduledOpen, setScheduledOpen] = useState(false);
   const [keepZips, setKeepZips] = useState(true);
+  const [showReplyCcBlock, setShowReplyCcBlock] = useState(false);
+  const [showReplyBcc, setShowReplyBcc] = useState(false);
+  const [showForwardCcBlock, setShowForwardCcBlock] = useState(false);
+  const [showForwardBcc, setShowForwardBcc] = useState(false);
   const editorRef = useRef<RichTextEditorHandle | null>(null);
   const { data: pendingJobs = [], isLoading: pendingLoading } = usePendingScheduledMailJobs(
     open && !!onScheduleMail,
@@ -116,9 +150,27 @@ export function ReplyForwardDialog({
   const minScheduleLocal = useMemo(() => toDatetimeLocalValue(new Date(Date.now() + 60_000)), [open]);
 
   const toLabel = useMemo(() => {
-    if (action === "forward" && forwardTo.trim()) return forwardTo.trim();
-    return "(destinatarios en borrador Outlook)";
-  }, [action, forwardTo]);
+    if (action === "forward") {
+      const parts = [forwardTo, forwardCc, forwardBcc].map((s) => s.trim()).filter(Boolean);
+      return parts.length ? parts.join("; ") : "(destinatarios)";
+    }
+    const parts = [replyTo, replyCc, replyBcc].map((s) => s.trim()).filter(Boolean);
+    return parts.length ? parts.join("; ") : "(destinatarios)";
+  }, [action, forwardTo, forwardCc, forwardBcc, replyTo, replyCc, replyBcc]);
+
+  useEffect(() => {
+    if (!open) {
+      setShowReplyCcBlock(false);
+      setShowReplyBcc(false);
+      setShowForwardCcBlock(false);
+      setShowForwardBcc(false);
+      return;
+    }
+    if (replyCc.trim() || replyBcc.trim()) setShowReplyCcBlock(true);
+    if (replyBcc.trim()) setShowReplyBcc(true);
+    if (forwardCc.trim() || forwardBcc.trim()) setShowForwardCcBlock(true);
+    if (forwardBcc.trim()) setShowForwardBcc(true);
+  }, [open, replyCc, replyBcc, forwardCc, forwardBcc]);
 
   const getBodyHtml = useCallback(() => draftHtml, [draftHtml]);
 
@@ -200,7 +252,9 @@ export function ReplyForwardDialog({
           onApply={applyAccountingTemplate}
           defaults={defaultTemplateContext as Record<string, string> | undefined}
           onClientSelected={(client) => {
-            if (action === "forward" && !forwardTo.trim() && client.email) setForwardTo(client.email);
+            if (!client.email) return;
+            if (action === "forward" && !forwardTo.trim()) setForwardTo(client.email);
+            if ((action === "reply" || action === "reply-all") && !replyTo.trim()) setReplyTo(client.email);
           }}
         />
       ) : null}
@@ -279,15 +333,139 @@ export function ReplyForwardDialog({
             }}
           >
             <div className="space-y-3 pb-8 sm:pb-10">
+              {(action === "reply" || action === "reply-all") && !preparing && (
+                <div className="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5 space-y-2">
+                  <p className="text-[11px] font-medium text-muted-foreground">Destinatarios</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Para</Label>
+                    <Input
+                      placeholder="correo@ejemplo.com; puedes separar con coma o punto y coma"
+                      value={replyTo}
+                      onChange={(e) => setReplyTo(e.target.value)}
+                      className="text-sm h-9"
+                      disabled={!draftId}
+                    />
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground"
+                        onClick={() => {
+                          setShowReplyCcBlock((v) => {
+                            if (v) setShowReplyBcc(false);
+                            return !v;
+                          });
+                        }}
+                      >
+                        CC / CCO{" "}
+                        {showReplyCcBlock ? <ChevronUp className="h-3 w-3 ml-0.5" /> : <ChevronDown className="h-3 w-3 ml-0.5" />}
+                      </Button>
+                      {!draftId ? (
+                        <span className="text-[10px] text-muted-foreground">Disponible cuando el borrador esté listo</span>
+                      ) : null}
+                    </div>
+                    {showReplyCcBlock && (
+                      <div className="space-y-2 pt-1">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Copia (CC)</Label>
+                          <Input
+                            placeholder="copia@ejemplo.com"
+                            value={replyCc}
+                            onChange={(e) => setReplyCc(e.target.value)}
+                            className="text-sm h-9"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="reply-show-bcc"
+                            checked={showReplyBcc}
+                            onCheckedChange={setShowReplyBcc}
+                          />
+                          <Label htmlFor="reply-show-bcc" className="text-xs text-muted-foreground cursor-pointer">
+                            Copia oculta (CCO)
+                          </Label>
+                        </div>
+                        {showReplyBcc && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">CCO</Label>
+                            <Input
+                              placeholder="oculto@ejemplo.com"
+                              value={replyBcc}
+                              onChange={(e) => setReplyBcc(e.target.value)}
+                              className="text-sm h-9"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {action === "forward" && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Para</Label>
-                  <Input
-                    placeholder="Separar con coma: correo@ejemplo.com"
-                    value={forwardTo}
-                    onChange={(e) => setForwardTo(e.target.value)}
-                    className="text-sm h-9"
-                  />
+                <div className="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5 space-y-2">
+                  <p className="text-[11px] font-medium text-muted-foreground">Destinatarios</p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Para</Label>
+                    <Input
+                      placeholder="Separar con coma o punto y coma"
+                      value={forwardTo}
+                      onChange={(e) => setForwardTo(e.target.value)}
+                      className="text-sm h-9"
+                    />
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground"
+                        onClick={() => {
+                          setShowForwardCcBlock((v) => {
+                            if (v) setShowForwardBcc(false);
+                            return !v;
+                          });
+                        }}
+                      >
+                        CC / CCO{" "}
+                        {showForwardCcBlock ? <ChevronUp className="h-3 w-3 ml-0.5" /> : <ChevronDown className="h-3 w-3 ml-0.5" />}
+                      </Button>
+                    </div>
+                    {showForwardCcBlock && (
+                      <div className="space-y-2 pt-1">
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">Copia (CC)</Label>
+                          <Input
+                            placeholder="copia@ejemplo.com"
+                            value={forwardCc}
+                            onChange={(e) => setForwardCc(e.target.value)}
+                            className="text-sm h-9"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id="fwd-show-bcc"
+                            checked={showForwardBcc}
+                            onCheckedChange={setShowForwardBcc}
+                          />
+                          <Label htmlFor="fwd-show-bcc" className="text-xs text-muted-foreground cursor-pointer">
+                            Copia oculta (CCO)
+                          </Label>
+                        </div>
+                        {showForwardBcc && (
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">CCO</Label>
+                            <Input
+                              placeholder="oculto@ejemplo.com"
+                              value={forwardBcc}
+                              onChange={(e) => setForwardBcc(e.target.value)}
+                              className="text-sm h-9"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -502,8 +680,8 @@ export function ReplyForwardDialog({
                   <div className="space-y-2 shrink-0">
                     <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                       <span>
-                        Adjuntos (documentos, imágenes, zip…). El asunto y destinatarios los define el borrador de
-                        Outlook.
+                        Adjuntos (documentos, imágenes, zip…). El asunto lo define el borrador de Outlook; Para, CC y
+                        CCO puedes editarlos arriba.
                       </span>
                       <label className="inline-flex items-center gap-2 shrink-0">
                         <Switch checked={keepZips} onCheckedChange={setKeepZips} />

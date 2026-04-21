@@ -97,11 +97,62 @@ function isAllowedAttachment(file: File): boolean {
   return false;
 }
 
+/** Extrae un correo de un token tipo `correo@x.com` o `Nombre <correo@x.com>`. */
+function tokenToEmail(token: string): string | null {
+  const t = token.trim();
+  if (!t) return null;
+  const angle = t.match(/<([^<>]+)>\s*$/);
+  const candidate = (angle ? angle[1] : t).trim().toLowerCase();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) return candidate;
+  return null;
+}
+
 export function parseRecipients(value: string): string[] {
-  return value
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
+  const raw = value.split(/[,;]/).map((p) => p.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const part of raw) {
+    const e = tokenToEmail(part);
+    if (e) out.push(e);
+  }
+  return out;
+}
+
+/** Lista Graph `toRecipients` / `ccRecipients` → texto para inputs (coma). */
+export function graphRecipientsToInputString(recipients: unknown): string {
+  if (!Array.isArray(recipients)) return "";
+  const parts: string[] = [];
+  for (const r of recipients) {
+    const ea = (r as { emailAddress?: { address?: string; name?: string } })?.emailAddress;
+    const addr = ea?.address?.trim();
+    if (!addr) continue;
+    const name = ea?.name?.trim();
+    parts.push(name ? `${name} <${addr}>` : addr);
+  }
+  return parts.join(", ");
+}
+
+export function emailsToGraphRecipients(emails: string[]): { emailAddress: { address: string } }[] {
+  return emails.map((address) => ({ emailAddress: { address } }));
+}
+
+/** Si el borrador no trae destinatarios, derivarlos del mensaje original. */
+export function fallbackReplyRecipientsFromDetail(
+  detail: Record<string, unknown> | null | undefined,
+  replyAll: boolean,
+): { to: string; cc: string; bcc: string } {
+  if (!detail) return { to: "", cc: "", bcc: "" };
+  const from = detail.from as { emailAddress?: { address?: string; name?: string } } | undefined;
+  const fromLine = graphRecipientsToInputString(
+    from?.emailAddress?.address ? [{ emailAddress: from.emailAddress }] : [],
+  );
+  if (!replyAll) {
+    return { to: fromLine, cc: "", bcc: "" };
+  }
+  const toRec = graphRecipientsToInputString(detail.toRecipients);
+  const ccRec = graphRecipientsToInputString(detail.ccRecipients);
+  const bccRec = graphRecipientsToInputString(detail.bccRecipients);
+  const toMerged = [fromLine, toRec].filter(Boolean).join(", ");
+  return { to: toMerged, cc: ccRec, bcc: bccRec };
 }
 
 export function validateRecipientGroups(groups: { to: string[]; cc?: string[]; bcc?: string[] }) {
