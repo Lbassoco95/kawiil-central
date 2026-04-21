@@ -729,7 +729,9 @@ export function useChat() {
         const token = session.data.session?.access_token;
 
         const chatBody = JSON.stringify({
-          messages: allMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: allMessages
+            .filter((m) => !m.agent_task_ref)
+            .map((m) => ({ role: m.role, content: m.content })),
           conversationId: convId,
           ai_project_id: activeAiProjectId || undefined,
           attachmentRefs: refsForAiChat.length ? refsForAiChat : undefined,
