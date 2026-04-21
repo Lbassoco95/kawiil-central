@@ -396,7 +396,7 @@ function ClientCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="z-[130] w-[--radix-popover-trigger-width] p-0"
         align="start"
       >
         <Command>
@@ -495,7 +495,7 @@ function AgentCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="z-[130] w-[--radix-popover-trigger-width] p-0"
         align="start"
       >
         <Command>
