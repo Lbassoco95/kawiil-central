@@ -1187,7 +1187,7 @@ const AsistenteIA = () => {
           if (!o) setArtifactDialogArtifact(null);
         }}
       >
-        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogContent className="w-[min(96vw,1400px)] max-w-[min(96vw,1400px)] max-h-[92vh] h-[min(92vh,900px)] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-lg">
           <DialogHeader className="sr-only">
             <DialogTitle>Artefacto</DialogTitle>
           </DialogHeader>
@@ -1197,7 +1197,7 @@ const AsistenteIA = () => {
               <span className="text-sm">Cargando…</span>
             </div>
           ) : artifactDialogArtifact ? (
-            <div className="min-h-[50vh] max-h-[85vh] flex flex-col">
+            <div className="flex-1 min-h-0 flex flex-col h-full max-h-[inherit]">
               <ArtifactViewer
                 artifact={artifactDialogArtifact}
                 onBack={() => {

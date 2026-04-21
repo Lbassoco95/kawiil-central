@@ -94,6 +94,11 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
   const isKawiilDoc = outputs.length > 0;
   const isLegacyMarkdown = !isKawiilDoc;
 
+  /** Si el formato primario es Word, abrimos la pestaña de texto primero (no hay preview nativo de DOCX). */
+  const resolvedPrimaryFormat = (artifact.primary_format || primaryOutput?.format || "pdf") as KawiilOutputFormat;
+  const openTextTabFirst = resolvedPrimaryFormat === "docx" && !!pdfOutput;
+  const tabsDefaultTab = openTextTabFirst ? "text" : "pdf";
+
   const availableFormats = useMemo(() => new Set(outputs.map((o) => o.format)), [outputs]);
   const missingFormats = useMemo(
     () => ALL_FORMATS.filter((f) => !availableFormats.has(f)),
@@ -179,7 +184,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       <div className="p-3 border-b border-border/30 space-y-2" style={isKawiilDoc ? { background: KAWIIL_AI_SOFT_BG } : undefined}>
         <button className="text-xs text-primary hover:underline flex items-center gap-1" onClick={onBack}>
           <ArrowLeft className="h-3 w-3" /> Volver
@@ -317,16 +322,29 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {pdfOutput ? (
-          <Tabs defaultValue="pdf" className="h-full flex flex-col">
-            <div className="px-3 pt-2 border-b border-border/30">
+          <Tabs
+            key={`${artifact.id}-${resolvedPrimaryFormat}`}
+            defaultValue={tabsDefaultTab}
+            className="h-full min-h-0 flex flex-col flex-1"
+          >
+            <div className="px-3 pt-2 border-b border-border/30 shrink-0">
               <TabsList className="h-7">
-                <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> PDF</TabsTrigger>
-                <TabsTrigger value="text" className="text-[11px] h-5 px-2 gap-1"><FileTextIcon className="h-3 w-3" /> Texto</TabsTrigger>
+                {openTextTabFirst ? (
+                  <>
+                    <TabsTrigger value="text" className="text-[11px] h-5 px-2 gap-1"><FileTextIcon className="h-3 w-3" /> Texto</TabsTrigger>
+                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF</TabsTrigger>
+                  </>
+                ) : (
+                  <>
+                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF</TabsTrigger>
+                    <TabsTrigger value="text" className="text-[11px] h-5 px-2 gap-1"><FileTextIcon className="h-3 w-3" /> Texto</TabsTrigger>
+                  </>
+                )}
               </TabsList>
             </div>
-            <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0">
+            <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 flex flex-col">
               <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
             </TabsContent>
             <TabsContent value="text" className="flex-1 m-0 overflow-y-auto p-4 min-h-0">
