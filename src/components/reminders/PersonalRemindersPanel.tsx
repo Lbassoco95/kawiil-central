@@ -60,7 +60,7 @@ export function PersonalRemindersPanel({
     enabled: !!user,
   });
 
-  const { reminders, addReminder, toggleReminder, deleteReminder } = useReminders();
+  const { reminders, isLoading, isError, fetchError, addReminder, toggleReminder, deleteReminder } = useReminders();
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [reminderToDelete, setReminderToDelete] = useState<string | null>(null);
 
@@ -99,6 +99,14 @@ export function PersonalRemindersPanel({
 
   return (
     <div className="animate-fade-in">
+      {isError ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTitle>No se pudieron cargar los recordatorios</AlertTitle>
+          <AlertDescription className="text-sm">
+            {(fetchError as Error)?.message ?? "Revisa tu conexión o vuelve a iniciar sesión."}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Alert className="mb-4 border-border/80 bg-muted/30">
         <Bell className="h-4 w-4" />
         <AlertTitle>Tus recordatorios se guardan en tu cuenta</AlertTitle>
@@ -159,7 +167,9 @@ export function PersonalRemindersPanel({
         isPending={deleteReminder.isPending}
       />
 
-      {pendingReminders.length === 0 && completedReminders.length === 0 ? (
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground py-4">Cargando recordatorios…</p>
+      ) : pendingReminders.length === 0 && completedReminders.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4">Sin recordatorios</p>
       ) : (
         <div className="space-y-0.5">

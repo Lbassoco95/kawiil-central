@@ -678,7 +678,7 @@ function NotificationDeliveryPreferences() {
 
 export default function Notificaciones() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: alerts, isLoading: loadingAlerts } = useDueDateAlerts();
   const { data: allNotifications = [], isLoading: loadingMentions } = useMentionNotifications();
   const markAsRead = useMarkAsRead();
@@ -699,6 +699,22 @@ export default function Notificaciones() {
       setTab(t as Tab);
     }
   }, [searchParams]);
+
+  const setTabAndUrl = useCallback(
+    (next: Tab) => {
+      setTab(next);
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next === "menciones") p.delete("tab");
+          else p.set("tab", next);
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const mentions = allNotifications.filter((n) => MENTION_TYPES.includes(n.type));
   const activityItems = allNotifications.filter((n) => ACTIVITY_TYPES.includes(n.type));
@@ -774,10 +790,10 @@ export default function Notificaciones() {
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { key: "menciones", label: "Menciones", icon: <AtSign className="h-3 w-3" />, badge: unreadMentions.length },
+    { key: "recordatorios", label: "Recordatorios", icon: <Bell className="h-3 w-3" />, badge: pendingRemindersCount },
     { key: "actividad", label: "Actividad", icon: <Activity className="h-3 w-3" />, badge: unreadActivity.length },
     { key: "sistema", label: "Sistema", icon: <BrainCircuit className="h-3 w-3" />, badge: unreadSistema.length },
     { key: "vencimientos", label: "Vencimientos", icon: <CalendarClock className="h-3 w-3" /> },
-    { key: "recordatorios", label: "Recordatorios", icon: <Bell className="h-3 w-3" />, badge: pendingRemindersCount },
   ];
 
   return (
@@ -852,7 +868,7 @@ export default function Notificaciones() {
             topMentionTitle={unreadMentions[0]?.title ?? null}
             topMentionBody={unreadMentions[0]?.body ?? null}
             topMentionAuthor={unreadMentions[0]?.source_profile?.full_name ?? null}
-            onGoToTab={(t) => setTab(t)}
+            onGoToTab={(t) => setTabAndUrl(t as Tab)}
             onMarkAllRead={() => markAllAsRead.mutate()}
             markAllPending={markAllAsRead.isPending}
           />
@@ -871,7 +887,8 @@ export default function Notificaciones() {
               {tabs.map((t) => (
                 <button
                   key={t.key}
-                  onClick={() => setTab(t.key)}
+                  type="button"
+                  onClick={() => setTabAndUrl(t.key)}
                   className={`tab-pill inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap ${
                     tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
                   }`}

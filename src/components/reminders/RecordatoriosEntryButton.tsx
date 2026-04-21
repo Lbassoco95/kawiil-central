@@ -35,7 +35,13 @@ export function RecordatoriosEntryButton() {
             <Bell className="mr-2 h-4 w-4 shrink-0" />
             Abrir recordatorios
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setCreateOpen(true)} className="cursor-pointer">
+          <DropdownMenuItem
+            onSelect={() => {
+              // Evitar conflicto de foco entre DropdownMenu y Dialog (Radix): abrir en el siguiente tick.
+              queueMicrotask(() => setCreateOpen(true));
+            }}
+            className="cursor-pointer"
+          >
             <Plus className="mr-2 h-4 w-4 shrink-0 text-primary" />
             Crear recordatorio…
           </DropdownMenuItem>

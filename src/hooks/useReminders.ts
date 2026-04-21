@@ -50,10 +50,14 @@ export function useReminders() {
 
   const addReminder = useMutation({
     mutationFn: async (input: ReminderCreateInput) => {
-      const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
+      const { data: orgId, error: orgErr } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
+      if (orgErr) throw orgErr;
+      if (orgId == null) {
+        throw new Error("No hay organización asociada a tu cuenta; no se puede crear el recordatorio.");
+      }
       const { error } = await supabase.from("reminders" as any).insert({
         user_id: user!.id,
-        organization_id: orgRes.data,
+        organization_id: orgId,
         title: input.title,
         description: input.description ?? null,
         due_date: input.due_date ?? null,
@@ -62,8 +66,13 @@ export function useReminders() {
       } as any);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: key }); toast.success("Recordatorio creado"); },
-    onError: () => toast.error("Error al crear recordatorio"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: key });
+      toast.success("Recordatorio creado");
+    },
+    onError: (e: Error) => {
+      toast.error(e?.message || "Error al crear recordatorio");
+    },
   });
 
   const toggleReminder = useMutation({
@@ -88,5 +97,13 @@ export function useReminders() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: key }); toast.success("Recordatorio eliminado"); },
   });
 
-  return { reminders: query.data ?? [], isLoading: query.isLoading, addReminder, toggleReminder, deleteReminder };
+  return {
+    reminders: query.data ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+    fetchError: query.error,
+    addReminder,
+    toggleReminder,
+    deleteReminder,
+  };
 }
