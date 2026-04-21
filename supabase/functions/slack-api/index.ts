@@ -633,11 +633,13 @@ Deno.serve(async (req) => {
       if (!channel || !ts) {
         return jsonOk({ ok: false, error: "channel and ts required" });
       }
+      const rawLimit = typeof json.limit === "number" ? json.limit : 50;
+      const limit = Math.min(1000, Math.max(1, rawLimit));
       const data = await slackCall(conn.access_token, "conversations.replies", {
         channel,
         ts,
         cursor: json.cursor as string | undefined,
-        limit: (json.limit as number) || 50,
+        limit,
         inclusive: "true",
       });
       return jsonOk(data);

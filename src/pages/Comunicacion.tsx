@@ -1083,15 +1083,26 @@ export default function Comunicacion() {
 
   const postMutation = useMutation({
     mutationFn: async (payload: { text: string; thread_ts?: string }) => {
-      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+      const data = await invokeSlackApi<{
+        ok: boolean;
+        error?: string;
+        ts?: string;
+      }>({
         action: "chat.postMessage",
         channel: selectedChannel,
         text: payload.text,
         thread_ts: payload.thread_ts,
       });
       if (!data.ok) throw new Error(data.error || "No se pudo enviar");
+      return data;
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (_posted, vars) => {
+      if (searchParams.has("ts") || searchParams.has("reply")) {
+        const q = new URLSearchParams(searchParams);
+        q.delete("ts");
+        q.delete("reply");
+        setSearchParams(q, { replace: true });
+      }
       if (!vars.thread_ts) {
         setDraft("");
         if (user?.id && selectedChannel) clearSlackDraft(user.id, selectedChannel);

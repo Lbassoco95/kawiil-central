@@ -2,7 +2,6 @@ import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { PersonalDashboard } from "@/components/dashboard/PersonalDashboard";
 import { TeamDashboard } from "@/components/dashboard/TeamDashboard";
-import { DashboardOverview } from "@/components/dashboard/DashboardOverview";
 import { RecordatoriosEntryButton } from "@/components/reminders/RecordatoriosEntryButton";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LayoutDashboard } from "lucide-react";
@@ -64,10 +63,7 @@ const Dashboard = () => {
         />
 
         {view === "personal" ? (
-          <>
-            <PersonalDashboard />
-            <DashboardOverview />
-          </>
+          <PersonalDashboard />
         ) : (
           <TeamDashboard />
         )}

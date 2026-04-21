@@ -6,7 +6,6 @@ import { useReminders } from "@/hooks/useReminders";
 import { PersonalRemindersPanel } from "@/components/reminders/PersonalRemindersPanel";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PerformanceChart } from "@/components/dashboard/PerformanceChart";
 import { MonthlyPerformance } from "@/components/dashboard/MonthlyPerformance";
@@ -14,22 +13,18 @@ import { PersonalRendimientoMetrics } from "@/components/dashboard/PersonalRendi
 import { PersonalProjectsProgress } from "@/components/dashboard/PersonalProjectsProgress";
 import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
 import { DailyBriefingGrid } from "@/components/dashboard/DailyBriefingGrid";
+import {
+  PersonalDashboardKpiRow,
+  PersonalBoardTasksAndProjectSteps,
+} from "@/components/dashboard/PersonalOperativeSection";
 import { AISummaryCard } from "@/components/shared/AISummaryCard";
 import { useMyActiveProjectsProgress } from "@/hooks/useMyActiveProjectsProgress";
+import { useMyAssignedTasks } from "@/hooks/useTasks";
+import { useClients } from "@/hooks/useClients";
+import { useAssignedSteps } from "@/hooks/useAssignedSteps";
 import { SERVICE_LABELS } from "@/lib/serviceLabels";
 import { Badge } from "@/components/ui/badge";
-import {
-  ArrowRight,
-  Sparkles,
-  AlertTriangle,
-  CalendarDays,
-  CalendarRange,
-  CheckCircle2,
-  Sun,
-  BarChart3,
-  X,
-  MessageSquare,
-} from "lucide-react";
+import { ArrowRight, Sparkles, CalendarRange, CheckCircle2, Sun, BarChart3, X } from "lucide-react";
 import {
   formatDateMX,
   toDateStringMX,
@@ -41,7 +36,6 @@ import {
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { PreferenceQuestionnaire } from "@/components/dashboard/PreferenceQuestionnaire";
-import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const SECTION_LABELS: Record<string, string> = {
@@ -77,7 +71,6 @@ function isDashboardTab(v: string | null): v is DashboardTab {
 
 export function PersonalDashboard() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const qc = useQueryClient();
@@ -171,23 +164,60 @@ export function PersonalDashboard() {
   const weekMondayYmd = useMemo(() => mondayYmdContaining(todayYmd), [todayYmd]);
   const weekSundayYmd = useMemo(() => addDaysToYmd(weekMondayYmd, 6), [weekMondayYmd]);
 
-  // Todas las tareas pendientes asignadas (sin límite) para KPIs y conteos reales
-  const { data: pendingTasksSnapshot = [] } = useQuery({
-    queryKey: ["personal-pending-snapshot", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("id, title, status, priority, due_date, area, project_id")
-        .eq("assigned_to", user!.id)
-        .in("status", ["pendiente", "en_progreso", "en_revision"])
-        .order("due_date", { ascending: true });
-      if (error) throw error;
-      return data ?? [];
-    },
-    enabled: !!user,
-  });
+  const { data: allMyTasks = [] } = useMyAssignedTasks();
+  const { data: clients = [] } = useClients();
+  const { data: assignedSteps = [] } = useAssignedSteps();
+  const { data: myProjectProgress } = useMyActiveProjectsProgress();
 
-  const myTasks = pendingTasksSnapshot.slice(0, 15);
+  /** Tareas en tablero (pendiente / en progreso / en revisión), orden por fecha límite. */
+  const boardPendingSorted = useMemo(() => {
+    return [...allMyTasks]
+      .filter((t) => ["pendiente", "en_progreso", "en_revision"].includes(t.status))
+      .sort((a, b) => {
+        const da = a.due_date?.slice(0, 10) ?? "9999-12-31";
+        const db = b.due_date?.slice(0, 10) ?? "9999-12-31";
+        if (da !== db) return da.localeCompare(db);
+        const order: Record<string, number> = { urgente: 0, alta: 1, media: 2, baja: 3 };
+        return (order[a.priority ?? "baja"] ?? 4) - (order[b.priority ?? "baja"] ?? 4);
+      });
+  }, [allMyTasks]);
+
+  const myTasks = boardPendingSorted.slice(0, 15);
+
+  const openTasksForKpi = useMemo(
+    () => allMyTasks.filter((t) => t.status !== "completada" && t.status !== "cancelada"),
+    [allMyTasks],
+  );
+
+  const operativeStats = useMemo(() => {
+    const todayTasks = openTasksForKpi.filter((t) => t.due_date?.slice(0, 10) === todayYmd);
+    const overdueKpi = openTasksForKpi.filter((t) => t.due_date && t.due_date.slice(0, 10) < todayYmd);
+    const waitingClient = openTasksForKpi.filter((t) => t.status === "en_revision");
+    const activeClients = clients.filter((c) => c.status === "activo");
+    return {
+      tasksToday: todayTasks.length,
+      overdueCount: overdueKpi.length,
+      activeProjects: (myProjectProgress ?? []).length,
+      activeClients: activeClients.length,
+      waitingClient: waitingClient.length,
+    };
+  }, [openTasksForKpi, todayYmd, clients, myProjectProgress]);
+
+  const topOperativeBoardTasks = useMemo(() => {
+    const order: Record<string, number> = { urgente: 0, alta: 1, media: 2, baja: 3 };
+    return [...openTasksForKpi]
+      .sort((a, b) => {
+        const pa = order[a.priority ?? "baja"] ?? 4;
+        const pb = order[b.priority ?? "baja"] ?? 4;
+        if (pa !== pb) return pa - pb;
+        const da = a.due_date?.slice(0, 10) ?? "9999-12-31";
+        const db = b.due_date?.slice(0, 10) ?? "9999-12-31";
+        return da.localeCompare(db);
+      })
+      .slice(0, 5);
+  }, [openTasksForKpi]);
+
+  const topOperativeSteps = useMemo(() => assignedSteps.slice(0, 8), [assignedSteps]);
 
   // Completadas hoy (zona CDMX): completed_at preferente; si falta, updated_at en el mismo rango
   const { data: completedToday } = useQuery({
@@ -290,8 +320,6 @@ export function PersonalDashboard() {
     return Math.round((sum / weekMoods.length) * 10) / 10;
   }, [weekMoods]);
 
-  const { data: myProjectProgress } = useMyActiveProjectsProgress();
-
   // My clients
   const { data: myClients } = useQuery({
     queryKey: ["personal-clients", user?.id],
@@ -339,16 +367,12 @@ export function PersonalDashboard() {
   const pendingReminders = reminders.filter((r) => !r.is_completed);
 
   const overdueTasks =
-    pendingTasksSnapshot.filter((t) => t.due_date && new Date(t.due_date) < today).length ?? 0;
+    boardPendingSorted.filter((t) => t.due_date && t.due_date.slice(0, 10) < todayYmd).length ?? 0;
 
-  const totalPending = pendingTasksSnapshot.length;
+  const totalPending = boardPendingSorted.length;
 
   const dueTodayPending =
-    pendingTasksSnapshot.filter((t) => {
-      if (!t.due_date) return false;
-      const d = t.due_date.slice(0, 10);
-      return d === todayYmd;
-    }).length ?? 0;
+    boardPendingSorted.filter((t) => t.due_date?.slice(0, 10) === todayYmd).length ?? 0;
 
   const priorityDot = (p: string) => {
     switch (p) {
@@ -359,19 +383,7 @@ export function PersonalDashboard() {
     }
   };
 
-  const dueThisWeek =
-    pendingTasksSnapshot.filter((t) => {
-      if (!t.due_date) return false;
-      const d = new Date(t.due_date);
-      const weekEnd = new Date(today);
-      weekEnd.setDate(weekEnd.getDate() + 7);
-      return d >= today && d <= weekEnd;
-    }).length ?? 0;
-
-  const urgentCount =
-    pendingTasksSnapshot.filter((t) => t.priority === "urgente" || t.priority === "alta").length ?? 0;
-
-  const nextAction = pendingTasksSnapshot[0] ?? null;
+  const nextAction = boardPendingSorted[0] ?? null;
 
   const dailyTotal = dueTodayPending + (completedToday ?? 0);
   const dailyProgress =
@@ -479,72 +491,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         {/* ═══ LEFT COLUMN ═══ */}
         <div className="space-y-4 min-w-0">
 
-        {/* KPI grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 animate-fade-in stagger-2" style={{ animationFillMode: "both" }}>
-          <button
-            onClick={() => navigate("/tareas?priority=urgente")}
-            className={`stat-card text-left group relative overflow-hidden ${urgentCount > 0 ? "border-destructive/30" : ""}`}
-          >
-            <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${urgentCount > 0 ? "from-destructive to-destructive/50" : "from-muted to-muted"}`} />
-            <div className="relative flex items-start justify-between">
-              <div>
-                <p className="text-3xl font-bold text-foreground animate-count-up">{urgentCount}</p>
-                <p className="text-xs text-muted-foreground mt-1 font-medium">Urgentes</p>
-              </div>
-              <div className={`p-2 rounded-xl ${urgentCount > 0 ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
-                <AlertTriangle className="h-4 w-4" />
-              </div>
-            </div>
-          </button>
-          <button
-            onClick={() => navigate("/tareas?due=week")}
-            className={`stat-card text-left group relative overflow-hidden ${dueThisWeek > 0 ? "border-warning/30" : ""}`}
-          >
-            <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${dueThisWeek > 0 ? "from-warning to-warning/50" : "from-muted to-muted"}`} />
-            <div className="relative flex items-start justify-between">
-              <div>
-                <p className="text-3xl font-bold text-foreground animate-count-up">{dueThisWeek}</p>
-                <p className="text-xs text-muted-foreground mt-1 font-medium">Esta semana</p>
-              </div>
-              <div className={`p-2 rounded-xl ${dueThisWeek > 0 ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground"}`}>
-                <CalendarDays className="h-4 w-4" />
-              </div>
-            </div>
-          </button>
-          <button
-            onClick={() => navigate("/tareas?vista=historial")}
-            className={`stat-card text-left group relative overflow-hidden ${(completedToday ?? 0) > 0 ? "border-accent/30" : ""}`}
-          >
-            <div className={`absolute inset-0 opacity-[0.06] bg-gradient-to-br ${(completedToday ?? 0) > 0 ? "from-accent to-accent/50" : "from-muted to-muted"}`} />
-            <div className="relative flex items-start justify-between">
-              <div>
-                <p className="text-3xl font-bold text-foreground animate-count-up">{completedToday ?? 0}</p>
-                <p className="text-xs text-muted-foreground mt-1 font-medium">Completadas hoy</p>
-              </div>
-              <div className={`p-2 rounded-xl ${(completedToday ?? 0) > 0 ? "bg-accent/10 text-accent" : "bg-muted text-muted-foreground"}`}>
-                <CheckCircle2 className="h-4 w-4" />
-              </div>
-            </div>
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => navigate("/comunicacion")}
-          className="w-full text-left stat-card flex items-center justify-between gap-3 border border-border/50 hover:border-primary/20 transition-colors animate-fade-in stagger-2"
-          style={{ animationFillMode: "both" }}
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
-              <MessageSquare className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Slack</p>
-              <p className="text-xs text-muted-foreground truncate">Canales y mensajes directos del workspace</p>
-            </div>
-          </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-        </button>
+        <PersonalDashboardKpiRow stats={operativeStats} carteraSize={clients.length} />
 
         {/* Next action */}
         {nextAction && (
@@ -626,36 +573,19 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
         {/* Resumen */}
         <TabsContent value="resumen" className="mt-4 space-y-5 animate-fade-in">
           <DailyBriefingGrid
-            pendingTasks={pendingTasksSnapshot as any}
+            pendingTasks={boardPendingSorted as any}
             todayYmd={todayYmd}
             completedToday={completedToday ?? 0}
             overdueCount={overdueTasks}
             dueTodayCount={dueTodayPending}
           />
 
-          {myTasks && myTasks.length > 0 && (
-            <div>
-              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Próximas tareas</h3>
-              <div className="space-y-1">
-                {myTasks.slice(0, 5).map((t, i) => (
-                  <button
-                    key={t.id}
-                    className="flex items-center gap-3 w-full py-2 text-left row-hover px-2 rounded-lg"
-                    style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
-                    onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
-                  >
-                    <span className={`h-2 w-2 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
-                    <span className="text-sm text-foreground truncate flex-1">{t.title}</span>
-                    {t.due_date && (
-                      <span className={`text-xs shrink-0 ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                        {formatDateMX(t.due_date)}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <PersonalBoardTasksAndProjectSteps
+            topTasks={topOperativeBoardTasks}
+            enCursoTotal={openTasksForKpi.length}
+            topSteps={topOperativeSteps}
+            assignedStepCount={assignedSteps.length}
+          />
 
           {myClients && myClients.length > 0 && (
             <div>
@@ -850,7 +780,7 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
 
         {/* Rendimiento */}
         <TabsContent value="rendimiento" className="mt-4 space-y-6 animate-fade-in">
-          <PersonalRendimientoMetrics pendingTasks={pendingTasksSnapshot} />
+          <PersonalRendimientoMetrics pendingTasks={boardPendingSorted} />
           <AISummaryCard
             cacheKey={`personal-rendimiento-coach-${user?.id ?? ""}-${promptFingerprint(rendimientoCoachPrompt)}`}
             contextPrompt={rendimientoCoachPrompt}
@@ -903,33 +833,6 @@ Instrucciones: UN mensaje breve (máximo 130 palabras) que sintetice cómo va su
           </div>
         )}
 
-        {/* Quick upcoming tasks */}
-        {myTasks && myTasks.length > 0 && (
-          <div className="glass-card p-5 animate-fade-in stagger-3" style={{ animationFillMode: "both" }}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-foreground">Próximas tareas</span>
-              <button onClick={() => navigate("/tareas")} className="text-xs text-primary hover:text-primary/80 transition-colors">Ver todas</button>
-            </div>
-            <div className="space-y-1">
-              {myTasks.slice(0, 4).map((t, i) => (
-                <button
-                  key={t.id}
-                  className="flex items-center gap-2.5 w-full py-2 text-left row-hover px-2 rounded-lg"
-                  style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
-                  onClick={() => navigate(t.project_id ? `/proyectos/${t.project_id}?tab=tareas&taskId=${t.id}` : `/tareas?taskId=${t.id}`)}
-                >
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${priorityDot(t.priority)}`} />
-                  <span className="text-[13px] text-foreground truncate flex-1">{t.title}</span>
-                  {t.due_date && (
-                    <span className={`text-[10px] shrink-0 ${new Date(t.due_date) < today ? "text-destructive font-medium" : "text-muted-foreground"}`}>
-                      {formatDateMX(t.due_date)}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         </div>{/* end right column */}
       </div>{/* end grid 2 cols */}
 

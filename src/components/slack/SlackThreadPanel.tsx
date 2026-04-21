@@ -51,7 +51,7 @@ export function SlackThreadPanel({
           action: "conversations.replies",
           channel: channelId,
           ts: threadTs!,
-          limit: 80,
+          limit: 1000,
         },
         { signal, timeoutMs: 55_000 },
       );
@@ -107,7 +107,7 @@ export function SlackThreadPanel({
                 highlightTs={highlightReplyTs?.trim() || ""}
                 isLoading={false}
                 error={threadQuery.error as Error | null}
-                selectedChannelId={`${channelId}-thread`}
+                selectedChannelId={`${channelId}-thread-${threadTs}`}
                 hasMore={false}
                 slackReactionChannelId={channelId}
                 slackSelfUserId={slackSelfUserId}
