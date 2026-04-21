@@ -17,7 +17,7 @@ export function RecordatoriosEntryButton() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const openRemindersTab = () => {
-    navigate("/?tab=recordatorios");
+    navigate("/notificaciones?tab=recordatorios");
   };
 
   return (
@@ -33,7 +33,7 @@ export function RecordatoriosEntryButton() {
         <DropdownMenuContent align="end" className="w-[min(100vw-2rem,260px)]">
           <DropdownMenuItem onSelect={openRemindersTab} className="cursor-pointer">
             <Bell className="mr-2 h-4 w-4 shrink-0" />
-            Abrir recordatorios
+            Ver en Notificaciones
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {

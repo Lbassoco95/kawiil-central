@@ -12,8 +12,11 @@ import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { kawiilTeamPath } from "@/lib/dropboxConfig";
 import { toast } from "sonner";
 import { Loader2, Cloud, HardDrive } from "lucide-react";
+import type { Json } from "@/integrations/supabase/types";
 import { FileDropzone } from "@/components/shared/FileDropzone";
-import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
+import { documentsLimits, withLimits } from "@/lib/fileIntake/limits";
+import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
+import { postProcessUploadedDocument } from "@/lib/fileIntake/zipUploadPipeline";
 
 interface Props {
   open: boolean;
@@ -38,8 +41,12 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
     setFile(selected);
     if (selected && !name) setName(selected.name);
   };
-  const dropzoneLimits = withLimits(singleFileLimits, {
+  const MB = 1024 * 1024;
+  const dropzoneLimits = withLimits(documentsLimits, {
     accept: ACCEPTED_DOCUMENT_EXTENSIONS,
+    maxFiles: 1,
+    maxBatchBytes: 52 * MB,
+    maxZipEntriesForClientExpand: 0,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,6 +73,10 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
     }
 
     // 2) Always save in the app (local storage + DB record)
+    const zm = file ? getZipIntakeMarker(file) : undefined;
+    const zipMeta: Json | undefined =
+      zm?.kind === "server_deferred" ? { zip_container: true } : undefined;
+
     createDocument.mutate(
       {
         name: name.trim(),
@@ -75,9 +86,13 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
         client_id: clientId || undefined,
         project_id: projectId || undefined,
         document_type: documentType || undefined,
+        metadata: zipMeta,
       },
       {
-        onSuccess: () => {
+        onSuccess: async (data) => {
+          if (file && data.source === "supabase") {
+            await postProcessUploadedDocument(data.id, file);
+          }
           onOpenChange(false);
           resetForm();
           if (!dropboxFailed) {

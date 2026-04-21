@@ -32,6 +32,7 @@ CREATE TRIGGER trg_ai_module_briefings_updated_at
 ALTER TABLE public.ai_module_briefings ENABLE ROW LEVEL SECURITY;
 
 -- Dueño del briefing: SELECT/INSERT/UPDATE/DELETE sobre sus propias filas
+DROP POLICY IF EXISTS "ai_module_briefings_owner_all" ON public.ai_module_briefings;
 CREATE POLICY "ai_module_briefings_owner_all"
   ON public.ai_module_briefings
   FOR ALL
@@ -40,6 +41,7 @@ CREATE POLICY "ai_module_briefings_owner_all"
   WITH CHECK (user_id = auth.uid());
 
 -- service_role full access (edge functions con adminClient)
+DROP POLICY IF EXISTS "ai_module_briefings_service_role_all" ON public.ai_module_briefings;
 CREATE POLICY "ai_module_briefings_service_role_all"
   ON public.ai_module_briefings
   FOR ALL

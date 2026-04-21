@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { postProcessUploadedDocument } from "@/lib/fileIntake/zipUploadPipeline";
+import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
 
 export function useProjectDocumentUpload(aiProjectId: string | null) {
   const { user } = useAuth();
@@ -61,9 +63,14 @@ export function useProjectDocumentUpload(aiProjectId: string | null) {
 
       setProgress("Procesando contenido...");
 
-      supabase.functions.invoke("process-document", {
-        body: { document_id: doc.id },
-      }).catch(() => {});
+      await postProcessUploadedDocument(doc.id as string, file);
+      if (getZipIntakeMarker(file)?.kind !== "server_deferred") {
+        supabase.functions
+          .invoke("process-document", {
+            body: { document_id: doc.id },
+          })
+          .catch(() => {});
+      }
 
       qc.invalidateQueries({ queryKey: ["ai-project-documents", aiProjectId] });
       toast.success(`"${file.name}" subido y procesándose`);

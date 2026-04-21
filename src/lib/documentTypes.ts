@@ -4,7 +4,7 @@
  * PDF, Word, texto plano (TXT, CSV, MD), Office (Excel, PowerPoint), imágenes.
  */
 export const ACCEPTED_DOCUMENT_EXTENSIONS =
-  ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx,.ppt,.pptx,image/*";
+  ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx,.ppt,.pptx,.zip,image/*";
 
 /** MIME types habituales para los mismos formatos (para validación opcional) */
 export const ACCEPTED_DOCUMENT_MIME_TYPES = [

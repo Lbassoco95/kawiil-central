@@ -4,8 +4,13 @@ import {
   formatMb,
   type FileIntakeLimits,
 } from "@/lib/fileIntake/limits";
-import { expandZipInBrowser, isZipFile } from "@/lib/fileIntake/unzipClient";
+import {
+  countZipFileEntries,
+  expandZipInBrowser,
+  isZipFile,
+} from "@/lib/fileIntake/unzipClient";
 import { expandZipInEdge } from "@/lib/fileIntake/unzipEdge";
+import { setZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
 
 export interface UseFileIntakeOptions {
   files: File[];
@@ -62,25 +67,89 @@ export function useFileIntake({
       if (!isZipFile(file)) return [file];
       if (limits.zipMode === "keep") return [file];
 
-      const useEdge =
-        limits.zipMode === "auto" && file.size > limits.clientUnzipMaxBytes;
+      const ZipName = file.name;
+
+      let entryCount = 0;
+      try {
+        entryCount = await countZipFileEntries(file);
+      } catch {
+        if (limits.deferLargeZipToServer) {
+          setZipIntakeMarker(file, { kind: "server_deferred" });
+          toast.info(
+            "ZIP enviado al servidor para extracción segura (no se pudo inspeccionar en el cliente)."
+          );
+          return [file];
+        }
+        entryCount = limits.maxZipEntriesForClientExpand + 1;
+      }
+
+      if (limits.deferLargeZipToServer) {
+        const overCount = entryCount > limits.maxZipEntriesForClientExpand;
+        const overSize = file.size > limits.clientUnzipMaxBytes;
+        if (overCount || overSize) {
+          setZipIntakeMarker(file, {
+            kind: "server_deferred",
+            entryCount,
+          });
+          if (overCount) {
+            toast.info(
+              `«${ZipName}» tiene muchas entradas (${entryCount}). Se subirá el ZIP y se extraerá en segundo plano.`
+            );
+          } else {
+            toast.info(
+              `«${ZipName}» es grande para el navegador. Se subirá el ZIP y se extraerá en segundo plano.`
+            );
+          }
+          return [file];
+        }
+      } else {
+        const useEdgeBySize =
+          limits.zipMode === "auto" && file.size > limits.clientUnzipMaxBytes;
+        const tooMany = entryCount > limits.maxZipEntriesForClientExpand;
+        const useEdge = useEdgeBySize || tooMany;
+        if (useEdge) {
+          try {
+            const { files: extracted, warnings } = await expandZipInEdge(file);
+            warnings.forEach((w) => toast.warning(w));
+            for (const ef of extracted) {
+              setZipIntakeMarker(ef, {
+                kind: "from_expanded_zip",
+                zipBaseName: ZipName,
+              });
+            }
+            return extracted.length > 0 ? extracted : [];
+          } catch (err) {
+            const msg =
+              err instanceof Error ? err.message : "Error descomprimiendo ZIP";
+            toast.error(msg);
+            return [];
+          }
+        }
+      }
 
       try {
-        if (useEdge) {
-          const { files: extracted, warnings } = await expandZipInEdge(file);
-          warnings.forEach((w) => toast.warning(w));
-          return extracted.length > 0 ? extracted : [];
-        }
         const { files: extracted, warnings } = await expandZipInBrowser(file);
         warnings.forEach((w) => toast.warning(w));
+        for (const ef of extracted) {
+          setZipIntakeMarker(ef, {
+            kind: "from_expanded_zip",
+            zipBaseName: ZipName,
+          });
+        }
         return extracted.length > 0 ? extracted : [];
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Error descomprimiendo ZIP";
+        const msg =
+          err instanceof Error ? err.message : "Error descomprimiendo ZIP";
         toast.error(msg);
         return [];
       }
     },
-    [limits.zipMode, limits.clientUnzipMaxBytes]
+    [
+      limits.zipMode,
+      limits.clientUnzipMaxBytes,
+      limits.deferLargeZipToServer,
+      limits.maxZipEntriesForClientExpand,
+    ]
   );
 
   const addFiles = useCallback(

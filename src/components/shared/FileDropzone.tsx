@@ -58,11 +58,13 @@ interface FileDropzoneProps {
 }
 
 function defaultHint(limits: FileIntakeLimits): string {
-  const acceptZip =
-    limits.zipMode === "expand" || limits.zipMode === "auto"
-      ? " (los .zip se descomprimen)"
-      : "";
-  return `Arrastra y suelta archivos aqui o haz click${acceptZip}`;
+  if (limits.zipMode === "keep") {
+    return "Arrastra y suelta archivos aqui o haz click";
+  }
+  if (limits.deferLargeZipToServer) {
+    return "Arrastra y suelta archivos aqui o haz click (ZIP grande o con muchas entradas: extracción en servidor)";
+  }
+  return "Arrastra y suelta archivos aqui o haz click (los .zip se descomprimen)";
 }
 
 function defaultSubhint(limits: FileIntakeLimits): string {

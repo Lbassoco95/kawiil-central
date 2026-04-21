@@ -153,6 +153,27 @@ export async function expandZipInBrowser(
   return { files: out, warnings };
 }
 
+/**
+ * Cuenta entradas de archivo (no carpetas, sin basura) sin descomprimir el contenido.
+ */
+export async function countZipFileEntries(zipFile: File): Promise<number> {
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(zipFile);
+  } catch (err) {
+    throw new Error(
+      `No se pudo abrir ${zipFile.name}: ${err instanceof Error ? err.message : "ZIP invalido"}`
+    );
+  }
+  let n = 0;
+  for (const entry of Object.values(zip.files)) {
+    if (entry.dir) continue;
+    if (isJunkEntry(entry.name)) continue;
+    n++;
+  }
+  return n;
+}
+
 export function isZipFile(file: File): boolean {
   if (file.type === "application/zip" || file.type === "application/x-zip-compressed") {
     return true;

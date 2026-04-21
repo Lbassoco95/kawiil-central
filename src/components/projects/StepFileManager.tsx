@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen } from "lucide-react";
+import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen, Archive } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { documentsLimits, withLimits } from "@/lib/fileIntake/limits";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -13,6 +13,11 @@ import { formatDateMX } from "@/lib/dateUtils";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { logActivity } from "@/lib/activityLog";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
+import {
+  invokeProcessDocumentForBinaryFile,
+  postProcessUploadedDocument,
+} from "@/lib/fileIntake/zipUploadPipeline";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
@@ -96,7 +101,9 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
       if (documentIds.length === 0) return [];
       const { data, error } = await supabase
         .from("documents")
-        .select("id, name, mime_type, file_path, file_size, created_at, source, external_path")
+        .select(
+          "id, name, mime_type, file_path, file_size, created_at, source, external_path, parent_document_id, archive_path, metadata"
+        )
         .in("id", documentIds);
       if (error) throw error;
       return data;
@@ -144,22 +151,31 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     const path = `${orgId}/${projectId}/${Date.now()}_${safeName}`;
     const { error: upErr } = await supabase.storage.from("documents").upload(path, file);
     if (upErr) throw upErr;
+    const lower = file.name.toLowerCase();
+    const isZip = lower.endsWith(".zip") || file.type === "application/zip" || file.type === "application/x-zip-compressed";
+    const mime = isZip ? file.type || "application/zip" : file.type;
+    const marker = getZipIntakeMarker(file);
     const { data: doc, error: docErr } = await supabase
       .from("documents")
       .insert({
         name: file.name,
         file_path: path,
-        mime_type: file.type,
+        mime_type: mime || null,
         file_size: file.size,
         organization_id: orgId!,
         project_id: projectId,
         uploaded_by: user.id,
         source: "supabase" as const,
+        metadata: marker?.kind === "server_deferred" ? { zip_container: true } : {},
       })
       .select()
       .single();
     if (docErr) throw docErr;
     logActivity({ entityType: "document", entityId: doc.id, action: "file_uploaded", details: { name: file.name } });
+    await postProcessUploadedDocument(doc.id as string, file);
+    if (marker?.kind === "from_expanded_zip") {
+      invokeProcessDocumentForBinaryFile(file, doc.id as string);
+    }
     return doc.id as string;
   };
 
@@ -364,6 +380,9 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
               >
                 {doc.source === "dropbox" ? (
                   <Link2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                ) : (doc as { metadata?: { zip_container?: boolean } }).metadata?.zip_container ||
+                  doc.mime_type?.includes("zip") ? (
+                  <Archive className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                 ) : (
                   <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 )}

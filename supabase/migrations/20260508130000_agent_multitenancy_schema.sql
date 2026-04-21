@@ -74,9 +74,18 @@ CREATE TABLE IF NOT EXISTS public.client_agents (
 );
 
 -- CHECK de status
-ALTER TABLE public.client_agents
-  ADD CONSTRAINT client_agents_status_check
-  CHECK (status IN ('active', 'paused', 'archived'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'client_agents_status_check'
+      AND conrelid = 'public.client_agents'::regclass
+  ) THEN
+    ALTER TABLE public.client_agents
+      ADD CONSTRAINT client_agents_status_check
+      CHECK (status IN ('active', 'paused', 'archived'));
+  END IF;
+END $$;
 
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_client_agents_client_id
@@ -112,6 +121,7 @@ COMMENT ON COLUMN public.client_agents.metadata IS
 ALTER TABLE public.client_agents ENABLE ROW LEVEL SECURITY;
 
 -- Política SELECT: usuarios ven instancias de su org (a través de profiles)
+DROP POLICY IF EXISTS "Users can view client_agents of their org" ON public.client_agents;
 CREATE POLICY "Users can view client_agents of their org"
   ON public.client_agents
   FOR SELECT

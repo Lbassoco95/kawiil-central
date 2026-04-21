@@ -35,6 +35,11 @@ import { TaskKawiilAiCard } from "./TaskKawiilAiCard";
 import { TaskAiBriefingCard } from "./TaskAiBriefingCard";
 import { ACCEPTED_DOCUMENT_EXTENSIONS } from "@/lib/documentTypes";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
+import {
+  invokeProcessDocumentForBinaryFile,
+  postProcessUploadedDocument,
+} from "@/lib/fileIntake/zipUploadPipeline";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { genericLimits, withLimits } from "@/lib/fileIntake/limits";
 import { MentionTextarea } from "./MentionTextarea";
@@ -509,10 +514,35 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
           const filePath = `tasks/${taskId}/${Date.now()}_${safeName}`;
           const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
           if (uploadError) throw uploadError;
-          await supabase.from("documents").insert({
-            name: file.name, file_path: filePath, mime_type: file.type, file_size: file.size,
-            task_id: taskId, organization_id: profile!.organization_id, uploaded_by: user.id, source: "supabase" as const,
-          });
+          const lower = file.name.toLowerCase();
+          const isZip =
+            lower.endsWith(".zip") ||
+            file.type === "application/zip" ||
+            file.type === "application/x-zip-compressed";
+          const mime = isZip ? file.type || "application/zip" : file.type;
+          const marker = getZipIntakeMarker(file);
+          const { data: doc, error: docInsErr } = await supabase
+            .from("documents")
+            .insert({
+              name: file.name,
+              file_path: filePath,
+              mime_type: mime || null,
+              file_size: file.size,
+              task_id: taskId,
+              organization_id: profile!.organization_id,
+              uploaded_by: user.id,
+              source: "supabase" as const,
+              metadata: marker?.kind === "server_deferred" ? { zip_container: true } : {},
+            })
+            .select("id")
+            .single();
+          if (docInsErr) throw docInsErr;
+          if (doc?.id) {
+            await postProcessUploadedDocument(doc.id, file);
+            if (marker?.kind === "from_expanded_zip") {
+              invokeProcessDocumentForBinaryFile(file, doc.id);
+            }
+          }
           ok += 1;
         } catch (err: any) {
           failed += 1;

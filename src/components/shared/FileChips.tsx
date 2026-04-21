@@ -1,5 +1,6 @@
 import { X, FileText, FileImage, FileSpreadsheet, FileArchive, FileCode, File as FileIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
 
 interface FileChipsProps {
   files: File[];
@@ -37,15 +38,32 @@ export function FileChips({ files, onRemove, disabled, className, showSize }: Fi
     >
       {files.map((f, i) => {
         const Icon = pickIcon(f.name);
+        const zm = getZipIntakeMarker(f);
         return (
           <span
             key={`${f.name}-${i}-${f.size}`}
             className="inline-flex items-center gap-1.5 text-[11px] bg-secondary/80 rounded-md px-2 py-1 max-w-[min(100%,260px)] border border-border/30"
           >
             <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate" title={f.name}>
+            <span className="truncate min-w-0" title={f.name}>
               {f.name}
             </span>
+            {zm?.kind === "server_deferred" && (
+              <span
+                className="shrink-0 text-[9px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-500"
+                title="Se extraerá en el servidor tras subir"
+              >
+                servidor
+              </span>
+            )}
+            {zm?.kind === "from_expanded_zip" && (
+              <span
+                className="shrink-0 text-[9px] text-muted-foreground truncate max-w-[72px]"
+                title={`Desde ${zm.zipBaseName}`}
+              >
+                ← ZIP
+              </span>
+            )}
             {showSize && (
               <span className="text-muted-foreground/80 shrink-0">{formatSize(f.size)}</span>
             )}

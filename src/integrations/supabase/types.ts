@@ -1564,6 +1564,7 @@ export type Database = {
       }
       documents: {
         Row: {
+          archive_path: string | null
           client_id: string | null
           created_at: string
           document_type: string | null
@@ -1573,9 +1574,11 @@ export type Database = {
           file_path: string | null
           file_size: number | null
           id: string
+          metadata: Json
           mime_type: string | null
           name: string
           organization_id: string
+          parent_document_id: string | null
           project_id: string | null
           source: Database["public"]["Enums"]["document_source"]
           tags: string[] | null
@@ -1585,6 +1588,7 @@ export type Database = {
           version: number
         }
         Insert: {
+          archive_path?: string | null
           client_id?: string | null
           created_at?: string
           document_type?: string | null
@@ -1594,9 +1598,11 @@ export type Database = {
           file_path?: string | null
           file_size?: number | null
           id?: string
+          metadata?: Json
           mime_type?: string | null
           name: string
           organization_id: string
+          parent_document_id?: string | null
           project_id?: string | null
           source?: Database["public"]["Enums"]["document_source"]
           tags?: string[] | null
@@ -1606,6 +1612,7 @@ export type Database = {
           version?: number
         }
         Update: {
+          archive_path?: string | null
           client_id?: string | null
           created_at?: string
           document_type?: string | null
@@ -1615,9 +1622,11 @@ export type Database = {
           file_path?: string | null
           file_size?: number | null
           id?: string
+          metadata?: Json
           mime_type?: string | null
           name?: string
           organization_id?: string
+          parent_document_id?: string | null
           project_id?: string | null
           source?: Database["public"]["Enums"]["document_source"]
           tags?: string[] | null
@@ -1646,6 +1655,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_parent_document_id_fkey"
+            columns: ["parent_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
             referencedColumns: ["id"]
           },
           {

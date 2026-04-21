@@ -28,22 +28,26 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+DROP POLICY IF EXISTS "Users can insert their own artifacts" ON public.ai_artifacts;
 CREATE POLICY "Users can insert their own artifacts"
   ON public.ai_artifacts
   FOR INSERT
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can update their own artifacts" ON public.ai_artifacts;
 CREATE POLICY "Users can update their own artifacts"
   ON public.ai_artifacts
   FOR UPDATE
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Users can delete their own artifacts" ON public.ai_artifacts;
 CREATE POLICY "Users can delete their own artifacts"
   ON public.ai_artifacts
   FOR DELETE
   USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Members of same org can view artifacts" ON public.ai_artifacts;
 -- SELECT org-wide: cualquier miembro de la misma organización puede ver
 -- el artefacto. Se resuelve `organization_id` via `profiles` del usuario
 -- autenticado para evitar confiar solo en la fila remota.

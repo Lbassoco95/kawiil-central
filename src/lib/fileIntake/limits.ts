@@ -23,6 +23,17 @@ export interface FileIntakeLimits {
   zipMode: ZipMode;
   /** Umbral para descomprimir en cliente (bytes) cuando zipMode='auto'. */
   clientUnzipMaxBytes: number;
+  /**
+   * Si hay mas entradas que este numero, no se expande en el navegador (ZIP marcado para servidor).
+   * Tambien aplica al modo no-defer: se usa unzip-batch en Edge en su lugar.
+   */
+  maxZipEntriesForClientExpand: number;
+  /**
+   * true: ZIP grande (peso en modo auto) o con demasiadas entradas se mantiene como un solo archivo
+   * y se marca para `process-zip-documents` tras subir a Storage (Base documental / proyectos).
+   * false: comportamiento anterior (Edge unzip-batch devuelve archivos sueltos), p. ej. chat adjuntos.
+   */
+  deferLargeZipToServer: boolean;
 }
 
 const MB = 1024 * 1024;
@@ -34,6 +45,8 @@ export const chatLimits: FileIntakeLimits = {
   maxBatchBytes: 100 * MB,
   zipMode: "expand",
   clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: false,
 };
 
 /** Preset para subida de documentos en proyectos / KnowledgePanel. */
@@ -44,6 +57,8 @@ export const documentsLimits: FileIntakeLimits = {
   accept: ".pdf,.xml,.txt,.md,.docx,.xlsx,.csv,.json,.png,.jpg,.jpeg,.zip",
   zipMode: "auto",
   clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: true,
 };
 
 /** Preset para adjuntos de correo (Microsoft / pipeline). */
@@ -53,6 +68,8 @@ export const emailLimits: FileIntakeLimits = {
   maxBatchBytes: 25 * MB,
   zipMode: "keep",
   clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: false,
 };
 
 /** Preset para comprobantes de gastos (XML, PDF, imagenes). */
@@ -63,6 +80,8 @@ export const expensesLimits: FileIntakeLimits = {
   accept: ".pdf,.xml,.png,.jpg,.jpeg,.zip",
   zipMode: "expand",
   clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: true,
 };
 
 /** Preset generico (tareas, comentarios, hub, etc.). */
@@ -72,6 +91,8 @@ export const genericLimits: FileIntakeLimits = {
   maxBatchBytes: 150 * MB,
   zipMode: "expand",
   clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: true,
 };
 
 /** Preset minimo para casos donde solo se permite un archivo (Hub procedimiento). */
@@ -81,6 +102,8 @@ export const singleFileLimits: FileIntakeLimits = {
   maxBatchBytes: 50 * MB,
   zipMode: "keep",
   clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: false,
 };
 
 export function formatMb(bytes: number): string {

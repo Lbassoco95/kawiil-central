@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
 
@@ -66,6 +66,7 @@ export function useCreateDocument() {
       project_id?: string;
       document_type?: string;
       tags?: string[];
+      metadata?: Json;
     }) => {
       const { data: profile } = await supabase
         .from("profiles")
@@ -82,7 +83,10 @@ export function useCreateDocument() {
         const safeName = sanitizeStorageFileName(input.file.name);
         filePath = `documents/${Date.now()}_${safeName}`;
         fileSize = input.file.size;
-        mimeType = input.file.type;
+        mimeType = input.file.type || null;
+        if (!mimeType && input.file.name.toLowerCase().endsWith(".zip")) {
+          mimeType = "application/zip";
+        }
 
         const { error: uploadError } = await supabase.storage
           .from("documents")
@@ -105,6 +109,7 @@ export function useCreateDocument() {
           tags: input.tags ?? [],
           organization_id: profile.organization_id,
           uploaded_by: user!.id,
+          metadata: input.metadata ?? {},
         })
         .select()
         .single();
