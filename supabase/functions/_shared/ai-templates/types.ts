@@ -135,6 +135,8 @@ export interface RenderAiDocumentRequest {
   title: string;
   template_key: KawiilTemplateKey;
   requested_formats: KawiilOutputFormat[];
+  /** Si viene de ai-chat, define qué formato es el principal (badge/preview) aunque el orden del array falle. */
+  primary_format?: KawiilOutputFormat;
   content: Record<string, unknown>;
   confidence?: number;
   reason?: string;

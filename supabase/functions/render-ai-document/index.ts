@@ -39,10 +39,18 @@ function parseRequest(body: unknown): RenderAiDocumentRequest {
   if (!formats.length) throw new Error("requested_formats debe incluir al menos un formato válido.");
   if (!req.content || typeof req.content !== "object") throw new Error("content es obligatorio.");
 
+  const primaryRaw = typeof (req as { primary_format?: unknown }).primary_format === "string"
+    ? (req as { primary_format: string }).primary_format
+    : "";
+  const primaryFromBody = (KAWIIL_OUTPUT_FORMATS as readonly string[]).includes(primaryRaw)
+    ? (primaryRaw as KawiilOutputFormat)
+    : undefined;
+
   return {
     title: req.title,
     template_key: req.template_key,
     requested_formats: formats,
+    primary_format: primaryFromBody,
     content: req.content as Record<string, unknown>,
     confidence: typeof req.confidence === "number" ? req.confidence : 1,
     reason: typeof req.reason === "string" ? req.reason : "",
@@ -100,12 +108,16 @@ Deno.serve(async (req) => {
       primaryColor: payload.branding?.primary_color,
     });
 
-    const requestedPrimary: KawiilOutputFormat = payload.requested_formats[0];
+    const requestedFormatsList = payload.requested_formats;
+    const requestedPrimary: KawiilOutputFormat =
+      payload.primary_format && requestedFormatsList.includes(payload.primary_format)
+        ? payload.primary_format
+        : requestedFormatsList[0];
     const safeTitle = sanitizeFileName(payload.title);
 
     const formats: RenderedFormat[] = [];
     const failures: Array<{ format: KawiilOutputFormat; error: string }> = [];
-    for (const format of payload.requested_formats) {
+    for (const format of requestedFormatsList) {
       try {
         const bytes = await renderFormat(format, {
           templateKey: payload.template_key,

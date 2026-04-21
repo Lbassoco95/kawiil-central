@@ -2828,6 +2828,8 @@ async function handleCreateAiDocument(
     title,
     template_key: templateKey,
     requested_formats: requestedFormats,
+    /** Tras normalizar orden (p. ej. Word antes que PDF), fijamos el primario explícito para render-ai-document. */
+    primary_format: requestedFormats[0],
     content: input.content,
     confidence: confidenceRaw,
     reason,
@@ -3660,13 +3662,10 @@ async function handleClaudeChat(
       .map((b: any) => b.text)
       .join("");
 
-    // El modelo a veces escribe bloques [artifact:uuid|...] con UUIDs inventados.
-    // El usuario hace clic y el id no existe en `ai_artifacts`. Solo nosotros añadimos
-    // marcadores válidos al final del turno (desde createdArtifacts).
-    textContent = textContent.replace(
-      /\s*\[artifact:[a-f0-9-]{36}\|[^\]]+\|[^\]]+\]\s*/gi,
-      "\n",
-    );
+    // El modelo a veces escribe bloques [artifact:uuid|...] con UUIDs inventados (cualquier
+    // variante de segmentos tras el id). El usuario hace clic y el id no existe en DB.
+    // Solo nosotros añadimos marcadores válidos al final (desde createdArtifacts).
+    textContent = textContent.replace(/\s*\[artifact:[a-f0-9-]{36}\|[^\]]*\]\s*/gi, "\n");
     textContent = textContent.replace(/\n{3,}/g, "\n\n").trim();
 
     if (createdArtifacts.length > 0) {

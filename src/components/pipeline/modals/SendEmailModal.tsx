@@ -423,11 +423,14 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span>Adjuntos</span>
-              <label className="inline-flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+              <span className="font-medium">Adjuntos</span>
+              <span className="hidden sm:inline text-muted-foreground/35 select-none" aria-hidden>
+                ·
+              </span>
+              <label className="inline-flex cursor-pointer items-center gap-2">
                 <Switch checked={keepZips} onCheckedChange={setKeepZips} />
-                <span className="text-xs">Mantener .zip</span>
+                <span>Mantener .zip</span>
               </label>
             </div>
             <FileDropzone
