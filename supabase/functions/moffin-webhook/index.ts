@@ -33,6 +33,15 @@ import {
 } from "../_shared/moffinSolutionsClient.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
+import {
+  attemptNubariumRetryPost,
+  buildRetryRawResponse,
+  bumpNubariumRetryState,
+  decideNubariumRetry,
+  type NubariumRetryConsultType,
+  nubariumRetrySummary,
+  nubariumSecretFromEnv,
+} from "../_shared/moffinNubariumRetry.ts";
 import { Webhook } from "npm:svix";
 
 const corsHeaders: Record<string, string> = {
@@ -310,19 +319,21 @@ Deno.serve(async (req) => {
         document_id: string | null;
         moffin_service: string | null;
         rfc: string;
+        raw_response: unknown;
       }
     | null = null;
+
+  const rowSelect =
+    "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, moffin_service, rfc, raw_response";
 
   if (queryId) {
     const { data: rows } = await admin
       .from("moffin_consults")
-      .select(
-        "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, moffin_service, rfc",
-      )
+      .select(rowSelect)
       .eq("moffin_query_id", queryId)
       .order("created_at", { ascending: false })
       .limit(1);
-    row = rows?.[0] ?? null;
+    row = (rows?.[0] ?? null) as typeof row;
   }
 
   if (!row && extId) {
@@ -332,14 +343,12 @@ Deno.serve(async (req) => {
       const consultType = m[2] as ConsultType;
       const { data: rows } = await admin
         .from("moffin_consults")
-        .select(
-          "id, consult_type, project_id, client_id, organization_id, requested_by, document_id, moffin_service, rfc",
-        )
+        .select(rowSelect)
         .eq("project_id", projectId)
         .eq("consult_type", consultType)
         .order("created_at", { ascending: false })
         .limit(1);
-      row = rows?.[0] ?? null;
+      row = (rows?.[0] ?? null) as typeof row;
     }
   }
 
@@ -395,6 +404,81 @@ Deno.serve(async (req) => {
             "Consulta Moffin fallida",
         ).slice(0, 500)
       : null;
+
+  // Reintento Nubarium si el webhook trae FAIL upstream transitorio (Solutions CSF/32D).
+  if (
+    mr &&
+    (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
+  ) {
+    const ciecSecret = nubariumSecretFromEnv();
+    const decision = decideNubariumRetry({
+      uiStatus: st,
+      consultType,
+      usesSolutions: webhookRowUsesSolutions(row),
+      hasClientId: !!row.client_id,
+      hasCiecSecret: ciecSecret.length >= 32,
+      rawResponse: row.raw_response,
+      report: mr,
+    });
+    if (decision.retry && row.client_id) {
+      const retryRes = await attemptNubariumRetryPost({
+        admin,
+        ciecSecret,
+        solutionsBase: solutionsBaseUrl,
+        solutionsBearer: solutionsBearerForWebhook,
+        solutionsAuthScheme: solutionsAuthSchemeForWebhook,
+        consultType: consultType as NubariumRetryConsultType,
+        rfc: row.rfc,
+        clientId: row.client_id,
+      });
+      if (retryRes.ok) {
+        const newState = bumpNubariumRetryState(
+          decision.prevState,
+          decision.nubariumError,
+          retryRes.queryId,
+        );
+        const merged = buildRetryRawResponse(row.raw_response, newState, mr, retryRes.json);
+        const patch: Record<string, unknown> = {
+          status: "pending",
+          error_message: null,
+          summary: nubariumRetrySummary(
+            consultType as NubariumRetryConsultType,
+            newState,
+            decision.nubariumError,
+          ),
+          raw_response: merged,
+        };
+        if (retryRes.queryId) patch.moffin_query_id = retryRes.queryId;
+        const { error: upErr } = await admin
+          .from("moffin_consults")
+          .update(patch)
+          .eq("id", row.id);
+        if (upErr) {
+          console.error("moffin-webhook nubarium retry update:", upErr.message);
+          return new Response(JSON.stringify({ error: upErr.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.log(
+          `nubarium_retry_webhook: consult=${row.id} count=${newState.count}/${2} newQueryId=${retryRes.queryId}`,
+        );
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            handled: true,
+            eventType,
+            consultId: row.id,
+            nubariumRetry: { count: newState.count, newQueryId: retryRes.queryId },
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      console.warn(
+        `nubarium_retry_webhook_failed: consult=${row.id} status=${retryRes.status} msg=${retryRes.message}`,
+      );
+    }
+  }
 
   let documentId = row.document_id;
   let pdfWarn: string | null = null;

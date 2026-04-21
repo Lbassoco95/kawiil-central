@@ -37,6 +37,16 @@ import {
 } from "../_shared/moffinReportStatus.ts";
 import { summarizeSatRfcCertificates } from "../_shared/moffinSatRfc.ts";
 import { tryUploadSatRfcPdf } from "../_shared/moffinSatRfcUpload.ts";
+import {
+  attemptNubariumRetryPost,
+  buildRetryRawResponse,
+  bumpNubariumRetryState,
+  decideNubariumRetry,
+  type NubariumRetryConsultType,
+  type NubariumRetryState,
+  nubariumRetrySummary,
+  nubariumSecretFromEnv,
+} from "../_shared/moffinNubariumRetry.ts";
 
 /**
  * Moffin OpenAPI: https://app.moffin.mx/api/v1/docs · https://moffin.mx/docs
@@ -283,6 +293,69 @@ async function persistMoffinReportToConsult(
   }
   const ct = row.consult_type as ConsultType;
   const st = resolvedMoffinConsultUiStatus(ct, report);
+
+  // Reintento Nubarium (Solutions CSF/32D · FAIL upstream transitorio).
+  if (ct === "constancia_situacion_fiscal" || ct === "opinion_cumplimiento") {
+    const ciecSecret = nubariumSecretFromEnv();
+    const decision = decideNubariumRetry({
+      uiStatus: st,
+      consultType: ct,
+      usesSolutions: rowUsesSolutionsSnapshot(row),
+      hasClientId: !!row.client_id,
+      hasCiecSecret: ciecSecret.length >= 32,
+      rawResponse: row.raw_response,
+      report,
+    });
+    if (decision.retry && row.client_id) {
+      const retryRes = await attemptNubariumRetryPost({
+        admin,
+        ciecSecret,
+        solutionsBase: upload.moffinBase,
+        solutionsBearer: upload.moffinApiKey,
+        solutionsAuthScheme: upload.pdfAuthMode === "bearer" ? "Bearer" : "Token",
+        consultType: ct as NubariumRetryConsultType,
+        rfc: row.rfc,
+        clientId: row.client_id,
+      });
+      if (retryRes.ok) {
+        const newState = bumpNubariumRetryState(
+          decision.prevState,
+          decision.nubariumError,
+          retryRes.queryId,
+        );
+        const merged = buildRetryRawResponse(
+          row.raw_response,
+          newState,
+          report,
+          retryRes.json,
+        );
+        const patch: Record<string, unknown> = {
+          status: "pending",
+          error_message: null,
+          summary: nubariumRetrySummary(
+            ct as NubariumRetryConsultType,
+            newState,
+            decision.nubariumError,
+          ),
+          raw_response: merged,
+        };
+        if (retryRes.queryId) patch.moffin_query_id = retryRes.queryId;
+        const { error: upErr } = await admin
+          .from("moffin_consults")
+          .update(patch)
+          .eq("id", row.id);
+        if (upErr) return { error: upErr.message };
+        console.log(
+          `nubarium_retry: consult=${row.id} count=${newState.count}/${2} newQueryId=${retryRes.queryId}`,
+        );
+        return {};
+      }
+      console.warn(
+        `nubarium_retry_post_failed: consult=${row.id} status=${retryRes.status} msg=${retryRes.message}`,
+      );
+    }
+  }
+
   let summary: string | null = null;
   if (ct === "lista_69b") summary = summarizeBlacklist(report);
   else summary = summarizeSatRfc(ct, report);
@@ -922,7 +995,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const json = satRes.json;
+    let json = satRes.json;
     let moffinStatus = mapMoffinStatus(String(json.status ?? ""));
     if (
       satRes.ok &&
@@ -936,6 +1009,60 @@ Deno.serve(async (req) => {
         (json.status === undefined || String(json.status ?? "").trim() === "")
       ) {
         moffinStatus = "pending";
+      }
+    }
+
+    // Reintento Nubarium inline si el POST inicial regresa FAIL upstream síncronamente.
+    let nubariumRetryStateForInsert: NubariumRetryState | null = null;
+    if (
+      (moffinStatus === "fail" || moffinStatus === "error") &&
+      project.client_id &&
+      (consultType === "constancia_situacion_fiscal" || consultType === "opinion_cumplimiento")
+    ) {
+      const initialDecision = decideNubariumRetry({
+        uiStatus: moffinStatus,
+        consultType,
+        usesSolutions: true,
+        hasClientId: true,
+        hasCiecSecret: ciecSecret.length >= 32,
+        rawResponse: null,
+        report: json,
+      });
+      if (initialDecision.retry) {
+        const retryRes = await attemptNubariumRetryPost({
+          admin,
+          ciecSecret,
+          solutionsBase,
+          solutionsBearer,
+          solutionsAuthScheme,
+          consultType: consultType as NubariumRetryConsultType,
+          rfc: rfcRaw,
+          clientId: project.client_id,
+        });
+        if (retryRes.ok) {
+          nubariumRetryStateForInsert = bumpNubariumRetryState(
+            initialDecision.prevState,
+            initialDecision.nubariumError,
+            retryRes.queryId,
+          );
+          json = retryRes.json;
+          moffinStatus = mapMoffinStatus(String(json.status ?? ""));
+          if (moffinMessageImpliesSatStillProcessing(json)) moffinStatus = "pending";
+          else if (
+            extractSolutionsQueryId(json) &&
+            moffinStatus === "error" &&
+            (json.status === undefined || String(json.status ?? "").trim() === "")
+          ) {
+            moffinStatus = "pending";
+          }
+          console.log(
+            `nubarium_retry_initial: rfc=${rfcRaw} count=${nubariumRetryStateForInsert.count} newQueryId=${retryRes.queryId}`,
+          );
+        } else {
+          console.warn(
+            `nubarium_retry_initial_failed: rfc=${rfcRaw} status=${retryRes.status} msg=${retryRes.message}`,
+          );
+        }
       }
     }
     const summary = summarizeSatRfc(consultType, json);
@@ -996,6 +1123,17 @@ Deno.serve(async (req) => {
             ? `Sin PDF adjunto: ${pdfSidecarError}`.slice(0, 500)
             : null;
 
+    const finalSummary = nubariumRetryStateForInsert
+      ? nubariumRetrySummary(
+          consultType as NubariumRetryConsultType,
+          nubariumRetryStateForInsert,
+          nubariumRetryStateForInsert.lastError,
+        )
+      : summary;
+    const finalRawResponse: Record<string, unknown> = nubariumRetryStateForInsert
+      ? { ...json, _nubariumRetry: nubariumRetryStateForInsert }
+      : json;
+
     const { data: inserted, error: insErr } = await admin
       .from("moffin_consults")
       .insert({
@@ -1007,8 +1145,8 @@ Deno.serve(async (req) => {
         moffin_service: moffinServiceName,
         status: moffinStatus,
         error_message: insertErrorMessage,
-        summary,
-        raw_response: json,
+        summary: finalSummary,
+        raw_response: finalRawResponse,
         moffin_query_id: moffinQueryIdStr,
         moffin_uuid: typeof json.uuid === "string" ? json.uuid : null,
         document_id: documentId,

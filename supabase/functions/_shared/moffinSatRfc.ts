@@ -379,14 +379,65 @@ function satReportIsPending(resp: Record<string, unknown>): boolean {
   return moffinMessageImpliesSatStillProcessing(resp);
 }
 
+/**
+ * Solutions envuelve el detalle SAT en `serviceQuery` (GET /query/{id}); cuando lo persistimos en
+ * `raw_response`, queda bajo `moffinGetReportSnapshot.serviceQuery`. Sin desenvolver, el summary lee
+ * `service`/`response` a nivel raíz y termina mostrando "Sin respuesta de certificados" cuando en
+ * realidad Moffin sí devolvió un FAIL upstream con `response.errorMessage`.
+ */
+export function unwrapMoffinReportInner(
+  resp: Record<string, unknown>,
+): Record<string, unknown> {
+  const snap = (resp as { moffinGetReportSnapshot?: unknown }).moffinGetReportSnapshot;
+  if (snap && typeof snap === "object" && !Array.isArray(snap)) {
+    const inner = (snap as Record<string, unknown>).serviceQuery;
+    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+      return inner as Record<string, unknown>;
+    }
+  }
+  const sq = (resp as { serviceQuery?: unknown }).serviceQuery;
+  if (sq && typeof sq === "object" && !Array.isArray(sq)) {
+    return sq as Record<string, unknown>;
+  }
+  return resp;
+}
+
 export function summarizeSatRfcCertificates(
   consultType: MoffinSatRfcConsultType,
   resp: Record<string, unknown>,
 ): string {
-  const svc = String(resp?.service ?? "").toUpperCase();
-  const st = String(resp?.status ?? "").toUpperCase();
-  if (svc === "CSF" || svc === "CONSTANCIA" || /situaci[oó]n\s*fiscal/i.test(String(resp?.service ?? ""))) {
-    const r = resp?.response as Record<string, unknown> | undefined;
+  const inner = unwrapMoffinReportInner(resp);
+  const svcRaw = String(inner?.service ?? resp?.service ?? "");
+  const svc = svcRaw.toUpperCase();
+  const stUp = String(inner?.status ?? resp?.status ?? "").toUpperCase();
+  const isFail = stUp === "FAIL" || stUp === "FAILED" || stUp === "FAILURE";
+
+  // FAIL upstream (Solutions/Nubarium): exponer errorMessage explícito en lugar del fallback genérico.
+  if (isFail) {
+    let err: string | null = null;
+    const ir = inner?.response;
+    if (ir && typeof ir === "object" && !Array.isArray(ir)) {
+      const e = (ir as Record<string, unknown>).errorMessage;
+      if (typeof e === "string" && e.trim()) err = e.trim();
+    }
+    if (!err) {
+      err =
+        moffinResponseMessagesFlattened(resp)
+          .split("|")
+          .map((s) => s.trim())
+          .find(Boolean) ?? null;
+    }
+    const tag =
+      svc === "CSF" ||
+      consultType === "constancia_situacion_fiscal" ||
+      /situaci[oó]n\s*fiscal|constancia/i.test(svcRaw)
+        ? "CSF (SAT)"
+        : "32D (SAT)";
+    return err ? `${tag} · fallo Moffin: ${err}` : `${tag} · fallo Moffin`;
+  }
+
+  if (svc === "CSF" || svc === "CONSTANCIA" || /situaci[oó]n\s*fiscal/i.test(svcRaw)) {
+    const r = inner?.response as Record<string, unknown> | undefined;
     const pdf = typeof r?.pdf === "string" ? "PDF disponible" : null;
     const cm = r?.claveMensaje;
     const parts = [
@@ -403,8 +454,8 @@ export function summarizeSatRfcCertificates(
           })()}`
         : "CSF consultada";
   }
-  if (svc === "32D" || /cumplimiento|opini[oó]n/i.test(String(resp?.service ?? ""))) {
-    const r = resp?.response as Record<string, unknown> | undefined;
+  if (svc === "32D" || /cumplimiento|opini[oó]n/i.test(svcRaw)) {
+    const r = inner?.response as Record<string, unknown> | undefined;
     const op = r?.opinion != null ? `Opinión: ${r.opinion}` : null;
     const pdf = typeof r?.pdf === "string" ? "PDF disponible" : null;
     const parts = [op, pdf].filter(Boolean);
