@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from "rea
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { useChat } from "@/hooks/useChat";
+import { useChat, type ChatAgentTaskRef } from "@/hooks/useChat";
 import { useAiProjects, useAiProjectDocuments, useAiProjectMembers } from "@/hooks/useAiProjects";
 import { useAiSharedMemories } from "@/hooks/useAiSharedMemories";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Send, Sparkles, Loader2, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight,
-  BrainCircuit, Settings2, FileText,
+  BrainCircuit, Settings2, FileText, UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -29,6 +29,8 @@ import { invokeSlackApi } from "@/lib/slackApi";
 import { ProjectSidebar } from "@/components/ai/ProjectSidebar";
 import { KnowledgePanel } from "@/components/ai/KnowledgePanel";
 import { ArtifactCard } from "@/components/ai/ArtifactCard";
+import { AgentTaskCard } from "@/components/ai/AgentTaskCard";
+import { DelegateToAgentDialog, type AttachmentRef } from "@/components/ai/DelegateToAgentDialog";
 import { ArtifactViewer } from "@/components/ai/ArtifactViewer";
 import { ProjectPreviewCard } from "@/components/ai/ProjectPreviewCard";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
@@ -39,6 +41,7 @@ import {
   MAX_CHAT_ATTACHMENT_BATCH_BYTES,
   MAX_CHAT_ATTACHMENT_BYTES_PER_FILE,
   MAX_CHAT_ATTACHMENT_FILES,
+  MAX_CHAT_IMAGE_BYTES_FOR_MODEL,
   formatMb,
 } from "@/lib/chatAttachmentLimits";
 import { AiProjectMembersDialog } from "@/components/ai/AiProjectMembersDialog";
@@ -70,7 +73,7 @@ const AsistenteIA = () => {
   const { user } = useAuth();
   const {
     messages, isStreaming, streamProgressSteps, pdfIndexingStatus, conversations, activeConversationId, activeAiProjectId,
-    sendMessage, loadConversation, startNewChat, deleteConversation,
+    sendMessage, loadConversation, addAgentTaskMessage, startNewChat, deleteConversation,
     updateConversationFolder, renameConversation, setAiProject,
   } = useChat();
   const {
@@ -101,6 +104,9 @@ const AsistenteIA = () => {
   const [artifactDialogOpen, setArtifactDialogOpen] = useState(false);
   const [artifactDialogArtifact, setArtifactDialogArtifact] = useState<AiArtifact | null>(null);
   const [artifactDialogLoading, setArtifactDialogLoading] = useState(false);
+  const [isDelegateModalOpen, setIsDelegateModalOpen] = useState(false);
+  const [delegateAttachments, setDelegateAttachments] = useState<AttachmentRef[]>([]);
+  const [isPreparingDelegate, setIsPreparingDelegate] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMobile = useIsMobile();
@@ -326,6 +332,87 @@ const AsistenteIA = () => {
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   };
+
+  /** Sube `pendingFiles` al bucket del chat para obtener refs consumibles por `dispatch-to-agent`. */
+  const uploadPendingFilesForDelegate = useCallback(async (): Promise<AttachmentRef[]> => {
+    if (!user) return [];
+    const files = pendingFiles.slice(0, MAX_CHAT_ATTACHMENT_FILES);
+    if (files.length === 0) return [];
+
+    const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+    if (orgRes.error || !orgRes.data) {
+      toast.error(orgRes.error?.message || "No se pudo obtener la organización");
+      return [];
+    }
+    const orgId = orgRes.data as string;
+    const saved: AttachmentRef[] = [];
+    let batchBytes = 0;
+
+    for (const file of files) {
+      if (file.type.startsWith("image/") && file.size > MAX_CHAT_IMAGE_BYTES_FOR_MODEL) {
+        toast.error(
+          `«${file.name}» supera 512 KB; para delegar comprime o recorta la imagen (límite del modelo).`,
+        );
+        continue;
+      }
+      if (file.size > MAX_CHAT_ATTACHMENT_BYTES_PER_FILE) {
+        toast.error(`${file.name} supera ${formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo`);
+        continue;
+      }
+      if (batchBytes + file.size > MAX_CHAT_ATTACHMENT_BATCH_BYTES) {
+        toast.error(`Límite de ${formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)} MB total por mensaje`);
+        break;
+      }
+      const safe = file.name.replace(/[^\w.\-]+/g, "_");
+      const objectPath = `${orgId}/${user.id}/${crypto.randomUUID()}_${safe}`;
+      const { error: upErr } = await supabase.storage.from("chat-uploads").upload(objectPath, file);
+      if (upErr) {
+        toast.error(`No se pudo subir ${file.name}`);
+        continue;
+      }
+      saved.push({
+        bucket: "chat-uploads",
+        path: objectPath,
+        name: file.name,
+        mime_type: file.type || "application/octet-stream",
+      });
+      batchBytes += file.size;
+      if (linkFilesToProject && activeAiProjectId) {
+        try {
+          await uploadToProject(file);
+        } catch {
+          /* no bloquear delegación */
+        }
+      }
+    }
+    return saved;
+  }, [user, pendingFiles, linkFilesToProject, activeAiProjectId, uploadToProject]);
+
+  const openDelegateModal = useCallback(async () => {
+    if (isStreaming) return;
+    setIsPreparingDelegate(true);
+    try {
+      const refs = await uploadPendingFilesForDelegate();
+      if (pendingFiles.length > 0 && refs.length === 0) {
+        toast.error("No se pudo preparar ningún adjunto para delegar.");
+        return;
+      }
+      setDelegateAttachments(refs);
+      setIsDelegateModalOpen(true);
+    } finally {
+      setIsPreparingDelegate(false);
+    }
+  }, [isStreaming, pendingFiles.length, uploadPendingFilesForDelegate]);
+
+  const handleAgentDelegated = useCallback(
+    async (ref: ChatAgentTaskRef) => {
+      await addAgentTaskMessage(ref);
+      setInput("");
+      setPendingFiles([]);
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+    },
+    [addAgentTaskMessage],
+  );
 
   const handleCreateAiProject = async () => {
     if (!newProjectName.trim()) return;
@@ -811,6 +898,26 @@ const AsistenteIA = () => {
             ) : (
               <div className="max-w-3xl mx-auto space-y-6">
                 {messages.map((msg, i) => {
+                  const taskRef = msg.agent_task_ref;
+                  if (taskRef) {
+                    return (
+                      <Fragment key={msg.id || `task-${taskRef.task_id}-${i}`}>
+                        <div className="flex gap-3 justify-start">
+                          <AgentTaskCard
+                            taskId={taskRef.task_id}
+                            agent={{
+                              display_name: taskRef.agent_display_name,
+                              role: taskRef.agent_name,
+                              color: taskRef.agent_color,
+                            }}
+                            title={taskRef.title}
+                            className="flex-1 min-w-0 max-w-[85%]"
+                          />
+                        </div>
+                      </Fragment>
+                    );
+                  }
+
                   const showProgressBeforeAssistant =
                     isStreaming &&
                     msg.role === "assistant" &&
@@ -974,6 +1081,21 @@ const AsistenteIA = () => {
                   rows={3}
                   disabled={isStreaming}
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => void openDelegateModal()}
+                  disabled={isStreaming || isPreparingDelegate}
+                  title="Delegar a un agente"
+                  className="h-[42px] w-[42px] rounded-xl shrink-0 border-sky-200/60 dark:border-sky-800/50"
+                >
+                  {isPreparingDelegate ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="h-4 w-4" />
+                  )}
+                </Button>
                 <Button
                   size="sm"
                   onClick={handleSend}
@@ -1171,6 +1293,19 @@ const AsistenteIA = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DelegateToAgentDialog
+        isOpen={isDelegateModalOpen}
+        onClose={() => {
+          setIsDelegateModalOpen(false);
+          setDelegateAttachments([]);
+        }}
+        defaultTitle={input.slice(0, 100)}
+        attachments={delegateAttachments}
+        conversationId={activeConversationId ?? undefined}
+        defaultClientId={activeProject?.client_id ?? null}
+        onDelegated={handleAgentDelegated}
+      />
     </AppLayout>
   );
 };
