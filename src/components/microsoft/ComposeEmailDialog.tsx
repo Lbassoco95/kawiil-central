@@ -25,10 +25,6 @@ import {
   X,
   Wand2,
   Wand,
-  CalendarCheck,
-  HandCoins,
-  FileSpreadsheet,
-  Mail as MailIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -41,45 +37,11 @@ import {
 import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
-
-type ImproveMode = "improve" | "shorter" | "formal" | "friendly";
-
-/** Plantillas rápidas mostradas en el panel IA y como pills cuando el editor está vacío. */
-const QUICK_DRAFT_TEMPLATES: Array<{
-  id: string;
-  label: string;
-  icon: typeof Sparkles;
-  instruction: string;
-}> = [
-  {
-    id: "confirm-meeting",
-    label: "Confirmar reunión",
-    icon: CalendarCheck,
-    instruction:
-      "Redacta un correo breve y cordial para confirmar la reunión propuesta. Incluye fecha, hora y un cierre amable.",
-  },
-  {
-    id: "request-info",
-    label: "Pedir información",
-    icon: MailIcon,
-    instruction:
-      "Redacta un correo profesional pidiendo la información o documentación pendiente al destinatario, con tono cordial y un cierre claro.",
-  },
-  {
-    id: "send-report",
-    label: "Enviar reporte semanal",
-    icon: FileSpreadsheet,
-    instruction:
-      "Redacta un correo presentando el reporte semanal adjunto: resume 2-3 hitos del avance y cierra con un próximo paso.",
-  },
-  {
-    id: "follow-up-payment",
-    label: "Seguimiento de pago",
-    icon: HandCoins,
-    instruction:
-      "Redacta un correo cordial para dar seguimiento al pago de una factura pendiente, agradeciendo de antemano y ofreciendo apoyo si necesitan algo.",
-  },
-];
+import {
+  QUICK_DRAFT_TEMPLATES,
+  plainTextToEmailHtml,
+  type ImproveMode,
+} from "@/components/microsoft/emailComposeAiShared";
 
 export interface ComposeDefaultTemplateContext {
   razon_social?: string;
@@ -99,19 +61,6 @@ interface ComposeEmailDialogProps {
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   /** Muestra el selector de plantillas del área contable. Por defecto true. */
   showAccountingTemplates?: boolean;
-}
-
-function plainTextToEmailHtml(text: string): string {
-  const esc = (s: string) =>
-    s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  const t = text.trim();
-  if (!t) return "<p></p>";
-  const blocks = t.split(/\n\n+/);
-  return blocks.map((b) => `<p>${esc(b).replace(/\n/g, "<br/>")}</p>`).join("");
 }
 
 function ComposeRecipientInput({

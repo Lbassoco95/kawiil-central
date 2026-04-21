@@ -427,7 +427,6 @@ export function EmailView() {
     summary: string;
     suggestedAction: string | null;
   } | null>(null);
-  const [showFullAI, setShowFullAI] = useState(false);
   const [quickAIPrompt, setQuickAIPrompt] = useState<string | null>(null);
   const [detailAiPanel, setDetailAiPanel] = useState<null | "summarize" | "translate">(null);
   const [detailAiLoading, setDetailAiLoading] = useState(false);
@@ -609,7 +608,6 @@ export function EmailView() {
     setSelectedEmailId(email.id);
     resetAction();
     setQuickAIPrompt(null);
-    setShowFullAI(false);
     if (!email.isRead) markRead.mutate(email.id);
   }, [markRead]);
 
@@ -636,7 +634,6 @@ export function EmailView() {
   const handleStartReply = async (action: EmailAction) => {
     if (!selectedEmailId || !action) return;
     setEmailAction(action);
-    setShowFullAI(false);
     setRequestDeliveryReceipt(false);
     setRequestReadReceipt(false);
     setDraftId(null);
@@ -835,7 +832,6 @@ export function EmailView() {
     setDraftHtml("");
     setDraftId(null);
     setForwardTo("");
-    setShowFullAI(false);
     setReplyFiles([]);
     setRequestDeliveryReceipt(false);
     setRequestReadReceipt(false);
@@ -2422,8 +2418,6 @@ export function EmailView() {
           setForwardTo={setForwardTo}
           replyFiles={replyFiles}
           onReplyFilesChange={setReplyFiles}
-          showFullAI={showFullAI}
-          setShowFullAI={setShowFullAI}
           createReplyDraftPending={createReplyDraft.isPending}
           createForwardDraftPending={createForwardDraft.isPending}
           isSending={isSending}
