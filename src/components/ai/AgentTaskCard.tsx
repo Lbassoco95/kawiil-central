@@ -96,6 +96,89 @@ function mapHookStatus(hookStatus: HookStatus): TaskStatus {
   }
 }
 
+/** Fila en `agent_tasks` (la VM actualiza status aunque no haya filas en `ai_task_events`). */
+type AgentTaskDbRow = {
+  status: string;
+  error_message: string | null;
+  started_at: string | null;
+};
+
+/**
+ * Poll ligero a `agent_tasks`: si Realtime/RLS ocultan `ai_task_events`, igual mostramos
+ * running/completed/failed según la columna `status` del servidor.
+ */
+function useAgentTaskDbPoll(taskId: string) {
+  const [row, setRow] = useState<AgentTaskDbRow | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const tick = async () => {
+      const { data, error } = await supabase
+        .from("agent_tasks")
+        .select("status, error_message, started_at")
+        .eq("id", taskId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.warn("[agent-task-card] agent_tasks", error.message);
+        return;
+      }
+      if (!data) return;
+      setRow({
+        status: typeof data.status === "string" ? data.status : "",
+        error_message: data.error_message ?? null,
+        started_at: data.started_at ?? null,
+      });
+    };
+
+    void tick();
+    const intervalId = window.setInterval(() => void tick(), 12_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [taskId]);
+
+  return row;
+}
+
+/**
+ * Prioridad: eventos del stream → estado derivado del hook → columnas `agent_tasks`.
+ * Así la tarjeta no se queda en "Pendiente" si el worker ya marcó running/completed en DB.
+ */
+function mergeTaskStatus(
+  hookMapped: TaskStatus,
+  events: AgentTaskEvent[],
+  db: AgentTaskDbRow | null,
+): TaskStatus {
+  if (events.some((e) => e.event_type === "completed")) return "completed";
+  if (events.some((e) => e.event_type === "failed")) return "failed";
+  if (hookMapped === "completed" || hookMapped === "failed") return hookMapped;
+
+  if (db) {
+    const s = db.status.toLowerCase();
+    if (s === "completed" || s === "success") return "completed";
+    if (
+      s === "failed" ||
+      s === "error" ||
+      (db.error_message && db.error_message.trim().length > 0)
+    ) {
+      return "failed";
+    }
+    if (
+      s === "running" ||
+      s === "processing" ||
+      s === "in_progress" ||
+      (db.started_at && db.started_at.length > 0)
+    ) {
+      return "running";
+    }
+  }
+  return hookMapped;
+}
+
 const RESULT_PREVIEW_MAX_CHARS = 300;
 
 export function AgentTaskCard({
@@ -106,7 +189,11 @@ export function AgentTaskCard({
   onViewDetails,
 }: AgentTaskCardProps) {
   const { events, status: hookStatus, isConnected } = useAgentTaskProgress(taskId);
-  const status = mapHookStatus(hookStatus);
+  const dbRow = useAgentTaskDbPoll(taskId);
+  const status = useMemo(
+    () => mergeTaskStatus(mapHookStatus(hookStatus), events, dbRow),
+    [hookStatus, events, dbRow],
+  );
 
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [isCopied, setIsCopied] = useState(false);
@@ -168,6 +255,9 @@ export function AgentTaskCard({
 
   const lastEventMessage = useMemo(() => {
     if (events.length === 0) {
+      if (status === "running") {
+        return "Ejecución en curso en el servidor (si no ves el detalle línea a línea, comprueba la VM de agentes y Realtime).";
+      }
       if (status === "pending") return "Esperando a que el agente inicie…";
       return "Sin eventos todavía";
     }
@@ -175,12 +265,13 @@ export function AgentTaskCard({
   }, [events, status]);
 
   const errorMessage = useMemo(() => {
+    if (dbRow?.error_message && dbRow.error_message.trim()) return dbRow.error_message;
     if (fetched?.error_message) return fetched.error_message;
     const failed = [...events].reverse().find((e) => e.event_type === "failed");
     const raw = failed?.payload?.error;
     if (typeof raw === "string" && raw.trim()) return raw;
     return null;
-  }, [fetched, events]);
+  }, [dbRow, fetched, events]);
 
   const handleCopy = async () => {
     const text = resultToCopyString(fetched?.result, fetched?.result_summary);
@@ -246,7 +337,7 @@ export function AgentTaskCard({
         </CollapsibleTrigger>
 
         <CollapsibleContent className="mt-3 space-y-3">
-          <EventTimeline events={events} status={status} />
+          <EventTimeline events={events} status={status} dbStatus={dbRow?.status ?? null} />
 
           {status === "completed" && (
             <ResultPreview
@@ -338,14 +429,28 @@ function StatusBadge({
 function EventTimeline({
   events,
   status,
+  dbStatus,
 }: {
   events: AgentTaskEvent[];
   status: TaskStatus;
+  dbStatus: string | null;
 }) {
   if (events.length === 0) {
+    const serverRunning =
+      status === "running" ||
+      /\b(running|processing|in_progress)\b/i.test(dbStatus || "");
     return (
-      <div className="text-[11px] text-muted-foreground italic">
-        Aún no hay eventos. El agente comenzará a reportar su progreso aquí.
+      <div className="text-[11px] text-muted-foreground italic space-y-1">
+        <p>
+          {serverRunning
+            ? "La tarea está activa en el backend; los pasos detallados dependen de la VM kawiil-agents y de eventos en la tabla ai_task_events."
+            : "Aún no hay eventos en tiempo real. Suele significar cola en la VM, worker detenido, o que la tarea sigue en estado pendiente en agent_tasks."}
+        </p>
+        {dbStatus ? (
+          <p className="text-[10px] not-italic font-mono text-muted-foreground/90">
+            Estado en servidor: {dbStatus}
+          </p>
+        ) : null}
       </div>
     );
   }
