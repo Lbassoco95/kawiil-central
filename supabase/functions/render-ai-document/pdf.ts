@@ -13,7 +13,7 @@ import {
   type ProposalData,
   resolveBranding,
 } from "../_shared/ai-templates/index.ts";
-import { formatCurrency } from "./common.ts";
+import { deepSanitizeForPdf, formatCurrency, sanitizeForPdfText } from "./common.ts";
 
 /**
  * Render PDF con pdfmake usando PdfPrinter + fuentes built-in Helvetica (Latin-1),
@@ -800,7 +800,18 @@ export async function renderKawiilPdf(input: {
   data: unknown;
   branding: ReturnType<typeof resolveBranding>;
 }): Promise<Uint8Array> {
-  const docDef = buildDocDefinition(input.templateKey, input.title, input.data, input.branding);
+  // Saneamos el árbol de datos ANTES de construir la definición del PDF: pdfmake
+  // usa la fuente built-in Helvetica (WinAnsiEncoding) y revienta si encuentra
+  // emojis o cualquier codepoint fuera de Latin-1 extendido. Sin esto, toda
+  // respuesta de la IA que traiga 🚀✅💰 (cosa muy común) rompe el render y el
+  // artifact cae al fallback de markdown plano.
+  const safeTitle = sanitizeForPdfText(input.title);
+  const safeData = deepSanitizeForPdf(input.data);
+  const safeBranding = {
+    ...input.branding,
+    orgName: sanitizeForPdfText(input.branding.orgName),
+  } as ReturnType<typeof resolveBranding>;
+  const docDef = buildDocDefinition(input.templateKey, safeTitle, safeData, safeBranding);
   // deno-lint-ignore no-explicit-any
   const pdfDoc: any = printer.createPdfKitDocument(docDef as any);
   const chunks: Uint8Array[] = [];

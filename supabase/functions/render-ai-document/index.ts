@@ -100,25 +100,49 @@ Deno.serve(async (req) => {
       primaryColor: payload.branding?.primary_color,
     });
 
-    const primary: KawiilOutputFormat = payload.requested_formats[0];
+    const requestedPrimary: KawiilOutputFormat = payload.requested_formats[0];
     const safeTitle = sanitizeFileName(payload.title);
 
     const formats: RenderedFormat[] = [];
+    const failures: Array<{ format: KawiilOutputFormat; error: string }> = [];
     for (const format of payload.requested_formats) {
-      const bytes = await renderFormat(format, {
-        templateKey: payload.template_key,
-        title: payload.title,
-        data: normalized,
-        branding,
-      });
-      formats.push({
-        format,
-        file_name: `${safeTitle}.${FORMAT_EXT[format]}`,
-        file_ext: FORMAT_EXT[format],
-        mime_type: FORMAT_MIME[format],
-        content_base64: uint8ArrayToBase64(bytes),
-      });
+      try {
+        const bytes = await renderFormat(format, {
+          templateKey: payload.template_key,
+          title: payload.title,
+          data: normalized,
+          branding,
+        });
+        formats.push({
+          format,
+          file_name: `${safeTitle}.${FORMAT_EXT[format]}`,
+          file_ext: FORMAT_EXT[format],
+          mime_type: FORMAT_MIME[format],
+          content_base64: uint8ArrayToBase64(bytes),
+        });
+      } catch (formatErr) {
+        // Un formato individual fallando NO debe tirar todo el request: registramos
+        // y seguimos con los demás (p. ej. PDF falla con emojis → DOCX sí se entrega).
+        const msg = formatErr instanceof Error ? formatErr.message : String(formatErr);
+        console.error(`render-ai-document: falló render de ${format}:`, msg);
+        failures.push({ format, error: msg });
+      }
     }
+
+    if (!formats.length) {
+      const reasons = failures.map((f) => `${f.format}: ${f.error}`).join(" | ") || "sin detalle";
+      return new Response(
+        JSON.stringify({ error: `No se pudo renderizar ningún formato (${reasons})` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Si el primario pedido falló pero hay otros formatos disponibles, usamos el
+    // primero que sí se rindió (útil para que el UI no muestre "primario: PDF"
+    // cuando el PDF falló pero tenemos DOCX).
+    const primary: KawiilOutputFormat = formats.some((f) => f.format === requestedPrimary)
+      ? requestedPrimary
+      : formats[0].format;
 
     const previewSummary = typeof (payload.content as { summary?: string }).summary === "string"
       ? (payload.content as { summary?: string }).summary
@@ -133,6 +157,7 @@ Deno.serve(async (req) => {
         primary_format: primary,
         preview_markdown: preview,
         formats,
+        partial_failures: failures.length ? failures : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

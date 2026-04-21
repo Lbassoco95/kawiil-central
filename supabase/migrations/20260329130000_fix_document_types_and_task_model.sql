@@ -45,7 +45,10 @@ COMMENT ON COLUMN public.documents.document_type_id
   IS 'FK to document_types catalog. Preferred over document_type text field.';
 
 -- 2. Unified view for task assignments (primary + co-assignees)
-CREATE OR REPLACE VIEW public.v_task_all_assignees AS
+-- security_invoker=true evita el hallazgo "SECURITY DEFINER View" del Advisor
+-- al evaluar permisos y RLS con el rol del usuario que consulta.
+CREATE OR REPLACE VIEW public.v_task_all_assignees
+WITH (security_invoker = true) AS
 SELECT
   t.id AS task_id,
   t.title,

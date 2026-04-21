@@ -22,9 +22,42 @@ import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import {
   useAiModuleBriefing,
   sha256Hex,
+  briefingJsonInstructions,
   type AiModuleBriefingModule,
 } from "@/hooks/useAiModuleBriefing";
 import type { AiChatSimpleMessage } from "@/lib/fetchAiChatSimple";
+import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
+
+/**
+ * Contratos de `metric_insights` por módulo para AiHeroV24.
+ * Los consumidores (TasksAIPanoramaCard, ProjectsBriefingCard, etc.) leen estas
+ * claves desde `useAiModuleBriefing().metricInsights` para cablear sus cards.
+ */
+export const TAREAS_METRIC_KEYS = [
+  "tareas_pendientes",
+  "completadas_hoy",
+  "vencidas",
+  "vencen_semana",
+] as const;
+
+export const PROYECTOS_METRIC_KEYS = [
+  "proyectos_activos",
+  "en_riesgo",
+  "sin_actividad",
+] as const;
+
+const TAREAS_METRIC_LABELS: Record<string, string> = {
+  tareas_pendientes: "Pendientes",
+  completadas_hoy: "Hechas hoy",
+  vencidas: "Vencidas",
+  vencen_semana: "Esta semana",
+};
+
+const PROYECTOS_METRIC_LABELS: Record<string, string> = {
+  proyectos_activos: "Activos",
+  en_riesgo: "En riesgo",
+  sin_actividad: "Sin actividad",
+};
 
 const PHRASE_FALLBACK =
   "La mejor manera de predecir el futuro es creándolo.\n— Peter Drucker, Managing for Results";
@@ -125,6 +158,9 @@ export function AiHeroV24(props: AiHeroV24Props) {
     payloadHash,
     buildMessages: () => messages,
     enabled: ready && !!payloadHash,
+    // Módulos (tareas/proyectos): on-demand. El usuario dispara la generación con
+    // un botón. Si ya existe fila del día, se sirve del cache sin llamar a IA.
+    autoFetch: false,
   });
 
   // Frase del día.
@@ -179,7 +215,7 @@ export function AiHeroV24(props: AiHeroV24Props) {
         </div>
 
         <div className="ai-hero-brief-body">
-          {briefing.isLoading && !briefing.content ? (
+          {briefing.isRefreshing && !briefing.content ? (
             <span className="text-xs text-muted-foreground">
               Generando briefing…
             </span>
@@ -188,15 +224,44 @@ export function AiHeroV24(props: AiHeroV24Props) {
               {briefing.error.message}
             </span>
           ) : briefing.content ? (
-            <KawiilAiMarkdown className="text-[12.5px] leading-relaxed">
-              {briefing.content}
-            </KawiilAiMarkdown>
+            <>
+              <KawiilAiMarkdown className="text-[12.5px] leading-relaxed">
+                {briefing.content}
+              </KawiilAiMarkdown>
+              {Object.keys(briefing.metricInsights).length > 0 && (
+                <MetricInsightChips
+                  insights={briefing.metricInsights}
+                  labels={
+                    props.module === "proyectos"
+                      ? PROYECTOS_METRIC_LABELS
+                      : TAREAS_METRIC_LABELS
+                  }
+                  order={
+                    props.module === "proyectos"
+                      ? [...PROYECTOS_METRIC_KEYS]
+                      : [...TAREAS_METRIC_KEYS]
+                  }
+                />
+              )}
+            </>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              {props.module === "proyectos"
-                ? "Analizando tu cartera de proyectos…"
-                : "Analizando tus tareas…"}
-            </span>
+            <div className="flex flex-col items-start gap-2">
+              <span className="text-xs text-muted-foreground">
+                {props.module === "proyectos"
+                  ? "Genera un resumen IA de tu cartera cuando lo necesites."
+                  : "Genera un resumen IA de tus tareas cuando lo necesites."}
+              </span>
+              <button
+                type="button"
+                onClick={() => void briefing.regenerate()}
+                disabled={!ready || !payloadHash || briefing.isRefreshing}
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11.5px] font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/10 disabled:opacity-50"
+                title="Generar briefing del día con Kawiil AI"
+              >
+                <Sparkles className="h-3 w-3" />
+                Generar briefing del día
+              </button>
+            </div>
           )}
         </div>
 
@@ -348,7 +413,15 @@ function buildBriefingInput(props: AiHeroV24Props): {
       typeof ctx.blockedCount === "number" ? `- Bloqueadas: ${ctx.blockedCount}` : "",
       topList ? `\nTareas críticas (top):\n${topList}` : "",
       "",
+      "INSTRUCCIONES PARA \"markdown\":",
       "Estructura: 1) qué tarea(s) atender PRIMERO y por qué (con nombre concreto), 2) si aplica, una sugerencia para delegar o aplazar algo. Si todo está bien, sugiere una mejora marginal.",
+      "",
+      "INSTRUCCIONES PARA \"metric_insights\":",
+      "- tareas_pendientes: 1 frase sobre la carga actual y el foco recomendado.",
+      "- completadas_hoy: 1 frase que reconozca el avance o estimule si es 0.",
+      "- vencidas: 1 frase con la acción concreta para retomar; omite si es 0.",
+      "- vencen_semana: 1 frase con el riesgo inminente de la semana; omite si es 0.",
+      briefingJsonInstructions({ metricKeys: [...TAREAS_METRIC_KEYS] }),
     ]
       .filter(Boolean)
       .join("\n");
@@ -394,7 +467,14 @@ function buildBriefingInput(props: AiHeroV24Props): {
     `- Sin actividad ≥ 7 días: ${ctx.sinActividad}`,
     topList ? `\nProyectos en riesgo (top):\n${topList}` : "",
     "",
+    "INSTRUCCIONES PARA \"markdown\":",
     "Estructura: 1) qué proyecto(s) atender PRIMERO y por qué (con nombre concreto), 2) si aplica, una oportunidad de adelantar otro proyecto. Si todo está bien, dilo y sugiere una mejora marginal.",
+    "",
+    "INSTRUCCIONES PARA \"metric_insights\":",
+    "- proyectos_activos: 1 frase sobre el estado general de la cartera activa.",
+    "- en_riesgo: 1 frase con el proyecto concreto que más urge; omite si es 0.",
+    "- sin_actividad: 1 frase con la acción para reactivar; omite si es 0.",
+    briefingJsonInstructions({ metricKeys: [...PROYECTOS_METRIC_KEYS] }),
   ].join("\n");
 
   const payload = {

@@ -13,14 +13,13 @@ import { useMyAssignedTasks } from "@/hooks/useTasks";
 import { useDueDateAlerts } from "@/hooks/useNotifications";
 import { useCalendarEvents, useUnreadEmailCount } from "@/hooks/useMicrosoft";
 import { usePipelineLeads } from "@/hooks/usePipeline";
-import { useCurrentProfile, getFirstName } from "@/hooks/useCurrentProfile";
+import { useCurrentProfile, getFirstName, getGreeting } from "@/hooks/useCurrentProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import {
   isPastDueCalendarMX,
   toDateStringMX,
   mexicoDayRangeISO,
-  nowMX,
 } from "@/lib/dateUtils";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { cn } from "@/lib/utils";
@@ -65,12 +64,7 @@ export function AiAssistantWelcome({ onSendPrompt }: Props) {
   const { data: profile } = useCurrentProfile();
   const today = useMexicoToday();
   const todayYmd = useMemo(() => toDateStringMX(today), [today]);
-  const greetingPrefix = useMemo(() => {
-    const hour = nowMX().getHours();
-    if (hour < 12) return "Buenos días";
-    if (hour < 19) return "Buenas tardes";
-    return "Buenas noches";
-  }, [today]);
+  const greetingPrefix = useMemo(() => getGreeting(), [today]);
 
   const dayRange = useMemo(() => mexicoDayRangeISO(todayYmd), [todayYmd]);
 

@@ -6,7 +6,27 @@ import { Sparkles, Loader2, RefreshCw, ChevronDown, ChevronRight } from "lucide-
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import { toDateStringMX } from "@/lib/dateUtils";
-import { useAiModuleBriefing, sha256Hex } from "@/hooks/useAiModuleBriefing";
+import { useAiModuleBriefing, sha256Hex, briefingJsonInstructions } from "@/hooks/useAiModuleBriefing";
+import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
+
+const DASHBOARD_METRIC_LABELS: Record<string, string> = {
+  tasks_pendientes: "Pendientes",
+  completadas_hoy: "Completadas",
+  vencidas: "Vencidas",
+  recordatorios: "Recordatorios",
+};
+
+/**
+ * KPIs del dashboard personal cuyos insights se bundlen en el briefing.
+ * Estas claves son contratos entre el prompt del briefing y los componentes
+ * consumidores (PersonalDashboard, TeamDashboard).
+ */
+export const DASHBOARD_METRIC_KEYS = [
+  "tasks_pendientes",
+  "completadas_hoy",
+  "vencidas",
+  "recordatorios",
+] as const;
 
 interface DailyBriefingProps {
   tasksCount: number;
@@ -114,6 +134,9 @@ export function DailyBriefing({
   const briefing = useAiModuleBriefing({
     module: "dashboard",
     payloadHash,
+    // Hero principal: 1 briefing automático al día. El blindaje 1/día del hook
+    // garantiza que cambios de hash durante el día NO regeneran (solo regenerate()).
+    autoFetch: true,
     enabled: ready && !!payloadHash,
     buildMessages: () => {
       const contextPrompt = `Genera un briefing corto y motivador del día para ${firstName}. Hoy es ${todayStr}.
@@ -124,12 +147,18 @@ TAREAS: ${JSON.stringify((taskDetails ?? []).map((t) => ({ titulo: t.title, prio
 
 DEADLINES EQUIPO (3 días): ${JSON.stringify((teamDeadlines ?? []).map((t) => ({ titulo: t.title, prioridad: t.priority, vence: t.due_date })))}
 
-INSTRUCCIONES:
+INSTRUCCIONES PARA "markdown":
 1. Resume en máximo 3 puntos clave con emojis.
 2. Si hay vencidas, menciona con empatía.
 3. Si completó, reconoce.
 4. Máximo 80 palabras. Sé ultra-conciso.
-5. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.`;
+5. Markdown obligatorio: línea de título con emoji (ej. 🗒️ **Briefing del …**), subtítulo **Situación actual**, viñetas con emojis (🔥 ⚠️ ✅), **negritas** en cifras y alertas. Sin saludo largo.
+
+INSTRUCCIONES PARA "metric_insights":
+- tasks_pendientes: 1 frase sobre la carga de tareas pendientes y el siguiente foco.
+- completadas_hoy: 1 frase que reconozca el avance o anime a avanzar si es 0.
+- vencidas: 1 frase concreta con la acción para retomar si hay vencidas; si es 0, omite la clave.
+- recordatorios: 1 frase útil sobre el estado de los recordatorios; si es 0, omite la clave.${briefingJsonInstructions({ metricKeys: [...DASHBOARD_METRIC_KEYS] })}`;
       return [{ role: "user", content: contextPrompt }];
     },
   });
@@ -177,6 +206,14 @@ INSTRUCCIONES:
           )}
 
           {content && <KawiilAiMarkdown>{content}</KawiilAiMarkdown>}
+
+          {content && Object.keys(briefing.metricInsights).length > 0 && (
+            <MetricInsightChips
+              insights={briefing.metricInsights}
+              labels={DASHBOARD_METRIC_LABELS}
+              order={[...DASHBOARD_METRIC_KEYS]}
+            />
+          )}
 
           {content && (
             <button

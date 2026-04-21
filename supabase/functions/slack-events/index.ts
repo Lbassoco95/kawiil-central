@@ -337,6 +337,60 @@ function slackNotificationType(flags: SlackTargetFlags): string {
   return flags.mention ? "slack_mention" : "slack_message";
 }
 
+type SlackFile = {
+  mimetype?: string;
+  filetype?: string;
+  name?: string;
+  title?: string;
+  pretty_type?: string;
+};
+
+/**
+ * Descripción legible del primer adjunto para el body de la notificación:
+ * - Solo imágenes: "Imagen" o "N imágenes".
+ * - Archivo: "{nombre} ({TIPO})" (p. ej. "contrato.pdf (PDF)").
+ * - Si hay más de uno, agrega "(+N más)".
+ */
+function describeSlackAttachments(files: SlackFile[] | undefined | null): string | null {
+  if (!Array.isArray(files) || files.length === 0) return null;
+  const isImage = (f: SlackFile) =>
+    (f.mimetype || "").startsWith("image/") ||
+    ["png", "jpg", "jpeg", "gif", "webp", "heic"].includes((f.filetype || "").toLowerCase());
+  const images = files.filter(isImage);
+  const others = files.filter((f) => !isImage(f));
+  if (images.length > 0 && others.length === 0) {
+    return files.length === 1 ? "Imagen" : `${files.length} imágenes`;
+  }
+  const f = others[0] ?? files[0];
+  const name = (f.name || f.title || "").trim() || "archivo";
+  const kindRaw = (f.pretty_type || f.filetype || "").toString().trim();
+  const kind = kindRaw ? kindRaw.toUpperCase() : "";
+  const suffix = kind ? ` (${kind})` : "";
+  const extras = files.length > 1 ? ` (+${files.length - 1} más)` : "";
+  return `${name}${suffix}${extras}`;
+}
+
+/**
+ * Preview del mensaje respetando hasta 3 líneas de texto y fusionando con la descripción
+ * del adjunto cuando hay archivos/imágenes. Preserva saltos de línea para que el toast pueda
+ * aplicar `line-clamp-3`.
+ */
+function buildSlackPreview(text: string, files?: SlackFile[] | null): string {
+  const cleanText = (text || "")
+    .replace(/<@[A-Z0-9]+>/g, "@…")
+    .replace(/[ \t]+/g, " ")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join("\n")
+    .slice(0, 280);
+  const attach = describeSlackAttachments(files || []);
+  if (attach && cleanText) return `${attach} · ${cleanText}`;
+  if (attach) return attach;
+  return cleanText;
+}
+
 /** Notificaciones in-app (+ push): cada mensaje en canal/grupo a miembros Kawiil, @mención, seguimiento, VIP, DM/mpim. */
 async function handleMessageNotificationEvent(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -650,7 +704,8 @@ async function handleMessageNotificationEvent(
     }
   }
 
-  const preview = text.replace(/<@[A-Z0-9]+>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 200);
+  const preview =
+    buildSlackPreview(text, event.files as SlackFile[] | undefined) || "(sin contenido)";
 
   const rows = [...targets.entries()].map(([user_id, flags]) => {
     const baseType = slackNotificationType(flags);

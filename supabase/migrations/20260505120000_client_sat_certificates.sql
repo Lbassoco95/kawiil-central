@@ -82,7 +82,10 @@ END $$;
 -- Triggers INSTEAD OF para INSERT/UPDATE/DELETE permiten que las Edge actuales
 -- (moffin-fiel save/delete y moffin-query lectura) sigan funcionando sin cambios.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW public.moffin_client_fiel AS
+-- security_invoker=true: la VIEW respeta RLS del usuario que consulta,
+-- evitando el hallazgo "SECURITY DEFINER View" del Supabase Advisor.
+CREATE OR REPLACE VIEW public.moffin_client_fiel
+WITH (security_invoker = true) AS
   SELECT
     id,
     organization_id,

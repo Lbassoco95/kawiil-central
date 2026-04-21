@@ -59,7 +59,7 @@ export function getInitials(profile: CurrentProfile | null | undefined, fallback
 
 export function getGreeting(date = new Date()): string {
   const h = date.getHours();
-  if (h < 12) return "Buenos días";
-  if (h < 19) return "Buenas tardes";
-  return "Buenas noches";
+  if (h < 12) return "Buen día";
+  if (h < 19) return "Buena tarde";
+  return "Buena noche";
 }

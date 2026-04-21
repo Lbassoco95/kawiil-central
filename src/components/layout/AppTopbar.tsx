@@ -1,6 +1,6 @@
 import { Menu, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCurrentProfile, getFirstName } from "@/hooks/useCurrentProfile";
+import { useCurrentProfile, getFirstName, getGreeting } from "@/hooks/useCurrentProfile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { openCommandPalette } from "@/lib/openCommandPalette";
 import { openMobileSidebar } from "@/lib/openMobileSidebar";
@@ -11,20 +11,13 @@ interface AppTopbarProps {
   isFullWidth?: boolean;
 }
 
-function getPersonalGreeting(date = new Date()): string {
-  const h = date.getHours();
-  if (h < 12) return "Buen día";
-  if (h < 19) return "Buena tarde";
-  return "Buena noche";
-}
-
 export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
   const { user } = useAuth();
   const { data: profile } = useCurrentProfile();
   const isMobile = useIsMobile();
 
   const firstName = getFirstName(profile, user?.email);
-  const greeting = getPersonalGreeting();
+  const greeting = getGreeting();
 
   const isMac =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
@@ -34,12 +27,12 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
     <div
       className={cn(
         "sticky top-0 z-30 shrink-0 border-b border-border/50 bg-background/85 backdrop-blur-md",
-        isMobile ? "px-3 py-2" : "px-6 py-2.5",
+        isMobile ? "px-3 py-2" : "px-6 py-3",
       )}
     >
       <div
         className={cn(
-          "flex items-center gap-3",
+          "flex items-center gap-4",
           isFullWidth ? "w-full max-w-none px-0" : "max-w-7xl mx-auto",
         )}
       >
@@ -54,24 +47,22 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <h1 className="truncate text-[15px] font-semibold leading-tight text-foreground sm:text-base md:text-[17px]">
+            {greeting},{" "}
+            <span className="text-primary">{firstName}</span>{" "}
             <span
-              className="kw-wave text-xl leading-none sm:text-[22px]"
+              className="kw-ai-wave inline-block align-baseline"
               role="img"
               aria-label="saludando"
             >
               👋
             </span>
-            <h1 className="truncate text-[15px] font-semibold leading-tight text-foreground sm:text-base">
-              {greeting},{" "}
-              <span className="text-primary">{firstName}</span>
-              {!isMobile && (
-                <span className="ml-1.5 font-normal text-muted-foreground">
-                  · ¿qué quieres avanzar hoy?
-                </span>
-              )}
-            </h1>
-          </div>
+            {!isMobile && (
+              <span className="ml-2 font-normal text-muted-foreground">
+                · ¿qué quieres avanzar hoy?
+              </span>
+            )}
+          </h1>
         </div>
 
         <button
@@ -79,8 +70,8 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
           onClick={openCommandPalette}
           aria-label="Abrir buscador global"
           className={cn(
-            "group relative inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground transition hover:bg-muted",
-            isMobile ? "h-8 w-8 justify-center px-0" : "min-w-[260px] justify-between",
+            "group relative inline-flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition hover:bg-muted",
+            isMobile ? "h-9 w-9 justify-center px-0" : "min-w-[260px] justify-between",
           )}
         >
           <span className="flex items-center gap-2">

@@ -18,10 +18,25 @@ interface Props {
   ready: boolean;
   userId?: string;
   accentClass?: string;
+  /**
+   * Contenido ya generado (p.ej. desde `useAiModuleBriefing().content` del módulo padre).
+   * Si se pasa, se renderiza directamente SIN llamar a IA. Tiene prioridad sobre el cache local.
+   */
+  externalContent?: string;
   /** Espera antes de llamar a la IA (escalonar con otros widgets del dashboard). */
   requestDelayMs?: number;
 }
 
+/**
+ * AISummaryCard — resumen IA por módulo/KPI.
+ *
+ * **Cambio de política (B1.6 optimización costos)**: ya NO dispara IA al montar.
+ * Dos modos de uso:
+ *   1) Recomendado: el padre pasa `externalContent` desde el briefing del módulo
+ *      (`useAiModuleBriefing().content`). 0 llamadas IA propias.
+ *   2) On-demand: el usuario pulsa el botón "Generar resumen". Se cachea 24 h en
+ *      localStorage por `cacheKey`.
+ */
 export function AISummaryCard({
   cacheKey,
   contextPrompt,
@@ -29,11 +44,12 @@ export function AISummaryCard({
   subtitle = "Analizado con tus datos en vivo",
   ready,
   userId,
+  externalContent,
   requestDelayMs = 0,
 }: Props) {
   void userId;
   void requestDelayMs;
-  const [content, setContent] = useState<string | null>(() => {
+  const [localContent, setLocalContent] = useState<string | null>(() => {
     try {
       const cached = localStorage.getItem(`kawiil-summary-${cacheKey}`);
       if (cached) {
@@ -49,6 +65,10 @@ export function AISummaryCard({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
 
+  // El contenido externo (del briefing del módulo padre) tiene prioridad sobre
+  // el cache local. Si no hay externo, se usa el local (cache 24h en localStorage).
+  const content = externalContent ?? localContent;
+
   const generate = useCallback(async () => {
     if (!ready) return;
     setLoading(true);
@@ -61,7 +81,7 @@ export function AISummaryCard({
         { retries: 2 },
       );
       if (fullContent) {
-        setContent(fullContent);
+        setLocalContent(fullContent);
         try {
           localStorage.setItem(
             `kawiil-summary-${cacheKey}`,
@@ -78,13 +98,19 @@ export function AISummaryCard({
     }
   }, [contextPrompt, ready, cacheKey]);
 
+  // Si llega contenido externo, persistirlo en el cache local para aprovechar
+  // entre navegaciones cuando el padre no esté montado.
   useEffect(() => {
-    if (ready && !content && !loading) {
-      void generate();
+    if (!externalContent) return;
+    try {
+      localStorage.setItem(
+        `kawiil-summary-${cacheKey}`,
+        JSON.stringify({ date: toDateStringMX(nowMX()), content: externalContent }),
+      );
+    } catch {
+      /* ignorar */
     }
-    // Solo dispara la primera vez tras estar listo, sin re-disparar al cambiar `generate`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, content]);
+  }, [externalContent, cacheKey]);
 
   return (
     <section

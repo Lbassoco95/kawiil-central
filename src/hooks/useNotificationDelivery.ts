@@ -1,4 +1,5 @@
-import { useEffect, useRef, useLayoutEffect, useCallback } from "react";
+import { useEffect, useRef, useLayoutEffect, useCallback, createElement } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -106,6 +107,7 @@ function scheduleToastDedupe(id: string, dedupe: Set<string>) {
 export function useNotificationDelivery() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const lastRtErrorToastAt = useRef(0);
   const prefsRef = useRef<NotificationDeliveryPrefs | undefined>(undefined);
   const toastDedupeIdsRef = useRef<Set<string>>(new Set());
@@ -158,14 +160,57 @@ export function useNotificationDelivery() {
       allowDesktop,
     });
 
+    const deepLink = slackDeepLinkFromNotification({
+      entity_type: row.entity_type,
+      entity_ref: row.entity_ref,
+      entity_id: row.entity_id,
+      type: row.type,
+    });
+    const bodyText = row.body?.trim() || "";
+
     let surfaced = false;
     if (allowToast) {
-      toast.info(title, {
-        description: row.body?.trim() || undefined,
-        duration: mandatorySurface ? 9000 : 6500,
-        className:
-          "!min-w-[min(100vw-1.5rem,20rem)] sm:!min-w-[22rem] !max-w-[min(100vw-1.5rem,26rem)] !shadow-xl !border-border/80",
-      });
+      toast.custom(
+        (toastId) =>
+          createElement(
+            "button",
+            {
+              type: "button",
+              onClick: () => {
+                if (deepLink) {
+                  navigate(deepLink);
+                }
+                toast.dismiss(toastId);
+              },
+              className:
+                "group flex w-full min-w-[min(100vw-1.5rem,20rem)] sm:min-w-[22rem] max-w-[min(100vw-1.5rem,26rem)] " +
+                "cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-popover p-3 text-left " +
+                "shadow-xl transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
+            },
+            createElement(
+              "div",
+              { className: "min-w-0 flex-1" },
+              createElement(
+                "p",
+                { className: "truncate text-sm font-semibold text-foreground" },
+                title,
+              ),
+              bodyText
+                ? createElement(
+                    "p",
+                    {
+                      className:
+                        "mt-0.5 whitespace-pre-line text-xs text-muted-foreground line-clamp-3",
+                    },
+                    bodyText,
+                  )
+                : null,
+            ),
+          ),
+        {
+          duration: mandatorySurface ? 9000 : 6500,
+        },
+      );
       surfaced = true;
     }
     if (
@@ -175,12 +220,6 @@ export function useNotificationDelivery() {
     ) {
       try {
         const tag = row.id ? `kawiil-${row.id}` : `kawiil-${row.type || "notif"}-${Date.now()}`;
-        const deepLink = slackDeepLinkFromNotification({
-          entity_type: row.entity_type,
-          entity_ref: row.entity_ref,
-          entity_id: row.entity_id,
-          type: row.type,
-        });
         const n = new Notification(title, {
           body: row.body?.trim() || undefined,
           tag,
@@ -216,7 +255,7 @@ export function useNotificationDelivery() {
     } else if (surfaced && globalSoundOn && row?.type !== "slack_message") {
       playNotificationBeep();
     }
-  }, [user?.id]);
+  }, [user?.id, navigate]);
 
   /** Si Realtime falla, seguimos trayendo Slack (y el resto) por polling + toast deduplicado. */
   useEffect(() => {

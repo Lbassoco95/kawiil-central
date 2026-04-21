@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutGrid, AlertTriangle, Loader2, RefreshCw, FileText, Scale } from "lucide-react";
+import { LayoutGrid, AlertTriangle, Loader2, RefreshCw, FileText, Scale, Sparkles } from "lucide-react";
 import { KawiilAiMarkdown } from "@/components/shared/KawiilAiMarkdown";
 import { cn } from "@/lib/utils";
-import { useAiModuleBriefing, sha256Hex } from "@/hooks/useAiModuleBriefing";
+import { useAiModuleBriefing, sha256Hex, briefingJsonInstructions } from "@/hooks/useAiModuleBriefing";
+import { PROYECTOS_METRIC_KEYS } from "@/components/dashboard/AiHeroV24";
+import { MetricInsightChips } from "@/components/dashboard/MetricInsightChips";
+
+const PROYECTOS_METRIC_LABELS: Record<string, string> = {
+  proyectos_activos: "Activos",
+  en_riesgo: "En riesgo",
+  sin_actividad: "Sin actividad",
+};
 
 interface ProjectBriefRow {
   id: string;
@@ -82,6 +90,9 @@ export function ProjectsBriefingCard({
   const briefing = useAiModuleBriefing({
     module: "proyectos",
     payloadHash,
+    // On-demand: el usuario dispara la generación con el botón "Generar briefing".
+    // Si ya existe fila del día para este usuario, se sirve del cache sin llamar a IA.
+    autoFetch: false,
     enabled: ready && !!payloadHash,
     buildMessages: () => {
       const sample = counts.enRiesgo
@@ -105,7 +116,14 @@ export function ProjectsBriefingCard({
         `- Sin actividad ≥ 7 días: ${counts.sinActividad.length}`,
         counts.enRiesgo.length > 0 ? `\nProyectos en riesgo (top):\n${sample}` : "",
         "",
+        "INSTRUCCIONES PARA \"markdown\":",
         "Estructura: 1) qué proyecto(s) atender PRIMERO y por qué (con nombre concreto), 2) si aplica, una oportunidad de adelantar otro proyecto. Si todo está bien, dilo y sugiere una mejora marginal.",
+        "",
+        "INSTRUCCIONES PARA \"metric_insights\":",
+        "- proyectos_activos: 1 frase sobre el estado general de la cartera activa.",
+        "- en_riesgo: 1 frase con el proyecto concreto que más urge; omite si es 0.",
+        "- sin_actividad: 1 frase con la acción para reactivar; omite si es 0.",
+        briefingJsonInstructions({ metricKeys: [...PROYECTOS_METRIC_KEYS] }),
       ].join("\n");
       return [{ role: "user", content: prompt }];
     },
@@ -181,17 +199,38 @@ export function ProjectsBriefingCard({
               : "todo en orden."}
           </p>
         ) : content ? (
-          <KawiilAiMarkdown className="text-sm leading-relaxed">
-            {content}
-          </KawiilAiMarkdown>
+          <>
+            <KawiilAiMarkdown className="text-sm leading-relaxed">
+              {content}
+            </KawiilAiMarkdown>
+            {Object.keys(briefing.metricInsights).length > 0 && (
+              <MetricInsightChips
+                insights={briefing.metricInsights}
+                labels={PROYECTOS_METRIC_LABELS}
+                order={[...PROYECTOS_METRIC_KEYS]}
+              />
+            )}
+          </>
         ) : loading ? (
           <p className="text-xs text-muted-foreground">Analizando tu cartera de proyectos…</p>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            {counts.enRiesgo.length > 0
-              ? `${counts.enRiesgo.length} proyecto${counts.enRiesgo.length === 1 ? "" : "s"} requiere${counts.enRiesgo.length === 1 ? "" : "n"} atención.`
-              : "Todos tus proyectos activos están sin alertas."}
-          </p>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              {counts.enRiesgo.length > 0
+                ? `${counts.enRiesgo.length} proyecto${counts.enRiesgo.length === 1 ? "" : "s"} requiere${counts.enRiesgo.length === 1 ? "" : "n"} atención.`
+                : "Todos tus proyectos activos están sin alertas."}
+            </p>
+            <button
+              type="button"
+              onClick={() => void briefing.regenerate()}
+              disabled={!ready || !payloadHash}
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11.5px] font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/10 disabled:opacity-50"
+              title="Generar briefing con Kawiil AI"
+            >
+              <Sparkles className="h-3 w-3" />
+              Generar briefing del día
+            </button>
+          </div>
         )}
       </div>
 

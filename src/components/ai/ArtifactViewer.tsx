@@ -214,7 +214,11 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             </TabsContent>
           </Tabs>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4 h-full">
+          // IMPORTANTE: el contenedor padre es `flex-1 min-h-0 overflow-hidden`
+          // (no flex en sí mismo), así que aquí usamos `h-full overflow-y-auto`
+          // para poder hacer scroll de markdown largos. Sin `h-full` el div
+          // colapsa al alto del contenido y el viewer recortaba el documento.
+          <div className="h-full overflow-y-auto p-4">
             {editing ? (
               <Textarea
                 value={editContent}
@@ -222,7 +226,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 className="min-h-[400px] text-sm font-mono resize-none"
               />
             ) : (
-              <div className="prose prose-sm max-w-none [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
+              <div className="prose prose-sm max-w-none pb-8 [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
                 <ReactMarkdown>{artifact.content}</ReactMarkdown>
               </div>
             )}

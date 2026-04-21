@@ -3330,7 +3330,10 @@ async function handleClaudeChat(
 
     const resp = await anthropicMessagesFetch(apiKey, {
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      // 8192 da margen para respuestas largas (p. ej. documentos extensos vía
+      // create_ai_document) sin que Claude termine con stop_reason="max_tokens"
+      // y un bloque de texto vacío.
+      max_tokens: 8192,
       system: systemPrompt,
       messages: anthropicMsgs,
       tools: isLastChance ? undefined : allTools,
@@ -3430,6 +3433,12 @@ async function handleClaudeChat(
                 } else if (parsed.error) {
                   // Render falló: caemos al handler legacy para no perder el contenido.
                   console.warn("Auto-upgrade create_artifact falló, fallback a markdown:", parsed.error);
+                  // Hacemos visible en el chat la razón del fallback para que el
+                  // usuario entienda por qué bajó a markdown (y podamos iterar).
+                  sseWriter.writeProgress(
+                    "warning",
+                    `No se pudo generar PDF/DOCX (${String(parsed.error).slice(0, 140)}). Guardando como markdown.`,
+                  );
                   result = await handleCreateArtifact(tu.input || {}, userId, orgId, aiProjectId);
                   const legacyParsed = JSON.parse(result);
                   if (legacyParsed.artifact_id) {
@@ -3515,6 +3524,34 @@ async function handleClaudeChat(
         return `[artifact:${a.id}|${a.title}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`;
       }).join("\n");
       textContent = textContent + "\n\n" + markers;
+    }
+
+    // Salvavidas: si Claude termina la ronda sin texto y sin artefactos, NO cerrar el
+    // stream en silencio (eso hacía que el cliente mostrara "No se recibió respuesta
+    // del modelo" sin más contexto). Emitimos un mensaje claro según stop_reason.
+    if (!textContent.trim()) {
+      console.warn(
+        `Claude round cerró sin texto. stop_reason=${stopReason} blocks=${contentBlocks.length} artifacts=${createdArtifacts.length}`,
+      );
+      if (stopReason === "max_tokens") {
+        sseWriter.fail(
+          "**La respuesta se cortó por tamaño (max_tokens).** " +
+            "Suele ocurrir cuando el documento o la explicación solicitada es muy grande. " +
+            "Prueba a dividir la tarea en pasos más chicos, pedir solo la sección que necesitas, " +
+            "o reintentar en un chat nuevo con menos historial.",
+        );
+      } else if (stopReason === "refusal") {
+        sseWriter.fail(
+          "**La IA rechazó la solicitud por sus políticas.** Reformula el pedido o proporciona más contexto.",
+        );
+      } else {
+        sseWriter.fail(
+          `**La IA no devolvió texto en esta respuesta** (stop_reason: ${stopReason ?? "desconocido"}). ` +
+            "Puede ser un fallo temporal del proveedor o que el mensaje excedió el contexto. " +
+            "Reintenta en unos segundos o inicia un chat nuevo si el historial es muy largo.",
+        );
+      }
+      return;
     }
 
     sseWriter.writeProgress("response", "Generando la respuesta final…");
