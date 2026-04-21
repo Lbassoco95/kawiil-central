@@ -689,6 +689,23 @@ div[id*="lovable" i] {
   padding-left: 12px;
   border-left: 1px solid hsl(var(--border));
 }
+.kw-tb-tz-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 66px; /* ~3 chips visibles */
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.kw-tb-tz-list::-webkit-scrollbar { width: 4px; }
+.kw-tb-tz-list::-webkit-scrollbar-track { background: transparent; }
+.kw-tb-tz-list::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+.kw-tb-tz-list::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
 .kw-tb-tz-chip {
   display: inline-flex;
   align-items: center;
@@ -907,6 +924,20 @@ div[id*="lovable" i] {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
+}
+
+/* Waving hand animation for topbar greeting */
+@keyframes kw-wave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(14deg); }
+  20% { transform: rotate(-8deg); }
+  40%, 50% { transform: rotate(14deg); }
+}
+.kw-wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: kw-wave 2.4s ease-in-out infinite;
+  animation-delay: 0.8s;
 }
 
 /* Respect user preference: minimize motion (animations + transitions) */

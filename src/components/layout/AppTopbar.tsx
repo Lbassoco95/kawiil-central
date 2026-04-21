@@ -1,6 +1,6 @@
 import { Menu, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCurrentProfile, getFirstName, getGreeting } from "@/hooks/useCurrentProfile";
+import { useCurrentProfile, getFirstName } from "@/hooks/useCurrentProfile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { openCommandPalette } from "@/lib/openCommandPalette";
 import { openMobileSidebar } from "@/lib/openMobileSidebar";
@@ -11,13 +11,20 @@ interface AppTopbarProps {
   isFullWidth?: boolean;
 }
 
+function getPersonalGreeting(date = new Date()): string {
+  const h = date.getHours();
+  if (h < 12) return "Buen día";
+  if (h < 19) return "Buena tarde";
+  return "Buena noche";
+}
+
 export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
   const { user } = useAuth();
   const { data: profile } = useCurrentProfile();
   const isMobile = useIsMobile();
 
   const firstName = getFirstName(profile, user?.email);
-  const greeting = getGreeting();
+  const greeting = getPersonalGreeting();
 
   const isMac =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
@@ -47,18 +54,24 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-            {greeting}
-          </p>
-          <h1 className="truncate text-base font-semibold leading-tight text-foreground sm:text-[15px]">
-            {firstName}
-            {!isMobile && (
-              <>
-                <span className="ml-1.5 text-muted-foreground font-normal">·</span>
-                <span className="ml-1.5 font-normal text-muted-foreground">¿qué quieres avanzar hoy?</span>
-              </>
-            )}
-          </h1>
+          <div className="flex items-center gap-2">
+            <span
+              className="kw-wave text-xl leading-none sm:text-[22px]"
+              role="img"
+              aria-label="saludando"
+            >
+              👋
+            </span>
+            <h1 className="truncate text-[15px] font-semibold leading-tight text-foreground sm:text-base">
+              {greeting},{" "}
+              <span className="text-primary">{firstName}</span>
+              {!isMobile && (
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  · ¿qué quieres avanzar hoy?
+                </span>
+              )}
+            </h1>
+          </div>
         </div>
 
         <button

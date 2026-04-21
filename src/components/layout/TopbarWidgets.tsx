@@ -212,8 +212,8 @@ function TimezoneStrip() {
 
   return (
     <div className="kw-tb-tz">
-      <div className="flex flex-col gap-[3px]">
-        {zones.slice(0, 3).map((z) => (
+      <div className="kw-tb-tz-list">
+        {zones.map((z) => (
           <TzChip key={z.code} entry={z} now={now} onRemove={() => remove(z.code)} />
         ))}
       </div>
