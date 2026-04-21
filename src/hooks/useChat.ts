@@ -20,6 +20,16 @@ export interface ChatAttachmentMeta {
   mime_type: string;
 }
 
+/** Referencia persistida en `chat_messages.agent_task_ref` (delegación a agente consultable). */
+export interface ChatAgentTaskRef {
+  task_id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_display_name: string;
+  agent_color: string;
+  title: string;
+}
+
 export interface ChatMessage {
   id?: string;
   role: "user" | "assistant";
@@ -29,6 +39,8 @@ export interface ChatMessage {
   activityLog?: string[];
   /** Mensaje de error visible en el hilo */
   isError?: boolean;
+  /** Tarea delegada a un agente IA (renderizada con AgentTaskCard en el hilo). */
+  agent_task_ref?: ChatAgentTaskRef | null;
 }
 
 export interface ChatConversation {
@@ -334,6 +346,7 @@ export function useChat() {
         role: r.role as "user" | "assistant",
         content: r.content,
         attachments: Array.isArray(r.attachments) && r.attachments.length ? r.attachments : undefined,
+        agent_task_ref: (r as any).agent_task_ref ?? null,
       }))
     );
     setActiveConversationId(conversationId);
@@ -368,6 +381,77 @@ export function useChat() {
       return (data as any).id as string;
     },
     [user, qc, activeAiProjectId]
+  );
+
+  const addAgentTaskMessage = useCallback(
+    async (ref: ChatAgentTaskRef) => {
+      if (!user) {
+        toast.error("Inicia sesión para guardar la delegación");
+        return;
+      }
+
+      let convId = activeConversationId;
+      if (!convId) {
+        try {
+          const raw = ref.title.trim();
+          const titleConv =
+            raw.length > 50 ? `${raw.substring(0, 50)}...` : raw || "Tarea delegada";
+          convId = await createConversation(titleConv);
+          setActiveConversationId(convId);
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "No se pudo crear la conversación";
+          console.error("addAgentTaskMessage: createConversation", e);
+          toast.error(msg);
+          return;
+        }
+      }
+
+      const payload: Record<string, unknown> = {
+        conversation_id: convId,
+        role: "assistant",
+        content: "",
+        agent_task_ref: ref,
+      };
+
+      const { data: msgData, error: insertErr } = await supabase
+        .from("chat_messages" as any)
+        .insert(payload as any)
+        .select("id")
+        .single();
+
+      if (insertErr) {
+        console.error("addAgentTaskMessage: insert", insertErr);
+        toast.error(insertErr.message || "No se pudo guardar el mensaje de tarea");
+        return;
+      }
+
+      const insertedId = (msgData as { id?: string } | null)?.id;
+      if (!insertedId) {
+        toast.error("No se recibió id del mensaje");
+        return;
+      }
+
+      const { error: convErr } = await supabase
+        .from("chat_conversations" as any)
+        .update({ updated_at: new Date().toISOString() } as any)
+        .eq("id", convId);
+      if (convErr) {
+        console.error("addAgentTaskMessage: update conversation", convErr);
+        toast.error("La tarea se guardó pero no se pudo actualizar la conversación");
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: insertedId,
+          role: "assistant",
+          content: "",
+          agent_task_ref: ref,
+        },
+      ]);
+      qc.invalidateQueries({ queryKey: ["chat-conversations"] });
+    },
+    [user, activeConversationId, createConversation, qc],
   );
 
   const updateConversationFolder = useCallback(
@@ -1008,6 +1092,7 @@ export function useChat() {
     activeAiProjectId,
     sendMessage,
     loadConversation,
+    addAgentTaskMessage,
     startNewChat,
     deleteConversation: deleteConversation.mutate,
     updateConversationFolder,
