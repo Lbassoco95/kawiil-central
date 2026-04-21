@@ -488,6 +488,46 @@ async function pdfBytesToGatewayText(bytes: Uint8Array, name: string): Promise<s
   }
 }
 
+async function pptxBytesToText(bytes: Uint8Array, _name: string): Promise<string> {
+  if (bytes.length > XLSX_PROCESS_MAX_BYTES) {
+    const mb = Math.round(bytes.length / (1024 * 1024));
+    return `[PowerPoint ~${mb} MB: demasiado grande para procesar en el servidor. Exporta PDF o reduce el archivo.]`;
+  }
+  try {
+    const JSZip = (await import("npm:jszip@3.10.1")).default;
+    const zip = await JSZip.loadAsync(bytes);
+    const slidePaths = Object.keys(zip.files).filter((n) =>
+      /^ppt\/slides\/slide\d+\.xml$/i.test(n)
+    );
+    slidePaths.sort((a, b) => {
+      const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+      const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+      return na - nb;
+    });
+    const parts: string[] = [];
+    for (const path of slidePaths.slice(0, 80)) {
+      const xml = await zip.file(path)?.async("string");
+      if (!xml) continue;
+      const text = xml
+        .replace(/<a:t>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text.length) parts.push(`## ${path}\n${text}`);
+    }
+    if (slidePaths.length > 80) {
+      parts.push(`[…${slidePaths.length - 80} diapositiva(s) omitidas por límite.]`);
+    }
+    if (parts.length === 0) {
+      return "[No se extrajo texto legible de las diapositivas.]";
+    }
+    return truncateText(parts.join("\n\n"), CHAT_TEXT_EXTRACT_MAX);
+  } catch (e) {
+    console.warn("pptx parse error", e);
+    return "[No se pudo leer la presentación. Prueba exportar PDF o adjunta las diapositivas relevantes como imágenes.]";
+  }
+}
+
 function xlsxBytesToText(bytes: Uint8Array): string {
   try {
     const huge = bytes.length > XLSX_HUGE_FILE_BYTES;
@@ -608,6 +648,28 @@ async function processAttachmentFile(
     }
     const t = xlsxBytesToText(bytes);
     return { claude: [{ type: "text", text: `Contenido de ${name}:\n${t}` }], gatewayText: `### ${name}\n${t}` };
+  }
+  if (
+    mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    mt === "application/vnd.ms-powerpoint" ||
+    lower.endsWith(".pptx") ||
+    lower.endsWith(".ppt")
+  ) {
+    if (bytes.length > XLSX_PROCESS_MAX_BYTES) {
+      const mb = Math.round(bytes.length / (1024 * 1024));
+      return {
+        claude: [{
+          type: "text",
+          text: `[PowerPoint ~${mb} MB: demasiado grande para procesar en el servidor. Exporta PDF o reduce el archivo.]`,
+        }],
+        gatewayText: `[Presentación omitida por tamaño: ${name}]`,
+      };
+    }
+    const t = await pptxBytesToText(bytes, name);
+    return {
+      claude: [{ type: "text", text: `Contenido extraído de ${name}:\n${t}` }],
+      gatewayText: `### ${name}\n${t}`,
+    };
   }
   if (lower.endsWith(".sqlite") || lower.endsWith(".db") || isLikelySqlite(bytes)) {
     const t = await sqliteBytesToSummary(bytes);

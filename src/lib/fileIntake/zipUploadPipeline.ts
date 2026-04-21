@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
+import { guessMimeFromFilename } from "@/lib/mimeFromFilename";
 
 /**
  * Tras insertar un `documents` asociado a un `File`, dispara extracción en Edge si el ZIP
@@ -29,13 +30,15 @@ export function invokeProcessDocumentForBinaryFile(
   documentId: string
 ): void {
   const name = file.name.toLowerCase();
-  const mime = file.type;
+  const mime = (file.type && file.type.trim()) || guessMimeFromFilename(file.name);
   const processable =
     mime === "application/pdf" ||
     mime === "application/xml" ||
     mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-    /\.(pdf|docx|xlsx|xml)$/i.test(name);
+    mime === "application/vnd.ms-powerpoint" ||
+    mime === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    /\.(pdf|docx|xlsx|xml|ppt|pptx)$/i.test(name);
   if (!processable) return;
   supabase.functions
     .invoke("process-document", { body: { document_id: documentId } })

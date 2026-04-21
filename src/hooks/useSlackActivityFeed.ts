@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { parseSlackEntityRef } from "@/lib/slackDeepLink";
+import { slackEntityLeafMessageTs } from "@/lib/slackDeepLink";
 
 export type SlackActivityTab = "all" | "mentions" | "threads" | "dms" | "reactions";
 
@@ -94,15 +94,18 @@ export function useSlackActivityFeed(tab: SlackActivityTab = "all", onlyUnread =
       }
 
       const mapped: SlackActivityItem[] = rows.map((r) => {
-        const parts = parseSlackEntityRef(r.entity_ref);
+        const leaf = slackEntityLeafMessageTs(r.entity_ref);
+        const pipe = r.entity_ref ? r.entity_ref.indexOf("|") : -1;
+        const channelFromRef =
+          pipe > 0 && r.entity_ref ? r.entity_ref.slice(0, pipe).trim() : null;
         return {
           id: r.id,
           type: r.type,
           title: r.title,
           body: r.body,
           entity_ref: r.entity_ref,
-          channel_id: parts?.channel ?? null,
-          message_ts: parts?.ts ?? null,
+          channel_id: channelFromRef,
+          message_ts: leaf,
           source_user_id: r.source_user_id,
           is_read: r.is_read,
           created_at: r.created_at,

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { AppLayout } from "@/components/AppLayout";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
@@ -31,6 +31,15 @@ import { DocumentSemanticSearch } from "@/components/documents/DocumentSemanticS
 import { useDocumentFavorites, useToggleDocumentFavorite } from "@/hooks/useDocumentFavorites";
 import { cn } from "@/lib/utils";
 import { KAWIIL_TEAM_ROOT, KAWIIL_TEAM_ROOT_NAME } from "@/lib/dropboxConfig";
+import {
+  DuplicateFileResolutionDialog,
+  type DuplicateResolutionChoice,
+} from "@/components/shared/DuplicateFileResolutionDialog";
+import {
+  filenameKey,
+  nextDistinctFilename,
+  fileWithName,
+} from "@/lib/duplicateUpload";
 
 // ─── File icon helper ─────────────────────────────────────────
 function getFileIcon(name: string, source?: string) {
@@ -88,6 +97,23 @@ function DropboxLiveBrowser() {
   const [renameName, setRenameName] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupName, setDupName] = useState("");
+  const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
+
+  const duplicatePrompt = useCallback((fileName: string) => {
+    setDupName(fileName);
+    setDupOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupOpen(false);
+    dupResolver.current?.(c);
+    dupResolver.current = null;
+  }, []);
 
   // Picker state for when personal folder is not set yet
   const [showFolderPicker, setShowFolderPicker] = useState(false);
@@ -240,10 +266,24 @@ function DropboxLiveBrowser() {
     setUploading(true);
     let ok = 0;
     let failed = 0;
+    const used = new Set(
+      entries.filter((e) => e.type === "file").map((e) => filenameKey(e.name)),
+    );
     try {
-      for (const file of files) {
+      for (const raw of files) {
+        let file = raw;
         try {
+          const k = filenameKey(file.name);
+          if (used.has(k)) {
+            const choice = await duplicatePrompt(file.name);
+            if (choice === "skip") continue;
+            if (choice === "copy") {
+              file = fileWithName(file, nextDistinctFilename(file.name, used));
+            }
+            // replace: mismo nombre → sobrescribe en la misma ruta
+          }
           await uploadFileToDropbox(file, `${currentPath}/${file.name}`);
+          used.add(filenameKey(file.name));
           ok += 1;
         } catch (err: any) {
           failed += 1;
@@ -545,6 +585,12 @@ function DropboxLiveBrowser() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DuplicateFileResolutionDialog
+        open={dupOpen}
+        fileName={dupName}
+        onResolve={onDupResolve}
+      />
     </div>
   );
 }

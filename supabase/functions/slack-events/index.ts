@@ -427,6 +427,14 @@ async function handleMessageNotificationEvent(
     console.warn("slack-events: message sin channel o ts", { eventId, teamId, channel, ts });
     return;
   }
+
+  const rawThreadTs = event.thread_ts as string | undefined;
+  const threadTsNorm =
+    typeof rawThreadTs === "string" && rawThreadTs.trim() ? rawThreadTs.trim() : undefined;
+  /** Respuesta en hilo: ref enriquecida para deep link (padre|respuesta). */
+  const entityRef =
+    threadTsNorm && threadTsNorm !== ts ? `${channel}|${threadTsNorm}|${ts}` : `${channel}|${ts}`;
+
   if (event.bot_id && subtype === "bot_message") {
     console.log("slack-events: message ignorado (bot_message)", { eventId, channel });
     return;
@@ -723,12 +731,11 @@ async function handleMessageNotificationEvent(
       body: bodyForRow,
       entity_type: "slack",
       entity_id: null as string | null,
-      entity_ref: `${channel}|${ts}`,
+      entity_ref: entityRef,
       source_user_id: null as string | null,
     };
   });
 
-  const entityRef = `${channel}|${ts}`;
   const userIds = rows.map((r) => r.user_id);
   const { data: existingRows } = await supabase
     .from("notifications")

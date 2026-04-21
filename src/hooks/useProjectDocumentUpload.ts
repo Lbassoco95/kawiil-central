@@ -6,82 +6,150 @@ import { toast } from "sonner";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import { postProcessUploadedDocument } from "@/lib/fileIntake/zipUploadPipeline";
 import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
+import { mimeTypeForFile } from "@/lib/mimeFromFilename";
+import {
+  filenameKey,
+  nextDistinctFilename,
+  fileWithName,
+} from "@/lib/duplicateUpload";
+import type { AiProjectDocument } from "@/hooks/useAiProjects";
+import type { DuplicateResolutionChoice } from "@/components/shared/DuplicateFileResolutionDialog";
+import { replaceSupabaseStoredDocumentFile } from "@/lib/supabaseDocumentReplace";
 
-export function useProjectDocumentUpload(aiProjectId: string | null) {
+export function useProjectDocumentUpload(
+  aiProjectId: string | null,
+  projectDocs: AiProjectDocument[],
+  duplicatePrompt: (fileName: string) => Promise<DuplicateResolutionChoice>
+) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState("");
 
-  const uploadToProject = useCallback(async (file: File) => {
-    if (!user || !aiProjectId) {
-      toast.error("Selecciona un proyecto primero");
-      return;
-    }
+  const uploadToProject = useCallback(
+    async (file: File) => {
+      if (!user || !aiProjectId) {
+        toast.error("Selecciona un proyecto primero");
+        return;
+      }
 
-    setUploading(true);
-    setProgress("Subiendo archivo...");
+      let working = file;
+      const nameSet = new Set(projectDocs.map((d) => filenameKey(d.name)));
+      const existing = projectDocs.find(
+        (d) => d.document_id && filenameKey(d.name) === filenameKey(working.name)
+      );
 
-    try {
-      const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user.id });
-      const orgId = orgRes.data;
+      if (existing?.document_id) {
+        const choice = await duplicatePrompt(working.name);
+        if (choice === "skip") return;
+        if (choice === "copy") {
+          const nextName = nextDistinctFilename(working.name, nameSet);
+          working = fileWithName(working, nextName);
+        } else {
+          setUploading(true);
+          setProgress("Reemplazando documento...");
+          try {
+            const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+            const orgId = orgRes.data as string;
 
-      const safeName = sanitizeStorageFileName(file.name);
-      const filePath = `${orgId}/${aiProjectId}/${Date.now()}_${safeName}`;
-      const { error: storageErr } = await supabase.storage
-        .from("documents")
-        .upload(filePath, file, { upsert: true });
+            const docRowId = existing.document_id as string;
+            await replaceSupabaseStoredDocumentFile({
+              documentId: docRowId,
+              file: working,
+              pathDirectoryPrefix: `${orgId}/${aiProjectId}`,
+            });
 
-      if (storageErr) throw new Error(`Upload failed: ${storageErr.message}`);
+            await supabase
+              .from("ai_project_documents")
+              .update({ name: working.name })
+              .eq("ai_project_id", aiProjectId)
+              .eq("document_id", docRowId);
 
-      setProgress("Registrando documento...");
+            setProgress("Procesando contenido...");
+            await postProcessUploadedDocument(docRowId, working);
+            if (getZipIntakeMarker(working)?.kind !== "server_deferred") {
+              supabase.functions
+                .invoke("process-document", { body: { document_id: docRowId } })
+                .catch(() => {});
+            }
 
-      const { data: doc, error: docErr } = await (supabase as any)
-        .from("documents")
-        .insert({
-          organization_id: orgId,
-          name: file.name,
-          file_path: filePath,
-          file_size: file.size,
-          mime_type: file.type,
-          source: "supabase",
-          uploaded_by: user.id,
-        })
-        .select("id")
-        .single();
+            qc.invalidateQueries({ queryKey: ["ai-project-documents", aiProjectId] });
+            toast.success(`"${working.name}" actualizado y procesándose`);
+          } catch (e: any) {
+            console.error("Replace upload error:", e);
+            toast.error(e.message || "Error al reemplazar archivo");
+          } finally {
+            setUploading(false);
+            setProgress("");
+          }
+          return;
+        }
+      }
 
-      if (docErr) throw new Error(`Document record failed: ${docErr.message}`);
+      setUploading(true);
+      setProgress("Subiendo archivo...");
 
-      await (supabase as any)
-        .from("ai_project_documents")
-        .insert({
+      try {
+        const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+        const orgId = orgRes.data;
+
+        const safeName = sanitizeStorageFileName(working.name);
+        const filePath = `${orgId}/${aiProjectId}/${Date.now()}_${safeName}`;
+        const { error: storageErr } = await supabase.storage
+          .from("documents")
+          .upload(filePath, working, { upsert: true });
+
+        if (storageErr) throw new Error(`Upload failed: ${storageErr.message}`);
+
+        setProgress("Registrando documento...");
+        const mime = mimeTypeForFile(working);
+
+        const { data: doc, error: docErr } = await (supabase as any)
+          .from("documents")
+          .insert({
+            organization_id: orgId,
+            name: working.name,
+            file_path: filePath,
+            file_size: working.size,
+            mime_type: mime,
+            source: "supabase",
+            uploaded_by: user.id,
+          })
+          .select("id")
+          .single();
+
+        if (docErr) throw new Error(`Document record failed: ${docErr.message}`);
+
+        await (supabase as any).from("ai_project_documents").insert({
           ai_project_id: aiProjectId,
           document_id: doc.id,
-          name: file.name,
+          name: working.name,
           source: "supabase",
         });
 
-      setProgress("Procesando contenido...");
+        setProgress("Procesando contenido...");
 
-      await postProcessUploadedDocument(doc.id as string, file);
-      if (getZipIntakeMarker(file)?.kind !== "server_deferred") {
-        supabase.functions
-          .invoke("process-document", {
-            body: { document_id: doc.id },
-          })
-          .catch(() => {});
+        await postProcessUploadedDocument(doc.id as string, working);
+        if (getZipIntakeMarker(working)?.kind !== "server_deferred") {
+          supabase.functions
+            .invoke("process-document", {
+              body: { document_id: doc.id },
+            })
+            .catch(() => {});
+        }
+
+        qc.invalidateQueries({ queryKey: ["ai-project-documents", aiProjectId] });
+        toast.success(`"${working.name}" subido y procesándose`);
+      } catch (e: any) {
+        console.error("Upload error:", e);
+        toast.error(e.message || "Error al subir archivo");
+      } finally {
+        setUploading(false);
+        setProgress("");
       }
-
-      qc.invalidateQueries({ queryKey: ["ai-project-documents", aiProjectId] });
-      toast.success(`"${file.name}" subido y procesándose`);
-    } catch (e: any) {
-      console.error("Upload error:", e);
-      toast.error(e.message || "Error al subir archivo");
-    } finally {
-      setUploading(false);
-      setProgress("");
-    }
-  }, [user, aiProjectId, qc]);
+    },
+    [user, aiProjectId, qc, projectDocs, duplicatePrompt]
+  );
 
   return { uploadToProject, uploading, progress };
 }

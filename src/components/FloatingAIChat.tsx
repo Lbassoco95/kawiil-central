@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, Fragment } from "react";
+import { useState, useRef, useEffect, Fragment, useCallback } from "react";
 import { useChat } from "@/hooks/useChat";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,45 @@ import { chatLimits } from "@/lib/fileIntake/limits";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation } from "react-router-dom";
+import {
+  DuplicateFileResolutionDialog,
+  type DuplicateResolutionChoice,
+} from "@/components/shared/DuplicateFileResolutionDialog";
+import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 
 export function FloatingAIChat() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [dupChatOpen, setDupChatOpen] = useState(false);
+  const [dupChatName, setDupChatName] = useState("");
+  const dupChatResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
+
+  const chatDuplicatePrompt = useCallback((fileName: string) => {
+    setDupChatName(fileName);
+    setDupChatOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupChatResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupChatResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupChatOpen(false);
+    dupChatResolver.current?.(c);
+    dupChatResolver.current = null;
+  }, []);
+
+  const resolveChatDuplicateFilenames = useResolveDuplicateFilenames(chatDuplicatePrompt);
+
+  const handlePendingFilesChange = useCallback(
+    async (next: File[]) => {
+      const resolved = await resolveChatDuplicateFilenames(next);
+      setPendingFiles(resolved);
+    },
+    [resolveChatDuplicateFilenames]
+  );
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const location = useLocation();
@@ -114,9 +147,10 @@ export function FloatingAIChat() {
 
   // Full chat panel
   return (
+    <>
     <FileDropzone
       files={pendingFiles}
-      onChange={setPendingFiles}
+      onChange={handlePendingFilesChange}
       limits={chatLimits}
       disabled={isStreaming}
       variant="overlay"
@@ -307,7 +341,7 @@ export function FloatingAIChat() {
         <div className="flex gap-1.5 items-end">
           <ChatAttachmentPicker
             files={pendingFiles}
-            onChange={setPendingFiles}
+            onChange={handlePendingFilesChange}
             disabled={isStreaming}
             showChips={false}
             className="shrink-0"
@@ -337,5 +371,11 @@ export function FloatingAIChat() {
         </div>
       </div>
     </FileDropzone>
+    <DuplicateFileResolutionDialog
+      open={dupChatOpen}
+      fileName={dupChatName}
+      onResolve={onDupChatResolve}
+    />
+    </>
   );
 }

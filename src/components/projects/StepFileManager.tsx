@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen, Archive } from "lucide-react";
@@ -24,6 +24,17 @@ import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog"
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
 import { SendToSignDialog } from "@/components/documents/SendToSignDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import {
+  DuplicateFileResolutionDialog,
+  type DuplicateResolutionChoice,
+} from "@/components/shared/DuplicateFileResolutionDialog";
+import {
+  filenameKey,
+  nextDistinctFilename,
+  fileWithName,
+} from "@/lib/duplicateUpload";
+import { replaceSupabaseStoredDocumentFile } from "@/lib/supabaseDocumentReplace";
+import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 
 interface Props {
   documentIds: string[];
@@ -48,7 +59,24 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [showDropboxPicker, setShowDropboxPicker] = useState(false);
   const dropboxFileRef = useRef<HTMLInputElement>(null);
   const [pendingLocalFiles, setPendingLocalFiles] = useState<File[]>([]);
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupName, setDupName] = useState("");
+  const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
   const localUploadLimits = withLimits(documentsLimits, { accept: ACCEPTED_DOCUMENT_EXTENSIONS });
+
+  const duplicatePrompt = useCallback((fileName: string) => {
+    setDupName(fileName);
+    setDupOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupOpen(false);
+    dupResolver.current?.(c);
+    dupResolver.current = null;
+  }, []);
 
   const createDropboxDoc = useMutation({
     mutationFn: async ({ docType, docName, folderPath }: { docType: string; docName: string; folderPath: string }) => {
@@ -153,7 +181,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     if (upErr) throw upErr;
     const lower = file.name.toLowerCase();
     const isZip = lower.endsWith(".zip") || file.type === "application/zip" || file.type === "application/x-zip-compressed";
-    const mime = isZip ? file.type || "application/zip" : file.type;
+    const mime = isZip ? file.type || "application/zip" : mimeTypeForFile(file);
     const marker = getZipIntakeMarker(file);
     const { data: doc, error: docErr } = await supabase
       .from("documents")
@@ -185,11 +213,46 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     setUploading(true);
     const addedIds: string[] = [];
     let failed = 0;
+    let replaced = 0;
+    const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
+    const nameKeys = new Set(documents.map((d) => filenameKey(d.name)));
     try {
-      for (const f of files) {
+      for (const raw of files) {
+        let f = raw;
         try {
+          const match = documents.find(
+            (d) => filenameKey(d.name) === filenameKey(f.name)
+          );
+          if (match) {
+            const choice = await duplicatePrompt(f.name);
+            if (choice === "skip") continue;
+            if (choice === "copy") {
+              f = fileWithName(f, nextDistinctFilename(f.name, nameKeys));
+            } else {
+              await replaceSupabaseStoredDocumentFile({
+                documentId: match.id as string,
+                file: f,
+                pathDirectoryPrefix: `${orgId}/${projectId}`,
+              });
+              await postProcessUploadedDocument(match.id as string, f);
+              if (getZipIntakeMarker(f)?.kind !== "server_deferred") {
+                supabase.functions
+                  .invoke("process-document", { body: { document_id: match.id } })
+                  .catch(() => {});
+              }
+              if (getZipIntakeMarker(f)?.kind === "from_expanded_zip") {
+                invokeProcessDocumentForBinaryFile(f, match.id as string);
+              }
+              replaced += 1;
+              nameKeys.add(filenameKey(f.name));
+              continue;
+            }
+          }
           const id = await uploadOneLocal(f);
-          if (id) addedIds.push(id);
+          if (id) {
+            addedIds.push(id);
+            nameKeys.add(filenameKey(f.name));
+          }
         } catch (err: any) {
           failed += 1;
           console.error("[StepFileManager] upload local fallo", f.name, err);
@@ -199,6 +262,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
         onDocumentAdded([...documentIds, ...addedIds]);
         toast.success(`${addedIds.length} archivo(s) subidos`);
       }
+      if (replaced > 0) toast.success(`${replaced} archivo(s) reemplazados`);
       if (failed > 0) toast.error(`${failed} archivo(s) fallaron`);
     } finally {
       setUploading(false);
@@ -477,6 +541,12 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             setDeleteDoc(null);
           }
         }}
+      />
+
+      <DuplicateFileResolutionDialog
+        open={dupOpen}
+        fileName={dupName}
+        onResolve={onDupResolve}
       />
 
       <DropboxFilePicker

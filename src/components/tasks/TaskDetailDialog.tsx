@@ -40,6 +40,18 @@ import {
   invokeProcessDocumentForBinaryFile,
   postProcessUploadedDocument,
 } from "@/lib/fileIntake/zipUploadPipeline";
+import {
+  DuplicateFileResolutionDialog,
+  type DuplicateResolutionChoice,
+} from "@/components/shared/DuplicateFileResolutionDialog";
+import {
+  filenameKey,
+  nextDistinctFilename,
+  fileWithName,
+} from "@/lib/duplicateUpload";
+import { replaceSupabaseStoredDocumentFile } from "@/lib/supabaseDocumentReplace";
+import { mimeTypeForFile } from "@/lib/mimeFromFilename";
+import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { genericLimits, withLimits } from "@/lib/fileIntake/limits";
 import { MentionTextarea } from "./MentionTextarea";
@@ -120,6 +132,26 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const [showCommentLinkPopover, setShowCommentLinkPopover] = useState(false);
   const [pendingCommentFiles, setPendingCommentFiles] = useState<File[]>([]);
   const [pendingFileTabFiles, setPendingFileTabFiles] = useState<File[]>([]);
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupName, setDupName] = useState("");
+  const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
+
+  const duplicatePrompt = useCallback((fileName: string) => {
+    setDupName(fileName);
+    setDupOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupOpen(false);
+    dupResolver.current?.(c);
+    dupResolver.current = null;
+  }, []);
+
+  const resolveBatchDuplicateNames = useResolveDuplicateFilenames(duplicatePrompt);
+
   const fileTabLimits = withLimits(genericLimits, { accept: ACCEPTED_DOCUMENT_EXTENSIONS });
   const [newLink, setNewLink] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -428,10 +460,12 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
   const handleCommentFileUpload = async (files: File[]) => {
     if (!files || files.length === 0) return;
-    setPendingCommentFiles(files);
+    const filesToUse = await resolveBatchDuplicateNames(files);
+    if (filesToUse.length === 0) return;
+    setPendingCommentFiles(filesToUse);
     setCommentUploading(true);
     try {
-      for (const file of files) {
+      for (const file of filesToUse) {
         if (file.size > 25 * 1024 * 1024) { toast.error(`${file.name} excede 25MB`); continue; }
         const safeName = sanitizeStorageFileName(file.name);
         const path = `comment-attachments/${Date.now()}_${safeName}`;
@@ -502,14 +536,45 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
   const handleFileUpload = async (files: File[]) => {
     if (!files || files.length === 0 || !user) return;
-    setPendingFileTabFiles(files);
+    const queue = await resolveBatchDuplicateNames(files);
+    if (queue.length === 0) return;
+    setPendingFileTabFiles(queue);
     setUploading(true);
     let ok = 0;
     let failed = 0;
     try {
       const { data: profile } = await supabase.from("profiles").select("organization_id").eq("user_id", user.id).single();
-      for (const file of files) {
+      const usedNames = new Set(documents.map((d: { name: string }) => filenameKey(d.name)));
+      for (const raw of queue) {
+        let file = raw;
         try {
+          const conflict = documents.find(
+            (d: { id: string; name: string }) => filenameKey(d.name) === filenameKey(file.name)
+          );
+          if (conflict) {
+            const choice = await duplicatePrompt(file.name);
+            if (choice === "skip") continue;
+            if (choice === "copy") {
+              file = fileWithName(file, nextDistinctFilename(file.name, usedNames));
+            } else {
+              await replaceSupabaseStoredDocumentFile({
+                documentId: conflict.id,
+                file,
+                pathDirectoryPrefix: `tasks/${taskId}`,
+              });
+              await postProcessUploadedDocument(conflict.id, file);
+              if (getZipIntakeMarker(file)?.kind !== "server_deferred") {
+                supabase.functions
+                  .invoke("process-document", { body: { document_id: conflict.id } })
+                  .catch(() => {});
+              }
+              if (getZipIntakeMarker(file)?.kind === "from_expanded_zip") {
+                invokeProcessDocumentForBinaryFile(file, conflict.id);
+              }
+              ok += 1;
+              continue;
+            }
+          }
           const safeName = sanitizeStorageFileName(file.name);
           const filePath = `tasks/${taskId}/${Date.now()}_${safeName}`;
           const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
@@ -519,7 +584,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
             lower.endsWith(".zip") ||
             file.type === "application/zip" ||
             file.type === "application/x-zip-compressed";
-          const mime = isZip ? file.type || "application/zip" : file.type;
+          const mime = isZip ? file.type || "application/zip" : mimeTypeForFile(file);
           const marker = getZipIntakeMarker(file);
           const { data: doc, error: docInsErr } = await supabase
             .from("documents")
@@ -539,10 +604,16 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
           if (docInsErr) throw docInsErr;
           if (doc?.id) {
             await postProcessUploadedDocument(doc.id, file);
+            if (getZipIntakeMarker(file)?.kind !== "server_deferred") {
+              supabase.functions
+                .invoke("process-document", { body: { document_id: doc.id } })
+                .catch(() => {});
+            }
             if (marker?.kind === "from_expanded_zip") {
               invokeProcessDocumentForBinaryFile(file, doc.id);
             }
           }
+          usedNames.add(filenameKey(file.name));
           ok += 1;
         } catch (err: any) {
           failed += 1;
@@ -1398,6 +1469,11 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
           }
         }}
         isPending={deleteTask.isPending}
+      />
+      <DuplicateFileResolutionDialog
+        open={dupOpen}
+        fileName={dupName}
+        onResolve={onDupResolve}
       />
     </Dialog>
   );

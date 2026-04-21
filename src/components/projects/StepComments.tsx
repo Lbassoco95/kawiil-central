@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { genericLimits } from "@/lib/fileIntake/limits";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +19,11 @@ import { sanitizeStorageFileName } from "@/lib/storageFilename";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DuplicateFileResolutionDialog,
+  type DuplicateResolutionChoice,
+} from "@/components/shared/DuplicateFileResolutionDialog";
+import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 
 interface Attachment {
   type: "image" | "dropbox" | "link";
@@ -44,6 +49,25 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
   const [linkInput, setLinkInput] = useState("");
   const [showLinkPopover, setShowLinkPopover] = useState(false);
   const [pendingCommentFiles, setPendingCommentFiles] = useState<File[]>([]);
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupName, setDupName] = useState("");
+  const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
+
+  const duplicatePrompt = useCallback((fileName: string) => {
+    setDupName(fileName);
+    setDupOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupOpen(false);
+    dupResolver.current?.(c);
+    dupResolver.current = null;
+  }, []);
+
+  const resolveBatchDuplicateNames = useResolveDuplicateFilenames(duplicatePrompt);
 
   const { data: comments = [] } = useQuery({
     queryKey: ["step-comments", projectId, stepKey],
@@ -74,10 +98,12 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
 
   const handleFileUpload = async (files: File[]) => {
     if (!files || files.length === 0) return;
-    setPendingCommentFiles(files);
+    const filesToUse = await resolveBatchDuplicateNames(files);
+    if (filesToUse.length === 0) return;
+    setPendingCommentFiles(filesToUse);
     setUploading(true);
     try {
-      for (const file of files) {
+      for (const file of filesToUse) {
         if (file.size > 25 * 1024 * 1024) {
           toast.error(`${file.name} excede 25MB`);
           continue;
@@ -435,6 +461,12 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             { type: "dropbox", name: file.name, url: file.url },
           ]);
         }}
+      />
+
+      <DuplicateFileResolutionDialog
+        open={dupOpen}
+        fileName={dupName}
+        onResolve={onDupResolve}
       />
     </div>
   );

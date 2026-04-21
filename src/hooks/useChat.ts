@@ -12,6 +12,7 @@ import {
   formatMb,
 } from "@/lib/chatAttachmentLimits";
 import { extractPdfPagesClient } from "@/lib/extractPdfTextClient";
+import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 
 export interface ChatAttachmentMeta {
   bucket: string;
@@ -620,7 +621,7 @@ export function useChat() {
           bucket: "chat-uploads",
           path: objectPath,
           name: file.name,
-          mime_type: file.type || "application/octet-stream",
+          mime_type: mimeTypeForFile(file),
         };
         savedMeta.push(meta);
         pathToFile.set(objectPath, file);

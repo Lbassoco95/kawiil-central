@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import type { Json, Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
+import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 
 export type Document = Tables<"documents"> & {
   clients?: { name: string } | null;
@@ -83,10 +84,7 @@ export function useCreateDocument() {
         const safeName = sanitizeStorageFileName(input.file.name);
         filePath = `documents/${Date.now()}_${safeName}`;
         fileSize = input.file.size;
-        mimeType = input.file.type || null;
-        if (!mimeType && input.file.name.toLowerCase().endsWith(".zip")) {
-          mimeType = "application/zip";
-        }
+        mimeType = mimeTypeForFile(input.file);
 
         const { error: uploadError } = await supabase.storage
           .from("documents")

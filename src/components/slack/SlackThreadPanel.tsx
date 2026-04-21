@@ -21,6 +21,8 @@ type Props = {
   onCreateTaskFromMessage?: (message: SlackMessage) => void;
   /** IDs Slack de usuarios que pueden arrobarse dentro del hilo (mismos miembros del canal). */
   mentionUserIds?: string[];
+  /** Resaltar una respuesta concreta (p. ej. deep link desde notificación). */
+  highlightReplyTs?: string | null;
 };
 
 export function SlackThreadPanel({
@@ -36,6 +38,7 @@ export function SlackThreadPanel({
   onToggleReaction,
   onCreateTaskFromMessage,
   mentionUserIds,
+  highlightReplyTs = null,
 }: Props) {
   const [draft, setDraft] = useState("");
 
@@ -101,7 +104,7 @@ export function SlackThreadPanel({
               <SlackMessageList
                 messages={replies}
                 userMap={userMap}
-                highlightTs=""
+                highlightTs={highlightReplyTs?.trim() || ""}
                 isLoading={false}
                 error={threadQuery.error as Error | null}
                 selectedChannelId={`${channelId}-thread`}

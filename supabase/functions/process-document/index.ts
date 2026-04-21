@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { guessMimeFromFilename } from "../_shared/mimeFromFilename.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": '*',
@@ -283,7 +284,10 @@ async function getDocumentContent(supabase: any, document: any): Promise<{ conte
 
     const arrayBuffer = await data.arrayBuffer();
     const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    return { content: base64, mimeType: document.mime_type || "application/pdf" };
+    const mimeType =
+      (document.mime_type && String(document.mime_type).trim()) ||
+      guessMimeFromFilename(document.name || "");
+    return { content: base64, mimeType };
   }
 
   if (document.source === "dropbox" && document.external_path) {
@@ -308,7 +312,10 @@ async function getDocumentContent(supabase: any, document: any): Promise<{ conte
       const arrayBuffer = await downloadResp.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
       console.log(`Downloaded Dropbox file: ${document.external_path} (${arrayBuffer.byteLength} bytes)`);
-      return { content: base64, mimeType: document.mime_type || "application/pdf" };
+      const mimeType =
+        (document.mime_type && String(document.mime_type).trim()) ||
+        guessMimeFromFilename(document.name || "");
+      return { content: base64, mimeType };
     } catch (err) {
       console.error("Dropbox download error:", err);
       return null;

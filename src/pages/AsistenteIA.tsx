@@ -1,4 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from "react";
+import {
+  DuplicateFileResolutionDialog,
+  type DuplicateResolutionChoice,
+} from "@/components/shared/DuplicateFileResolutionDialog";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
@@ -55,6 +59,8 @@ import {
   KAWIIL_AI_HEADER_BG,
   KAWIIL_AI_SOFT_BG,
 } from "@/lib/kawiilAi";
+import { mimeTypeForFile } from "@/lib/mimeFromFilename";
+import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 
 const FALLBACK_SUGGESTIONS = [
   "¿Cuáles son mis tareas pendientes más urgentes?",
@@ -87,7 +93,58 @@ const AsistenteIA = () => {
   const { memories, deleteMemory, createMemory, updateMemory } = useAiMemories(activeAiProjectId);
   const { artifacts, deleteArtifact, updateArtifact } = useAiArtifacts(activeAiProjectId);
   const { documents: projectDocs, addDocument, removeDocument } = useAiProjectDocuments(activeAiProjectId);
-  const { uploadToProject, uploading, progress: uploadProgress } = useProjectDocumentUpload(activeAiProjectId);
+
+  const [dupUploadOpen, setDupUploadOpen] = useState(false);
+  const [dupUploadName, setDupUploadName] = useState("");
+  const dupUploadResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
+
+  const duplicateUploadPrompt = useCallback((fileName: string) => {
+    setDupUploadName(fileName);
+    setDupUploadOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupUploadResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupUploadResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupUploadOpen(false);
+    dupUploadResolver.current?.(c);
+    dupUploadResolver.current = null;
+  }, []);
+
+  const [dupChatOpen, setDupChatOpen] = useState(false);
+  const [dupChatName, setDupChatName] = useState("");
+  const dupChatResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
+
+  const chatDuplicatePrompt = useCallback((fileName: string) => {
+    setDupChatName(fileName);
+    setDupChatOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupChatResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupChatResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupChatOpen(false);
+    dupChatResolver.current?.(c);
+    dupChatResolver.current = null;
+  }, []);
+
+  const resolveChatDuplicateFilenames = useResolveDuplicateFilenames(chatDuplicatePrompt);
+
+  const handlePendingFilesChange = useCallback(
+    async (next: File[]) => {
+      const resolved = await resolveChatDuplicateFilenames(next);
+      setPendingFiles(resolved);
+    },
+    [resolveChatDuplicateFilenames]
+  );
+
+  const { uploadToProject, uploading, progress: uploadProgress } = useProjectDocumentUpload(
+    activeAiProjectId,
+    projectDocs ?? [],
+    duplicateUploadPrompt
+  );
 
   const [input, setInput] = useState("");
   const [showSidebar, setShowSidebar] = useState(true);
@@ -374,7 +431,7 @@ const AsistenteIA = () => {
         bucket: "chat-uploads",
         path: objectPath,
         name: file.name,
-        mime_type: file.type || "application/octet-stream",
+        mime_type: mimeTypeForFile(file),
       });
       batchBytes += file.size;
       if (linkFilesToProject && activeAiProjectId) {
@@ -745,7 +802,7 @@ const AsistenteIA = () => {
         {/* Main chat area */}
         <FileDropzone
           files={pendingFiles}
-          onChange={setPendingFiles}
+          onChange={handlePendingFilesChange}
           limits={chatLimits}
           disabled={isStreaming}
           variant="overlay"
@@ -1067,7 +1124,7 @@ const AsistenteIA = () => {
               <div className="flex gap-2 items-end">
                 <ChatAttachmentPicker
                   files={pendingFiles}
-                  onChange={setPendingFiles}
+                  onChange={handlePendingFilesChange}
                   disabled={isStreaming}
                   showChips={false}
                   className="shrink-0"
@@ -1161,6 +1218,18 @@ const AsistenteIA = () => {
           />
         )}
       </div>
+
+      <DuplicateFileResolutionDialog
+        open={dupUploadOpen}
+        fileName={dupUploadName}
+        onResolve={onDupUploadResolve}
+      />
+
+      <DuplicateFileResolutionDialog
+        open={dupChatOpen}
+        fileName={dupChatName}
+        onResolve={onDupChatResolve}
+      />
 
       {/* Create AI Project Dialog */}
       <AiProjectMembersDialog

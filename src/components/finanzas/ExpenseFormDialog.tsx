@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -22,6 +22,11 @@ import { useProjects } from "@/hooks/useProjects";
 import { useCreateExpense } from "@/hooks/useExpenses";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { expensesLimits } from "@/lib/fileIntake/limits";
+import {
+  DuplicateFileResolutionDialog,
+  type DuplicateResolutionChoice,
+} from "@/components/shared/DuplicateFileResolutionDialog";
+import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 import { fetchAiChatSimpleContent } from "@/lib/fetchAiChatSimple";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -58,8 +63,35 @@ export function ExpenseFormDialog({ open, onOpenChange }: Props) {
   const { data: clients = [] } = useClients();
   const { data: projects = [] } = useProjects();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupName, setDupName] = useState("");
+  const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
   const [aiClassifying, setAiClassifying] = useState(false);
   const [aiHint, setAiHint] = useState<string | null>(null);
+
+  const duplicatePrompt = useCallback((fileName: string) => {
+    setDupName(fileName);
+    setDupOpen(true);
+    return new Promise<DuplicateResolutionChoice>((resolve) => {
+      dupResolver.current = resolve;
+    });
+  }, []);
+
+  const onDupResolve = useCallback((c: DuplicateResolutionChoice) => {
+    setDupOpen(false);
+    dupResolver.current?.(c);
+    dupResolver.current = null;
+  }, []);
+
+  const resolveExpenseDuplicates = useResolveDuplicateFilenames(duplicatePrompt);
+
+  const handlePendingFilesChange = useCallback(
+    async (next: File[]) => {
+      const resolved = await resolveExpenseDuplicates(next);
+      setPendingFiles(resolved);
+    },
+    [resolveExpenseDuplicates]
+  );
 
   useEffect(() => {
     if (!open) {
@@ -165,6 +197,7 @@ Datos del gasto:
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden p-0 [&>button.absolute]:hidden flex flex-col rounded-2xl border-sky-200/40 dark:border-sky-900/40">
         <header
@@ -360,7 +393,7 @@ Datos del gasto:
               </p>
               <FileDropzone
                 files={pendingFiles}
-                onChange={setPendingFiles}
+                onChange={handlePendingFilesChange}
                 limits={expensesLimits}
                 variant="area"
                 hint="Arrastra archivos o haz click"
@@ -382,5 +415,11 @@ Datos del gasto:
         </Form>
       </DialogContent>
     </Dialog>
+    <DuplicateFileResolutionDialog
+      open={dupOpen}
+      fileName={dupName}
+      onResolve={onDupResolve}
+    />
+    </>
   );
 }

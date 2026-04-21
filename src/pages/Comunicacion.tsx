@@ -149,6 +149,7 @@ export default function Comunicacion() {
 
   const channelFromUrl = searchParams.get("channel") || "";
   const tsFromUrl = searchParams.get("ts") || "";
+  const replyFromUrl = (searchParams.get("reply") || "").trim();
   const activityFromUrl = (searchParams.get("activity") || "") as string;
   const openLaterFromUrl = searchParams.get("later") === "1";
 
@@ -204,6 +205,13 @@ export default function Comunicacion() {
     if (!channelFromUrl || channelFromUrl === selectedChannel) return;
     switchChannel(channelFromUrl, false);
   }, [channelFromUrl, selectedChannel, switchChannel]);
+
+  /** Deep link con `reply`: abrir panel de hilo en el padre (`ts`) tras sincronizar canal. */
+  useEffect(() => {
+    if (!channelFromUrl || selectedChannel !== channelFromUrl) return;
+    if (!tsFromUrl || !replyFromUrl) return;
+    setThreadRootTs(tsFromUrl);
+  }, [channelFromUrl, selectedChannel, tsFromUrl, replyFromUrl]);
 
   useEffect(() => {
     if (!activityFromUrl) return;
@@ -1673,11 +1681,24 @@ export default function Comunicacion() {
           </div>
           <SlackThreadPanel
             open={!!threadRootTs}
-            onOpenChange={(o) => !o && setThreadRootTs(null)}
+            onOpenChange={(open) => {
+              if (open) return;
+              setThreadRootTs(null);
+              if (searchParams.get("reply")) {
+                const q = new URLSearchParams(searchParams);
+                q.delete("reply");
+                setSearchParams(q, { replace: true });
+              }
+            }}
             channelId={selectedChannel}
             threadTs={threadRootTs}
             userMap={userMap}
             mentionUserIds={composerMemberIds}
+            highlightReplyTs={
+              replyFromUrl && threadRootTs && tsFromUrl && threadRootTs === tsFromUrl
+                ? replyFromUrl
+                : null
+            }
             onReply={(text) => {
               if (!threadRootTs) return;
               postMutation.mutate({ text, thread_ts: threadRootTs });

@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { guessMimeFromFilename } from "@/lib/mimeFromFilename";
 
 export interface ExpandZipOptions {
   /** Si true, conserva la ruta relativa dentro del ZIP en `(file as any).__relativePath`. */
@@ -31,53 +32,6 @@ function isJunkEntry(name: string): boolean {
 function basenameOf(path: string): string {
   const parts = path.split("/").filter(Boolean);
   return parts[parts.length - 1] ?? path;
-}
-
-function guessMimeType(name: string): string {
-  const ext = name.toLowerCase().split(".").pop() ?? "";
-  switch (ext) {
-    case "pdf":
-      return "application/pdf";
-    case "png":
-      return "image/png";
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "gif":
-      return "image/gif";
-    case "webp":
-      return "image/webp";
-    case "svg":
-      return "image/svg+xml";
-    case "txt":
-    case "md":
-      return "text/plain";
-    case "csv":
-      return "text/csv";
-    case "json":
-      return "application/json";
-    case "xml":
-      return "application/xml";
-    case "html":
-    case "htm":
-      return "text/html";
-    case "doc":
-      return "application/msword";
-    case "docx":
-      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    case "xls":
-      return "application/vnd.ms-excel";
-    case "xlsx":
-      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    case "ppt":
-      return "application/vnd.ms-powerpoint";
-    case "pptx":
-      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-    case "zip":
-      return "application/zip";
-    default:
-      return "application/octet-stream";
-  }
 }
 
 /**
@@ -129,7 +83,7 @@ export async function expandZipInBrowser(
     }
 
     const name = basenameOf(entry.name);
-    const mime = blob.type || guessMimeType(name);
+    const mime = blob.type || guessMimeFromFilename(name);
     const file = new File([blob], name, {
       type: mime,
       lastModified: entry.date?.getTime() ?? Date.now(),

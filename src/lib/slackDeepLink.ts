@@ -1,29 +1,60 @@
 /**
- * Helpers para convertir la referencia canónica de una notificación de Slack
- * (`entity_ref = "<canal>|<ts>"` que graba `supabase/functions/slack-events`)
- * en una URL/deep link al mensaje dentro de `/comunicacion`, donde
- * `SlackMessageList` ya soporta `?channel=…&ts=…` con scroll + highlight.
+ * Helpers para convertir la referencia de una notificación de Slack
+ * (`entity_ref`: `canal|ts` o `canal|thread_ts|reply_ts` desde `slack-events`)
+ * en una URL a `/comunicacion` con scroll + highlight; en hilos se añade `reply`.
  */
 
 export type SlackDeepLinkParts = {
   channel: string;
-  ts: string;
+  /** Ancla en la lista principal (mensaje raíz o padre del hilo). */
+  mainTs: string;
+  /** Ts del mensaje dentro del hilo (respuesta); ausente en refs de 2 segmentos. */
+  replyTs?: string;
 };
 
-export function parseSlackEntityRef(ref?: string | null): SlackDeepLinkParts | null {
+/**
+ * Partes normalizadas; mantiene `ts` como alias de `mainTs` para compatibilidad.
+ */
+export type SlackDeepLinkPartsCompat = SlackDeepLinkParts & { ts: string };
+
+function segmentsFromRef(ref: string): string[] {
+  return ref
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function parseSlackEntityRef(ref?: string | null): SlackDeepLinkPartsCompat | null {
   if (!ref) return null;
-  const pipe = ref.indexOf("|");
-  if (pipe <= 0) return null;
-  const channel = ref.slice(0, pipe).trim();
-  const ts = ref.slice(pipe + 1).trim();
-  if (!channel || !ts) return null;
-  return { channel, ts };
+  const segs = segmentsFromRef(ref);
+  if (segs.length < 2) return null;
+  const channel = segs[0];
+  if (segs.length === 2) {
+    const mainTs = segs[1];
+    if (!channel || !mainTs) return null;
+    return { channel, mainTs, ts: mainTs };
+  }
+  const mainTs = segs[1];
+  const replyTs = segs[2];
+  if (!channel || !mainTs || !replyTs) return null;
+  return { channel, mainTs, replyTs, ts: mainTs };
+}
+
+/** Ts del mensaje concreto (respuesta o único) para feed / contadores por mensaje. */
+export function slackEntityLeafMessageTs(ref?: string | null): string | null {
+  const p = parseSlackEntityRef(ref);
+  if (!p) return null;
+  return p.replyTs ?? p.mainTs;
 }
 
 export function slackDeepLinkPath(ref?: string | null): string | null {
   const parts = parseSlackEntityRef(ref);
   if (!parts) return null;
-  return `/comunicacion?channel=${encodeURIComponent(parts.channel)}&ts=${encodeURIComponent(parts.ts)}`;
+  const q = new URLSearchParams();
+  q.set("channel", parts.channel);
+  q.set("ts", parts.mainTs);
+  if (parts.replyTs) q.set("reply", parts.replyTs);
+  return `/comunicacion?${q.toString()}`;
 }
 
 type SlackDeepLinkInput = {
