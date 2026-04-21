@@ -123,6 +123,7 @@ export function FloatingAIChat() {
       showChips={false}
       enablePaste={false}
       hint="Suelta archivos para adjuntar"
+      enableFolderPicker
       className={cn(
         "fixed z-50 bg-card border border-border shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200",
         isMobile

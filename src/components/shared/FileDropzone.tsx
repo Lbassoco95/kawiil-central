@@ -22,6 +22,8 @@ export type FileDropzoneVariant = "button" | "area" | "compact" | "overlay";
 export interface FileDropzoneHandle {
   /** Abre el selector de archivos del SO. */
   openPicker: () => void;
+  /** Abre el selector de carpeta (`webkitdirectory`), si `enableFolderPicker` está activo. */
+  openFolderPicker: () => void;
   /** Limpia archivos. */
   clear: () => void;
 }
@@ -33,8 +35,13 @@ interface FileDropzoneProps {
   /** Override del `accept` del preset. */
   accept?: string;
   disabled?: boolean;
-  /** Si true, permite seleccionar carpetas (no soportado por todos los navegadores). */
+  /** Si true, el único input solo permite elegir carpeta (legacy). Preferir `enableFolderPicker`. */
   directoryPicker?: boolean;
+  /**
+   * Si true: segundo control e input `webkitdirectory` para subir todos los archivos de una carpeta,
+   * sin desactivar el selector multi-archivo habitual.
+   */
+  enableFolderPicker?: boolean;
   /** Si true (default), tambien escucha pegar archivos desde portapapeles cuando el dropzone tiene foco. */
   enablePaste?: boolean;
   /** Mostrar chips con archivos seleccionados. Default true. */
@@ -57,14 +64,20 @@ interface FileDropzoneProps {
   children?: ReactNode;
 }
 
-function defaultHint(limits: FileIntakeLimits): string {
+function defaultHint(limits: FileIntakeLimits, folderPicker?: boolean): string {
+  let base: string;
   if (limits.zipMode === "keep") {
-    return "Arrastra y suelta archivos aqui o haz click";
+    base = "Arrastra y suelta archivos aqui o haz click";
+  } else if (limits.deferLargeZipToServer) {
+    base =
+      "Arrastra y suelta archivos aqui o haz click (ZIP grande o con muchas entradas: extracción en servidor)";
+  } else {
+    base = "Arrastra y suelta archivos aqui o haz click (los .zip se descomprimen)";
   }
-  if (limits.deferLargeZipToServer) {
-    return "Arrastra y suelta archivos aqui o haz click (ZIP grande o con muchas entradas: extracción en servidor)";
+  if (folderPicker) {
+    return `${base}. También puedes elegir una carpeta con «Subir carpeta».`;
   }
-  return "Arrastra y suelta archivos aqui o haz click (los .zip se descomprimen)";
+  return base;
 }
 
 function defaultSubhint(limits: FileIntakeLimits): string {
@@ -79,6 +92,7 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
     accept,
     disabled,
     directoryPicker,
+    enableFolderPicker = false,
     enablePaste = true,
     showChips = true,
     showSize,
@@ -94,6 +108,7 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
   ref
 ) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setDragging] = useState(false);
   const dragCounterRef = useRef(0);
@@ -104,6 +119,7 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
     ref,
     () => ({
       openPicker: () => inputRef.current?.click(),
+      openFolderPicker: () => folderInputRef.current?.click(),
       clear: () => intake.clear(),
     }),
     [intake]
@@ -125,6 +141,23 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
     },
     [intake]
   );
+
+  const handleFolderInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      await intake.addFiles(e.target.files);
+      if (folderInputRef.current) folderInputRef.current.value = "";
+    },
+    [intake]
+  );
+
+  const openFolderPickerClick = useCallback(() => {
+    if (interactiveDisabled || reachedMaxFiles) return;
+    folderInputRef.current?.click();
+  }, [interactiveDisabled, reachedMaxFiles]);
+
+  /** Dos inputs: archivos + carpeta. Si `directoryPicker` sin `enableFolderPicker`, un solo input solo-carpeta (legacy). */
+  const useDualFolderMode = enableFolderPicker;
+  const folderWebKitProps = { webkitdirectory: "", directory: "" } as Record<string, string>;
 
   const handleDragEnter = useCallback(
     (e: React.DragEvent) => {
@@ -195,21 +228,33 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
     return () => node.removeEventListener("paste", handler);
   }, [enablePaste, intake, interactiveDisabled]);
 
-  const directoryProps = directoryPicker
-    ? ({ webkitdirectory: "", directory: "" } as Record<string, string>)
-    : undefined;
+  const directoryProps =
+    directoryPicker && !enableFolderPicker ? folderWebKitProps : undefined;
 
   const inputEl = (
-    <input
-      ref={inputRef}
-      type="file"
-      multiple={limits.maxFiles > 1}
-      accept={intake.acceptAttr}
-      className="hidden"
-      disabled={interactiveDisabled}
-      onChange={handleInputChange}
-      {...(directoryProps ?? {})}
-    />
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple={limits.maxFiles > 1}
+        accept={intake.acceptAttr}
+        className="hidden"
+        disabled={interactiveDisabled}
+        onChange={handleInputChange}
+        {...(directoryProps ?? {})}
+      />
+      {useDualFolderMode && (
+        <input
+          ref={folderInputRef}
+          type="file"
+          className="hidden"
+          disabled={interactiveDisabled}
+          accept={intake.acceptAttr}
+          onChange={handleFolderInputChange}
+          {...folderWebKitProps}
+        />
+      )}
+    </>
   );
 
   const chipsEl = showChips ? (
@@ -223,6 +268,8 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
 
   // Variant: button (estilo ChatAttachmentPicker antiguo)
   if (variant === "button") {
+    const hintLine =
+      defaultHint(limits, enableFolderPicker) + " · " + defaultSubhint(limits);
     return (
       <div
         ref={containerRef}
@@ -233,26 +280,54 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
         onDrop={handleDrop}
       >
         {inputEl}
-        <Button
-          type="button"
-          size={buttonSize}
-          variant={buttonVariant}
+        <div
           className={cn(
-            "shrink-0",
-            buttonSize === "icon" && "h-9 w-9 p-0",
-            isDragging && "ring-2 ring-primary"
+            "flex items-center shrink-0",
+            useDualFolderMode ? "gap-1" : ""
           )}
-          disabled={interactiveDisabled || reachedMaxFiles}
-          title={defaultHint(limits) + " · " + defaultSubhint(limits)}
-          onClick={handleClick}
         >
-          {isBusy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Paperclip className="h-4 w-4" />
+          <Button
+            type="button"
+            size={buttonSize}
+            variant={buttonVariant}
+            className={cn(
+              "shrink-0",
+              buttonSize === "icon" && "h-9 w-9 p-0",
+              isDragging && "ring-2 ring-primary"
+            )}
+            disabled={interactiveDisabled || reachedMaxFiles}
+            title={hintLine}
+            onClick={handleClick}
+          >
+            {isBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Paperclip className="h-4 w-4" />
+            )}
+            {buttonLabel ? <span className="ml-1.5">{buttonLabel}</span> : null}
+          </Button>
+          {useDualFolderMode && (
+            <Button
+              type="button"
+              size={buttonSize}
+              variant="outline"
+              className={cn(
+                "shrink-0 px-2",
+                buttonSize === "icon" && "h-9 w-9 p-0",
+                isDragging && "ring-2 ring-primary"
+              )}
+              disabled={interactiveDisabled || reachedMaxFiles}
+              title="Subir todos los archivos de una carpeta"
+              onClick={(e) => {
+                e.stopPropagation();
+                openFolderPickerClick();
+              }}
+              aria-label="Subir carpeta"
+            >
+              <FolderUp className="h-4 w-4" />
+            </Button>
           )}
-          {buttonLabel ? <span className="ml-1.5">{buttonLabel}</span> : null}
-        </Button>
+        </div>
         {chipsEl}
       </div>
     );
@@ -270,33 +345,80 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
         onDrop={handleDrop}
       >
         {inputEl}
-        <Button
-          type="button"
-          size={buttonSize}
-          variant={buttonVariant === "ghost" ? "outline" : buttonVariant}
-          className={cn(
-            "w-full gap-1.5",
-            isDragging && "ring-2 ring-primary border-primary"
-          )}
-          disabled={interactiveDisabled || reachedMaxFiles}
-          onClick={handleClick}
-        >
-          {isBusy ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {buttonLabel ?? "Procesando..."}
-            </>
-          ) : (
-            <>
-              {directoryPicker ? (
-                <FolderUp className="h-3.5 w-3.5" />
-              ) : (
-                <Upload className="h-3.5 w-3.5" />
+        {useDualFolderMode ? (
+          <div className="flex gap-1.5 w-full">
+            <Button
+              type="button"
+              size={buttonSize}
+              variant={buttonVariant === "ghost" ? "outline" : buttonVariant}
+              className={cn(
+                "flex-1 gap-1.5 min-w-0",
+                isDragging && "ring-2 ring-primary border-primary"
               )}
-              {buttonLabel ?? (isDragging ? "Suelta aqui" : "Subir archivos")}
-            </>
-          )}
-        </Button>
+              disabled={interactiveDisabled || reachedMaxFiles}
+              onClick={handleClick}
+              title={defaultHint(limits, true) + " · " + defaultSubhint(limits)}
+            >
+              {isBusy ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {buttonLabel ?? "Procesando..."}
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    {buttonLabel ?? (isDragging ? "Suelta aqui" : "Archivos")}
+                  </span>
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              size={buttonSize}
+              variant="outline"
+              className={cn(
+                "gap-1.5 shrink-0",
+                isDragging && "ring-2 ring-primary border-primary"
+              )}
+              disabled={interactiveDisabled || reachedMaxFiles}
+              onClick={openFolderPickerClick}
+              title="Subir todos los archivos de una carpeta"
+              aria-label="Subir carpeta"
+            >
+              <FolderUp className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Carpeta</span>
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size={buttonSize}
+            variant={buttonVariant === "ghost" ? "outline" : buttonVariant}
+            className={cn(
+              "w-full gap-1.5",
+              isDragging && "ring-2 ring-primary border-primary"
+            )}
+            disabled={interactiveDisabled || reachedMaxFiles}
+            onClick={handleClick}
+          >
+            {isBusy ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {buttonLabel ?? "Procesando..."}
+              </>
+            ) : (
+              <>
+                {directoryPicker ? (
+                  <FolderUp className="h-3.5 w-3.5" />
+                ) : (
+                  <Upload className="h-3.5 w-3.5" />
+                )}
+                {buttonLabel ?? (isDragging ? "Suelta aqui" : "Subir archivos")}
+              </>
+            )}
+          </Button>
+        )}
         {chipsEl}
       </div>
     );
@@ -315,6 +437,26 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
       >
         {inputEl}
         {children}
+        {useDualFolderMode && (
+          <div className="absolute bottom-2 right-2 z-[45] pointer-events-auto">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-8 text-xs gap-1 shadow-md"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openFolderPickerClick();
+              }}
+              disabled={interactiveDisabled || reachedMaxFiles}
+              title="Subir todos los archivos de una carpeta"
+            >
+              <FolderUp className="h-3.5 w-3.5" />
+              Carpeta
+            </Button>
+          </div>
+        )}
         {(isDragging || isBusy) && (
           <div
             className={cn(
@@ -331,7 +473,9 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
             ) : (
               <>
                 <Upload className="h-6 w-6 text-primary" />
-                <span className="font-medium">{hint ?? defaultHint(limits)}</span>
+                <span className="font-medium">
+                  {hint ?? defaultHint(limits, enableFolderPicker)}
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {subhint ?? defaultSubhint(limits)}
                 </span>
@@ -374,7 +518,7 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
         )}
         <div className="flex flex-col gap-0.5">
           <span className="text-sm font-medium text-foreground">
-            {hint ?? defaultHint(limits)}
+            {hint ?? defaultHint(limits, enableFolderPicker)}
           </span>
           <span className="text-xs text-muted-foreground">
             {subhint ?? defaultSubhint(limits)}
@@ -384,6 +528,16 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
           )}
         </div>
       </button>
+      {useDualFolderMode && (
+        <button
+          type="button"
+          onClick={openFolderPickerClick}
+          disabled={interactiveDisabled || reachedMaxFiles}
+          className="text-xs font-medium text-primary hover:underline disabled:opacity-50 disabled:no-underline self-center"
+        >
+          Subir carpeta entera
+        </button>
+      )}
       {chipsEl}
     </div>
   );

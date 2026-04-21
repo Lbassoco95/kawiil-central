@@ -752,6 +752,7 @@ const AsistenteIA = () => {
           showChips={false}
           enablePaste={false}
           hint="Suelta archivos para adjuntar al chat"
+          enableFolderPicker
           className="flex-1 flex flex-col min-w-0 border-l border-border/40"
         >
           <div

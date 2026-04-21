@@ -320,6 +320,7 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
             buttonSize="icon"
             buttonVariant="ghost"
             className="shrink-0"
+            enableFolderPicker
           />
 
           <Button

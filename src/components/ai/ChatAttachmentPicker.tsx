@@ -56,6 +56,7 @@ export function ChatAttachmentPicker({
       buttonSize="icon"
       buttonVariant="ghost"
       showChips={showChips}
+      enableFolderPicker
     />
   );
 }

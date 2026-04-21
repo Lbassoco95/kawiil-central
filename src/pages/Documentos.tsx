@@ -383,6 +383,7 @@ function DropboxLiveBrowser() {
               showChips={false}
               buttonLabel={uploading ? "Subiendo..." : "Subir archivos (.zip se expande)"}
               className="w-auto"
+              enableFolderPicker
             />
           </div>
         )}

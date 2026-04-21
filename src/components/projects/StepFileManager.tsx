@@ -314,6 +314,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
             buttonSize="sm"
             buttonVariant="ghost"
             className="shrink-0"
+            enableFolderPicker
           />
           {/* Create Office doc in Dropbox */}
           <DropdownMenu>

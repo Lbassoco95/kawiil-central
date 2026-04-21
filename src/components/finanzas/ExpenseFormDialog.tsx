@@ -366,6 +366,7 @@ Datos del gasto:
                 hint="Arrastra archivos o haz click"
                 subhint="PDF, imágenes, Office o .zip"
                 showSize
+                enableFolderPicker
               />
             </div>
 

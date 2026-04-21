@@ -54,6 +54,8 @@ export function DocumentUploader({ onUpload, uploading, progress }: DocumentUplo
   );
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  const folderWebKitProps = { webkitdirectory: "", directory: "" } as Record<string, string>;
   const busy = uploading || isProcessing || intake.isProcessing;
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -116,28 +118,56 @@ export function DocumentUploader({ onUpload, uploading, progress }: DocumentUplo
           if (fileRef.current) fileRef.current.value = "";
         }}
       />
-      <Button
-        size="sm"
-        variant="ghost"
-        className="w-full h-8 text-xs gap-1.5"
-        onClick={() => fileRef.current?.click()}
-        disabled={busy}
-      >
-        {busy ? (
-          <>
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {progress || "Subiendo..."}
-          </>
-        ) : isDragging ? (
-          <>
-            <FolderUp className="h-3 w-3" /> Suelta aqui
-          </>
-        ) : (
-          <>
-            <Upload className="h-3 w-3" /> Subir archivos (.zip se expande)
-          </>
-        )}
-      </Button>
+      <input
+        ref={folderRef}
+        type="file"
+        className="hidden"
+        accept={intake.acceptAttr}
+        {...folderWebKitProps}
+        onChange={async (e) => {
+          await intake.addFiles(e.target.files);
+          if (folderRef.current) folderRef.current.value = "";
+        }}
+      />
+      <div className="flex gap-1 w-full">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="flex-1 h-8 text-xs gap-1.5 min-w-0"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          title="Elegir archivos o usar arrastre. ZIP: expansion segun tamaño."
+        >
+          {busy ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span className="truncate">{progress || "Subiendo..."}</span>
+            </>
+          ) : isDragging ? (
+            <>
+              <FolderUp className="h-3 w-3 shrink-0" /> Suelta aqui
+            </>
+          ) : (
+            <>
+              <Upload className="h-3 w-3 shrink-0" />
+              <span className="truncate">Archivos</span>
+            </>
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 px-2 text-xs gap-1 shrink-0"
+          type="button"
+          onClick={() => folderRef.current?.click()}
+          disabled={busy}
+          title="Subir todos los archivos de una carpeta"
+          aria-label="Subir carpeta"
+        >
+          <FolderUp className="h-3 w-3" />
+          <span className="hidden sm:inline">Carpeta</span>
+        </Button>
+      </div>
     </div>
   );
 }

@@ -1016,6 +1016,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                         buttonSize="icon"
                         buttonVariant="ghost"
                         className="shrink-0"
+                        enableFolderPicker
                       />
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setShowCommentDropbox(true)} title="Seleccionar de Dropbox">
                         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2l6 3.75L6 9.5 0 5.75zm12 0l6 3.75-6 3.75-6-3.75zM0 13.25L6 9.5l6 3.75L6 17zm12 0l6-3.75 6 3.75L18 17zM6 18.25l6-3.75 6 3.75L12 22z" /></svg>
@@ -1122,8 +1123,9 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       disabled={uploading}
                       showChips={false}
                       hint={uploading ? "Subiendo..." : "Subir archivos"}
-                      subhint="Arrastra varios o un .zip (se expande)"
+                      subhint="Arrastra varios archivos, una carpeta o un .zip (se expande)"
                       className="text-xs"
+                      enableFolderPicker
                     />
                     <label className="cursor-pointer">
                       <input type="file" className="hidden" accept="image/*" capture="environment" onChange={async (e) => {
