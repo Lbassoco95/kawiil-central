@@ -374,9 +374,28 @@ export function useCreateCalendarEvent() {
       if (data?.error) throw new Error(String(data.error));
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
-      toast.success("Evento creado en Outlook");
+      const d = (data || {}) as {
+        onlineMeetingFallback?: boolean;
+        fallbackApplied?: string;
+        originalGraphError?: string;
+      };
+      if (d.onlineMeetingFallback) {
+        toast.success("Evento creado en Outlook (sin reunión de Teams)", {
+          description:
+            "Microsoft rechazó la reunión de Teams para tu cuenta (licencia o tenant sin Teams). El evento se creó sin el enlace de Teams.",
+          duration: 8000,
+        });
+      } else if (d.fallbackApplied) {
+        toast.success("Evento creado en Outlook (modo compatibilidad)", {
+          description:
+            `Microsoft rechazó el payload original. Se creó el evento con un formato reducido (${d.fallbackApplied}). Si faltan campos, ábrelo y edítalo desde Outlook.`,
+          duration: 9000,
+        });
+      } else {
+        toast.success("Evento creado en Outlook");
+      }
     },
     onError: (err: Error) => {
       const msg = String(err.message || "");

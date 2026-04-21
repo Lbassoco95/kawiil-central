@@ -206,7 +206,7 @@ export function CalendarView() {
   }, [viewMode]);
   const [newEvent, setNewEvent] = useState({
     subject: "", startTime: "09:00", endTime: "10:00", attendees: "",
-    location: "", description: "", isOnlineMeeting: true, isAllDay: false, categories: [] as string[],
+    location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] as string[],
   });
 
   const {
@@ -410,7 +410,7 @@ export function CalendarView() {
       ? { subject: newEvent.subject, isAllDay: true, start: { dateTime: `${dateStr}T00:00:00`, timeZone: CDMX_TZ }, end: { dateTime: `${nextDayStr}T00:00:00`, timeZone: CDMX_TZ } }
       : { subject: newEvent.subject, start: { dateTime: `${dateStr}T${newEvent.startTime}:00`, timeZone: CDMX_TZ }, end: { dateTime: `${dateStr}T${newEvent.endTime}:00`, timeZone: CDMX_TZ } };
 
-    if (newEvent.description.trim()) baseEvent.body = { contentType: "HTML", content: newEvent.description.trim() };
+    if (newEvent.description.trim()) baseEvent.body = { contentType: "html", content: newEvent.description.trim() };
     if (newEvent.location.trim()) baseEvent.location = { displayName: newEvent.location.trim() };
     if (attendees.length > 0) baseEvent.attendees = attendees;
     if (newEvent.isOnlineMeeting) { baseEvent.isOnlineMeeting = true; baseEvent.onlineMeetingProvider = "teamsForBusiness"; }
@@ -419,7 +419,7 @@ export function CalendarView() {
     createEvent.mutate(baseEvent, {
       onSuccess: () => {
         setShowCreate(false);
-        setNewEvent({ subject: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: true, isAllDay: false, categories: [] });
+        setNewEvent({ subject: "", startTime: "09:00", endTime: "10:00", attendees: "", location: "", description: "", isOnlineMeeting: false, isAllDay: false, categories: [] });
       },
     });
   };
@@ -432,7 +432,7 @@ export function CalendarView() {
       start: { dateTime: `${editForm.startDate}T${editForm.startTime}:00`, timeZone: CDMX_TZ },
       end: { dateTime: `${editForm.endDate}T${editForm.endTime}:00`, timeZone: CDMX_TZ },
       location: editForm.location.trim() ? { displayName: editForm.location.trim() } : undefined,
-      body: editForm.description.trim() ? { contentType: "HTML", content: editForm.description.trim() } : undefined,
+      body: editForm.description.trim() ? { contentType: "html", content: editForm.description.trim() } : undefined,
       categories: editForm.categories,
       attendees: attendees.length > 0 ? attendees : undefined,
     };

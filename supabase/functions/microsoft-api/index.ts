@@ -561,12 +561,185 @@ Deno.serve(async (req) => {
       }
 
       case "create-event": {
-        const res = await graphMailFetchWithRetry(accessToken, `/me/events`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(params.event),
-        });
-        result = await res.json();
+        const rawEventPayload = params?.event ?? {};
+
+        // Normalización defensiva contra ErrorPropertyValidationFailure
+        const normalizeEventPayload = (ev: Record<string, any>): Record<string, any> => {
+          const out: Record<string, any> = { ...ev };
+
+          // 1. body.contentType: Graph espera "text" | "html" (normalizamos a minúsculas)
+          if (out.body && typeof out.body === "object") {
+            const ct = String(out.body.contentType || "").toLowerCase();
+            out.body = {
+              ...out.body,
+              contentType: ct === "html" ? "html" : "text",
+            };
+            if (!out.body.content || String(out.body.content).trim() === "") {
+              delete out.body;
+            }
+          }
+
+          // 2. subject debe ser string
+          if (out.subject != null) out.subject = String(out.subject);
+
+          // 3. attendees: filtrar entradas vacías/mal formadas
+          if (Array.isArray(out.attendees)) {
+            out.attendees = out.attendees
+              .map((a: any) => {
+                const address = String(a?.emailAddress?.address || "").trim();
+                if (!address) return null;
+                return {
+                  emailAddress: {
+                    address,
+                    ...(a?.emailAddress?.name ? { name: String(a.emailAddress.name) } : {}),
+                  },
+                  type: a?.type || "required",
+                };
+              })
+              .filter(Boolean);
+            if (out.attendees.length === 0) delete out.attendees;
+          }
+
+          // 4. categories: solo strings no vacíos
+          if (Array.isArray(out.categories)) {
+            out.categories = out.categories
+              .map((c: any) => (typeof c === "string" ? c.trim() : ""))
+              .filter(Boolean);
+            if (out.categories.length === 0) delete out.categories;
+          }
+
+          // 5. location: asegurar que sólo lleve displayName si es objeto
+          if (out.location && typeof out.location === "object") {
+            const dn = String(out.location.displayName || "").trim();
+            if (!dn) {
+              delete out.location;
+            } else {
+              out.location = { displayName: dn };
+            }
+          }
+
+          // 6. onlineMeetingProvider sólo si isOnlineMeeting
+          if (!out.isOnlineMeeting) {
+            delete out.onlineMeetingProvider;
+            delete out.onlineMeeting;
+            delete out.isOnlineMeeting;
+          }
+
+          // 7. Asegurar que start/end tengan timeZone (si no, defaulteamos a UTC)
+          if (out.start && typeof out.start === "object" && !out.start.timeZone) {
+            out.start = { ...out.start, timeZone: "UTC" };
+          }
+          if (out.end && typeof out.end === "object" && !out.end.timeZone) {
+            out.end = { ...out.end, timeZone: "UTC" };
+          }
+
+          return out;
+        };
+
+        const eventPayload = normalizeEventPayload(rawEventPayload);
+        const hasOnlineMeeting = !!eventPayload?.isOnlineMeeting;
+
+        const tryCreate = async (payload: Record<string, any>): Promise<Response> =>
+          graphMailFetchWithRetry(accessToken, `/me/events`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+        try {
+          const res = await tryCreate(eventPayload);
+          result = await res.json();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const isValidationFailure =
+            /\[400\]/.test(msg) &&
+            (msg.includes("ErrorPropertyValidationFailure") ||
+              msg.toLowerCase().includes("at least one property failed validation") ||
+              msg.toLowerCase().includes("onlinemeeting"));
+
+          console.error("[microsoft-api] create-event failed", {
+            graphError: msg,
+            payloadKeys: Object.keys(eventPayload),
+            payload: eventPayload,
+          });
+
+          if (!isValidationFailure) throw err;
+
+          // Fallback progresivo: eliminar campos uno por uno para aislar el problema.
+          // Orden: primero online meeting (si existía), luego campos opcionales,
+          // finalmente dejar sólo lo esencial (subject, start, end).
+          const attempts: Array<{ label: string; payload: Record<string, any> }> = [];
+
+          if (hasOnlineMeeting) {
+            const p = { ...eventPayload };
+            delete p.isOnlineMeeting;
+            delete p.onlineMeetingProvider;
+            delete p.onlineMeeting;
+            attempts.push({ label: "without-online-meeting", payload: p });
+          }
+          {
+            const p = { ...eventPayload };
+            delete p.isOnlineMeeting;
+            delete p.onlineMeetingProvider;
+            delete p.onlineMeeting;
+            delete p.attendees;
+            attempts.push({ label: "without-attendees-and-online", payload: p });
+          }
+          {
+            const p = { ...eventPayload };
+            delete p.isOnlineMeeting;
+            delete p.onlineMeetingProvider;
+            delete p.onlineMeeting;
+            delete p.attendees;
+            delete p.categories;
+            attempts.push({ label: "without-attendees-categories-online", payload: p });
+          }
+          {
+            const p: Record<string, any> = {
+              subject: eventPayload.subject || "(sin título)",
+              start: eventPayload.start,
+              end: eventPayload.end,
+            };
+            if (eventPayload.isAllDay) p.isAllDay = true;
+            attempts.push({ label: "minimal", payload: p });
+          }
+
+          let recovered: any = null;
+          let recoveredLabel: string | null = null;
+          let lastFallbackError = msg;
+          for (const attempt of attempts) {
+            try {
+              console.warn(
+                `[microsoft-api] retrying create-event with fallback: ${attempt.label}`,
+                { payloadKeys: Object.keys(attempt.payload) },
+              );
+              const retryRes = await tryCreate(attempt.payload);
+              recovered = await retryRes.json();
+              recoveredLabel = attempt.label;
+              break;
+            } catch (e) {
+              lastFallbackError = e instanceof Error ? e.message : String(e);
+              console.warn(
+                `[microsoft-api] fallback ${attempt.label} also failed`,
+                { error: lastFallbackError },
+              );
+            }
+          }
+
+          if (!recovered) {
+            // Ningún fallback funcionó: lanzamos error con diagnóstico útil.
+            throw new Error(
+              `Microsoft rechazó el evento. Error de Graph: ${msg}. Último intento (${attempts[attempts.length - 1]?.label}): ${lastFallbackError}`,
+            );
+          }
+
+          result = {
+            ...recovered,
+            fallbackApplied: recoveredLabel,
+            originalGraphError: msg,
+            ...(recoveredLabel?.includes("online") ? { onlineMeetingFallback: true, onlineMeetingFallbackReason: msg } : {}),
+          };
+        }
         break;
       }
 

@@ -209,7 +209,7 @@ const Microsoft365Calendario = () => {
   return (
     <AppLayout>
       <ErrorBoundary>
-        <div className="flex h-[calc(100vh-7rem)] flex-col gap-4 animate-fade-in">
+        <div className="flex flex-col gap-4 animate-fade-in">
           <PageHeader
             variant="hero"
             breadcrumb={["Kawiil OS", "Integraciones", "Calendario"]}
@@ -226,7 +226,11 @@ const Microsoft365Calendario = () => {
             tasksDue={aiTasksDue}
             cacheKey={`${monYmd}_${sunYmd}`}
           />
-          <div className="min-h-0 flex-1">
+          {/* Altura propia del módulo: ocupa casi todo el viewport pero con un mínimo
+              que evita que se quede "aplastado" cuando el header + resumen AI están
+              arriba. El usuario hace scroll de página para bajar hasta el calendario,
+              y dentro del calendario existe su propio scroll para las horas 06:00–23:00. */}
+          <div className="h-[calc(100vh-10rem)] min-h-[680px]">
             <CalendarView />
           </div>
         </div>
