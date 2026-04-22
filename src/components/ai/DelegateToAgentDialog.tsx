@@ -60,6 +60,9 @@ export interface DelegateToAgentDialogProps {
   /** `template_id` del agente (mismo valor que en `agent_task_ref.agent_id`). */
   defaultAgentTemplateId?: string | null;
 
+  /** Proyecto IA activo; se envía en `input_context.ai_project_id` para la VM kawiil-agents. */
+  aiProjectId?: string | null;
+
   /**
    * Tarea de agente previa en este hilo. La edge reenvía `input_context.previous_task_id`
    * a la VM para segunda búsqueda o seguimiento enlazado.
@@ -147,6 +150,7 @@ export function DelegateToAgentDialog({
   conversationId,
   defaultClientId = null,
   defaultAgentTemplateId = null,
+  aiProjectId = null,
   previousTaskId = null,
   followUpKind = null,
   onDelegated,
@@ -226,6 +230,9 @@ export function DelegateToAgentDialog({
 
       const ctx: Record<string, unknown> = {};
       if (conversationId) ctx.conversation_id = conversationId;
+      if (aiProjectId) ctx.ai_project_id = aiProjectId;
+      /** Indicación para la VM: puede adjuntar extracto del hilo / memorias del proyecto (contrato kawiil-agents). */
+      ctx.include_conversation_excerpt = true;
       if (previousTaskId) {
         ctx.previous_task_id = previousTaskId;
         if (followUpKind) ctx.follow_up_kind = followUpKind;

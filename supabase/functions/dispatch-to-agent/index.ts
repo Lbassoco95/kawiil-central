@@ -52,10 +52,13 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 /**
- * input_context (objeto reenviado a la VM) puede incluir p. ej.:
+ * input_context (objeto reenviado tal cual a la VM kawiil-agents) puede incluir p. ej.:
  * - conversation_id: hilo del chat
+ * - ai_project_id: proyecto IA activo (mismo id que en chat) para alinear RAG / memorias
+ * - include_conversation_excerpt: si true, la VM puede solicitar a Supabase un extracto de mensajes memorias
  * - previous_task_id: tarea de agente previa (segunda búsqueda / seguimiento)
  * - follow_up_kind: "retry" | "continuation" (metadata opcional)
+ * La edge no interpreta el contenido; solo valida y reenvía.
  */
 interface DispatchBody {
   title?: unknown;

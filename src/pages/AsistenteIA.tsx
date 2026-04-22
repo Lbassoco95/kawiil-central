@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Send, Sparkles, Loader2, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight,
-  BrainCircuit, Settings2, FileText, UserPlus, Copy,
+  BrainCircuit, Settings2, FileText, UserPlus, Copy, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -84,6 +84,7 @@ const AsistenteIA = () => {
   const { user } = useAuth();
   const {
     messages, isStreaming, streamProgressSteps, pdfIndexingStatus, conversations, activeConversationId, activeAiProjectId,
+    agentSession, returnToKawiilAssistant,
     sendMessage, loadConversation, addAgentTaskMessage, patchMessageContent, startNewChat,
     deleteConversation,
     updateConversationFolder, renameConversation, setAiProject,
@@ -1255,6 +1256,65 @@ const AsistenteIA = () => {
             </div>
           )}
 
+          {agentSession && (
+            <div
+              className="shrink-0 border-t border-sky-200/50 px-4 py-2.5 dark:border-sky-800/30"
+              style={{ background: KAWIIL_AI_SOFT_BG }}
+            >
+              <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-xl border border-sky-200/60 dark:border-sky-800/40 bg-card/80 px-3 py-2.5 shadow-sm">
+                <div className="flex items-start gap-2 min-w-0 text-[11px] sm:text-xs text-foreground/90 leading-snug">
+                  <MessageSquare className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400 mt-0.5" />
+                  {agentSession.last_interaction === "delegate" ? (
+                    <p>
+                      Tarea reciente con{" "}
+                      <span className="font-semibold text-foreground">
+                        {agentSession.task_ref.agent_display_name}
+                      </span>
+                      . Puedes volver al asistente Kawiil o seguir con el mismo agente; el hilo y la memoria del proyecto
+                      se guardan.
+                    </p>
+                  ) : (
+                    <p>
+                      Hablando con el asistente Kawiil. Puedes{" "}
+                      <span className="font-medium">continuar con {agentSession.task_ref.agent_display_name}</span> para
+                      una nueva tarea ligada a la anterior.
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    className="h-8 text-xs"
+                    style={{ background: KAWIIL_AI_GRADIENT }}
+                    onClick={() => {
+                      openFollowUpWithAgent(agentSession.task_ref, "continuation");
+                    }}
+                    disabled={isStreaming || isPreparingDelegate}
+                  >
+                    Continuar con {agentSession.task_ref.agent_display_name}
+                  </Button>
+                  {agentSession.last_interaction === "delegate" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs border-sky-200/70 dark:border-sky-800/50"
+                      onClick={() => {
+                        returnToKawiilAssistant();
+                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                        setTimeout(() => textareaRef.current?.focus(), 200);
+                      }}
+                    >
+                      Volver al asistente
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Input */}
           <div
             className="border-t border-sky-200/50 px-4 py-3 dark:border-sky-800/30"
@@ -1279,7 +1339,11 @@ const AsistenteIA = () => {
                   value={input}
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
-                  placeholder="Escribe tu mensaje o adjunta archivos…"
+                  placeholder={
+                    agentSession?.last_interaction === "delegate"
+                      ? "Escribe al asistente Kawiil o usa «Continuar con el agente» arriba…"
+                      : "Escribe tu mensaje o adjunta archivos…"
+                  }
                   className="resize-none min-h-[80px] max-h-[200px] text-sm bg-card border border-sky-200/50 rounded-xl flex-1 min-w-0 shadow-sm focus-visible:ring-sky-400 focus-visible:ring-offset-0 dark:border-sky-800/40"
                   rows={3}
                   disabled={isStreaming}
@@ -1524,6 +1588,7 @@ const AsistenteIA = () => {
         conversationId={activeConversationId ?? undefined}
         defaultClientId={activeProject?.client_id ?? null}
         defaultAgentTemplateId={delegateDefaultAgentTemplateId}
+        aiProjectId={activeAiProjectId}
         previousTaskId={delegatePreviousTaskId}
         followUpKind={delegateFollowUpKind}
         onDelegated={handleAgentDelegated}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { ChatProgressStep } from "@/components/ai/ChatProcessingPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,6 +31,34 @@ export interface ChatAgentTaskRef {
   title: string;
 }
 
+/** `chat_conversations.agent_session` — rehidrata “Continuar con agente / volver al asistente”. */
+export type ChatAgentSessionInteraction = "delegate" | "chat";
+
+export type ChatAgentSession = {
+  task_ref: ChatAgentTaskRef;
+  last_interaction: ChatAgentSessionInteraction;
+};
+
+export function parseChatAgentSession(raw: unknown): ChatAgentSession | null {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const tr = o.task_ref;
+  if (tr == null || typeof tr !== "object" || Array.isArray(tr)) return null;
+  const t = tr as Record<string, unknown>;
+  if (typeof t.task_id !== "string" || typeof t.agent_id !== "string") return null;
+  const ref: ChatAgentTaskRef = {
+    task_id: t.task_id,
+    agent_id: t.agent_id,
+    agent_name: String(t.agent_name ?? ""),
+    agent_display_name: String(t.agent_display_name ?? "Agente"),
+    agent_color: String(t.agent_color ?? "#4da6ff"),
+    title: String(t.title ?? ""),
+  };
+  const li =
+    o.last_interaction === "chat" || o.last_interaction === "delegate" ? o.last_interaction : "delegate";
+  return { task_ref: ref, last_interaction: li };
+}
+
 export interface ChatMessage {
   id?: string;
   role: "user" | "assistant";
@@ -51,6 +79,8 @@ export interface ChatConversation {
   ai_project_id: string | null;
   created_at: string;
   updated_at: string;
+  /** Contexto de sesión con agente delegable (misma forma que `parseChatAgentSession`). */
+  agent_session?: unknown | null;
 }
 
 export interface SendMessageOptions {
@@ -60,6 +90,9 @@ export interface SendMessageOptions {
 }
 
 const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
+
+/** Tras un resultado de agente muy largo, se dispara en segundo plano `extract-ai-memories` (memorias estructuradas). */
+const AGENT_RESULT_MEMORY_EXTRACT_MIN_CHARS = 6000;
 
 /** Evita que el estado "enviando" quede activo si la Edge Function o la red cuelgan sin cerrar el stream. */
 const AI_CHAT_CLIENT_TIMEOUT_MS = 15 * 60 * 1000;
@@ -318,6 +351,11 @@ export function useChat() {
   const [pdfIndexingStatus, setPdfIndexingStatus] = useState<PdfIndexingStatus | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeAiProjectId, setActiveAiProjectId] = useState<string | null>(null);
+  const [agentSession, setAgentSession] = useState<ChatAgentSession | null>(null);
+  const agentSessionRef = useRef<ChatAgentSession | null>(null);
+  useEffect(() => {
+    agentSessionRef.current = agentSession;
+  }, [agentSession]);
 
   const { data: conversations, isLoading: loadingConversations } = useQuery({
     queryKey: ["chat-conversations", user?.id],
@@ -358,11 +396,17 @@ export function useChat() {
 
     const { data: conv } = await supabase
       .from("chat_conversations" as any)
-      .select("ai_project_id")
+      .select("ai_project_id, agent_session")
       .eq("id", conversationId)
       .single();
     if (conv) {
       setActiveAiProjectId((conv as any).ai_project_id || null);
+      const parsed = parseChatAgentSession((conv as { agent_session?: unknown }).agent_session);
+      setAgentSession(parsed);
+      agentSessionRef.current = parsed;
+    } else {
+      setAgentSession(null);
+      agentSessionRef.current = null;
     }
   }, []);
 
@@ -453,6 +497,14 @@ export function useChat() {
           agent_task_ref: ref,
         },
       ]);
+      const session: ChatAgentSession = { task_ref: ref, last_interaction: "delegate" };
+      setAgentSession(session);
+      agentSessionRef.current = session;
+      const { error: seErr } = await supabase
+        .from("chat_conversations" as any)
+        .update({ agent_session: session as any, updated_at: new Date().toISOString() } as any)
+        .eq("id", convId);
+      if (seErr) console.warn("addAgentTaskMessage: agent_session", seErr);
       qc.invalidateQueries({ queryKey: ["chat-conversations"] });
     },
     [user, activeConversationId, createConversation, qc],
@@ -488,6 +540,11 @@ export function useChat() {
                 auto_chunk: false,
               },
             })
+            .catch(() => {});
+        }
+        if (embedText.length >= AGENT_RESULT_MEMORY_EXTRACT_MIN_CHARS && activeConversationId) {
+          void supabase.functions
+            .invoke("extract-ai-memories", { body: { conversation_id: activeConversationId } })
             .catch(() => {});
         }
       }
@@ -586,6 +643,8 @@ export function useChat() {
         setActiveConversationId(null);
         setMessages([]);
         setPdfIndexingStatus(null);
+        setAgentSession(null);
+        agentSessionRef.current = null;
       }
       toast.success("Conversación eliminada");
     },
@@ -722,6 +781,17 @@ export function useChat() {
         void supabase.functions
           .invoke("analyze-improvement-suggestions", { body: { message_id: userMessageId } })
           .catch(() => {});
+      }
+
+      const sess0 = agentSessionRef.current;
+      if (sess0 && sess0.last_interaction !== "chat") {
+        const next: ChatAgentSession = { ...sess0, last_interaction: "chat" };
+        setAgentSession(next);
+        agentSessionRef.current = next;
+        void supabase
+          .from("chat_conversations" as any)
+          .update({ agent_session: next as any, updated_at: new Date().toISOString() } as any)
+          .eq("id", convId);
       }
 
       const refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
@@ -1133,10 +1203,25 @@ export function useChat() {
     ]
   );
 
+  const returnToKawiilAssistant = useCallback(() => {
+    if (!activeConversationId) return;
+    const s = agentSessionRef.current;
+    if (!s || s.last_interaction === "chat") return;
+    const next: ChatAgentSession = { ...s, last_interaction: "chat" };
+    setAgentSession(next);
+    agentSessionRef.current = next;
+    void supabase
+      .from("chat_conversations" as any)
+      .update({ agent_session: next as any, updated_at: new Date().toISOString() } as any)
+      .eq("id", activeConversationId);
+  }, [activeConversationId]);
+
   const startNewChat = useCallback(() => {
     setActiveConversationId(null);
     setMessages([]);
     setPdfIndexingStatus(null);
+    setAgentSession(null);
+    agentSessionRef.current = null;
   }, []);
 
   const setAiProject = useCallback((projectId: string | null) => {
@@ -1144,6 +1229,8 @@ export function useChat() {
     setActiveConversationId(null);
     setMessages([]);
     setPdfIndexingStatus(null);
+    setAgentSession(null);
+    agentSessionRef.current = null;
   }, []);
 
   return {
@@ -1153,6 +1240,8 @@ export function useChat() {
     loadingConversations,
     activeConversationId,
     activeAiProjectId,
+    agentSession,
+    returnToKawiilAssistant,
     sendMessage,
     loadConversation,
     addAgentTaskMessage,

@@ -1033,6 +1033,7 @@ export type Database = {
       }
       chat_conversations: {
         Row: {
+          agent_session: Json | null
           ai_project_id: string | null
           created_at: string
           folder: string | null
@@ -1043,6 +1044,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          agent_session?: Json | null
           ai_project_id?: string | null
           created_at?: string
           folder?: string | null
@@ -1053,6 +1055,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          agent_session?: Json | null
           ai_project_id?: string | null
           created_at?: string
           folder?: string | null
