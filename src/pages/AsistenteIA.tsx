@@ -535,6 +535,13 @@ const AsistenteIA = () => {
     [isStreaming],
   );
 
+  /** Desde seguimiento: delegar sin `previous_task_id` (tarea desacoplada). Mantiene agente y adjuntos del modal. */
+  const handleDelegateStartFreshTask = useCallback(() => {
+    setDelegatePreviousTaskId(null);
+    setDelegateFollowUpKind(null);
+    setDelegateModalTitleOverride(null);
+  }, []);
+
   /** Abre el modal de delegar con las instrucciones del proyecto pre-rellenadas (si existen). */
   const openDelegateWithProjectInstructionPrefill = useCallback(async () => {
     if (isStreaming) return;
@@ -968,19 +975,6 @@ const AsistenteIA = () => {
                     </span>
                   )}
                 </div>
-                <p className="hidden sm:block mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
-                  Chat con contexto de proyectos, documentos y memorias del equipo.
-                </p>
-                {(activeProject || displayAgentSession) && (
-                  <p className="hidden md:block text-[10px] text-muted-foreground/80 mt-0.5 max-w-[42rem] leading-snug">
-                    {activeProject
-                      ? "Kawiil usa RAG, memorias del proyecto e historial de este hilo. Al delegar, la VM (kawiil-agents) recibe "
-                      : "Kawiil consulta RAG e historial de este hilo. Al delegar, la VM (kawiil-agents) recibe "}
-                    <span className="text-foreground/80">instrucciones</span> e{" "}
-                    <span className="text-foreground/80">input_context</span> según lo soportado en el servidor; no
-                    replica automáticamente toda la memoria del chat.
-                  </p>
-                )}
                 {activeConversationId && displayAgentSession && (
                   <div className="sm:hidden flex items-center justify-between gap-2 mt-1 min-w-0 max-w-full">
                     <span className="text-[10px] text-muted-foreground truncate min-w-0">
@@ -1033,7 +1027,7 @@ const AsistenteIA = () => {
                     }}
                     disabled={isStreaming || isPreparingDelegate}
                     className="h-8 shrink-0 gap-1 text-[10px] sm:text-[11px] px-1.5 sm:px-2 text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10"
-                    title="Delegar con instrucciones del proyecto en el cuerpo de la petición a la VM"
+                    title="Abrir delegación; las instrucciones del proyecto se rellenan en el formulario"
                   >
                     <ListChecks className="h-3.5 w-3.5 shrink-0" />
                     <span className="hidden sm:inline">Próxima tarea (instrucciones)</span>
@@ -1370,15 +1364,15 @@ const AsistenteIA = () => {
                 <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-xl border border-sky-200/60 dark:border-sky-800/40 bg-card/80 px-3 py-2.5 shadow-sm">
                   <div className="flex items-start gap-2 min-w-0 text-[11px] sm:text-xs text-foreground/90 leading-snug">
                     <MessageSquare className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400 mt-0.5" />
-                    <div className="space-y-1 min-w-0">
+                    <div className="min-w-0">
                       {displayAgentSession.last_interaction === "delegate" ? (
                         <p>
                           Tarea reciente con{" "}
                           <span className="font-semibold text-foreground">
                             {displayAgentSession.task_ref.agent_display_name}
                           </span>
-                          . Puedes volver al asistente Kawiil o seguir con el mismo agente; el hilo y la memoria del
-                          proyecto se guardan.
+                          . Puedes volver al asistente Kawiil o seguir con el mismo agente; el hilo y el proyecto
+                          se guardan.
                         </p>
                       ) : (
                         <p>
@@ -1386,13 +1380,9 @@ const AsistenteIA = () => {
                           <span className="font-medium">
                             continuar con {displayAgentSession.task_ref.agent_display_name}
                           </span>{" "}
-                          para una nueva tarea ligada a la anterior.
+                          para enviar seguimiento e instrucciones al mismo agente.
                         </p>
                       )}
-                      <p className="text-[9.5px] text-muted-foreground/90 leading-snug">
-                        Kawiil usa RAG y memoria del hilo aquí; el agente en VM recibe lo que envía la edge (instrucciones,
-                        input_context), no una copia íntegra del chat.
-                      </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 shrink-0">
@@ -1706,6 +1696,7 @@ const AsistenteIA = () => {
         onDelegated={handleAgentDelegated}
         projectInstructions={activeProject?.instructions ?? null}
         projectKnowledgeForAgent={projectKnowledgeForAgent}
+        onStartFreshTask={handleDelegateStartFreshTask}
       />
     </AppLayout>
   );

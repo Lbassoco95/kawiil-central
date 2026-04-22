@@ -91,6 +91,12 @@ export interface DelegateToAgentDialogProps {
     dropboxDocuments: { document_id: string; name: string; external_path: string }[];
   } | null;
 
+  /**
+   * Solo con seguimiento (`previousTaskId`): limpia el vínculo a la tarea anterior y
+   * deja el mismo modal en modo "tarea nueva" (sin enlace a la tarea previa).
+   */
+  onStartFreshTask?: () => void;
+
   /** Tras un dispatch exitoso desde la VM (vía edge `dispatch-to-agent`). */
   onDelegated: (ref: {
     task_id: string;
@@ -176,6 +182,7 @@ export function DelegateToAgentDialog({
   followUpKind = null,
   projectInstructions = null,
   projectKnowledgeForAgent = null,
+  onStartFreshTask,
   onDelegated,
 }: DelegateToAgentDialogProps) {
   const { data: clients = [], isLoading: clientsLoading } = useClients();
@@ -204,7 +211,7 @@ export function DelegateToAgentDialog({
     setClientPopoverOpen(false);
     setAgentPopoverOpen(false);
     setAgentInstructions((projectInstructions ?? "").trim());
-  }, [isOpen, defaultClientId, defaultTitle, defaultAgentTemplateId, projectInstructions]);
+  }, [isOpen, defaultClientId, defaultTitle, defaultAgentTemplateId, projectInstructions, previousTaskId]);
 
   const handleClientSelect = (id: string | null) => {
     setSelectedClientId((prev) => {
@@ -227,9 +234,13 @@ export function DelegateToAgentDialog({
   const knowledgeDropbox = projectKnowledgeForAgent?.dropboxDocuments ?? [];
   const knowledgeTotalCount = knowledgeSupabaseRefs.length + knowledgeDropbox.length;
 
+  const isFollowUp = Boolean(previousTaskId);
+  const instrTrim = agentInstructions.replace(/\r\n/g, "\n").trim();
+  const hasDispatchBody = title.trim().length > 0 || instrTrim.length > 0;
+
   const canSubmit =
     selectedAgentId !== null &&
-    title.trim().length > 0 &&
+    hasDispatchBody &&
     !agentList.isLoading &&
     !agentList.error &&
     !clientsLoading;
@@ -240,6 +251,17 @@ export function DelegateToAgentDialog({
     const agent = agentList.agents.find((a) => a.template_id === selectedAgentId);
     if (!agent) {
       setDispatchError("Agente no encontrado. Recarga la lista.");
+      return;
+    }
+
+    const tTrim = title.trim();
+    const effectiveTitle = tTrim
+      ? tTrim.slice(0, 200)
+      : instrTrim
+        ? instrTrim.slice(0, 200)
+        : "";
+    if (!effectiveTitle) {
+      setDispatchError("Escribe un asunto o instrucciones.");
       return;
     }
 
@@ -254,7 +276,7 @@ export function DelegateToAgentDialog({
 
       const body: Record<string, unknown> = {
         agent_id: agent.template_id,
-        title: title.trim(),
+        title: effectiveTitle,
         attachment_refs: mergedAttachmentRefs,
       };
 
@@ -309,7 +331,7 @@ export function DelegateToAgentDialog({
         agent_name: agent.name,
         agent_display_name: agent.display_name,
         agent_color: agent.color,
-        title: title.trim(),
+        title: effectiveTitle,
       });
 
       onClose();
@@ -323,6 +345,61 @@ export function DelegateToAgentDialog({
     }
   };
 
+  const primaryCtaLabel = isFollowUp
+    ? followUpKind === "retry"
+      ? "Reenviar ajuste"
+      : "Enviar seguimiento"
+    : "Delegar tarea";
+  const primaryLoadingLabel = isFollowUp ? "Enviando…" : "Delegando…";
+  const dialogTitle = isFollowUp ? "Seguimiento con el agente" : "Delegar tarea a un agente";
+
+  const sharedKnowledgeBlock =
+    knowledgeTotalCount > 0 ? (
+      <div className="space-y-1.5">
+        <Label>Conocimiento del proyecto (incluido en el envío)</Label>
+        <div className="rounded-md border border-sky-200/60 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-950/20 px-2.5 py-2 text-[10.5px] text-muted-foreground space-y-1.5">
+          <p>
+            <span className="font-medium text-foreground/90">{knowledgeSupabaseRefs.length}</span> en Storage
+            {knowledgeDropbox.length > 0 && (
+              <>
+                {" "}
+                y <span className="font-medium text-foreground/90">{knowledgeDropbox.length}</span> en Dropbox
+              </>
+            )}
+            . Documentos del proyecto y adjuntos del chat (sin duplicar ruta en Storage).
+          </p>
+          <ul className="max-h-20 overflow-y-auto space-y-0.5 list-none p-0 m-0 text-[10px]">
+            {knowledgeSupabaseRefs.map((r, i) => (
+              <li key={`ks-${i}-${r.path}`} className="truncate">
+                {r.name}
+              </li>
+            ))}
+            {knowledgeDropbox.map((d) => (
+              <li key={d.document_id} className="truncate">
+                {d.name} <span className="text-muted-foreground/80">(Dropbox)</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    ) : null;
+
+  const followUpInfoShort = isFollowUp && (
+    <div
+      role="status"
+      className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-[11px] text-muted-foreground leading-snug"
+    >
+      {followUpKind === "retry" ? (
+        <p>Reintento: mismo agente e historial; indica abajo el ajuste o la nueva búsqueda.</p>
+      ) : (
+        <p>
+          Seguimiento al mismo agente: escribe qué necesitas ahora. Se incluyen documentos de conocimiento, adjuntos del
+          chat y enlace a la tarea anterior.
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <Dialog
       open={isOpen}
@@ -332,130 +409,139 @@ export function DelegateToAgentDialog({
     >
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Delegar tarea a un agente</DialogTitle>
+          <DialogTitle>{dialogTitle}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label>Cliente</Label>
-            <ClientCombobox
-              clients={clientList}
-              selected={selectedClientId}
-              onSelect={handleClientSelect}
-              open={clientPopoverOpen}
-              onOpenChange={setClientPopoverOpen}
-              disabled={clientsLoading}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Deja vacío si es una tarea general del despacho.
-            </p>
-          </div>
-
-          {previousTaskId && (
-            <div
-              role="status"
-              className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-[11px] text-muted-foreground leading-snug"
-            >
-              Segunda búsqueda o seguimiento: se envía el id de la tarea anterior (
-              <span className="font-mono text-[10px] opacity-90">{previousTaskId.slice(0, 8)}…</span>
-              ) a la VM junto con el hilo. Puedes <span className="text-foreground/85">cambiar el título y las
-              instrucciones</span> abajo para acotar el enfoque; también se reenvían los documentos del conocimiento
-              (proyecto) y los adjuntos del chat, si aplica.
-              {followUpKind === "retry" && (
-                <span className="block mt-1 text-foreground/80">Modo: reintento de búsqueda.</span>
-              )}
-              {followUpKind === "continuation" && (
-                <span className="block mt-1 text-foreground/80">Modo: nueva solicitud enlazada.</span>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label>Agente</Label>
-            <AgentCombobox
-              grouped={groupedAgents}
-              isLoading={agentList.isLoading}
-              selected={selectedAgentId}
-              onSelect={setSelectedAgentId}
-              open={agentPopoverOpen}
-              onOpenChange={setAgentPopoverOpen}
-            />
-            {agentList.error && (
-              <p className="text-[11px] text-destructive">
-                {agentList.error.message}
-              </p>
-            )}
-            {selectedAgent && (
-              <p className="text-[11px] text-muted-foreground line-clamp-3">
-                {selectedAgent.description ?? selectedAgent.role}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="task-title">Título de la tarea</Label>
-            <Input
-              id="task-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value.slice(0, 200))}
-              placeholder="Ej. Revisar contrato de arrendamiento"
-              maxLength={200}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="agent-instructions">Instrucciones para el agente (opcional)</Label>
-            <Textarea
-              id="agent-instructions"
-              value={agentInstructions}
-              onChange={(e) => setAgentInstructions(e.target.value.slice(0, MAX_DELEGATE_INSTRUCTIONS))}
-              placeholder="Se envían a la VM con la tarea. Pueden repetir o ampliar las instrucciones del proyecto de IA."
-              className="min-h-[100px] max-h-48 text-sm resize-y"
-              rows={4}
-            />
-            <p className="text-[10.5px] text-muted-foreground leading-snug">
-              El asistente Kawiil en este hilo ya usa el proyecto, memorias e índice semántico. El agente en servidor
-              recibe este texto, referencias a archivos y <span className="text-foreground/80">input_context</span> (hilo,
-              proyecto, Dropbox si aplica); el uso final depende de kawiil-agents.
-            </p>
-          </div>
-
-          {knowledgeTotalCount > 0 && (
-            <div className="space-y-1.5">
-              <Label>Conocimiento del proyecto (incluido en la tarea)</Label>
-              <div className="rounded-md border border-sky-200/60 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-950/20 px-2.5 py-2 text-[10.5px] text-muted-foreground space-y-1.5">
-                <p>
-                  <span className="font-medium text-foreground/90">
-                    {knowledgeSupabaseRefs.length}
-                  </span>{" "}
-                  en Storage
-                  {knowledgeDropbox.length > 0 && (
-                    <>
-                      {" "}
-                      y{" "}
-                      <span className="font-medium text-foreground/90">
-                        {knowledgeDropbox.length}
-                      </span>{" "}
-                      en Dropbox
-                    </>
-                  )}{" "}
-                  (además de los adjuntos del chat, sin duplicar ruta en Storage).
-                </p>
-                <ul className="max-h-20 overflow-y-auto space-y-0.5 list-none p-0 m-0 text-[10px]">
-                  {knowledgeSupabaseRefs.map((r, i) => (
-                    <li key={`ks-${i}-${r.path}`} className="truncate">
-                      {r.name}
-                    </li>
-                  ))}
-                  {knowledgeDropbox.map((d) => (
-                    <li key={d.document_id} className="truncate">
-                      {d.name} <span className="text-muted-foreground/80">(Dropbox)</span>
-                    </li>
-                  ))}
-                </ul>
+          {isFollowUp ? (
+            <>
+              {followUpInfoShort}
+              <div className="space-y-1.5">
+                <Label htmlFor="agent-instructions" className="text-foreground">
+                  Mensaje al agente
+                </Label>
+                <Textarea
+                  id="agent-instructions"
+                  value={agentInstructions}
+                  onChange={(e) => setAgentInstructions(e.target.value.slice(0, MAX_DELEGATE_INSTRUCTIONS))}
+                  placeholder="Instrucciones o preguntas para continuar con el mismo encargo. Puedes dejar en blanco el asunto si responde aquí."
+                  className="min-h-[128px] max-h-56 text-sm resize-y"
+                  rows={5}
+                />
+                <p className="text-[10.5px] text-muted-foreground">Opcional: complementa o resume con el asunto de abajo.</p>
               </div>
-            </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-title">Asunto breve (opcional)</Label>
+                <Input
+                  id="task-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value.slice(0, 200))}
+                  placeholder="p. ej. Revisar anexo 2 del expediente"
+                  maxLength={200}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cliente</Label>
+                <ClientCombobox
+                  clients={clientList}
+                  selected={selectedClientId}
+                  onSelect={handleClientSelect}
+                  open={clientPopoverOpen}
+                  onOpenChange={setClientPopoverOpen}
+                  disabled={clientsLoading}
+                />
+                <p className="text-[11px] text-muted-foreground">Deja vacío si aplica tarea general del despacho.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Agente (este seguimiento)</Label>
+                {selectedAgent ? (
+                  <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                    <p className="text-sm font-medium">{selectedAgent.display_name}</p>
+                    <p className="text-[11px] text-muted-foreground line-clamp-3 mt-0.5">
+                      {selectedAgent.description ?? selectedAgent.role}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-destructive">Cargando agente…</p>
+                )}
+                {agentList.error && (
+                  <p className="text-[11px] text-destructive">{agentList.error.message}</p>
+                )}
+              </div>
+              {onStartFreshTask && (
+                <div className="pt-0.5">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs text-muted-foreground"
+                    onClick={() => onStartFreshTask()}
+                  >
+                    Iniciar una tarea nueva (sin vincular a la anterior)
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label>Cliente</Label>
+                <ClientCombobox
+                  clients={clientList}
+                  selected={selectedClientId}
+                  onSelect={handleClientSelect}
+                  open={clientPopoverOpen}
+                  onOpenChange={setClientPopoverOpen}
+                  disabled={clientsLoading}
+                />
+                <p className="text-[11px] text-muted-foreground">Deja vacío si es una tarea general del despacho.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Agente</Label>
+                <AgentCombobox
+                  grouped={groupedAgents}
+                  isLoading={agentList.isLoading}
+                  selected={selectedAgentId}
+                  onSelect={setSelectedAgentId}
+                  open={agentPopoverOpen}
+                  onOpenChange={setAgentPopoverOpen}
+                />
+                {agentList.error && (
+                  <p className="text-[11px] text-destructive">{agentList.error.message}</p>
+                )}
+                {selectedAgent && (
+                  <p className="text-[11px] text-muted-foreground line-clamp-3">
+                    {selectedAgent.description ?? selectedAgent.role}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="task-title">Título de la tarea</Label>
+                <Input
+                  id="task-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value.slice(0, 200))}
+                  placeholder="Ej. Revisar contrato de arrendamiento"
+                  maxLength={200}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="agent-instructions">Instrucciones (opcional)</Label>
+                <Textarea
+                  id="agent-instructions"
+                  value={agentInstructions}
+                  onChange={(e) => setAgentInstructions(e.target.value.slice(0, MAX_DELEGATE_INSTRUCTIONS))}
+                  placeholder="Detalle, criterios o referencia a documentos. Pueden ampliar las instrucciones del proyecto de IA."
+                  className="min-h-[100px] max-h-48 text-sm resize-y"
+                  rows={4}
+                />
+                <p className="text-[10.5px] text-muted-foreground">
+                  Si solo escribes instrucciones, se usarán como título abreviado.
+                </p>
+              </div>
+            </>
           )}
+
+          {sharedKnowledgeBlock}
 
           {attachments && attachments.length > 0 && (
             <div className="space-y-1.5">
@@ -499,10 +585,10 @@ export function DelegateToAgentDialog({
             {isDispatching ? (
               <>
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                Delegando…
+                {primaryLoadingLabel}
               </>
             ) : (
-              "Delegar tarea"
+              primaryCtaLabel
             )}
           </Button>
         </DialogFooter>
