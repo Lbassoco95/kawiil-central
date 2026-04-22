@@ -386,6 +386,46 @@ const AsistenteIA = () => {
     );
   }, [promptParam, setSearchParams]);
 
+  const conversationDeeplinkApplied = useRef<string | null>(null);
+  const conversationParam = searchParams.get("conversation");
+  useEffect(() => {
+    const raw = conversationParam?.trim() ?? "";
+    if (!raw) {
+      conversationDeeplinkApplied.current = null;
+      return;
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(raw)) return;
+    if (conversationDeeplinkApplied.current === raw) return;
+    conversationDeeplinkApplied.current = raw;
+
+    if (raw === activeConversationId) {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.delete("conversation");
+          return p;
+        },
+        { replace: true },
+      );
+      return;
+    }
+
+    void (async () => {
+      try {
+        await loadConversation(raw);
+      } finally {
+        setSearchParams(
+          (prev) => {
+            const p = new URLSearchParams(prev);
+            p.delete("conversation");
+            return p;
+          },
+          { replace: true },
+        );
+      }
+    })();
+  }, [conversationParam, activeConversationId, loadConversation, setSearchParams]);
+
   useEffect(() => {
     if (activeProject) setShowKnowledge(true);
   }, [activeProject?.id]);
@@ -901,19 +941,6 @@ const AsistenteIA = () => {
               updateAiProject.mutate({ id, instructions: instr });
               toast.success("Instrucciones actualizadas");
             }}
-            onUpdateAgentDefaults={
-              user?.id
-                ? (id, updates) => {
-                    updateAiProject.mutate(
-                      { id, ...updates },
-                      {
-                        onSuccess: () => toast.success("Preferencias de agente actualizadas"),
-                        onError: (e: Error) => toast.error(e.message),
-                      },
-                    );
-                  }
-                : undefined
-            }
             currentUserId={user?.id}
             onOpenMembers={activeAiProjectId ? () => setMembersDialogOpen(true) : undefined}
           />
@@ -933,29 +960,29 @@ const AsistenteIA = () => {
           className="flex-1 flex flex-col min-w-0 border-l border-border/40"
         >
           <div
-            className="shrink-0 border-b border-sky-200/60 px-3 py-2.5 sm:px-4 sm:py-3 dark:border-sky-800/40"
+            className="shrink-0 border-b border-sky-200/60 px-2.5 py-1.5 sm:px-3 sm:py-2 dark:border-sky-800/40"
             style={{ background: KAWIIL_AI_HEADER_BG }}
           >
-            <div className="flex items-center gap-2 min-w-0 text-white">
+            <div className="flex items-center gap-1.5 min-w-0 text-white">
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => setShowSidebar(!showSidebar)}
-                className="h-8 w-8 shrink-0 p-0 text-white/90 hover:text-white hover:bg-white/20"
+                className="h-7 w-7 shrink-0 p-0 text-white/90 hover:text-white hover:bg-white/20"
                 aria-label={showSidebar ? "Ocultar panel" : "Mostrar panel"}
               >
-                {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+                {showSidebar ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeft className="h-3.5 w-3.5" />}
               </Button>
               <span
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm ring-1 ring-white/25"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white shadow-sm ring-1 ring-white/25"
                 style={{ background: KAWIIL_AI_GRADIENT }}
                 aria-hidden
               >
-                {activeProject ? <BrainCircuit className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                {activeProject ? <BrainCircuit className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight drop-shadow-sm">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <h1 className="text-sm sm:text-base font-bold tracking-tight text-white leading-tight drop-shadow-sm">
                     Kawiil{" "}
                     <span className="text-white/95 font-extrabold" aria-hidden>
                       AI
@@ -963,17 +990,17 @@ const AsistenteIA = () => {
                   </h1>
                   <Badge
                     variant="outline"
-                    className="h-4 border border-white/40 bg-white/10 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-white shadow-sm"
+                    className="h-3.5 border border-white/40 bg-white/10 px-1 text-[8px] font-bold uppercase tracking-wider text-white shadow-sm"
                   >
                     v2.4
                   </Badge>
                   {activeProject ? (
-                    <span className="inline-flex max-w-[min(100%,14rem)] items-center gap-1 truncate rounded-full border border-white/30 bg-white/10 px-2 py-0.5 text-[10px] sm:text-[11px] text-white">
-                      <BrainCircuit className="h-3 w-3 shrink-0" />
+                    <span className="inline-flex max-w-[min(100%,12rem)] items-center gap-0.5 truncate rounded-full border border-white/30 bg-white/10 px-1.5 py-0 text-[9px] sm:text-[10px] text-white">
+                      <BrainCircuit className="h-2.5 w-2.5 shrink-0" />
                       <span className="truncate">{activeProject.name}</span>
                     </span>
                   ) : (
-                    <span className="rounded-full border border-white/25 bg-white/10 px-2 py-0.5 text-[10px] sm:text-[11px] text-white/95">
+                    <span className="rounded-full border border-white/25 bg-white/10 px-1.5 py-0 text-[9px] sm:text-[10px] text-white/95">
                       Asistente interno
                     </span>
                   )}
@@ -987,7 +1014,7 @@ const AsistenteIA = () => {
                       type="button"
                       size="sm"
                       variant="secondary"
-                      className="h-7 text-[10px] px-2 shrink-0 bg-white/95 text-slate-800 hover:bg-white border-0 shadow-sm"
+                      className="h-6 text-[9px] px-1.5 shrink-0 bg-white/95 text-slate-800 hover:bg-white border-0 shadow-sm"
                       onClick={() => {
                         void openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
                       }}
@@ -1010,7 +1037,7 @@ const AsistenteIA = () => {
                     type="button"
                     size="sm"
                     variant="secondary"
-                    className="h-7 text-[9.5px] sm:text-[10px] px-2 bg-white/95 text-slate-800 hover:bg-white border-0 shadow-sm"
+                    className="h-6 text-[9px] sm:text-[9.5px] px-1.5 bg-white/95 text-slate-800 hover:bg-white border-0 shadow-sm"
                     onClick={() => {
                       void openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
                     }}
@@ -1029,25 +1056,25 @@ const AsistenteIA = () => {
                       void openDelegateWithProjectInstructionPrefill();
                     }}
                     disabled={isStreaming || isPreparingDelegate}
-                    className="h-8 shrink-0 gap-1 text-[10px] sm:text-[11px] px-1.5 sm:px-2 text-white/95 hover:text-white hover:bg-white/20"
-                    title="Abrir delegación; las instrucciones del proyecto se rellenan en el formulario"
+                    className="h-7 shrink-0 gap-0.5 text-[9px] sm:text-[10px] px-1.5 sm:px-2 text-white/95 hover:text-white hover:bg-white/20"
+                    title="Delegar; se rellenan las instrucciones del proyecto"
                   >
-                    <ListChecks className="h-3.5 w-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Próxima tarea (instrucciones)</span>
-                    <span className="sm:hidden">Instrucciones</span>
+                    <ListChecks className="h-3 w-3 shrink-0" />
+                    <span className="hidden sm:inline lg:hidden">Tarea</span>
+                    <span className="hidden lg:inline">Próxima tarea</span>
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
                     className={cn(
-                      "h-8 shrink-0 gap-1.5 text-[11px] text-white/95 hover:text-white",
+                      "h-7 shrink-0 gap-1 text-[10px] text-white/95 hover:text-white",
                       showKnowledge
                         ? "bg-white/25 hover:bg-white/30"
                         : "hover:bg-white/20",
                     )}
                   >
-                    {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
+                    {showKnowledge ? <PanelRightClose className="h-3 w-3" /> : <PanelRight className="h-3 w-3" />}
                     <span className="hidden sm:inline">Conocimiento</span>
                   </Button>
                 </>
@@ -1343,9 +1370,9 @@ const AsistenteIA = () => {
             }}
           >
             {pdfIndexingStatus && (
-              <div className="shrink-0 border-b border-sky-300/40 bg-sky-50/60 px-4 py-2 dark:border-sky-800/40 dark:bg-sky-950/30">
-                <div className="max-w-3xl mx-auto flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600 dark:text-sky-400 shrink-0" />
+              <div className="shrink-0 border-b border-sky-300/40 bg-sky-50/60 px-3 py-1.5 dark:border-sky-800/40 dark:bg-sky-950/30">
+                <div className="max-w-3xl mx-auto flex items-center gap-1.5 text-[9px] sm:text-[10px] text-muted-foreground leading-tight">
+                  <Loader2 className="h-3 w-3 animate-spin text-sky-600 dark:text-sky-400 shrink-0" />
                   <span className="min-w-0">
                     {pdfIndexingStatus.phase === "extracting"
                       ? `Leyendo «${pdfIndexingStatus.fileName}» para indexar búsqueda semántica…`
@@ -1363,58 +1390,52 @@ const AsistenteIA = () => {
             )}
 
             {displayAgentSession && (
-              <div className="shrink-0 px-4 py-2.5">
-                <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-xl border border-sky-200/60 dark:border-sky-800/40 bg-card/80 px-3 py-2.5 shadow-sm">
-                  <div className="flex items-start gap-2 min-w-0 text-[11px] sm:text-xs text-foreground/90 leading-snug">
-                    <MessageSquare className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400 mt-0.5" />
-                    <div className="min-w-0">
+              <div className="shrink-0 px-3 py-1.5 sm:px-4">
+                <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 rounded-lg border border-sky-200/60 dark:border-sky-800/40 bg-card/80 px-2.5 py-1.5 shadow-sm">
+                  <div className="flex items-start gap-1.5 min-w-0 text-[9px] sm:text-[10px] text-foreground/90 leading-tight">
+                    <MessageSquare className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400 mt-0.5" />
+                    <div className="min-w-0 line-clamp-2 sm:line-clamp-none">
                       {displayAgentSession.last_interaction === "delegate" ? (
                         <p>
-                          Tarea reciente con{" "}
-                          <span className="font-semibold text-foreground">
-                            {displayAgentSession.task_ref.agent_display_name}
-                          </span>
-                          . Puedes volver al asistente Kawiil o seguir con el mismo agente; el hilo y el proyecto
-                          se guardan.
+                          Tarea con <span className="font-semibold">{displayAgentSession.task_ref.agent_display_name}</span>
+                          : sigue con el agente o vuelve al asistente; hilo y proyecto guardados.
                         </p>
                       ) : (
                         <p>
-                          Hablando con el asistente Kawiil. Puedes{" "}
-                          <span className="font-medium">
-                            continuar con {displayAgentSession.task_ref.agent_display_name}
-                          </span>{" "}
-                          para enviar seguimiento e instrucciones al mismo agente.
+                          Asistente Kawiil ·{" "}
+                          <span className="font-medium">Seguir con {displayAgentSession.task_ref.agent_display_name}</span> para
+                          instrucciones al mismo agente.
                         </p>
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1 shrink-0 sm:pl-1">
                     <Button
                       type="button"
                       variant="default"
                       size="sm"
-                      className="h-8 text-xs"
+                      className="h-7 text-[10px] px-2"
                       style={{ background: KAWIIL_AI_GRADIENT }}
                       onClick={() => {
                         openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
                       }}
                       disabled={isStreaming || isPreparingDelegate}
                     >
-                      Continuar con {displayAgentSession.task_ref.agent_display_name}
+                      <span className="truncate max-w-[10rem]">Con {displayAgentSession.task_ref.agent_display_name}</span>
                     </Button>
                     {displayAgentSession.last_interaction === "delegate" && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-8 text-xs border-sky-200/70 dark:border-sky-800/50"
+                        className="h-7 text-[10px] px-2 border-sky-200/70 dark:border-sky-800/50"
                         onClick={() => {
                           returnToKawiilAssistant();
                           messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
                           setTimeout(() => textareaRef.current?.focus(), 200);
                         }}
                       >
-                        Volver al asistente
+                        Al asistente
                       </Button>
                     )}
                   </div>
@@ -1423,8 +1444,8 @@ const AsistenteIA = () => {
             )}
 
             {/* Input */}
-            <div className="px-4 py-3">
-              <div className="max-w-3xl mx-auto flex flex-col gap-2">
+            <div className="px-3 py-2 sm:px-4">
+              <div className="max-w-3xl mx-auto flex flex-col gap-1.5">
               <ChatAttachmentChips
                 files={pendingFiles}
                 disabled={isStreaming}
@@ -1448,8 +1469,8 @@ const AsistenteIA = () => {
                       ? "Escribe al asistente Kawiil o usa «Continuar con el agente» arriba…"
                       : "Escribe tu mensaje o adjunta archivos…"
                   }
-                  className="resize-none min-h-[80px] max-h-[200px] text-sm bg-card border border-sky-200/50 rounded-xl flex-1 min-w-0 shadow-sm focus-visible:ring-sky-400 focus-visible:ring-offset-0 dark:border-sky-800/40"
-                  rows={3}
+                  className="resize-none min-h-[64px] max-h-[180px] text-[13px] leading-snug bg-card border border-sky-200/50 rounded-lg flex-1 min-w-0 shadow-sm focus-visible:ring-sky-400 focus-visible:ring-offset-0 dark:border-sky-800/40"
+                  rows={2}
                   disabled={isStreaming}
                 />
                 <Button
@@ -1459,19 +1480,19 @@ const AsistenteIA = () => {
                   onClick={() => void openDelegateModal()}
                   disabled={isStreaming || isPreparingDelegate}
                   title="Delegar a un agente"
-                  className="h-[42px] w-[42px] rounded-xl shrink-0 border-sky-200/60 dark:border-sky-800/50"
+                  className="h-[38px] w-[38px] rounded-lg shrink-0 border-sky-200/60 dark:border-sky-800/50"
                 >
                   {isPreparingDelegate ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <UserPlus className="h-4 w-4" />
+                    <UserPlus className="h-3.5 w-3.5" />
                   )}
                 </Button>
                 <Button
                   size="sm"
                   onClick={handleSend}
                   disabled={(!input.trim() && pendingFiles.length === 0) || isStreaming}
-                  className="h-[42px] w-[42px] rounded-xl shrink-0 text-white shadow-md shadow-sky-500/30 hover:opacity-95 disabled:opacity-50 disabled:shadow-none"
+                  className="h-[38px] w-[38px] rounded-lg shrink-0 text-white shadow-md shadow-sky-500/30 hover:opacity-95 disabled:opacity-50 disabled:shadow-none"
                   style={{ background: KAWIIL_AI_GRADIENT }}
                 >
                   {isStreaming ? (
@@ -1483,25 +1504,29 @@ const AsistenteIA = () => {
               </div>
               </div>
               {activeAiProjectId && (
-                <div className="max-w-3xl mx-auto flex items-center gap-2 mt-2">
+                <div className="max-w-3xl mx-auto flex items-center gap-1.5 mt-1">
                   <Checkbox
                     id="link-project-files"
                     checked={linkFilesToProject}
                     onCheckedChange={(c) => setLinkFilesToProject(!!c)}
                     disabled={isStreaming}
+                    className="h-3.5 w-3.5"
                   />
-                  <Label htmlFor="link-project-files" className="text-[10px] text-muted-foreground cursor-pointer font-normal">
-                    También vincular adjuntos al conocimiento del proyecto (documentos Kawiil)
+                  <Label htmlFor="link-project-files" className="text-[9px] text-muted-foreground cursor-pointer font-normal leading-tight">
+                    Vincular adjuntos al conocimiento del proyecto
                   </Label>
                 </div>
               )}
-              <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
-                Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
-                {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
-                MB total. Tras la respuesta de la IA, los PDF se indexan en segundo plano para búsqueda semántica en
-                mensajes siguientes (puedes seguir escribiendo mientras indexa). Imágenes/Excel u otros sí se procesan
-                en el mensaje. Kawiil AI puede cometer errores.
-              </p>
+              <details className="max-w-3xl mx-auto mt-1.5 text-left">
+                <summary className="text-[8px] text-muted-foreground/90 cursor-pointer list-none text-center">
+                  Límites y ayuda con adjuntos
+                </summary>
+                <p className="text-[8px] text-muted-foreground/80 leading-relaxed pt-1 px-0.5">
+                  Hasta {MAX_CHAT_ATTACHMENT_FILES} archivos, {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB c/u,{" "}
+                  {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)} MB total. Los PDF se indexan en segundo plano. La IA
+                  puede equivocarse.
+                </p>
+              </details>
             </div>
           </div>
         </FileDropzone>

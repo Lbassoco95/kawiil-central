@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { playNotificationBeep } from "@/lib/notificationBeep";
+import { asistenteChatDeepLinkFromNotification } from "@/lib/asistenteNotificationLink";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
 import { SlackNotificationToast } from "@/components/notifications/SlackNotificationToast";
 
@@ -40,6 +41,8 @@ function effectiveNotificationTitle(row: NotifRow): string {
       ai_proactive_tip: "Sugerencia de IA",
       reminders_hourly_digest: "Recordatorios pendientes",
       reminders_daily_digest: "Recordatorios (resumen diario)",
+      agent_task_completed: "Asistente · Tarea de agente completada",
+      agent_task_failed: "Asistente · Tarea de agente con error",
     };
     if (labels[row.type]) return labels[row.type];
     return `Nueva notificación (${row.type})`;
@@ -165,12 +168,13 @@ export function useNotificationDelivery() {
       allowDesktop,
     });
 
-    const deepLink = slackDeepLinkFromNotification({
-      entity_type: row.entity_type,
-      entity_ref: row.entity_ref,
-      entity_id: row.entity_id,
-      type: row.type,
-    });
+    const deepLink =
+      slackDeepLinkFromNotification({
+        entity_type: row.entity_type,
+        entity_ref: row.entity_ref,
+        entity_id: row.entity_id,
+        type: row.type,
+      }) || asistenteChatDeepLinkFromNotification(row);
     const bodyText = row.body?.trim() || "";
 
     let surfaced = false;

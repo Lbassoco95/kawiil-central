@@ -3,6 +3,20 @@
  * [dispatch-to-agent](../supabase/functions/dispatch-to-agent/index.ts)).
  * La edge reenvía el objeto; la VM interpreta y aplica presupuesto de tokens
  * (p. ej. límite ~200k de Anthropic).
+ *
+ * **context_mode: `rag_first` (Kawiil OS)**  
+ * El cliente de **kawiil-central** no añade a `attachment_refs` rutas del bucket
+ * `documents` del expediente del proyecto; `attachment_refs` trae solo adjuntos
+ * subidos al chat. Siguen yendo `ai_project_id` y
+ * `knowledge_included_document_ids` (y, si aplica, `knowledge_dropbox_documents`) para
+ * acotar búsqueda: la VM kawiil-agents debe leer el contexto vía
+ * `document_chunks` (p. ej. RPC `public.match_document_chunks_for_agent` con
+ * `filter_org_id` + `filter_document_ids` = `knowledge_included_document_ids`) y
+ * **no** re-descargar el expediente entero de Storage. No usar
+ * `document_chunks.project_id` como `ai_project_id` (el primero apunta a `public.projects` CRM). El presupuesto de bytes del expediente en
+ * `knowledge_max_total_bytes` aplica a modos con refs, no a `rag_first`
+ * (el cliente manda pistas de `max_attachment_bytes_per_task` / `max_estimated_input_tokens`
+ * a partir de los bytes conocidos de adjuntos de chat, si los hay).
  */
 export const AGENT_CONTEXT_MODES = ["full_refs", "rag_first", "refs_budget"] as const;
 export type AgentContextMode = (typeof AGENT_CONTEXT_MODES)[number];
@@ -31,13 +45,15 @@ export type AgentDispatchInputContext = {
   /** IDs de `documents` incluidos a propósito en este envío (subconjunto del conocimiento). */
   knowledge_included_document_ids?: string[];
   /**
-   * Pistas de tope; la VM aplica el recorte final frente a 200k tokens.
-   * `knowledge_max_total_bytes` estima con `documents.file_size` (Storage).
+   * Suma aprox. de bytes de refs de **expediente** que el cliente pide a la VM
+   * (modos con binario por Storage en `attachment_refs` + refs del proyecto). No se envía
+   * bajo el contrato de `context_mode: rag_first` (ver cabecera de este módulo).
    */
   knowledge_max_total_bytes?: number;
   /**
-   * Techo duro de adjuntos o texto extraído en la VM; opcional, bytes.
-   * Si la VM no lo implementa, ignora.
+   * Con `context_mode: rag_first`, pista de tamaño (bytes) de adjuntos reales
+   * del chat, si el cliente conoce `size_bytes` en la meta. La VM no está obligada
+   * a leer otras señales de tope; opcional, bytes.
    */
   max_attachment_bytes_per_task?: number;
   /**

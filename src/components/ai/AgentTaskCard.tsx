@@ -313,11 +313,9 @@ export function AgentTaskCard({
 
   const lastEventMessage = useMemo(() => {
     if (events.length === 0) {
-      if (status === "running") {
-        return "Ejecución en curso en el servidor (si no ves el detalle línea a línea, comprueba la VM de agentes y Realtime).";
-      }
-      if (status === "pending") return "Esperando a que el agente inicie…";
-      return "Sin eventos todavía";
+      if (status === "running") return "Ejecución en curso…";
+      if (status === "pending") return "Iniciando…";
+      return "Sin actividad aún";
     }
     return formatEventMessage(events[events.length - 1]);
   }, [events, status]);
@@ -358,7 +356,7 @@ export function AgentTaskCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border px-4 py-3 transition-colors",
+        "rounded-xl border px-3 py-2 transition-colors",
         status === "completed" && "border-success/30 bg-success/5",
         status === "failed" && "border-destructive/30 bg-destructive/5",
         (status === "running" || status === "pending") && "border-border bg-card",
@@ -366,20 +364,20 @@ export function AgentTaskCard({
       )}
     >
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-        <CollapsibleTrigger className="flex items-center gap-3 w-full text-left">
+        <CollapsibleTrigger className="flex items-center gap-2.5 w-full text-left">
           <AgentAvatar displayName={agent.display_name} color={agent.color} />
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold truncate">{agent.display_name}</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-[13px] font-semibold leading-tight truncate">{agent.display_name}</p>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">
                 {agent.role}
               </p>
             </div>
-            <p className="text-[11px] text-muted-foreground truncate">{title}</p>
+            <p className="text-[10px] text-muted-foreground line-clamp-1">{title}</p>
             <p
               className={cn(
-                "text-[11px] truncate mt-0.5",
+                "text-[9px] line-clamp-2 mt-0.5",
                 status === "running" ? "text-foreground/80" : "text-muted-foreground",
               )}
               title={lastEventMessage}
@@ -510,16 +508,24 @@ function EventTimeline({
       status === "running" ||
       /\b(running|processing|in_progress)\b/i.test(dbStatus || "");
     return (
-      <div className="text-[11px] text-muted-foreground italic space-y-1">
-        <p>
+      <div className="text-[10px] text-muted-foreground space-y-1">
+        <p className="not-italic">
           {serverRunning
-            ? "La tarea está activa en el backend; los pasos detallados dependen de la VM kawiil-agents y de eventos en la tabla ai_task_events."
-            : "Aún no hay eventos en tiempo real. Suele significar cola en la VM, worker detenido, o que la tarea sigue en estado pendiente en agent_tasks."}
+            ? "Tarea en ejecución. Los pasos detallados aparecerán aquí si el servidor emite eventos."
+            : "Aún no hay eventos: puede estar en cola o iniciando."}
         </p>
         {dbStatus ? (
-          <p className="text-[10px] not-italic font-mono text-muted-foreground/90">
-            Estado en servidor: {dbStatus}
-          </p>
+          <details className="not-italic">
+            <summary className="text-[9px] cursor-pointer text-foreground/70 list-none">
+              <span className="ml-0">Más detalle (técnico)</span>
+            </summary>
+            <p className="text-[8px] mt-0.5 text-muted-foreground/90 leading-relaxed pl-0">
+              {serverRunning
+                ? "Si no hay líneas de progreso, el equipo de agentes o Realtime podría no estar emitiendo; revisa con operaciones si persiste."
+                : "Causa habitual: cola, worker, o tarea aún en pendiente (agent_tasks / VM)."}
+            </p>
+            <p className="text-[8px] font-mono text-muted-foreground/90 mt-0.5">Estado: {dbStatus}</p>
+          </details>
         ) : null}
       </div>
     );

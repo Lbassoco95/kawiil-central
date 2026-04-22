@@ -30,6 +30,7 @@ import {
   formatPushRegistrationUserMessage,
 } from "@/lib/registerWebPush";
 import { playNotificationBeep } from "@/lib/notificationBeep";
+import { asistenteChatDeepLinkFromNotification } from "@/lib/asistenteNotificationLink";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
 import { useSlackQuickReply } from "@/contexts/SlackQuickReplyContext";
 import { cn } from "@/lib/utils";
@@ -86,6 +87,9 @@ function getNotificationCtas(
   if (m.type === "improvement_suggestion") {
     ctas.push({ key: "open_suggestion", label: "Ver sugerencia", primary: true });
   }
+  if (m.type === "agent_task_completed" || m.type === "agent_task_failed") {
+    ctas.push({ key: "open_asistente_conv", label: "Abrir conversación", primary: true });
+  }
 
   return ctas;
 }
@@ -99,6 +103,8 @@ function getNotificationIcon(type: string) {
   if (type === "deadline_due_tomorrow_task") return <CalendarClock className="h-3.5 w-3.5 text-amber-600" />;
   if (type === "improvement_suggestion") return <Lightbulb className="h-3.5 w-3.5 text-amber-500" />;
   if (type === "ai_proactive_tip") return <Sparkles className="h-3.5 w-3.5 text-sky-500" />;
+  if (type === "agent_task_completed" || type === "agent_task_failed")
+    return <MessageSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   if (type === "slack_mention") return <AtSign className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   if (type === "slack_message") return <MessageSquare className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />;
   return <Settings className="h-3.5 w-3.5 text-muted-foreground" />;
@@ -771,6 +777,11 @@ export default function Notificaciones() {
     } else if (m.type === "ai_proactive_tip") {
       navigate("/");
     } else {
+      const asistenteUrl = asistenteChatDeepLinkFromNotification(m);
+      if (asistenteUrl) {
+        navigate(asistenteUrl);
+        return;
+      }
       const slackUrl = slackDeepLinkFromNotification({
         entity_type: m.entity_type,
         entity_ref: m.entity_ref,

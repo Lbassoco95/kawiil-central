@@ -65,15 +65,30 @@ function jsonResponse(payload: unknown, status = 200): Response {
  * - `conversation_excerpt_max_messages` (número, p. ej. 30) cuando `last_n`
  *
  * **Expediente / conocimiento (documentos grandes)**
- * - `context_mode`: "full_refs" (inyectar cuerpos completos vía refs), "rag_first" (priorizar
- *   búsqueda en embeddings / chunks del `ai_project_id`), "refs_budget" (recortar por presupuesto).
+ * - `context_mode`: "full_refs" (inyectar cuerpos completos vía refs), "rag_first" (RAG vía
+ *   `document_chunks` y `knowledge_included_document_ids`, no inyectar refs Storage del expediente),
+ *   "refs_budget" (recortar por presupuesto).
  * - `knowledge_included_document_ids`: subconjunto de `documents.id` que el usuario eligió; la VM
  *   no inyecta otros del proyecto salvo lógica interna.
- * - `knowledge_max_total_bytes`: suma teórica (bytes) de los refs de Storage enviados; ayuda
- *   a la VM a presupuestar antes de leer y extraer texto.
+ * - `knowledge_max_total_bytes`: suma teórica (bytes) de los refs de Storage del **expediente** que
+ *   kawiil-central prevé enviar. **Kawiil OS con `context_mode: rag_first` no manda** esas refs en
+ *   `attachment_refs` (solo adjuntos de chat) y tampoco rellena `knowledge_max_total_bytes` con
+ *   ese cálculo; en su lugar, el cliente manda pistas con `max_attachment_bytes_per_task` /
+ *   `max_estimated_input_tokens` según bytes conocidos de archivos de chat, si aplica.
  * - `knowledge_supabase_ref_count` y `knowledge_dropbox_documents` (Dropbox: sin binario en Storage)
  * - `max_attachment_bytes_per_task` / `max_estimated_input_tokens` (opcional): tope duro o blando
  *   en el servidor.
+ *
+ * **Implementación esperada en kawiil-agents (VM) para `context_mode: rag_first` (repo aparte)**
+ * - Inyectar contexto a partir de `public.document_chunks` (pgvector). Búsqueda semántica acotada a
+ *   documentos: RPC `public.match_document_chunks_for_agent(query_embedding, filter_org_id,
+ *   filter_document_ids, ...)` donde `filter_document_ids` = `knowledge_included_document_ids` (UUIDs
+ *   de `documents.id`). Esa RPC devuelve [] si el array es NULL/vacío (sin full scan). No confundir
+ *   `document_chunks.project_id` (CRM) con `input_context.ai_project_id` (asistente).
+ * - `attachment_refs` trae en este modo solo rutas a adjuntos de chat (p. ej. `chat-uploads`); no
+ *   repetir cuerpos de documentos de proyecto vía `documents` + Storage mientras haya RAG fiable.
+ * - **Fallback** si faltan chunks para un `document_id` del ámbito: acordar política (advertencia
+ *   al usuario, una descarga puntual de Storage, o reindexar) en la VM, no en esta edge.
  *
  * Las columnas `ai_projects.agent_*` en kawiil-central son sugerencias por proyecto; el cliente
  * rellena el objeto anterior al delegar.

@@ -4190,6 +4190,16 @@ async function handleClaudeChat(
       return;
     }
 
+    if (stopReason === "max_tokens") {
+      console.warn(
+        `[ai-chat] Respuesta truncada por max_tokens con texto parcial (${textContent.length} chars)`,
+      );
+      textContent +=
+        "\n\n---\n\n**Nota:** Esta respuesta se cortó al alcanzar el límite de salida del modelo en un solo turno. " +
+        "Puedes pedir la **continuación** en un mensaje corto, dividir la tarea (p. ej. solo el hallazgo o solo el anexo), " +
+        "o abrir un chat nuevo si el historial es muy largo.";
+    }
+
     sseWriter.writeProgress("response", "Generando la respuesta final…");
     sseWriter.writeTextChunks(textContent);
     sseWriter.close();

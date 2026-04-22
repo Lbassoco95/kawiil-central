@@ -5084,6 +5084,27 @@ export type Database = {
           source_type: string
         }[]
       }
+      match_document_chunks_for_agent: {
+        Args: {
+          filter_document_ids: string[]
+          filter_org_id: string
+          filter_source_types?: string[]
+          match_count?: number
+          query_embedding: string
+          similarity_threshold?: number
+        }
+        Returns: {
+          client_id: string
+          content: string
+          document_id: string
+          id: string
+          metadata: Json
+          project_id: string
+          similarity: number
+          source_id: string
+          source_type: string
+        }[]
+      }
       move_lead_stage: {
         Args: { p_lead_id: string; p_new_stage_id: string }
         Returns: Json

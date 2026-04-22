@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, MessageSquare, ExternalLink } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SlackMessageList } from "@/components/slack/SlackMessageList";
+import { SlackComposer } from "@/components/slack/SlackComposer";
 import type { SlackDeepLinkPartsCompat } from "@/lib/slackDeepLink";
 import {
   invokeSlackApi,
@@ -13,43 +15,30 @@ import {
   isSlackPermissionDeniedMessage,
   SLACK_CHAT_API_PERMISSION_HINT,
   SLACK_PERMISSION_TOAST_MS,
+  SLACK_REACTIONS_PERMISSION_HINT,
   type SlackConversation,
   type SlackMessage,
 } from "@/lib/slackApi";
 import { useSlackConnection } from "@/hooks/useSlackConnection";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
-import { conversationTitle, slackUserDisplayName } from "@/components/slack/slackGrouping";
+import { conversationTitle } from "@/components/slack/slackGrouping";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-const HISTORY_LIMIT = 50;
-const THREAD_LIMIT = 50;
+const HISTORY_LIMIT = 90;
+const THREAD_LIMIT = 90;
 const WINDOW_SEC = 48 * 3600;
-
-const MENTION_RE = /<@([UW][A-Z0-9]+)(?:\|[^>]+)?>/g;
 
 function slackWindowOldestTs(): string {
   return (Date.now() / 1000 - WINDOW_SEC).toFixed(6);
 }
 
-function plainSlackText(
-  text: string | null | undefined,
-  userMap: Record<string, { display_name: string | null; real_name: string | null } | undefined>,
-): string {
-  if (!text) return "";
-  let out = text.replace(MENTION_RE, (_m, id: string) => `@${slackUserDisplayName(id, userMap)}`);
-  out = out.replace(/<((?:https?:\/\/|mailto:)[^|>\s]+)\|([^>]+)>/g, "$2");
-  out = out.replace(/<((?:https?:\/\/|mailto:)[^>\s]+)>/g, "$1");
-  out = out.replace(/<#[CG][A-Z0-9]+\|([^>]+)>/g, "#$1");
-  out = out.replace(/<!subteam\^[A-Z0-9]+\|@?([^>]+)>/g, "@$1");
-  out = out.replace(/<!(channel|here|everyone)>/g, "@$1");
-  return out.trim();
-}
-
 function sortMessagesAsc(messages: SlackMessage[]): SlackMessage[] {
   return [...messages].sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 }
+
+type ListTab = "channel" | "thread";
 
 type Props = {
   open: boolean;
@@ -66,10 +55,13 @@ export function SlackQuickReplyPanel({
 }: Props) {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { isConnected, isLoading: loadingConn } = useSlackConnection();
+  const { isConnected, isLoading: loadingConn, connection } = useSlackConnection();
   const [draft, setDraft] = useState("");
+  const [listTab, setListTab] = useState<ListTab>("channel");
 
   const channelId = parsed?.channel ?? "";
+  const hasThread = !!parsed?.replyTs;
+  const threadRootTs = parsed?.mainTs ?? "";
 
   const channelQuery = useQuery({
     queryKey: ["slack-quick-channel-info", channelId],
@@ -125,13 +117,7 @@ export function SlackQuickReplyPanel({
       if (!data.ok) throw new Error(formatSlackHistoryLoadError(data.error));
       return sortMessagesAsc(data.messages || []);
     },
-    // Tras `conversations.info` (misma tasa de API al abrir: menos ráfagas concurrentes).
-    enabled:
-      open &&
-      isConnected &&
-      !!channelId &&
-      !parsed?.replyTs &&
-      (channelQuery.isSuccess || channelQuery.isError),
+    enabled: open && isConnected && !!channelId,
     staleTime: 15_000,
   });
 
@@ -151,21 +137,26 @@ export function SlackQuickReplyPanel({
       if (!data.ok) throw new Error(formatSlackHistoryLoadError(data.error));
       return sortMessagesAsc(data.messages || []);
     },
-    enabled: open && isConnected && !!channelId && !!parsed?.replyTs,
+    enabled: open && isConnected && !!channelId && hasThread,
     staleTime: 15_000,
   });
 
-  const displayMessages = parsed?.replyTs ? threadQuery.data ?? [] : historyQuery.data ?? [];
+  const channelMessages = historyQuery.data ?? [];
+  const threadMessages = threadQuery.data ?? [];
 
   const slackUserIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const m of displayMessages) {
+    for (const m of channelMessages) {
+      if (m.user) ids.add(m.user);
+      if (m.text) extractSlackUserIdsFromText(m.text).forEach((id) => ids.add(id));
+    }
+    for (const m of threadMessages) {
       if (m.user) ids.add(m.user);
       if (m.text) extractSlackUserIdsFromText(m.text).forEach((id) => ids.add(id));
     }
     if (convMeta?.user) ids.add(convMeta.user);
     return [...ids];
-  }, [displayMessages, convMeta?.user]);
+  }, [channelMessages, threadMessages, convMeta?.user]);
 
   const { data: userMap = {} } = useSlackUserProfiles(slackUserIds);
 
@@ -179,17 +170,10 @@ export function SlackQuickReplyPanel({
     return channelId || "Slack";
   }, [notificationTitle, convMeta, userMap, channelId]);
 
-  const loadingMessages = parsed?.replyTs ? threadQuery.isLoading : historyQuery.isLoading;
-  const messagesError = parsed?.replyTs ? threadQuery.error : historyQuery.error;
-
-  const highlightTs = parsed?.replyTs ?? parsed?.mainTs;
-
   useEffect(() => {
-    if (!open || !highlightTs || loadingMessages) return;
-    const id = `slack-quick-msg-${highlightTs.replace(/\./g, "-")}`;
-    const el = document.getElementById(id);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [open, highlightTs, loadingMessages, displayMessages.length]);
+    if (!open || !parsed) return;
+    setListTab(parsed.replyTs ? "thread" : "channel");
+  }, [open, parsed?.channel, parsed?.replyTs, parsed?.mainTs]);
 
   useEffect(() => {
     if (!open) setDraft("");
@@ -204,6 +188,15 @@ export function SlackQuickReplyPanel({
     toast.error(msg);
   };
 
+  const invalidateQuickAndMain = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["slack-quick-history", channelId] });
+    qc.invalidateQueries({ queryKey: ["slack-quick-thread", channelId, threadRootTs] });
+    qc.invalidateQueries({ queryKey: ["slack-history", channelId] });
+    if (threadRootTs) {
+      qc.invalidateQueries({ queryKey: ["slack-thread", channelId, threadRootTs] });
+    }
+  }, [qc, channelId, threadRootTs]);
+
   const sendMutation = useMutation({
     mutationFn: async (payload: { text: string; thread_ts?: string }) => {
       const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
@@ -217,21 +210,99 @@ export function SlackQuickReplyPanel({
     onSuccess: (_data, vars) => {
       toast.success(vars.thread_ts ? "Enviado en el hilo" : "Enviado al canal");
       setDraft("");
-      qc.invalidateQueries({ queryKey: ["slack-quick-history", channelId] });
-      qc.invalidateQueries({ queryKey: ["slack-quick-thread", channelId, parsed?.mainTs] });
-      qc.invalidateQueries({ queryKey: ["slack-history", channelId] });
-      if (vars.thread_ts) {
-        qc.invalidateQueries({ queryKey: ["slack-thread", channelId, vars.thread_ts] });
-      }
+      invalidateQuickAndMain();
     },
     onError: (e: Error) => onChatError(e),
   });
+
+  const reactionMutation = useMutation({
+    mutationFn: async (vars: {
+      ts: string;
+      name: string;
+      add: boolean;
+      navThreadRootTs?: string | null;
+    }) => {
+      const name = vars.name.replace(/^:|:$/g, "").trim();
+      if (!channelId || !name) throw new Error("Datos incompletos");
+      const action = vars.add ? "reactions.add" : "reactions.remove";
+      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+        action,
+        channel: channelId,
+        ts: vars.ts,
+        name,
+      });
+      if (!data.ok) throw new Error(data.error || "No se pudo actualizar la reacción");
+    },
+    onSuccess: () => {
+      invalidateQuickAndMain();
+    },
+    onError: (e, vars) => {
+      const buildMessagePath = (): string | null => {
+        if (!channelId) return null;
+        const q = new URLSearchParams();
+        q.set("channel", channelId);
+        if (vars.navThreadRootTs && vars.navThreadRootTs !== vars.ts) {
+          q.set("ts", vars.navThreadRootTs);
+          q.set("reply", vars.ts);
+        } else {
+          q.set("ts", vars.ts);
+        }
+        return `/comunicacion?${q.toString()}`;
+      };
+      const path = buildMessagePath();
+      const actionBtn =
+        path != null
+          ? ({
+              label: "Ir al mensaje",
+              onClick: () => navigate(path),
+            } as const)
+          : undefined;
+      const msg = e instanceof Error ? e.message : "";
+      if (isSlackPermissionDeniedMessage(msg)) {
+        toast.error(SLACK_REACTIONS_PERMISSION_HINT, {
+          duration: SLACK_PERMISSION_TOAST_MS,
+          ...(actionBtn ? { action: actionBtn } : {}),
+        });
+        return;
+      }
+      toast.error(msg, { ...(actionBtn ? { action: actionBtn } : {}) });
+    },
+  });
+
+  const navThreadRootForMessage = useCallback(
+    (messageTs: string, source: ListTab): string | null => {
+      if (source === "thread" && threadRootTs) return threadRootTs;
+      const list = source === "channel" ? channelMessages : threadMessages;
+      const msg = list.find((m) => m.ts === messageTs);
+      if (msg?.thread_ts && msg.thread_ts !== msg.ts) return msg.thread_ts;
+      return null;
+    },
+    [channelMessages, threadMessages, threadRootTs],
+  );
+
+  const handleToggleReaction = useCallback(
+    (messageTs: string, name: string, add: boolean, source: ListTab) => {
+      const navThreadRootTs = navThreadRootForMessage(messageTs, source);
+      reactionMutation.mutate({
+        ts: messageTs,
+        name,
+        add,
+        navThreadRootTs: navThreadRootTs ?? undefined,
+      });
+    },
+    [navThreadRootForMessage, reactionMutation],
+  );
 
   const handleSend = (mode: "channel" | "thread") => {
     const text = draft.trim();
     if (!text || !parsed) return;
     const thread_ts = mode === "thread" ? parsed.mainTs : undefined;
     sendMutation.mutate({ text, thread_ts });
+  };
+
+  const composerSendMode = (): "channel" | "thread" => {
+    if (hasThread && listTab === "thread") return "thread";
+    return "channel";
   };
 
   const goFullComunicacion = () => {
@@ -245,26 +316,84 @@ export function SlackQuickReplyPanel({
     navigate(path);
   };
 
+  const highlightChannel = parsed?.mainTs ?? "";
+  const highlightThread = parsed?.replyTs ?? parsed?.mainTs ?? "";
+
+  const channelLoading = historyQuery.isLoading;
+  const channelError = historyQuery.error as Error | null;
+  const threadLoading = threadQuery.isLoading;
+  const threadError = threadQuery.error as Error | null;
+
+  const reactionPending =
+    reactionMutation.isPending && reactionMutation.variables
+      ? {
+          messageTs: reactionMutation.variables.ts,
+          name: reactionMutation.variables.name,
+        }
+      : null;
+
   if (!parsed) return null;
+
+  const messageListShell = "flex flex-1 min-h-0 flex-col overflow-hidden bg-muted/15";
+
+  const renderChannelList = () => (
+    <div className={messageListShell}>
+      <SlackMessageList
+        messages={channelMessages}
+        userMap={userMap}
+        highlightTs={highlightChannel}
+        isLoading={channelLoading && !historyQuery.data}
+        error={channelError}
+        hasMore={false}
+        isFetchingMore={false}
+        slackReactionChannelId={channelId}
+        slackSelfUserId={connection?.slack_user_id ?? null}
+        reactionPending={reactionPending}
+        onToggleReaction={(ts, name, add) => handleToggleReaction(ts, name, add, "channel")}
+        selectedChannelId={channelId}
+        currentChannelName={headerLabel}
+      />
+    </div>
+  );
+
+  const renderThreadList = () => (
+    <div className={messageListShell}>
+      <SlackMessageList
+        messages={threadMessages}
+        userMap={userMap}
+        highlightTs={highlightThread}
+        isLoading={threadLoading && !threadQuery.data}
+        error={threadError}
+        hasMore={false}
+        isFetchingMore={false}
+        slackReactionChannelId={channelId}
+        slackSelfUserId={connection?.slack_user_id ?? null}
+        reactionPending={reactionPending}
+        onToggleReaction={(ts, name, add) => handleToggleReaction(ts, name, add, "thread")}
+        selectedChannelId={channelId}
+        currentChannelName={headerLabel}
+      />
+    </div>
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-[440px]"
+        className="flex w-full flex-col gap-0 bg-background p-0 sm:max-w-[480px]"
         aria-describedby={undefined}
       >
-        <SheetHeader className="space-y-1 border-b border-border/80 px-4 py-3 pr-12 text-left">
+        <SheetHeader className="space-y-1 border-b border-border/80 bg-background px-4 py-3 pr-12 text-left shrink-0">
           <SheetTitle className="flex items-center gap-2 text-base">
-            <MessageSquare className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0" />
+            <MessageSquare className="h-4 w-4 text-[#611f69] shrink-0" />
             <span className="truncate">{headerLabel}</span>
           </SheetTitle>
           <SheetDescription className="text-xs">
-            Contexto reciente (~48h en canal, o mensajes del hilo). Sin cargar historial completo.
+            Contexto reciente del canal (~48h) y, si aplica, el hilo del aviso. Mismo estilo que Comunicación.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-1 flex-col min-h-0">
+        <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
           {!isConnected && !loadingConn && (
             <Alert className="m-3 shrink-0">
               <AlertTitle className="text-sm">Slack no conectado</AlertTitle>
@@ -281,71 +410,49 @@ export function SlackQuickReplyPanel({
           )}
 
           {isConnected && (
-            <>
-              <div className="flex-1 min-h-[200px] max-h-[min(52vh,420px)] overflow-y-auto px-3 py-2 space-y-2">
-                {loadingMessages && (
-                  <div className="flex justify-center py-8 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                )}
-                {messagesError && (
-                  <Alert variant="destructive">
-                    <AlertTitle className="text-sm">No se pudo cargar</AlertTitle>
-                    <AlertDescription className="text-xs">
-                      {(messagesError as Error).message}
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {!loadingMessages && !messagesError && displayMessages.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-6">
-                    No hay mensajes en esta ventana. Abre Comunicación para ver el historial completo.
-                  </p>
-                )}
-                {!loadingMessages &&
-                  displayMessages.map((m) => {
-                    const plain = plainSlackText(m.text, userMap);
-                    if (!plain && !m.files?.length) return null;
-                    const author = m.user
-                      ? slackUserDisplayName(m.user, userMap)
-                      : m.bot_id
-                        ? "Bot"
-                        : "Usuario";
-                    const isHi = m.ts === highlightTs;
-                    return (
-                      <div
-                        key={m.ts}
-                        id={`slack-quick-msg-${m.ts.replace(/\./g, "-")}`}
-                        className={cn(
-                          "rounded-lg border px-2.5 py-1.5 text-xs",
-                          isHi
-                            ? "border-sky-500/60 bg-sky-500/10"
-                            : "border-border/60 bg-card/80",
-                        )}
-                      >
-                        <div className="font-semibold text-[11px] text-foreground/90">{author}</div>
-                        {plain ? (
-                          <p className="mt-0.5 whitespace-pre-wrap break-words text-muted-foreground">
-                            {plain}
-                          </p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-              </div>
+            <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+              {hasThread ? (
+                <Tabs
+                  value={listTab}
+                  onValueChange={(v) => setListTab(v as ListTab)}
+                  className="flex flex-1 min-h-0 flex-col gap-0"
+                >
+                  <TabsList className="mx-3 mt-2 h-9 shrink-0 w-fit self-start">
+                    <TabsTrigger value="channel" className="text-xs px-3">
+                      Canal
+                    </TabsTrigger>
+                    <TabsTrigger value="thread" className="text-xs px-3">
+                      Hilo
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent
+                    value="channel"
+                    className={cn("mt-2 flex-1 min-h-0 flex flex-col overflow-hidden data-[state=inactive]:hidden")}
+                  >
+                    {renderChannelList()}
+                  </TabsContent>
+                  <TabsContent
+                    value="thread"
+                    className={cn("mt-2 flex-1 min-h-0 flex flex-col overflow-hidden data-[state=inactive]:hidden")}
+                  >
+                    {renderThreadList()}
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <div className="flex flex-1 min-h-0 flex-col pt-2">{renderChannelList()}</div>
+              )}
 
-              <div className="shrink-0 border-t border-border/80 p-3 space-y-2 bg-muted/20">
-                <Textarea
+              <div className="shrink-0 border-t border-border/80 bg-muted/25 p-3 space-y-2">
+                <SlackComposer
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Escribe una respuesta…"
-                  className="min-h-[72px] max-h-[120px] text-sm resize-none"
-                  disabled={sendMutation.isPending}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      handleSend(parsed.replyTs ? "thread" : "channel");
-                    }
-                  }}
+                  onChange={setDraft}
+                  onSend={() => handleSend(composerSendMode())}
+                  disabled={!channelId}
+                  sending={sendMutation.isPending}
+                  channelLabel={headerLabel}
+                  mentionUserIds={[]}
+                  userMap={userMap}
+                  compact
                 />
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -373,7 +480,7 @@ export function SlackQuickReplyPanel({
                   </Button>
                 </div>
                 <p className="text-[10px] text-muted-foreground">
-                  ⌘/Ctrl+Enter envía al canal (o al hilo si el aviso era de un hilo).
+                  ⌘/Ctrl+Enter envía según la pestaña activa (Canal o Hilo); los botones fuerzan el destino.
                 </p>
                 <Button
                   type="button"
@@ -386,7 +493,7 @@ export function SlackQuickReplyPanel({
                   Abrir en Comunicación
                 </Button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </SheetContent>

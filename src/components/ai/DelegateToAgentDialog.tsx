@@ -324,13 +324,26 @@ export function DelegateToAgentDialog({
     [agentList.agents, selectedAgentId],
   );
 
+  const isRagFirst = contextMode === "rag_first";
+
   const knowledgeSupabaseRefs = knowledge?.supabaseRefs ?? [];
   const knowledgeDropbox = knowledge?.dropboxDocuments ?? [];
   const knowledgeTotalCount = knowledgeSupabaseRefs.length + knowledgeDropbox.length;
   const knowledgeRoughTokens = knowledge
     ? roughEstimateDocTokensForDispatch(knowledge.includedBytesEstimate)
     : 0;
-  const showKnowledgeTokenWarning = knowledge != null && knowledgeRoughTokens > KNOWLEDGE_TOKEN_ROUGH_WARN;
+
+  const chatAttachmentBytes = useMemo(() => {
+    if (!attachments?.length) return 0;
+    return (attachments as AttachmentRef[]).reduce((sum, a) => {
+      const b = a.size_bytes;
+      return sum + (typeof b === "number" && b > 0 ? b : 0);
+    }, 0);
+  }, [attachments]);
+  const chatRoughTokens = roughEstimateDocTokensForDispatch(chatAttachmentBytes);
+  const showKnowledgeTokenWarning = isRagFirst
+    ? chatRoughTokens > KNOWLEDGE_TOKEN_ROUGH_WARN
+    : knowledge != null && knowledgeRoughTokens > KNOWLEDGE_TOKEN_ROUGH_WARN;
 
   const isFollowUp = Boolean(previousTaskId);
   const instrTrim = agentInstructions.replace(/\r\n/g, "\n").trim();
@@ -388,7 +401,10 @@ export function DelegateToAgentDialog({
       const kBuilt = knowledge;
       const kSupa = kBuilt?.supabaseRefs ?? [];
       const fromChat = (attachments ?? []) as ChatAttachmentMeta[];
-      const mergedAttachmentRefs = mergeAgentAttachmentRefs(kSupa, fromChat);
+      const rag = contextMode === "rag_first";
+      const mergedAttachmentRefs = rag
+        ? mergeAgentAttachmentRefs([], fromChat)
+        : mergeAgentAttachmentRefs(kSupa, fromChat);
 
       const body: Record<string, unknown> = {
         agent_id: agent.template_id,
@@ -414,7 +430,7 @@ export function DelegateToAgentDialog({
         ctx.conversation_excerpt_max_messages = 0;
       }
       ctx.include_conversation_excerpt = conversationExcerptMode !== "off";
-      if (kSupa.length) {
+      if (!rag && kSupa.length) {
         ctx.knowledge_supabase_ref_count = kSupa.length;
       }
       if (kBuilt?.dropboxDocuments && kBuilt.dropboxDocuments.length > 0) {
@@ -423,7 +439,11 @@ export function DelegateToAgentDialog({
       if (kBuilt && kBuilt.includedDocumentIds.length > 0) {
         ctx.knowledge_included_document_ids = kBuilt.includedDocumentIds;
       }
-      if (kBuilt) {
+      if (rag) {
+        if (chatAttachmentBytes > 0) ctx.max_attachment_bytes_per_task = chatAttachmentBytes;
+        const t = roughEstimateDocTokensForDispatch(chatAttachmentBytes);
+        if (t > 0) ctx.max_estimated_input_tokens = t;
+      } else if (kBuilt) {
         ctx.knowledge_max_total_bytes = kBuilt.includedBytesEstimate;
         const est = roughEstimateDocTokensForDispatch(kBuilt.includedBytesEstimate);
         if (est > 0) ctx.max_estimated_input_tokens = est;
@@ -503,6 +523,12 @@ export function DelegateToAgentDialog({
             <SelectItem value="rag_first">Priorizar búsqueda (RAG) en el proyecto</SelectItem>
           </SelectContent>
         </Select>
+        {isRagFirst && (
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            No se reenvían archivos del bucket del expediente: el agente usa el índice del proyecto y el acotado de
+            documentos que marques abajo; solo se adjuntan al binario de la tarea los subidos en este chat.
+          </p>
+        )}
       </div>
       <div className="space-y-1.5">
         <Label className="text-[11px]">Extracto de esta conversación en el contexto</Label>
@@ -544,7 +570,7 @@ export function DelegateToAgentDialog({
     allKnowledgeDocIds.length > 0 ? (
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <Label>Documentos de conocimiento a enviar</Label>
+          <Label>{isRagFirst ? "Conocimiento del proyecto (qué entra al índice RAG)" : "Documentos de conocimiento a enviar"}</Label>
           {knowledgeDocSelection !== "all" && (
             <Button
               type="button"
@@ -557,14 +583,22 @@ export function DelegateToAgentDialog({
             </Button>
           )}
         </div>
-        <p className="text-[10px] text-muted-foreground leading-snug">
-          Tope acumulado: {maxMbLabel} MB (por tamaño en disco; la VM aplica límite global al prompt, ~200k
-          tokens). Prioridad: documentos más recientes.
-        </p>
+        {isRagFirst ? (
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            Marca qué documentos acotan la búsqueda semántica; no se reenvían por Storage. Dropbox sigue
+            resolviéndose en la VM según el contrato.
+          </p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            Tope acumulado: {maxMbLabel} MB (por tamaño en disco; la VM aplica límite global al prompt, ~200k
+            tokens). Prioridad: documentos más recientes.
+          </p>
+        )}
         {showKnowledgeTokenWarning && (
           <p className="text-[10px] text-amber-800 dark:text-amber-100/90 rounded border border-amber-200/60 bg-amber-50/50 dark:bg-amber-950/30 px-2 py-1.5 leading-snug">
-            Estimación de contexto alta. Usa RAG, menos archivos, extracto mínimo del chat, o un seguimiento
-            aparte.
+            {isRagFirst
+              ? "Carga de contexto alta por archivos de este chat. Reduce adjuntos, acorta el hilo, o reintenta en otra tarea."
+              : "Estimación de contexto alta. Usa RAG, menos archivos, extracto mínimo del chat, o un seguimiento aparte."}
           </p>
         )}
         <div className="rounded-md border border-sky-200/60 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 max-h-40 overflow-y-auto space-y-2">
@@ -592,19 +626,27 @@ export function DelegateToAgentDialog({
               );
             })}
         </div>
-        {knowledge != null && knowledge.skippedForByteBudget > 0 && (
+        {knowledge != null && knowledge.skippedForByteBudget > 0 && !isRagFirst && (
           <p className="text-[10px] text-amber-800 dark:text-amber-100/90">
             {knowledge.skippedForByteBudget} documento(s) excluido(s) al superar el tope de {maxMbLabel} MB; se
             priorizan los más recientes.
           </p>
         )}
-        <p className="text-[10px] text-muted-foreground">
-          En el envío: {knowledgeSupabaseRefs.length} en Storage
-          {knowledgeDropbox.length > 0
-            ? ` y ${knowledgeDropbox.length} en Dropbox.`
-            : ". "}
-          Los adjuntos del chat se combinan y no se duplican por ruta en Storage.
-        </p>
+        {isRagFirst ? (
+          <p className="text-[10px] text-muted-foreground">
+            Ámbito: {knowledge?.includedDocumentIds.length ?? 0} documento(s) del proyecto (la VM filtra búsqueda
+            o rutas; sin reabrir el expediente en Storage en esta tarea). Archivos añadidos al binario:{" "}
+            {attachments?.length ?? 0} en el chat.
+          </p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground">
+            En el envío: {knowledgeSupabaseRefs.length} en Storage
+            {knowledgeDropbox.length > 0
+              ? ` y ${knowledgeDropbox.length} en Dropbox.`
+              : ". "}
+            Los adjuntos del chat se combinan y no se duplican por ruta en Storage.
+          </p>
+        )}
         {knowledgeTotalCount < 1 && (knowledgeDocSelection === "all" || knowledgeDocSelection.length > 0) && (
           <p className="text-[10px] text-destructive/90">
             Ninguna referencia incluida con los filtros actuales. Aumenta el tope en el proyecto, quita

@@ -148,13 +148,18 @@ export function KnowledgePanel({
                 Sube archivos o selecciona de Dropbox para dar contexto a la IA
               </p>
             ) : (
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {projectDocs.map((doc) => (
-                  <div key={doc.id} className="group flex items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-secondary/40 transition-colors">
-                    <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <div
+                    key={doc.id}
+                    className="group flex items-start gap-1.5 rounded-md px-1.5 py-1.5 hover:bg-secondary/40 transition-colors"
+                  >
+                    <FileText className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-medium truncate">{doc.name}</p>
-                      <p className="text-[9px] text-muted-foreground">{doc.source}</p>
+                      <p className="text-[10px] font-normal text-foreground leading-snug line-clamp-2 break-words normal-case">
+                        {doc.name}
+                      </p>
+                      <p className="text-[8px] text-muted-foreground/90">{doc.source}</p>
                     </div>
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       {onCreateMemory && (
