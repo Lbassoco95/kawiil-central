@@ -2513,24 +2513,23 @@ serve(async (req) => {
 
     const sseProgressPreamble: { phase: string; message: string }[] = [];
     const nAtt = Array.isArray(attachmentRefs) ? attachmentRefs.length : 0;
-    if (indexedNames.length > 0) {
-      sseProgressPreamble.push({
-        phase: "indexed_pdfs",
-        message: `${indexedNames.length} PDF(s) disponibles vía búsqueda semántica: ${indexedNames.join(", ")}`,
-      });
+    {
+      const parts: string[] = [];
+      if (indexedNames.length > 0) {
+        const joined = indexedNames.join(", ");
+        const short = joined.length > 100 ? joined.slice(0, 97) + "…" : joined;
+        parts.push(`${indexedNames.length} PDF(s) con búsqueda semántica: ${short}`);
+      }
+      if (nAtt > 0) {
+        parts.push(`${nAtt} adjunto(s) en integración (extracción según tipo)`);
+      }
+      parts.push(
+        ai_project_id
+          ? "Cargando proyecto de IA, memorias e instrucciones…"
+          : "Cargando instrucciones y herramientas…",
+      );
+      sseProgressPreamble.push({ phase: "context", message: parts.join(" · ") });
     }
-    if (nAtt > 0) {
-      sseProgressPreamble.push({
-        phase: "attachments",
-        message: `Integrando ${nAtt} adjunto(s) en el mensaje (extracción según tipo de archivo)…`,
-      });
-    }
-    sseProgressPreamble.push({
-      phase: "context",
-      message: ai_project_id
-        ? "Cargando instrucciones, proyecto de IA, memorias y herramientas…"
-        : "Cargando instrucciones del asistente y herramientas de Kawiil…",
-    });
 
     // ─── Direct search mode (structured results + optional AI summary) ───
     if (searchMode && searchQuery) {
@@ -3801,6 +3800,23 @@ function buildTaskMutationFallbackMessage(t: TaskMutationTally): string {
   return msg;
 }
 
+/** Texto breve para SSE (kawiil_progress) al ejecutar una herramienta; prioriza la consulta sobre el nombre técnico. */
+function progressMessageForTool(name: string, input: Record<string, unknown> | undefined): string {
+  const q =
+    input && typeof input.query === "string"
+      ? String(input.query).replace(/\s+/g, " ").trim()
+      : "";
+  if (name === "semantic_search" && q) {
+    const short = q.length > 90 ? q.slice(0, 87) + "…" : q;
+    return `Buscando en documentos: «${short}»`;
+  }
+  if (name === "search_across" && q) {
+    const short = q.length > 80 ? q.slice(0, 77) + "…" : q;
+    return `Buscando en la plataforma: «${short}»`;
+  }
+  return `Ejecutando herramienta: ${name}…`;
+}
+
 // ─── Claude (Anthropic) handler ───
 async function handleClaudeChat(
   apiKey: string, systemPrompt: string, userMessages: any[],
@@ -4090,7 +4106,10 @@ async function handleClaudeChat(
           }
         } else {
           console.log(`Tool [Claude]: ${tu.name}`, tu.input);
-          sseWriter.writeProgress("tool", `Ejecutando herramienta: ${tu.name}…`);
+          sseWriter.writeProgress(
+            "tool",
+            progressMessageForTool(tu.name, (tu.input || {}) as Record<string, unknown>),
+          );
           result = await executeTool(tu.name, tu.input || {}, supabase, userId, orgId, conversationId);
           if (result && typeof result === "object" && !Array.isArray(result)) {
             tallyTaskMutationTool(tu.name, result as Record<string, unknown>, taskMutationTally);

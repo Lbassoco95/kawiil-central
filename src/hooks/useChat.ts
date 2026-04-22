@@ -738,11 +738,13 @@ export function useChat() {
         return;
       }
 
-      if (files.length) {
-        pushProgress("upload", `Subiendo ${files.length} archivo(s) al almacenamiento seguro…`);
-      } else {
-        pushProgress("send", "Preparando tu mensaje…");
-      }
+      pushProgress(
+        "prep",
+        files.length
+          ? `Subiendo ${files.length} archivo(s) al almacenamiento seguro…`
+          : "Preparando tu mensaje…",
+        "replace_same_phase",
+      );
 
       const savedMeta: ChatAttachmentMeta[] = [];
       const pathToFile = new Map<string, File>();
@@ -796,7 +798,7 @@ export function useChat() {
       }
 
       if (savedMeta.length > 0) {
-        pushProgress("upload_ok", `${savedMeta.length} archivo(s) listo(s) en el chat.`);
+        pushProgress("prep", `${savedMeta.length} archivo(s) listo(s) en el chat.`, "replace_same_phase");
       }
 
       const userMsg: ChatMessage = {
@@ -808,7 +810,7 @@ export function useChat() {
       setMessages(allMessages);
       setIsStreaming(true);
 
-      pushProgress("persist", "Guardando el mensaje en tu conversación…");
+      pushProgress("prep", "Guardando el mensaje en tu conversación…", "replace_same_phase");
 
       let userMessageId: string | undefined;
       try {
@@ -848,7 +850,7 @@ export function useChat() {
 
       const refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
 
-      pushProgress("ai_connect", "Conectando con Kawiil AI y procesando contexto…");
+      pushProgress("prep", "Conectando con Kawiil AI y procesando contexto…", "replace_same_phase");
 
       let assistantContent = "";
       const hasArtifactMarker = (text: string) => /\[artifact:[a-f0-9-]{36}\|/.test(text);
@@ -961,6 +963,7 @@ export function useChat() {
           pushProgress(
             "rate_limit",
             `Límite temporal del proveedor de IA. Esperando ${Math.round(waitMs / 1000)} s y reintentando (${r429 + 1}/5)…`,
+            "replace_same_phase",
           );
           await new Promise((r) => setTimeout(r, waitMs));
           resp = await fetchChatResilient();
@@ -991,6 +994,7 @@ export function useChat() {
           pushProgress(
             "overload",
             `El servicio de IA está muy cargado. Esperando ${Math.round(retryAfterMs / 1000)} s (reintento ${rOv + 1}/5)…`,
+            "replace_same_phase",
           );
           await new Promise((r) => setTimeout(r, retryAfterMs));
           resp = await fetchChatResilient();
@@ -1088,7 +1092,25 @@ export function useChat() {
           if (parsed.type === "kawiil_progress") {
             const phase = String(parsed.phase || "step");
             const message = String(parsed.message || "");
-            if (message) pushProgress(phase, message);
+            if (!message) return;
+            // Una sola línea viva por ronda / respuesta / reintento; el resto se apila (p. ej. tool).
+            const replacePhases = new Set([
+              "claude_round",
+              "response",
+              "rate_limit",
+              "overload",
+              "warning",
+            ]);
+            if (replacePhases.has(phase)) {
+              // "Generando la respuesta final" sustituye la línea de ronda, no añade otra.
+              if (phase === "response") {
+                pushProgress("claude_round", message, "replace_same_phase");
+              } else {
+                pushProgress(phase, message, "replace_same_phase");
+              }
+            } else {
+              pushProgress(phase, message);
+            }
             return;
           }
           const content = (parsed as any).choices?.[0]?.delta?.content as string | undefined;
