@@ -622,7 +622,7 @@ export function EmailView() {
   const handleSearch = (val: string) => {
     setSearch(val);
     clearTimeout((window as any).__emailSearchTimeout);
-    (window as any).__emailSearchTimeout = setTimeout(() => setDebouncedSearch(val), 500);
+    (window as any).__emailSearchTimeout = setTimeout(() => setDebouncedSearch(val), 300);
   };
 
   const handleRefreshEmails = useCallback(async () => {
@@ -636,8 +636,16 @@ export function EmailView() {
       tasks.push(refetchEmailDetail());
     }
 
+    const convId =
+      emailDetail && typeof (emailDetail as { conversationId?: string }).conversationId === "string"
+        ? (emailDetail as { conversationId: string }).conversationId.trim()
+        : "";
+    if (convId) {
+      tasks.push(queryClient.invalidateQueries({ queryKey: ["email-conversation", convId] }));
+    }
+
     await Promise.allSettled(tasks);
-  }, [emailsQuery, queryClient, selectedEmailId, refetchEmailDetail]);
+  }, [emailsQuery, queryClient, selectedEmailId, refetchEmailDetail, emailDetail]);
 
   const handleStartReply = async (action: EmailAction) => {
     if (!selectedEmailId || !action) return;
@@ -1117,7 +1125,14 @@ export function EmailView() {
     forwardEmail.isPending ||
     sendDraft.isPending ||
     createForwardDraft.isPending;
-  const otherThreadEmails = threadEmails.filter((e: any) => e.id !== selectedEmailId);
+  const otherThreadEmails = useMemo(() => {
+    const filtered = threadEmails.filter((e: any) => e.id !== selectedEmailId);
+    return [...filtered].sort((a: any, b: any) => {
+      const ta = Date.parse(emailListTimestamp(a)) || 0;
+      const tb = Date.parse(emailListTimestamp(b)) || 0;
+      return ta - tb;
+    });
+  }, [threadEmails, selectedEmailId]);
 
   const threadContextForAi = useMemo(() => {
     if (!selectedEmailId) return "";
@@ -1528,7 +1543,7 @@ export function EmailView() {
               <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar correos..."
+                  placeholder="Buscar en todo el buzón…"
                   className="h-9 border-0 bg-muted/40 pl-9 text-sm focus-visible:ring-1"
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
@@ -1634,7 +1649,11 @@ export function EmailView() {
                 <Mail className="h-7 w-7 text-muted-foreground/50" />
               </div>
               <p className="text-sm font-medium text-muted-foreground">Sin correos</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Esta carpeta está vacía</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">
+                {debouncedSearch.trim()
+                  ? `Ningún resultado para “${debouncedSearch.trim()}”. Prueba otras palabras o revisa deletreo.`
+                  : "Esta carpeta está vacía"}
+              </p>
             </div>
           ) : (
             <div className="px-0">

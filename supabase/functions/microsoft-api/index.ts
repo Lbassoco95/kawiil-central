@@ -886,14 +886,37 @@ Deno.serve(async (req) => {
         const top = params?.top || 25;
         const skip = params?.skip || 0;
         const folder = params?.folder || "inbox";
-        const search = params?.search ? `&$search="${params.search}"` : "";
-        const skipParam = skip > 0 ? `&$skip=${skip}` : "";
         const select =
           "$select=id,subject,bodyPreview,from,toRecipients,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments,importance,conversationId";
+
+        const rawSearch =
+          typeof params?.search === "string" ? params.search.replace(/\s+/g, " ").trim() : "";
+        if (rawSearch) {
+          const forSearch = rawSearch
+            .replace(/[\u0000-\u001f\u007f]/g, " ")
+            .replace(/"/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (!forSearch) {
+            result = { value: [] };
+            break;
+          }
+          // Búsqueda en todo el buzón: los correos (p. ej. Microsoft Forms) a veces no están en la carpeta
+          // visible, y con $search Graph no admite $orderby; combinarlo suele provocar 400.
+          const searchParam = `&$search=${encodeURIComponent(`"${forSearch}"`)}`;
+          result = await graphRequest(
+            accessToken,
+            `/me/messages?${select}&$top=${top}&$count=true${searchParam}`,
+            { headers: GRAPH_MAIL_SEARCH_HEADERS },
+          );
+          break;
+        }
+
+        const skipParam = skip > 0 ? `&$skip=${skip}` : "";
         result = await graphRequest(
           accessToken,
-          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}${search}`,
-          { headers: params?.search ? GRAPH_MAIL_SEARCH_HEADERS : GRAPH_MAIL_PREFER_IMMUTABLE },
+          `/me/mailFolders/${folder}/messages?${select}&$top=${top}&$orderby=receivedDateTime desc&$count=true${skipParam}`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         break;
       }
@@ -1132,14 +1155,14 @@ Deno.serve(async (req) => {
       case "email-conversation": {
         const convId = params?.conversationId;
         if (!convId) throw new Error("conversationId required");
-        const safeConvId = String(convId).replace(/"/g, "");
+        const odataSafe = String(convId).replace(/'/g, "''");
         const convSelect =
-          "$select=id,conversationId,subject,bodyPreview,body,from,receivedDateTime,sentDateTime,isRead,hasAttachments";
-        // $search requiere ConsistencyLevel eventual; $select aporta body para el hilo en UI
+          "$select=id,conversationId,subject,bodyPreview,body,from,receivedDateTime,sentDateTime,createdDateTime,isRead,hasAttachments";
+        const filter = encodeURIComponent(`conversationId eq '${odataSafe}'`);
         const data = await graphRequest(
           accessToken,
-          `/me/messages?${convSelect}&$search="conversationId:${safeConvId}"&$top=50`,
-          { headers: GRAPH_MAIL_SEARCH_HEADERS },
+          `/me/messages?${convSelect}&$filter=${filter}&$orderby=receivedDateTime asc&$top=50`,
+          { headers: GRAPH_MAIL_PREFER_IMMUTABLE },
         );
         result = data?.value || [];
         break;

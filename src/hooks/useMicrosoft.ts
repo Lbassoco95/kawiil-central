@@ -601,13 +601,15 @@ function parseOdataCount(raw: unknown): number | null {
 export function useOutlookEmails(folderId = "inbox", search?: string) {
   const { user } = useAuth();
   const PAGE_SIZE = 25;
+  /** Con búsqueda activa la API usa /me/messages (todo el buzón), no el id de carpeta. */
+  const normalizedSearch = search?.trim() || undefined;
 
   return useInfiniteQuery({
-    queryKey: ["outlook-emails", folderId, search],
+    queryKey: ["outlook-emails", normalizedSearch ? "global" : folderId, normalizedSearch],
     queryFn: async ({ pageParam }: { pageParam: number | string }): Promise<OutlookEmailsPage> => {
       const params: Record<string, unknown> = {
         folder: folderId,
-        search,
+        search: normalizedSearch,
         top: PAGE_SIZE,
       };
       let pageSkip = 0;
@@ -624,7 +626,7 @@ export function useOutlookEmails(folderId = "inbox", search?: string) {
         "Invocando microsoft-api/emails",
         {
           folderId,
-          hasSearch: Boolean(search),
+          hasSearch: Boolean(normalizedSearch),
           pageParamType: typeof pageParam,
           pageSkip,
           hasNextLinkParam: typeof pageParam === "string" && pageParam.startsWith("http"),
@@ -689,13 +691,13 @@ export function useOutlookEmails(folderId = "inbox", search?: string) {
       }
 
       // Sin búsqueda: @odata.count permite seguir aunque la 1.ª página traiga < PAGE_SIZE.
-      if (!search && folderTotal != null && loaded < folderTotal) {
+      if (!normalizedSearch && folderTotal != null && loaded < folderTotal) {
         return loaded;
       }
 
       if (lastPage.emails.length === PAGE_SIZE) {
         // Con $search Graph no admite $skip; si no hay nextLink, no inventar páginas.
-        if (search) return undefined;
+        if (normalizedSearch) return undefined;
         return loaded;
       }
 
@@ -1082,6 +1084,7 @@ export function useSendDraft() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["email-conversation"] });
       invalidateInboxUnreadAndMailFolders(queryClient);
       toast.success("Correo enviado");
     },
@@ -1150,6 +1153,7 @@ export function useReplyEmail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["email-conversation"] });
       toast.success("Respuesta enviada");
     },
     onError: (err: Error) => toast.error("Error al responder: " + getActionableError(err)),
@@ -1244,6 +1248,9 @@ export function useForwardEmail() {
       return data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["email-conversation"] });
+      invalidateInboxUnreadAndMailFolders(queryClient);
       toast.success("Correo reenviado");
     },
     onError: (err: Error) => toast.error("Error al reenviar: " + getActionableError(err)),
