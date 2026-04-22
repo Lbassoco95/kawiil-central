@@ -3109,12 +3109,50 @@ function detectExtraFormats(markdown: string, generic: GenericContent): KawiilOu
   return Array.from(extra);
 }
 
+/** Último turno de usuario: texto plano (OpenAI shape: string o partes {type:text}). */
+function getLastUserPlainTextFromOpenAiMessages(openaiMessages: any[]): string {
+  for (let i = openaiMessages.length - 1; i >= 0; i--) {
+    const m = openaiMessages[i];
+    if (m?.role !== "user") continue;
+    const c = m.content;
+    if (typeof c === "string" && c.trim()) return c;
+    if (Array.isArray(c)) {
+      const parts: string[] = [];
+      for (const block of c) {
+        if (block?.type === "text" && typeof block.text === "string") parts.push(block.text);
+      }
+      if (parts.length) return parts.join("\n");
+    }
+  }
+  return "";
+}
+
+/**
+ * Heurística: el usuario pidió entrega o revisión en Word/DOCX (es/en).
+ * No sustituimos si dejó claro "solo PDF".
+ */
+function userRequestedWordLike(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/\b(solo|únicamente|unicamente|only)\s+pdf\b/i.test(t)) return false;
+  if (/\bdocx\b|\.docx/i.test(t)) return true;
+  if (/\bformato\s+en\s+word\b/i.test(t)) return true;
+  if (/\b(en|de|para)\s+word\b/i.test(t)) return true;
+  if (/\bmicrosoft\s+word\b/i.test(t)) return true;
+  if (/(dame|genera|crea|haz|entrega|prepara|escribe|exporta).{0,60}\bword\b/i.test(t)) return true;
+  if (/\bword\b/.test(t) && /(revisar|revisión|editar|editable|documento|archivo|plantilla|borrador)/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
 async function handleCreateAiDocument(
   input: Record<string, unknown>,
   userId: string,
   orgId: string,
   aiProjectId: string | null,
   authHeader: string,
+  lastUserPlainText?: string,
 ): Promise<string> {
   // Back-compat: si la IA sigue llamando con shape viejo (requested_kind + word_document / spreadsheet / presentation),
   // lo normalizamos a template_key + content antes de seguir.
@@ -3208,6 +3246,18 @@ async function handleCreateAiDocument(
         ...requestedFormats.filter((f) => f !== "pdf" && f !== "docx"),
       ];
     }
+  }
+
+  // Último mensaje de usuario: si pidió Word y el modelo devolvió primary_format: pdf o omitió docx.
+  if (lastUserPlainText && userRequestedWordLike(lastUserPlainText)) {
+    if (!requestedFormats.includes("docx")) {
+      requestedFormats = ["docx", ...requestedFormats];
+    }
+    if (!requestedFormats.includes("pdf")) {
+      requestedFormats.push("pdf");
+    }
+    const rest = requestedFormats.filter((f) => f !== "docx" && f !== "pdf");
+    requestedFormats = ["docx", "pdf", ...rest];
   }
 
   const renderPayload = {
@@ -3825,6 +3875,7 @@ async function handleClaudeChat(
   authHeader: string,
   conversationId: string | null,
 ): Promise<void> {
+  const lastUserPlainText = getLastUserPlainTextFromOpenAiMessages(userMessages);
   let anthropicMsgs = pruneClaudeMessages(
     toAnthropicMessages(userMessages),
     MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
@@ -3995,6 +4046,7 @@ async function handleClaudeChat(
                   orgId,
                   aiProjectId,
                   authHeader,
+                  lastUserPlainText,
                 );
                 const parsed = JSON.parse(attemptResult) as {
                   artifact_id?: string;
@@ -4089,7 +4141,14 @@ async function handleClaudeChat(
             "tool",
             `Generando documento: ${typeof tu.input?.title === "string" ? tu.input.title : "sin título"} (puede tardar unos segundos)…`,
           );
-          result = await handleCreateAiDocument(tu.input || {}, userId, orgId, aiProjectId, authHeader);
+          result = await handleCreateAiDocument(
+            tu.input || {},
+            userId,
+            orgId,
+            aiProjectId,
+            authHeader,
+            lastUserPlainText,
+          );
           try {
             const parsed = JSON.parse(result);
             if (parsed.artifact_id) {

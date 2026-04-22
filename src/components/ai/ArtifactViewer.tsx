@@ -210,10 +210,18 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
               {artifact.title}
             </h3>
             {primaryOutput ? (
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                Formato primario: {FORMAT_LABEL[primaryOutput.format] || primaryOutput.format.toUpperCase()}
-                {outputs.length > 1 ? ` · ${outputs.length} formatos disponibles` : ""}
-              </p>
+              <div className="text-[10px] text-muted-foreground mt-0.5 space-y-0.5">
+                <p>
+                  Formato primario: {FORMAT_LABEL[primaryOutput.format] || primaryOutput.format.toUpperCase()}
+                  {outputs.length > 1 ? ` · ${outputs.length} formatos disponibles` : ""}
+                </p>
+                {resolvedPrimaryFormat === "docx" && outputs.length > 0 ? (
+                  <p className="text-[10px] text-foreground/80">
+                    Entrega principal en Word: usa <span className="font-medium">Descargar</span> y elige DOCX; el
+                    PDF es copia de lectura.
+                  </p>
+                ) : null}
+              </div>
             ) : null}
             {isFailed && artifact.render_error ? (
               <p className="text-[10px] text-rose-700 mt-0.5 truncate" title={artifact.render_error}>
@@ -327,7 +335,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
           <Tabs
             key={`${artifact.id}-${resolvedPrimaryFormat}`}
             defaultValue={tabsDefaultTab}
-            className="h-full min-h-0 flex flex-col flex-1"
+            className="h-full min-h-0 flex flex-1 flex-col"
           >
             <div className="px-3 pt-2 border-b border-border/30 shrink-0">
               <TabsList className="h-7">
@@ -344,8 +352,10 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 )}
               </TabsList>
             </div>
-            <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 flex flex-col">
-              <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
+            <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 flex flex-col data-[state=active]:flex-1">
+              <div className="flex-1 min-h-[50vh] min-[900px]:min-h-0 flex flex-col">
+                <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
+              </div>
             </TabsContent>
             <TabsContent value="text" className="flex-1 m-0 overflow-y-auto p-4 min-h-0">
               <div className="prose prose-sm max-w-none [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">

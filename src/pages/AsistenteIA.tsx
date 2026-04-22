@@ -908,7 +908,7 @@ const AsistenteIA = () => {
 
   return (
     <AppLayout>
-      <div className="flex h-[calc(100vh-4rem)] -mt-2">
+      <div className="flex h-[calc(100vh-4rem)] min-h-0 -mt-2 items-stretch">
         {/* Left sidebar */}
         {showSidebar && (
           <ProjectSidebar
@@ -957,7 +957,7 @@ const AsistenteIA = () => {
           enablePaste={false}
           hint="Suelta archivos para adjuntar al chat"
           enableFolderPicker
-          className="flex-1 flex flex-col min-w-0 border-l border-border/40"
+          className="flex-1 flex flex-col min-w-0 min-h-0 h-full border-l border-border/40"
         >
           <div
             className="shrink-0 border-b border-sky-200/60 px-2.5 py-1.5 sm:px-3 sm:py-2 dark:border-sky-800/40"
