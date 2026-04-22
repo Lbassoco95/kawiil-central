@@ -90,7 +90,8 @@ type Props = {
   lastReadTs?: string | null;
 };
 
-const ANCHOR_PREFETCH_MAX = 40;
+const ANCHOR_PREFETCH_MAX = 25;
+const ANCHOR_PREFETCH_DELAY_MS = 400;
 
 /** Reacciones rápidas inline del toolbar hover (antes del picker completo). */
 const QUICK_REACTION_KEYS = ["thumbsup", "heart", "white_check_mark", "eyes"] as const;
@@ -364,6 +365,7 @@ export function SlackMessageList({
   const prevLenRef = useRef(0);
   const stickBottomRef = useRef(true);
   const anchorPrefetchCountRef = useRef(0);
+  const anchorPrefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const formatCtx: FormatContext = {
     userMap,
@@ -397,6 +399,10 @@ export function SlackMessageList({
 
   useEffect(() => {
     anchorPrefetchCountRef.current = 0;
+    if (anchorPrefetchTimeoutRef.current) {
+      clearTimeout(anchorPrefetchTimeoutRef.current);
+      anchorPrefetchTimeoutRef.current = null;
+    }
   }, [selectedChannelId, highlightTs]);
 
   useLayoutEffect(() => {
@@ -438,7 +444,7 @@ export function SlackMessageList({
     return () => clearTimeout(t);
   }, [highlightTs, messages.length, highlightAnchorInList]);
 
-  /** Mientras haya ancla en la URL y el mensaje no esté en el lote cargado, pide más historial (tope). */
+  /** Mientras haya ancla en la URL y el mensaje no esté en el lote cargado, pide más historial (tope, con retraso entre páginas). */
   useEffect(() => {
     if (!highlightTs?.trim() || !onLoadMore || !hasMore) return;
     if (highlightAnchorInList) return;
@@ -446,14 +452,26 @@ export function SlackMessageList({
     const idSafe = highlightTs.replace(/\./g, "-");
     if (document.getElementById(`slack-msg-${idSafe}`)) return;
     if (anchorPrefetchCountRef.current >= ANCHOR_PREFETCH_MAX) return;
-    anchorPrefetchCountRef.current += 1;
-    onLoadMore();
+    if (anchorPrefetchTimeoutRef.current) clearTimeout(anchorPrefetchTimeoutRef.current);
+    anchorPrefetchTimeoutRef.current = setTimeout(() => {
+      anchorPrefetchTimeoutRef.current = null;
+      if (anchorPrefetchCountRef.current >= ANCHOR_PREFETCH_MAX) return;
+      anchorPrefetchCountRef.current += 1;
+      onLoadMore();
+    }, ANCHOR_PREFETCH_DELAY_MS);
+    return () => {
+      if (anchorPrefetchTimeoutRef.current) {
+        clearTimeout(anchorPrefetchTimeoutRef.current);
+        anchorPrefetchTimeoutRef.current = null;
+      }
+    };
   }, [
     highlightTs,
     highlightAnchorInList,
     hasMore,
     isFetchingMore,
     onLoadMore,
+    messages.length,
   ]);
 
   if (isLoading) {
@@ -922,8 +940,13 @@ export function SlackMessageList({
       >
         <div className="px-3 py-4 space-y-1 max-w-4xl mx-auto">
           {isFetchingMore && (
-            <div className="flex justify-center py-2">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <div
+              className="flex justify-center items-center gap-2 py-2"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Cargando mensajes anteriores…</span>
             </div>
           )}
           {rows}

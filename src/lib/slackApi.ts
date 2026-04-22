@@ -81,6 +81,40 @@ function isAbortLikeFunctionsError(error: unknown): boolean {
   return m.includes("abort") || m.includes("timed out") || m.includes("timeout");
 }
 
+function sleepMsSlackApi(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Cuerpo JSON de slack-api con ok:false por límite de Slack (a veces HTTP 200). */
+function isSlackRateLimitPayload(d: unknown): boolean {
+  if (!d || typeof d !== "object") return false;
+  const o = d as { ok?: boolean; error?: string };
+  if (o.ok !== false) return false;
+  const e = String(o.error || "").toLowerCase();
+  return e === "ratelimited" || e === "rate_limited" || e.includes("slack_http_429");
+}
+
+function retryAfterMsFromSlackPayload(d: unknown): number | null {
+  if (!d || typeof d !== "object") return null;
+  const o = d as { retry_after?: number };
+  if (typeof o.retry_after === "number" && o.retry_after > 0) {
+    return Math.min(60_000, (o.retry_after + 1) * 1000);
+  }
+  return null;
+}
+
+function isInvokeFailureRetryableRateLimit(message: string): boolean {
+  const m = (message || "").toLowerCase();
+  return (
+    m.includes("429") ||
+    m.includes("too many") ||
+    m.includes("rate limit") ||
+    m.includes("ratelimited")
+  );
+}
+
+const MAX_SLACK_INVOKE_RATE_RETRIES = 2;
+
 export type InvokeSlackApiOptions = {
   signal?: AbortSignal;
   /** Aborta el fetch si supera este tiempo (ms). Evita spinners eternos si la Edge o la red cuelgan. */
@@ -92,61 +126,77 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
   opts?: InvokeSlackApiOptions,
 ): Promise<T> {
   const timeoutMs = opts?.timeoutMs ?? 0;
-  const timeoutController = new AbortController();
   const upstreamAbort = opts?.signal;
-  let timedOut = false;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  const onUpstreamAbort = () => timeoutController.abort();
-  if (upstreamAbort) {
-    if (upstreamAbort.aborted) {
-      timeoutController.abort();
-    } else {
-      upstreamAbort.addEventListener("abort", onUpstreamAbort, { once: true });
+
+  for (let attempt = 0; attempt <= MAX_SLACK_INVOKE_RATE_RETRIES; attempt++) {
+    const timeoutController = new AbortController();
+    let timedOut = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const onUpstreamAbort = () => timeoutController.abort();
+    if (upstreamAbort) {
+      if (upstreamAbort.aborted) {
+        timeoutController.abort();
+      } else {
+        upstreamAbort.addEventListener("abort", onUpstreamAbort, { once: true });
+      }
     }
-  }
-  if (timeoutMs > 0) {
-    timeoutId = setTimeout(() => {
-      timedOut = true;
-      timeoutController.abort();
-    }, timeoutMs);
+    if (timeoutMs > 0) {
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        timeoutController.abort();
+      }, timeoutMs);
+    }
+
+    let data: unknown;
+    let error: unknown;
+    try {
+      const res = await supabase.functions.invoke("slack-api", {
+        body,
+        signal: timeoutController.signal,
+      });
+      data = res.data;
+      error = res.error;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (upstreamAbort && !upstreamAbort.aborted) {
+        upstreamAbort.removeEventListener("abort", onUpstreamAbort);
+      }
+    }
+
+    if (error) {
+      if (isAbortLikeFunctionsError(error)) {
+        if (timedOut) {
+          throw new Error(
+            "La petición a Slack tardó demasiado. Comprueba tu red o vuelve a abrir el canal.",
+          );
+        }
+        if (upstreamAbort?.aborted) {
+          throw new Error("La petición a Slack se canceló al cambiar de canal o recargar la vista.");
+        }
+        throw new Error("La petición a Slack se canceló. Vuelve a intentarlo.");
+      }
+      const parsed = await readInvokeFailureMessage(error);
+      const msg = parsed || (error instanceof Error ? error.message : "Error al llamar a Slack");
+      if (attempt < MAX_SLACK_INVOKE_RATE_RETRIES && isInvokeFailureRetryableRateLimit(msg)) {
+        await sleepMsSlackApi(2000 * (attempt + 1));
+        continue;
+      }
+      throw new Error(msg);
+    }
+
+    const d = data as { error?: string; message?: string } | null;
+    if (d?.error === "slack_not_connected") {
+      throw new Error(d.message || "Conecta Slack primero.");
+    }
+    if (isSlackRateLimitPayload(data) && attempt < MAX_SLACK_INVOKE_RATE_RETRIES) {
+      const wait = retryAfterMsFromSlackPayload(data) ?? 2000 * (attempt + 1);
+      await sleepMsSlackApi(wait);
+      continue;
+    }
+    return data as T;
   }
 
-  let data: unknown;
-  let error: unknown;
-  try {
-    const res = await supabase.functions.invoke("slack-api", {
-      body,
-      signal: timeoutController.signal,
-    });
-    data = res.data;
-    error = res.error;
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-    if (upstreamAbort && !upstreamAbort.aborted) {
-      upstreamAbort.removeEventListener("abort", onUpstreamAbort);
-    }
-  }
-
-  if (error) {
-    if (isAbortLikeFunctionsError(error)) {
-      if (timedOut) {
-        throw new Error(
-          "La petición a Slack tardó demasiado. Comprueba tu red o vuelve a abrir el canal.",
-        );
-      }
-      if (upstreamAbort?.aborted) {
-        throw new Error("La petición a Slack se canceló al cambiar de canal o recargar la vista.");
-      }
-      throw new Error("La petición a Slack se canceló. Vuelve a intentarlo.");
-    }
-    const parsed = await readInvokeFailureMessage(error);
-    throw new Error(parsed || (error instanceof Error ? error.message : "Error al llamar a Slack"));
-  }
-  const d = data as { error?: string; message?: string } | null;
-  if (d?.error === "slack_not_connected") {
-    throw new Error(d.message || "Conecta Slack primero.");
-  }
-  return data as T;
+  throw new Error("No se pudo completar la petición a Slack tras reintentos.");
 }
 
 function base64ToBlob(base64: string, contentType: string): Blob {

@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { playNotificationBeep } from "@/lib/notificationBeep";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
+import { SlackNotificationToast } from "@/components/notifications/SlackNotificationToast";
 
 type NotifRow = {
   id?: string;
@@ -46,11 +47,15 @@ function effectiveNotificationTitle(row: NotifRow): string {
   return "Nueva notificación";
 }
 
-function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row: NotifRow) {
-  const isSlackMsg =
+function isSlackInAppNotification(row: NotifRow): boolean {
+  return (
     row?.entity_type === "slack" &&
-    (row?.type === "slack_message" || row?.type === "slack_mention");
-  if (!isSlackMsg) return;
+    (row?.type === "slack_message" || row?.type === "slack_mention")
+  );
+}
+
+function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row: NotifRow) {
+  if (!isSlackInAppNotification(row)) return;
   qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
   void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
   // No invalidar `slack-history` / `slack-thread` desde notificaciones: INSERT/UPDATE en ráfaga
@@ -170,47 +175,63 @@ export function useNotificationDelivery() {
 
     let surfaced = false;
     if (allowToast) {
-      toast.custom(
-        (toastId) =>
-          createElement(
-            "button",
-            {
-              type: "button",
-              onClick: () => {
-                if (deepLink) {
-                  navigate(deepLink);
-                }
-                toast.dismiss(toastId);
-              },
-              className:
-                "group flex w-full min-w-[min(100vw-1.5rem,20rem)] sm:min-w-[22rem] max-w-[min(100vw-1.5rem,26rem)] " +
-                "cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-popover p-3 text-left " +
-                "shadow-xl transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
-            },
+      if (isSlackInAppNotification(row)) {
+        toast.custom(
+          (toastId) =>
+            createElement(SlackNotificationToast, {
+              toastId,
+              row,
+              title,
+              bodyText,
+              navigate,
+            }),
+          {
+            duration: mandatorySurface ? 9000 : 6500,
+          },
+        );
+      } else {
+        toast.custom(
+          (toastId) =>
             createElement(
-              "div",
-              { className: "min-w-0 flex-1" },
+              "button",
+              {
+                type: "button",
+                onClick: () => {
+                  if (deepLink) {
+                    navigate(deepLink);
+                  }
+                  toast.dismiss(toastId);
+                },
+                className:
+                  "group flex w-full min-w-[min(100vw-1.5rem,20rem)] sm:min-w-[22rem] max-w-[min(100vw-1.5rem,26rem)] " +
+                  "cursor-pointer items-start gap-3 rounded-lg border border-border/80 bg-popover p-3 text-left " +
+                  "shadow-xl transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring",
+              },
               createElement(
-                "p",
-                { className: "truncate text-sm font-semibold text-foreground" },
-                title,
+                "div",
+                { className: "min-w-0 flex-1" },
+                createElement(
+                  "p",
+                  { className: "truncate text-sm font-semibold text-foreground" },
+                  title,
+                ),
+                bodyText
+                  ? createElement(
+                      "p",
+                      {
+                        className:
+                          "mt-0.5 whitespace-pre-line text-xs text-muted-foreground line-clamp-3",
+                      },
+                      bodyText,
+                    )
+                  : null,
               ),
-              bodyText
-                ? createElement(
-                    "p",
-                    {
-                      className:
-                        "mt-0.5 whitespace-pre-line text-xs text-muted-foreground line-clamp-3",
-                    },
-                    bodyText,
-                  )
-                : null,
             ),
-          ),
-        {
-          duration: mandatorySurface ? 9000 : 6500,
-        },
-      );
+          {
+            duration: mandatorySurface ? 9000 : 6500,
+          },
+        );
+      }
       surfaced = true;
     }
     if (

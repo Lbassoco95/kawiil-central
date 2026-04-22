@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { SlackQuickReplyProvider } from "@/contexts/SlackQuickReplyContext";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -57,6 +58,7 @@ const App = () => (
       <ErrorBoundary>
         <BrowserRouter>
           <AuthProvider>
+            <SlackQuickReplyProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/cambiar-contrasena" element={<CambiarContrasena />} />
@@ -122,6 +124,7 @@ const App = () => (
               <Route path="/admin" element={<Navigate to="/configuracion" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </SlackQuickReplyProvider>
           </AuthProvider>
         </BrowserRouter>
       </ErrorBoundary>

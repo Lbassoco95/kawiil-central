@@ -197,32 +197,55 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== "") body.set(k, String(v));
   }
-  const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), SLACK_HTTP_TIMEOUT_MS);
-  try {
-    const res = await fetch(`https://slack.com/api/${method}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body,
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      return { ok: false, error: `slack_http_${res.status}` };
+  const sleepRate = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const maxRateRetries = 2;
+
+  for (let rateAttempt = 0; rateAttempt <= maxRateRetries; rateAttempt++) {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), SLACK_HTTP_TIMEOUT_MS);
+    try {
+      const res = await fetch(`https://slack.com/api/${method}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+        signal: controller.signal,
+      });
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get("Retry-After")) || 0;
+        if (rateAttempt < maxRateRetries) {
+          const ms = retryAfter > 0 ? Math.min(60_000, retryAfter * 1000) : 2000 * (rateAttempt + 1);
+          await sleepRate(ms);
+          continue;
+        }
+        return { ok: false, error: "slack_http_429" };
+      }
+      if (!res.ok) {
+        return { ok: false, error: `slack_http_${res.status}` };
+      }
+      const json = await res.json() as { ok?: boolean; error?: string; retry_after?: number };
+      if (json && json.ok === false && (json.error === "ratelimited" || json.error === "rate_limited") &&
+        rateAttempt < maxRateRetries) {
+        const ra = Number(json.retry_after) || 0;
+        const ms = ra > 0 ? Math.min(60_000, (ra + 1) * 1000) : 2000 * (rateAttempt + 1);
+        await sleepRate(ms);
+        continue;
+      }
+      return json;
+    } catch (e) {
+      const abortName =
+        e && typeof e === "object" && "name" in e ? String((e as { name: string }).name) : "";
+      if (abortName === "AbortError") {
+        return { ok: false, error: "slack_timeout" };
+      }
+      return { ok: false, error: "slack_network_error" };
+    } finally {
+      clearTimeout(tid);
     }
-    return await res.json();
-  } catch (e) {
-    const abortName =
-      e && typeof e === "object" && "name" in e ? String((e as { name: string }).name) : "";
-    if (abortName === "AbortError") {
-      return { ok: false, error: "slack_timeout" };
-    }
-    return { ok: false, error: "slack_network_error" };
-  } finally {
-    clearTimeout(tid);
   }
+  return { ok: false, error: "ratelimited" };
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {

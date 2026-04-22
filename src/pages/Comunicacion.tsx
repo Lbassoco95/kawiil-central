@@ -107,6 +107,22 @@ function bumpParentReplyInSlackHistory(
   };
 }
 
+/** Primera página = lote más reciente (`chrono` ascendente); el envío reciente se anexa al final. */
+function appendChannelMessageToSlackHistory(
+  old: InfiniteData<HistoryPage> | undefined,
+  newMsg: SlackMessage,
+): InfiniteData<HistoryPage> | undefined {
+  if (!old?.pages?.length) return old;
+  if (newMsg.ts && old.pages[0].messages.some((m) => m.ts === newMsg.ts)) return old;
+  return {
+    ...old,
+    pages: [
+      { ...old.pages[0], messages: [...old.pages[0].messages, newMsg] },
+      ...old.pages.slice(1),
+    ],
+  };
+}
+
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MPIM_MEMBERS_BATCH = 40;
 /** Límite de MPIM para prefetch de miembros (evita decenas de batches en workspaces grandes). */
@@ -581,9 +597,9 @@ export default function Comunicacion() {
       if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
       return failureCount < 2;
     },
-    refetchInterval: () =>
-      typeof document !== "undefined" && document.visibilityState === "visible" ? 18_000 : false,
-    refetchIntervalInBackground: false,
+    // Sin poller: con useInfiniteQuery cada tick refetchea TODAS las páginas ya cargadas
+    // (N llamadas a conversations.history) y dispara 429. Actualizar con reacción/invalidar/envío o botón.
+    refetchInterval: false,
   });
 
   const messages = useMemo(() => {
@@ -1128,6 +1144,7 @@ export default function Comunicacion() {
         ok: boolean;
         error?: string;
         ts?: string;
+        message?: SlackMessage;
       }>({
         action: "chat.postMessage",
         channel: selectedChannel,
@@ -1137,7 +1154,7 @@ export default function Comunicacion() {
       if (!data.ok) throw new Error(data.error || "No se pudo enviar");
       return data;
     },
-    onSuccess: (_posted, vars) => {
+    onSuccess: (posted, vars) => {
       if (searchParams.has("ts") || searchParams.has("reply")) {
         const q = new URLSearchParams(searchParams);
         q.delete("ts");
@@ -1154,7 +1171,22 @@ export default function Comunicacion() {
           (old) => bumpParentReplyInSlackHistory(old, vars.thread_ts!),
         );
       }
-      qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+      if (selectedChannel && !vars.thread_ts) {
+        const selfId = connection?.slack_user_id;
+        const merged: SlackMessage = posted.message
+          ? { ...posted.message, ts: posted.message.ts || posted.ts || "" }
+          : {
+              ts: posted.ts!,
+              text: vars.text,
+              user: selfId,
+            };
+        if (merged.ts) {
+          qc.setQueriesData<InfiniteData<HistoryPage>>(
+            { queryKey: ["slack-history", selectedChannel] },
+            (old) => appendChannelMessageToSlackHistory(old, merged),
+          );
+        }
+      }
       if (vars.thread_ts) {
         qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, vars.thread_ts] });
       }
@@ -1634,7 +1666,7 @@ export default function Comunicacion() {
               messages={messages}
               userMap={userMap}
               highlightTs={tsFromUrl}
-              isLoading={historyInfinite.isLoading}
+              isLoading={historyInfinite.isLoading && !historyInfinite.data}
               error={historyPanelError}
               bottomRef={bottomRef}
               hasMore={historyInfinite.hasNextPage}

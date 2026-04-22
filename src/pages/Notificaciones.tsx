@@ -31,6 +31,7 @@ import {
 } from "@/lib/registerWebPush";
 import { playNotificationBeep } from "@/lib/notificationBeep";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
+import { useSlackQuickReply } from "@/contexts/SlackQuickReplyContext";
 import { cn } from "@/lib/utils";
 import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { Badge } from "@/components/ui/badge";
@@ -66,11 +67,12 @@ function getNotificationCtas(
   if (m.type === "deadline_overdue_task" || m.type === "deadline_due_tomorrow_task") {
     ctas.push({ key: "open_task", label: "Abrir tarea", primary: true });
   }
-  if (m.type === "mention" || m.type === "slack_mention") {
+  if (m.type === "mention") {
     ctas.push({ key: "reply", label: "Responder", primary: true });
   }
-  if (m.type === "slack_message") {
-    ctas.push({ key: "open_slack", label: "Abrir en Slack", primary: true });
+  if (m.type === "slack_message" || m.type === "slack_mention") {
+    ctas.push({ key: "quick_slack", label: "Respuesta rápida", primary: true });
+    ctas.push({ key: "open_comunicacion", label: "Abrir en Comunicación" });
   }
   if (m.type === "expense_created" || m.type === "expense_status_changed" || m.entity_type === "expense") {
     ctas.push({ key: "open_expense", label: "Ver gasto", primary: true });
@@ -679,6 +681,7 @@ function NotificationDeliveryPreferences() {
 
 export default function Notificaciones() {
   const navigate = useNavigate();
+  const { openSlackQuickReply } = useSlackQuickReply();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: alerts, isLoading: loadingAlerts } = useDueDateAlerts();
   const { data: allNotifications = [], isLoading: loadingMentions } = useMentionNotifications();
@@ -729,8 +732,22 @@ export default function Notificaciones() {
   const hasDueSoon =
     (alerts?.dueSoon?.length ?? 0) > 0 || (alerts?.stepsDueSoon?.length ?? 0) > 0;
 
-  const handleNotificationClick = (m: typeof allNotifications[0]) => {
+  const handleNotificationClick = (m: typeof allNotifications[0], ctaKey?: string) => {
     if (!m.is_read) markAsRead.mutate(m.id);
+
+    if (
+      (m.type === "slack_message" || m.type === "slack_mention") &&
+      m.entity_type === "slack" &&
+      ctaKey === "quick_slack"
+    ) {
+      openSlackQuickReply({
+        entity_ref: m.entity_ref ?? null,
+        entity_id: m.entity_id,
+        entity_type: m.entity_type,
+        notificationTitle: m.title,
+      });
+      return;
+    }
 
     if (m.entity_type === "project" && m.entity_id) {
       navigate(`/proyectos/${m.entity_id}?tab=comentarios`);
@@ -1020,7 +1037,7 @@ export default function Notificaciones() {
                                     className="h-7 px-2.5 text-[11px]"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleNotificationClick(m);
+                                      handleNotificationClick(m, c.key);
                                     }}
                                   >
                                     {c.label}
