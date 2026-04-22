@@ -315,6 +315,10 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ["assigned-steps"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["project"] });
+      if (variables.project_id) {
+        queryClient.invalidateQueries({ queryKey: ["project-tasks", variables.project_id] });
+        queryClient.invalidateQueries({ queryKey: ["compliance-tasks", variables.project_id] });
+      }
       queryClient.invalidateQueries({ queryKey: ["task"] });
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-task-log"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-all-tasks"] });
