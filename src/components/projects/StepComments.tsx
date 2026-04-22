@@ -13,6 +13,7 @@ import {
   Link2, X, ExternalLink,
 } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
+import { extractDropboxFilenameFromUrl, getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
 import { toast } from "sonner";
 import { DropboxFilePicker } from "./DropboxFilePicker";
 import { sanitizeStorageFileName } from "@/lib/storageFilename";
@@ -24,6 +25,7 @@ import {
   type DuplicateResolutionChoice,
 } from "@/components/shared/DuplicateFileResolutionDialog";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 
 interface Attachment {
   type: "image" | "dropbox" | "link";
@@ -195,25 +197,7 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
     });
   };
 
-  const renderContent = (content: string) => {
-    const parts = content.split(/(@[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w])/g);
-    return parts.map((part, i) => {
-      if (part.startsWith("@")) {
-        const name = part.slice(1);
-        const found = orgProfiles?.find(
-          (p) => p.full_name.toLowerCase() === name.toLowerCase()
-        );
-        if (found) {
-          return (
-            <span key={i} className="text-primary font-bold">
-              {part}
-            </span>
-          );
-        }
-      }
-      return part;
-    });
-  };
+  const renderContent = (content: string) => renderTextWithMentionHighlights(content, "step-cmt");
 
   const renderAttachments = (atts: Attachment[] | null | undefined) => {
     if (!atts || atts.length === 0) return null;
@@ -404,12 +388,17 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
                   onChange={(e) => setLinkInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && linkInput.trim()) {
+                      const u = linkInput.trim();
+                      const isDbx = u.includes("dropbox.com");
+                      const attName = isDbx
+                        ? extractDropboxFilenameFromUrl(u) ?? getDropboxLinkDisplayLabel(u)
+                        : u.split("/").pop() || "Enlace";
                       setAttachments((prev) => [
                         ...prev,
                         {
-                          type: linkInput.includes("dropbox.com") ? "dropbox" : "link",
-                          name: linkInput.split("/").pop() || "Enlace",
-                          url: linkInput.trim(),
+                          type: isDbx ? "dropbox" : "link",
+                          name: attName,
+                          url: u,
                         },
                       ]);
                       setLinkInput("");
@@ -422,12 +411,17 @@ export function StepComments({ projectId, stepKey, stepLabel }: Props) {
                   className="h-7 px-2 text-xs"
                   disabled={!linkInput.trim()}
                   onClick={() => {
+                    const u = linkInput.trim();
+                    const isDbx = u.includes("dropbox.com");
+                    const attName = isDbx
+                      ? extractDropboxFilenameFromUrl(u) ?? getDropboxLinkDisplayLabel(u)
+                      : u.split("/").pop() || "Enlace";
                     setAttachments((prev) => [
                       ...prev,
                       {
-                        type: linkInput.includes("dropbox.com") ? "dropbox" : "link",
-                        name: linkInput.split("/").pop() || "Enlace",
-                        url: linkInput.trim(),
+                        type: isDbx ? "dropbox" : "link",
+                        name: attName,
+                        url: u,
                       },
                     ]);
                     setLinkInput("");

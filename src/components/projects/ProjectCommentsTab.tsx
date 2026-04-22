@@ -10,6 +10,7 @@ import { MentionTextarea } from "@/components/tasks/MentionTextarea";
 import { Send, MessageSquare } from "lucide-react";
 import { formatMX } from "@/lib/dateUtils";
 import { toast } from "sonner";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 
 interface Props {
   projectId: string;
@@ -96,25 +97,7 @@ export function ProjectCommentsTab({ projectId, projectName = "un proyecto" }: P
     onError: (err: Error) => toast.error("Error: " + err.message),
   });
 
-  const renderContent = (content: string) => {
-    const parts = content.split(/(@[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w])/g);
-    return parts.map((part, i) => {
-      if (part.startsWith("@")) {
-        const name = part.slice(1);
-        const found = orgProfiles?.find(
-          (p) => p.full_name.toLowerCase() === name.toLowerCase()
-        );
-        if (found) {
-          return (
-            <span key={i} className="text-primary font-bold">
-              {part}
-            </span>
-          );
-        }
-      }
-      return part;
-    });
-  };
+  const renderContent = (content: string) => renderTextWithMentionHighlights(content, "proj-cmt");
 
   return (
     <Card>

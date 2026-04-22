@@ -11,6 +11,7 @@ import {
 import { useUserRole } from "@/hooks/useUserRole";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { formatMX } from "@/lib/dateUtils";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -278,7 +279,9 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
                             </button>
                           )}
                         </div>
-                        <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{c.content}</p>
+                        <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">
+                          {renderTextWithMentionHighlights(c.content, `hub-cmt-${c.id}`)}
+                        </p>
                       </div>
                     </div>
                   ))

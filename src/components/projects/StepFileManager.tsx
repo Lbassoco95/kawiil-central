@@ -19,6 +19,7 @@ import {
   postProcessUploadedDocument,
 } from "@/lib/fileIntake/zipUploadPipeline";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
+import { extractDropboxFilenameFromUrl, getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
 import { DocumentPreviewDialog } from "@/components/documents/DocumentPreviewDialog";
 import { DropboxUploadDialog } from "@/components/documents/DropboxUploadDialog";
 import { DropboxFilePicker } from "@/components/projects/DropboxFilePicker";
@@ -144,14 +145,15 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     setSavingLink(true);
     try {
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user.id });
-      const linkName = dropboxUrl.includes("dropbox.com")
-        ? decodeURIComponent(dropboxUrl.split("/").pop()?.split("?")[0] || "Enlace Dropbox")
+      const trimmedUrl = dropboxUrl.trim();
+      const linkName = trimmedUrl.includes("dropbox.com")
+        ? extractDropboxFilenameFromUrl(trimmedUrl) ?? getDropboxLinkDisplayLabel(trimmedUrl)
         : "Enlace externo";
       const { data: doc, error } = await supabase
         .from("documents")
         .insert({
           name: linkName,
-          external_path: dropboxUrl.trim(),
+          external_path: trimmedUrl,
           organization_id: orgId!,
           project_id: projectId,
           uploaded_by: user.id,

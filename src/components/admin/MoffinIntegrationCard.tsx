@@ -3,7 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { ACTIVE_SUPABASE_URL } from "@/integrations/supabase/client";
-import { invokeFunctionWithSession } from "@/lib/supabaseInvoke";
+import {
+  functionInvokeUserMessageAsync,
+  invokeFunctionWithSession,
+} from "@/lib/supabaseInvoke";
 import { Loader2, Landmark, ExternalLink, ListChecks } from "lucide-react";
 
 type HealthPayload = {
@@ -31,7 +34,9 @@ export function MoffinIntegrationCard() {
     queryKey: ["moffin-health"],
     queryFn: async () => {
       const { data: res, error: fnErr } = await invokeFunctionWithSession("moffin-health", {});
-      if (fnErr) throw new Error(fnErr.message);
+      if (fnErr) {
+        throw new Error(await functionInvokeUserMessageAsync(res, fnErr));
+      }
       return res as HealthPayload;
     },
     enabled: !!session?.access_token,

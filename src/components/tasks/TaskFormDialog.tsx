@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
 
 interface Props {
   open: boolean;
@@ -297,7 +298,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
                 <div className="space-y-1.5 mb-1.5">
                   {dropboxLinks.map((link, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
-                      <a href={link} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate flex-1">{link}</a>
+                      <a href={link} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate flex-1" title={link}>
+                        {getDropboxLinkDisplayLabel(link)}
+                      </a>
                       <X className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => setDropboxLinks(dropboxLinks.filter((_, j) => j !== i))} />
                     </div>
                   ))}

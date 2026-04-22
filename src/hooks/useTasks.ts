@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { sendSlackNotification } from "@/lib/slackNotifications";
 import { logEntityActivity } from "@/lib/activityLog";
 import { createNotifications } from "@/lib/notificationHelpers";
+import { extractDropboxFilenameFromUrl } from "@/lib/dropboxLinkLabel";
 
 /** Bloquea completar una tarea padre si el checklist tiene ítems abiertos o subtareas enlazadas no cerradas. */
 async function assertCanCompleteParentTask(taskId: string) {
@@ -287,7 +288,11 @@ export function useCreateTask() {
           ...taskData,
           organization_id: profile.organization_id,
           created_by: user!.id,
-          dropbox_links: dropbox_links?.map((url) => ({ url, added_at: new Date().toISOString() })) ?? [],
+          dropbox_links:
+            dropbox_links?.map((url) => {
+              const name = extractDropboxFilenameFromUrl(url);
+              return { url, added_at: new Date().toISOString(), ...(name ? { name } : {}) };
+            }) ?? [],
         } as TablesInsert<"tasks">)
         .select()
         .single();

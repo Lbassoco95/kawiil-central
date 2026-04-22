@@ -1,6 +1,32 @@
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/functions-js";
 
 type InvokePayload = { error?: string; message?: string };
+
+/** Cuerpo JSON de una respuesta 4xx/5xx; `supabase.functions.invoke` a veces no rellena `data`. */
+async function jsonBodyFromFunctionsHttpError(
+  err: unknown,
+): Promise<Record<string, unknown> | null> {
+  if (!(err instanceof FunctionsHttpError)) return null;
+  const res = err.context;
+  if (!(res instanceof Response)) return null;
+  try {
+    const j: unknown = await res.clone().json();
+    if (j && typeof j === "object" && !Array.isArray(j)) {
+      return j as Record<string, unknown>;
+    }
+  } catch {
+    try {
+      const text = await res.clone().text();
+      if (text?.trim()) {
+        return { message: text.trim().slice(0, 500) };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
 
 /**
  * Mensaje para el usuario cuando la Edge Function responde error pero el cuerpo JSON trae detalle.
@@ -33,13 +59,29 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
         : "Guarda la CIEC del cliente antes de ejecutar consultas CSF u opinión (Moffin Solutions).";
     }
     if (payload.error === "moffin_profile_failed") {
-      const detail =
-        typeof payload.message === "string" && payload.message.trim()
-          ? ` Detalle de Moffin: ${payload.message.trim()}`
-          : "";
+      const rawMsg =
+        typeof payload.message === "string" && payload.message.trim() ? payload.message.trim() : "";
+      const looksLikeMoffinInvoicesOrBilling =
+        /failed to fetch invoices|fetch invoices|factura/i.test(rawMsg);
+      const hintRaw = (payload as { hint?: string }).hint;
+      const hint =
+        typeof hintRaw === "string" && hintRaw.trim() ? ` ${hintRaw.trim()}` : "";
+      if (looksLikeMoffinInvoicesOrBilling) {
+        return (
+          "Kawiil solo envía RFC y CIEC para la constancia (CSF); no pide facturas del SAT. " +
+          "El texto «Failed to fetch invoices» lo devuelve el servidor de Moffin cuando falla un paso interno " +
+          "(suele ser facturación o datos de tu cuenta comercial en Moffin, no la descarga de la CSF). " +
+          "Contacta a soporte Moffin con ese detalle. " +
+          (rawMsg ? `Respuesta Moffin: ${rawMsg}` : "") +
+          hint
+        );
+      }
+      const detail = rawMsg ? ` Detalle de Moffin: ${rawMsg}` : "";
       return (
         "No se pudo crear el perfil SAT en Moffin (RFC + CIEC). Revisa que la CIEC sea la del portal del SAT; " +
-        "luego actualízala en Contabilidad y vuelve a intentar." + detail
+        "luego actualízala en Contabilidad y vuelve a intentar." +
+        detail +
+        hint
       );
     }
     if (payload.error === "moffin_profile_invalid") {
@@ -67,6 +109,26 @@ export function functionInvokeUserMessage(data: unknown, invokeError: unknown): 
     }
   }
   return invokeError instanceof Error ? invokeError.message : "La función devolvió un error.";
+}
+
+/**
+ * Igual que {@link functionInvokeUserMessage} pero, si hay `FunctionsHttpError`, lee el JSON del
+ * cuerpo (evita mostrar solo "Edge Function returned a non-2xx status code").
+ */
+export async function functionInvokeUserMessageAsync(
+  data: unknown,
+  invokeError: unknown,
+): Promise<string> {
+  const fromHttp = await jsonBodyFromFunctionsHttpError(invokeError);
+  if (fromHttp) {
+    const d =
+      data && typeof data === "object" && data !== null && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : null;
+    const merged = d ? { ...fromHttp, ...d } : { ...fromHttp };
+    return functionInvokeUserMessage(merged, invokeError);
+  }
+  return functionInvokeUserMessage(data, invokeError);
 }
 
 /**

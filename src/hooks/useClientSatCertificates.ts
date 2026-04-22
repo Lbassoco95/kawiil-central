@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  functionInvokeUserMessage,
+  functionInvokeUserMessageAsync,
   invokeFunctionWithSession,
 } from "@/lib/supabaseInvoke";
 
@@ -82,7 +82,7 @@ export function useClientSatCertificates(clientId: string) {
         error?: string;
       };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
       return {
         items: payload.items ?? [],
@@ -129,7 +129,7 @@ export function useSaveClientSatCertificate(clientId: string) {
         throw e;
       }
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
       return payload.certificate ?? null;
     },
@@ -161,7 +161,7 @@ export function useDeleteClientSatCertificate(clientId: string) {
       );
       const payload = (data ?? {}) as { error?: string; message?: string };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
     },
     onSuccess: () => {

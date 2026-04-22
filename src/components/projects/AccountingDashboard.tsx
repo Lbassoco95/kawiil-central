@@ -63,7 +63,7 @@ import { PhaseTaskRow } from "./PhaseManager";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { toast } from "sonner";
 import {
-  functionInvokeUserMessage,
+  functionInvokeUserMessageAsync,
   invokeFunctionWithSession,
 } from "@/lib/supabaseInvoke";
 import { Input } from "@/components/ui/input";
@@ -391,7 +391,9 @@ export function AccountingDashboard({
         action: "status",
         clientId: clientId!,
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
+      }
       const payload = (data ?? {}) as {
         configured?: boolean;
         certFingerprint?: string | null;
@@ -418,7 +420,9 @@ export function AccountingDashboard({
         action: "status",
         clientId: clientId!,
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
+      }
       const payload = (data ?? {}) as {
         configured?: boolean;
         profileId?: number | null;
@@ -536,7 +540,7 @@ export function AccountingDashboard({
         message?: string;
       };
       if (payload.error || error) {
-        toast.error(functionInvokeUserMessage(data, error));
+        toast.error(await functionInvokeUserMessageAsync(data, error));
         return;
       }
       const failed = payload.results?.filter((r) => !r.ok) ?? [];
@@ -611,7 +615,7 @@ export function AccountingDashboard({
           statusCode?: number;
         };
         if (payload.error || error) {
-          toast.error(functionInvokeUserMessage(data, error));
+          toast.error(await functionInvokeUserMessageAsync(data, error));
           const errCode = String((payload as { error?: string }).error ?? "");
           const scrollCiec =
             MOFFIN_USE_SOLUTIONS &&

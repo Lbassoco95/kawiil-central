@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { KeySquare, Loader2, Trash2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  functionInvokeUserMessage,
+  functionInvokeUserMessageAsync,
   invokeFunctionWithSession,
 } from "@/lib/supabaseInvoke";
 
@@ -39,7 +39,7 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
       });
       const payload = (data ?? {}) as CiecStatus & { error?: string; message?: string };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
       return payload as CiecStatus;
     },
@@ -57,7 +57,7 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
       });
       const payload = (data ?? {}) as { error?: string; message?: string; ok?: boolean };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
     },
     onSuccess: () => {
@@ -79,7 +79,7 @@ export function MoffinSatCiecSection({ clientId }: { clientId: string }) {
       });
       const payload = (data ?? {}) as { error?: string; message?: string };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
     },
     onSuccess: () => {

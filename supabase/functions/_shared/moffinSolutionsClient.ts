@@ -25,6 +25,39 @@ export function moffinSolutionsFetchSignal(): AbortSignal {
   return c.signal;
 }
 
+/** Une campos habituales del JSON de error de Moffin (perfil SAT, query, etc.). */
+function moffinSolutionsErrorMessage(
+  json: Record<string, unknown>,
+  httpStatus: number,
+): string {
+  const parts: string[] = [];
+  const add = (s: string | undefined) => {
+    const t = s?.trim();
+    if (t) parts.push(t);
+  };
+  if (typeof json.message === "string") add(json.message);
+  if (typeof json.error === "string") add(json.error);
+  if (json.error && typeof json.error === "object" && !Array.isArray(json.error)) {
+    const o = json.error as Record<string, unknown>;
+    if (typeof o.message === "string") add(o.message);
+  }
+  if (typeof json.detail === "string") add(json.detail);
+  if (typeof json.description === "string") add(json.description);
+  const errs = json.errors;
+  if (Array.isArray(errs)) {
+    for (const e of errs) {
+      if (typeof e === "string") add(e);
+      else if (e && typeof e === "object" && "message" in (e as object)) {
+        const m = (e as { message?: unknown }).message;
+        if (typeof m === "string") add(m);
+      }
+    }
+  }
+  const out = Array.from(new Set(parts.filter(Boolean)));
+  if (out.length) return out.join(" · ");
+  return `HTTP ${httpStatus}`;
+}
+
 /**
  * Esquema de autorización para Solutions:
  * - "Bearer" (default): JWT obtenido vía OAuth /oauth/token o MOFFIN_SOLUTIONS_BEARER estático.
@@ -83,10 +116,7 @@ export async function moffinSolutionsPostJson(
     };
   }
   if (!res.ok) {
-    const msg =
-      (typeof json.message === "string" && json.message) ||
-      (typeof json.error === "string" && json.error) ||
-      `HTTP ${res.status}`;
+    const msg = moffinSolutionsErrorMessage(json, res.status);
     return { ok: false, message: msg, status: res.status, bodySample: text.slice(0, 200) };
   }
   return { ok: true, json, status: res.status };
@@ -135,10 +165,7 @@ export async function moffinSolutionsGetJson(
     };
   }
   if (!res.ok) {
-    const msg =
-      (typeof json.message === "string" && json.message) ||
-      (typeof json.error === "string" && json.error) ||
-      `HTTP ${res.status}`;
+    const msg = moffinSolutionsErrorMessage(json, res.status);
     return { ok: false, message: msg, status: res.status };
   }
   return { ok: true, json, status: res.status };

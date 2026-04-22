@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  functionInvokeUserMessage,
+  functionInvokeUserMessageAsync,
   invokeFunctionWithSession,
 } from "@/lib/supabaseInvoke";
 import { useCallback, useMemo, useState } from "react";
@@ -91,7 +91,7 @@ export function MoffinSatStatusSummary({
         message?: string;
       };
       if (payload.error || error) {
-        toast.error(functionInvokeUserMessage(data, error));
+        toast.error(await functionInvokeUserMessageAsync(data, error));
         return;
       }
       const failed = payload.results?.filter((r) => !r.ok) ?? [];

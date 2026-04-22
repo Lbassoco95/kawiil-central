@@ -29,6 +29,7 @@ import {
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
+import { extractDropboxFilenameFromUrl, getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
 import { cn } from "@/lib/utils";
 import { TaskDependenciesPanel } from "./TaskDependenciesPanel";
 import { TaskKawiilAiCard } from "./TaskKawiilAiCard";
@@ -61,6 +62,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useDeleteTask } from "@/hooks/useTasks";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { createNotifications } from "@/lib/notificationHelpers";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { useNavigate } from "react-router-dom";
 
 interface CommentAttachment {
@@ -166,6 +168,8 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const [newSubtask, setNewSubtask] = useState("");
   const [newSubtaskAssignee, setNewSubtaskAssignee] = useState<string | null>(null);
   const [newSubtaskDueDate, setNewSubtaskDueDate] = useState("");
+  /** Célula de la subtarea: heredar de la tarea, sin área, o un slug concreto. */
+  const [newSubtaskArea, setNewSubtaskArea] = useState<"__parent__" | "__none__" | string>("__parent__");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activeTab, setActiveTab] = useState<"comments" | "links" | "files">("comments");
 
@@ -187,9 +191,13 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     });
   };
 
-  // Reset pending changes when task changes
+  // Reset pending changes and formulario de subtarea al cambiar de tarea
   useEffect(() => {
     setPendingChanges({});
+    setNewSubtask("");
+    setNewSubtaskAssignee(null);
+    setNewSubtaskDueDate("");
+    setNewSubtaskArea("__parent__");
   }, [taskId]);
 
   // Computed current values (pending override or task value)
@@ -338,6 +346,13 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
       if (!profile) throw new Error("No profile");
 
+      const subtaskArea: string | null =
+        newSubtaskArea === "__parent__"
+          ? (currentArea ?? null)
+          : newSubtaskArea === "__none__"
+            ? null
+            : newSubtaskArea;
+
       const { data: newTask, error } = await supabase
         .from("tasks")
         .insert({
@@ -346,6 +361,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
           created_by: user!.id,
           assigned_to: assignee,
           due_date: dueDate,
+          area: subtaskArea,
           client_id: task?.client_id || null,
           project_id: task?.project_id || null,
           status: "pendiente" as const,
@@ -386,6 +402,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
 
       updateChecklist([...checklist, newItem]);
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["task-subtasks", taskId] });
     } catch (err: any) {
       toast.error("Error al crear subtarea: " + err.message);
       return;
@@ -394,13 +411,13 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     setNewSubtask("");
     setNewSubtaskAssignee(null);
     setNewSubtaskDueDate("");
+    setNewSubtaskArea("__parent__");
   };
 
   const removeChecklistItem = (itemId: string) => {
     updateChecklist(checklist.filter((c) => c.id !== itemId));
   };
 
-  const MENTION_REGEX = /(@[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w][a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w\s]*[a-zA-ZáéíóúñÁÉÍÓÚÑüÜ\w])/g;
   const LINK_REGEX = /📎\s*\[([^\]]+)\]\(([^)]+)\)/g;
 
   const renderCommentContent = (content: string) => {
@@ -433,17 +450,8 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     return elements.length > 0 ? elements : content;
   };
 
-  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] => {
-    const parts = text.split(MENTION_REGEX);
-    return parts.map((part, i) => {
-      if (part.startsWith("@")) {
-        const name = part.slice(1);
-        const isKnown = orgProfiles?.some((p) => p.full_name.toLowerCase() === name.toLowerCase());
-        if (isKnown) return <span key={`m-${keyOffset}-${i}`} className="text-primary font-bold">{part}</span>;
-      }
-      return <span key={`t-${keyOffset}-${i}`}>{part}</span>;
-    });
-  };
+  const renderMentions = (text: string, keyOffset: number): React.ReactNode[] =>
+    renderTextWithMentionHighlights(text, `cm-${keyOffset}`);
 
   const handleStatusChange = (status: string) => setPending("status", status);
 
@@ -517,7 +525,12 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const handleAddDropboxLink = () => {
     if (!newLink.trim() || !task) return;
     const currentLinks = (task.dropbox_links as any[]) ?? [];
-    updateTask.mutate({ id: taskId, dropbox_links: [...currentLinks, { url: newLink.trim(), added_at: new Date().toISOString() }] });
+    const url = newLink.trim();
+    const derived = extractDropboxFilenameFromUrl(url);
+    updateTask.mutate({
+      id: taskId,
+      dropbox_links: [...currentLinks, { url, added_at: new Date().toISOString(), ...(derived ? { name: derived } : {}) }],
+    });
     setNewLink("");
     toast.success("Enlace agregado");
   };
@@ -919,6 +932,21 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                       />
                     </div>
                   </div>
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-medium text-muted-foreground">Área / Célula</label>
+                    <Select value={newSubtaskArea} onValueChange={(v) => setNewSubtaskArea(v)}>
+                      <SelectTrigger className="h-7 w-full text-xs">
+                        <SelectValue placeholder="Célula..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__parent__">Igual que la tarea principal</SelectItem>
+                        <SelectItem value="__none__">Sin área</SelectItem>
+                        {Object.entries(celulaLabelMap).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Button size="sm" variant="outline" className="h-7 text-xs gap-1 w-full" onClick={addChecklistItem} disabled={!newSubtask.trim()}>
                     <Plus className="h-3 w-3" /> Crear subtarea
                   </Button>
@@ -1103,13 +1131,23 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                               onChange={(e) => setCommentLinkInput(e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" && commentLinkInput.trim()) {
-                                  setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                                  const u = commentLinkInput.trim();
+                                  const isDbx = u.includes("dropbox.com");
+                                  const attName = isDbx
+                                    ? extractDropboxFilenameFromUrl(u) ?? getDropboxLinkDisplayLabel(u)
+                                    : u.split("/").pop() || "Enlace";
+                                  setCommentAttachments(prev => [...prev, { type: isDbx ? "dropbox" : "link", name: attName, url: u }]);
                                   setCommentLinkInput(""); setShowCommentLinkPopover(false);
                                 }
                               }}
                             />
                             <Button size="sm" className="h-7 px-2 text-xs" disabled={!commentLinkInput.trim()} onClick={() => {
-                              setCommentAttachments(prev => [...prev, { type: commentLinkInput.includes("dropbox.com") ? "dropbox" : "link", name: commentLinkInput.split("/").pop() || "Enlace", url: commentLinkInput.trim() }]);
+                              const u = commentLinkInput.trim();
+                              const isDbx = u.includes("dropbox.com");
+                              const attName = isDbx
+                                ? extractDropboxFilenameFromUrl(u) ?? getDropboxLinkDisplayLabel(u)
+                                : u.split("/").pop() || "Enlace";
+                              setCommentAttachments(prev => [...prev, { type: isDbx ? "dropbox" : "link", name: attName, url: u }]);
                               setCommentLinkInput(""); setShowCommentLinkPopover(false);
                             }}>Añadir</Button>
                           </div>
@@ -1128,12 +1166,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                   <div className="space-y-1.5 min-w-0">
                     {dropboxLinks.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Sin enlaces de Dropbox</p>}
                     {dropboxLinks.map((link: any, i: number) => {
-                      let shortUrl = link.url;
-                      try {
-                        const u = new URL(link.url);
-                        const path = u.pathname.length > 25 ? u.pathname.slice(0, 22) + "…" : u.pathname;
-                        shortUrl = u.hostname + path;
-                      } catch {}
+                      const label = getDropboxLinkDisplayLabel(link.url, link.name);
                       return (
                       <div key={i} className="flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted/30 p-2">
                         <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -1144,7 +1177,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                           className="flex-1 min-w-0 truncate text-xs text-primary hover:underline"
                           title={link.url}
                         >
-                          {link.name || shortUrl}
+                          {label}
                         </a>
                         <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5">{link.added_at ? formatMX(link.added_at, "dd MMM") : ""}</span>
                         <button

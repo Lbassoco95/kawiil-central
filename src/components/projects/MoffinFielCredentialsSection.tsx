@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { KeyRound, Upload, Trash2, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  functionInvokeUserMessage,
+  functionInvokeUserMessageAsync,
   invokeFunctionWithSession,
 } from "@/lib/supabaseInvoke";
 
@@ -53,7 +53,7 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
       });
       const payload = (data ?? {}) as FielStatus & { error?: string; message?: string };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
       return payload as FielStatus;
     },
@@ -75,7 +75,7 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
       });
       const payload = (data ?? {}) as { error?: string; message?: string; ok?: boolean };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
     },
     onSuccess: () => {
@@ -98,7 +98,7 @@ export function MoffinFielCredentialsSection({ clientId }: { clientId: string })
       });
       const payload = (data ?? {}) as { error?: string; message?: string };
       if (payload.error || error) {
-        throw new Error(functionInvokeUserMessage(data, error));
+        throw new Error(await functionInvokeUserMessageAsync(data, error));
       }
     },
     onSuccess: () => {

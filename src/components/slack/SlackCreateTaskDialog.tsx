@@ -14,6 +14,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import type { SlackMessage } from "@/lib/slackApi";
+import { getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
 
 const UNASSIGNED_VALUE = "__unassigned__";
 const NONE_VALUE = "__none__";
@@ -374,8 +375,9 @@ export function SlackCreateTaskDialog({
                         target="_blank"
                         rel="noreferrer"
                         className="text-primary hover:underline truncate flex-1"
+                        title={link}
                       >
-                        {link}
+                        {getDropboxLinkDisplayLabel(link)}
                       </a>
                       <X
                         className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-destructive"
