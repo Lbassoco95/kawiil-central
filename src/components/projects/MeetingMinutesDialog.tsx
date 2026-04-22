@@ -197,6 +197,51 @@ export function MeetingMinutesDialog({
       return;
     }
 
+    const isExcel =
+      ext === "xlsx" ||
+      ext === "xls" ||
+      (file.type || "").includes("spreadsheetml") ||
+      (file.type || "") === "application/vnd.ms-excel";
+    if (isExcel) {
+      try {
+        toast.info("Leyendo hojas de Excel…");
+        const XLSX = await import("xlsx");
+        const arrayBuffer = await file.arrayBuffer();
+        const wb = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+        if (!wb.SheetNames?.length) {
+          throw new Error("Sin hojas");
+        }
+        const stringifyCell = (v: unknown): string => {
+          if (v == null || v === "") return "";
+          if (v instanceof Date) {
+            return Number.isNaN(v.getTime()) ? "" : v.toLocaleString("es", { dateStyle: "short", timeStyle: "short" });
+          }
+          if (typeof v === "number" && Number.isFinite(v)) return String(v);
+          return String(v);
+        };
+        const MAX_ROWS = 10_000;
+        const parts: string[] = [];
+        for (const sheetName of wb.SheetNames) {
+          const sheet = wb.Sheets[sheetName];
+          if (!sheet) continue;
+          const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as unknown[][];
+          const rows = matrix.slice(0, MAX_ROWS);
+          const lines = rows.map((row) =>
+            (Array.isArray(row) ? row : []).map((c) => stringifyCell(c)).join("\t"),
+          );
+          parts.push(`--- ${sheetName} ---\n${lines.join("\n")}`);
+        }
+        const text = parts.join("\n\n").trim();
+        setContent(text || "(No se pudo extraer texto del archivo)");
+        toast.success("Contenido de Excel cargado");
+      } catch (err: any) {
+        console.error(err);
+        toast.error("No se pudo leer el Excel. Pega el contenido o exporta a CSV.");
+      }
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
     toast.info("Para este tipo de archivo, copia y pega el contenido en el campo de texto.");
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -414,7 +459,13 @@ export function MeetingMinutesDialog({
             ) : (
               <>
                 <div>
-                  <input ref={fileRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.md,.csv" onChange={handleFileUpload} />
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx"
+                    onChange={handleFileUpload}
+                  />
                   <Button
                     variant="outline"
                     className="w-full h-20 border-dashed flex flex-col gap-1"
@@ -422,7 +473,7 @@ export function MeetingMinutesDialog({
                   >
                     <Upload className="h-5 w-5 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">
-                      {fileName || "Sube un archivo (PDF, Word, .txt, .md)"}
+                      {fileName || "Sube un archivo (PDF, Word, Excel, .txt, .md, .csv)"}
                     </span>
                   </Button>
                 </div>
