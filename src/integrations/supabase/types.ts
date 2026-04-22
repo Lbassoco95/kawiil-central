@@ -785,6 +785,10 @@ export type Database = {
       }
       ai_projects: {
         Row: {
+          agent_context_mode: string
+          agent_conversation_excerpt_max_messages: number
+          agent_conversation_excerpt_mode: string
+          agent_max_knowledge_bytes: number | null
           client_id: string | null
           created_at: string
           description: string | null
@@ -798,6 +802,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          agent_context_mode?: string
+          agent_conversation_excerpt_max_messages?: number
+          agent_conversation_excerpt_mode?: string
+          agent_max_knowledge_bytes?: number | null
           client_id?: string | null
           created_at?: string
           description?: string | null
@@ -811,6 +819,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          agent_context_mode?: string
+          agent_conversation_excerpt_max_messages?: number
+          agent_conversation_excerpt_mode?: string
+          agent_max_knowledge_bytes?: number | null
           client_id?: string | null
           created_at?: string
           description?: string | null
@@ -4982,6 +4994,10 @@ export type Database = {
       get_my_ai_projects: {
         Args: never
         Returns: {
+          agent_context_mode: string
+          agent_conversation_excerpt_max_messages: number
+          agent_conversation_excerpt_mode: string
+          agent_max_knowledge_bytes: number | null
           client_id: string | null
           created_at: string
           description: string | null

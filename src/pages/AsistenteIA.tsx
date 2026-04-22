@@ -63,7 +63,6 @@ import {
   KAWIIL_AI_HEADER_BG,
   KAWIIL_AI_SOFT_BG,
 } from "@/lib/kawiilAi";
-import { buildProjectKnowledgeForAgentDispatch } from "@/lib/buildAgentProjectKnowledgeDispatch";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 import type { AgentTaskDeliverableLink } from "@/lib/agentTaskResult";
@@ -281,12 +280,6 @@ const AsistenteIA = () => {
     () => agentSession ?? syntheticChatAgentSessionFromMessages(messages),
     [agentSession, messages],
   );
-
-  /** Rutas de Storage y metadatos Dropbox de documentos de Conocimiento → dispatch a la VM. */
-  const projectKnowledgeForAgent = useMemo(() => {
-    if (!activeAiProjectId) return null;
-    return buildProjectKnowledgeForAgentDispatch(projectDocs);
-  }, [activeAiProjectId, projectDocs]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -908,6 +901,19 @@ const AsistenteIA = () => {
               updateAiProject.mutate({ id, instructions: instr });
               toast.success("Instrucciones actualizadas");
             }}
+            onUpdateAgentDefaults={
+              user?.id
+                ? (id, updates) => {
+                    updateAiProject.mutate(
+                      { id, ...updates },
+                      {
+                        onSuccess: () => toast.success("Preferencias de agente actualizadas"),
+                        onError: (e: Error) => toast.error(e.message),
+                      },
+                    );
+                  }
+                : undefined
+            }
             currentUserId={user?.id}
             onOpenMembers={activeAiProjectId ? () => setMembersDialogOpen(true) : undefined}
           />
@@ -1692,7 +1698,8 @@ const AsistenteIA = () => {
         followUpKind={delegateFollowUpKind}
         onDelegated={handleAgentDelegated}
         projectInstructions={activeProject?.instructions ?? null}
-        projectKnowledgeForAgent={projectKnowledgeForAgent}
+        projectDocuments={activeAiProjectId ? projectDocs : null}
+        projectContextDefaults={activeProject ?? null}
         onStartFreshTask={handleDelegateStartFreshTask}
       />
     </AppLayout>

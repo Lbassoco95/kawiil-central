@@ -52,15 +52,31 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 /**
- * input_context (objeto reenviado tal cual a la VM kawiil-agents) puede incluir p. ej.:
- * - conversation_id: hilo del chat
- * - ai_project_id: proyecto IA activo (mismo id que en chat) para alinear RAG / memorias
- * - include_conversation_excerpt: si true, la VM puede solicitar a Supabase un extracto de mensajes memorias
- * - previous_task_id: tarea de agente previa (segunda búsqueda / seguimiento)
- * - follow_up_kind: "retry" | "continuation" (metadata opcional)
- * - knowledge_supabase_ref_count: número de refs de documentos de proyecto (bucket `documents`) incluidas en `attachment_refs`
- * - knowledge_dropbox_documents: [{ document_id, name, external_path }] — enlaces a Dropbox (sin archivo en Storage)
- * La edge no interpreta el contenido; solo valida y reenvía.
+ * `input_context` (reenviado a kawiil-agents; la edge no lo interpreta):
+ *
+ * **Identificadores / seguimiento**
+ * - `conversation_id`, `ai_project_id`
+ * - `previous_task_id`, `follow_up_kind` ("retry" | "continuation")
+ *
+ * **Conversación en el prompt (la VM recorta bajo límite ~200k tokens)**
+ * - `include_conversation_excerpt` (boolean, legacy): true = la VM incorpora hilo; preferir
+ *   `conversation_excerpt_mode` + `include_conversation_excerpt` alineado (ver abajo).
+ * - `conversation_excerpt_mode`: "full" | "last_n" | "off"
+ * - `conversation_excerpt_max_messages` (número, p. ej. 30) cuando `last_n`
+ *
+ * **Expediente / conocimiento (documentos grandes)**
+ * - `context_mode`: "full_refs" (inyectar cuerpos completos vía refs), "rag_first" (priorizar
+ *   búsqueda en embeddings / chunks del `ai_project_id`), "refs_budget" (recortar por presupuesto).
+ * - `knowledge_included_document_ids`: subconjunto de `documents.id` que el usuario eligió; la VM
+ *   no inyecta otros del proyecto salvo lógica interna.
+ * - `knowledge_max_total_bytes`: suma teórica (bytes) de los refs de Storage enviados; ayuda
+ *   a la VM a presupuestar antes de leer y extraer texto.
+ * - `knowledge_supabase_ref_count` y `knowledge_dropbox_documents` (Dropbox: sin binario en Storage)
+ * - `max_attachment_bytes_per_task` / `max_estimated_input_tokens` (opcional): tope duro o blando
+ *   en el servidor.
+ *
+ * Las columnas `ai_projects.agent_*` en kawiil-central son sugerencias por proyecto; el cliente
+ * rellena el objeto anterior al delegar.
  */
 interface DispatchBody {
   title?: unknown;

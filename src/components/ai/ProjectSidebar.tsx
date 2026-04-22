@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,19 @@ import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
 import type { ChatConversation } from "@/hooks/useChat";
 import type { AiProject } from "@/hooks/useAiProjects";
+import {
+  DEFAULT_AGENT_CONTEXT_MODE,
+  DEFAULT_AGENT_CONVERSATION_EXCERPT_MAX_MESSAGES,
+  DEFAULT_AGENT_CONVERSATION_EXCERPT_MODE,
+  DEFAULT_AGENT_MAX_KNOWLEDGE_BYTES,
+} from "@/lib/agentDispatchInputContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const FOLDER_PRESETS = [
   "Proyectos", "Contabilidad", "Legal", "Redaccion", "Consultas", "Ideas",
@@ -36,6 +49,22 @@ interface ProjectSidebarProps {
   onArchiveProject: (id: string) => void;
   onLeaveProject?: (id: string) => void;
   onUpdateInstructions: (id: string, instructions: string) => void;
+  /**
+   * Guarda en `ai_projects` los modos y tope (delegación a la VM) para
+   * rellenar el modal con valores por defecto.
+   */
+  onUpdateAgentDefaults?: (
+    id: string,
+    updates: Partial<
+      Pick<
+        AiProject,
+        | "agent_context_mode"
+        | "agent_conversation_excerpt_mode"
+        | "agent_conversation_excerpt_max_messages"
+        | "agent_max_knowledge_bytes"
+      >
+    >,
+  ) => void;
   currentUserId?: string | null;
   onOpenMembers?: () => void;
 }
@@ -44,7 +73,7 @@ export function ProjectSidebar({
   activeProject, aiProjects, activeAiProjectId, activeConversationId,
   filteredConversations, onSelectProject, onNewChat, onLoadConversation,
   onDeleteConversation, onRenameConversation, onMoveConversation,
-  onCreateProject, onArchiveProject, onLeaveProject, onUpdateInstructions,
+  onCreateProject, onArchiveProject, onLeaveProject, onUpdateInstructions, onUpdateAgentDefaults,
   currentUserId, onOpenMembers,
 }: ProjectSidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["__none__"]));
@@ -55,7 +84,37 @@ export function ProjectSidebar({
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [editInstructions, setEditInstructions] = useState("");
+  const [agentContextMode, setAgentContextMode] = useState(DEFAULT_AGENT_CONTEXT_MODE);
+  const [agentExcerptMode, setAgentExcerptMode] = useState(DEFAULT_AGENT_CONVERSATION_EXCERPT_MODE);
+  const [agentExcerptN, setAgentExcerptN] = useState(DEFAULT_AGENT_CONVERSATION_EXCERPT_MAX_MESSAGES);
+  /** "" = null (usar 8 MB en app) */
+  const [agentMaxMb, setAgentMaxMb] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!activeProject) return;
+    const m = activeProject.agent_context_mode;
+    setAgentContextMode(
+      m === "full_refs" || m === "rag_first" || m === "refs_budget" ? m : DEFAULT_AGENT_CONTEXT_MODE,
+    );
+    const e = activeProject.agent_conversation_excerpt_mode;
+    setAgentExcerptMode(
+      e === "full" || e === "last_n" || e === "off" ? e : DEFAULT_AGENT_CONVERSATION_EXCERPT_MODE,
+    );
+    setAgentExcerptN(
+      activeProject.agent_conversation_excerpt_max_messages ?? DEFAULT_AGENT_CONVERSATION_EXCERPT_MAX_MESSAGES,
+    );
+    const b = activeProject.agent_max_knowledge_bytes;
+    setAgentMaxMb(
+      b != null && b > 0 ? String(Math.round(b / (1024 * 1024))) : "",
+    );
+  }, [
+    activeProject?.id,
+    activeProject?.agent_context_mode,
+    activeProject?.agent_conversation_excerpt_mode,
+    activeProject?.agent_conversation_excerpt_max_messages,
+    activeProject?.agent_max_knowledge_bytes,
+  ]);
 
   const groupedConversations = (() => {
     const groups: Record<string, ChatConversation[]> = {};
@@ -264,6 +323,83 @@ export function ProjectSidebar({
               </p>
             )}
           </div>
+
+          {onUpdateAgentDefaults && currentUserId && activeProject.user_id === currentUserId && (
+            <div className="rounded-md border border-dashed border-border/60 p-2 space-y-1.5">
+              <p className="text-[9px] font-medium text-muted-foreground">
+                Agente (valores iniciales al delegar)
+              </p>
+              <div className="space-y-0.5">
+                <span className="text-[8px] text-muted-foreground">Modo de expediente</span>
+                <Select value={agentContextMode} onValueChange={setAgentContextMode}>
+                  <SelectTrigger className="h-7 text-[9px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="refs_budget">Equilibrar (refs_budget)</SelectItem>
+                    <SelectItem value="full_refs">Cuerpos completos</SelectItem>
+                    <SelectItem value="rag_first">RAG primero</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[8px] text-muted-foreground">Hilo al delegar</span>
+                <Select value={agentExcerptMode} onValueChange={setAgentExcerptMode}>
+                  <SelectTrigger className="h-7 text-[9px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="last_n">Últimos N mensajes</SelectItem>
+                    <SelectItem value="full">Hilo completo</SelectItem>
+                    <SelectItem value="off">Sin chat en contexto</SelectItem>
+                  </SelectContent>
+                </Select>
+                {agentExcerptMode === "last_n" && (
+                  <Input
+                    type="number"
+                    min={0}
+                    max={500}
+                    className="h-6 text-[9px] mt-0.5"
+                    value={agentExcerptN}
+                    onChange={(e) => setAgentExcerptN(Math.min(500, Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+                  />
+                )}
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[8px] text-muted-foreground">
+                  Tope conocimiento (MB, vacío = {Math.round(DEFAULT_AGENT_MAX_KNOWLEDGE_BYTES / 1024 / 1024)} MB)
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={500}
+                  placeholder="(predeterminado app)"
+                  className="h-6 text-[9px]"
+                  value={agentMaxMb}
+                  onChange={(e) => setAgentMaxMb(e.target.value.replace(/[^0-9.]/g, ""))}
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="h-6 w-full text-[9px]"
+                onClick={() => {
+                  const mb = agentMaxMb.trim() === "" ? null : Math.min(500, Math.max(0, Number(agentMaxMb)));
+                  onUpdateAgentDefaults(activeProject.id, {
+                    agent_context_mode: agentContextMode,
+                    agent_conversation_excerpt_mode: agentExcerptMode,
+                    agent_conversation_excerpt_max_messages: agentExcerptN,
+                    agent_max_knowledge_bytes:
+                      mb == null || Number.isNaN(mb) || mb === 0
+                        ? null
+                        : Math.min(524_288_000, Math.floor(mb * 1024 * 1024)),
+                  });
+                }}
+              >
+                Guardar preferencias de agente
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="border-b border-border/30">

@@ -14,6 +14,11 @@ export interface AiProject {
   is_archived: boolean;
   created_at: string;
   updated_at: string;
+  /** @see agentDispatchInputContext (migración agent context). */
+  agent_context_mode?: string;
+  agent_conversation_excerpt_mode?: string;
+  agent_conversation_excerpt_max_messages?: number;
+  agent_max_knowledge_bytes?: number | null;
 }
 
 export interface AiProjectDocument {
@@ -33,6 +38,7 @@ export type AiProjectDocumentWithFile = AiProjectDocument & {
     mime_type: string | null;
     external_path: string | null;
     source: string | null;
+    file_size: number | null;
   } | null;
 };
 
@@ -157,7 +163,7 @@ export function useAiProjectDocuments(projectId: string | null) {
           name,
           source,
           created_at,
-          documents ( file_path, mime_type, external_path, source )
+          documents ( file_path, mime_type, external_path, source, file_size )
         `,
         )
         .eq("ai_project_id", projectId!)

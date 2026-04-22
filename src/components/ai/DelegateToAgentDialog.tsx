@@ -32,8 +32,29 @@ import { useClients } from "@/hooks/useClients";
 import type { Client } from "@/hooks/useClients";
 import type { ChatAttachmentMeta } from "@/hooks/useChat";
 import {
+  buildProjectKnowledgeForAgentDispatch,
   mergeAgentAttachmentRefs,
+  roughEstimateDocTokensForDispatch,
 } from "@/lib/buildAgentProjectKnowledgeDispatch";
+import {
+  AGENT_CONTEXT_MODES,
+  AGENT_CONVERSATION_EXCERPT_MODES,
+  DEFAULT_AGENT_CONTEXT_MODE,
+  DEFAULT_AGENT_CONVERSATION_EXCERPT_MAX_MESSAGES,
+  DEFAULT_AGENT_CONVERSATION_EXCERPT_MODE,
+  DEFAULT_AGENT_MAX_KNOWLEDGE_BYTES,
+  type AgentContextMode,
+  type AgentConversationExcerptMode,
+} from "@/lib/agentDispatchInputContext";
+import type { AiProject, AiProjectDocumentWithFile } from "@/hooks/useAiProjects";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
@@ -83,13 +104,21 @@ export interface DelegateToAgentDialogProps {
   projectInstructions?: string | null;
 
   /**
-   * Documentos del panel Conocimiento (proyecto): rutas de Storage y/o metadatos Dropbox
-   * para que la VM no dependa solo de adjuntos del chat.
+   * Filas de `ai_project_documents` (join `documents`) para armar referencias; el usuario
+   * puede restringir qué se envía (subconjunto + presupuesto de bytes) desde el modal.
    */
-  projectKnowledgeForAgent?: {
-    supabaseRefs: ChatAttachmentMeta[];
-    dropboxDocuments: { document_id: string; name: string; external_path: string }[];
-  } | null;
+  projectDocuments?: AiProjectDocumentWithFile[] | null;
+  /**
+   * Valores de `ai_projects` (migración agent context) o null si no hay proyecto.
+   * Si faltan columnas (migración pendiente), se usan constantes de `agentDispatchInputContext`.
+   */
+  projectContextDefaults?: Pick<
+    AiProject,
+    | "agent_context_mode"
+    | "agent_conversation_excerpt_mode"
+    | "agent_conversation_excerpt_max_messages"
+    | "agent_max_knowledge_bytes"
+  > | null;
 
   /**
    * Solo con seguimiento (`previousTaskId`): limpia el vínculo a la tarea anterior y
@@ -128,6 +157,23 @@ const GROUP_LABELS: Record<AgentGroupKey, string> = {
 };
 
 const MAX_DELEGATE_INSTRUCTIONS = 12_000;
+
+/** Sobre el conocimiento: aviso de posible carga de contexto (el texto extraído en la VM puede exceder esto). */
+const KNOWLEDGE_TOKEN_ROUGH_WARN = 100_000;
+
+function coalesceContextMode(m?: string | null): AgentContextMode {
+  if (m && (AGENT_CONTEXT_MODES as readonly string[]).includes(m)) {
+    return m as AgentContextMode;
+  }
+  return DEFAULT_AGENT_CONTEXT_MODE;
+}
+
+function coalesceExcerptMode(m?: string | null): AgentConversationExcerptMode {
+  if (m && (AGENT_CONVERSATION_EXCERPT_MODES as readonly string[]).includes(m)) {
+    return m as AgentConversationExcerptMode;
+  }
+  return DEFAULT_AGENT_CONVERSATION_EXCERPT_MODE;
+}
 
 const GROUP_ORDER: AgentGroupKey[] = [
   "LEGAL",
@@ -181,7 +227,8 @@ export function DelegateToAgentDialog({
   previousTaskId = null,
   followUpKind = null,
   projectInstructions = null,
-  projectKnowledgeForAgent = null,
+  projectDocuments = null,
+  projectContextDefaults = null,
   onStartFreshTask,
   onDelegated,
 }: DelegateToAgentDialogProps) {
@@ -198,8 +245,37 @@ export function DelegateToAgentDialog({
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
   const [agentPopoverOpen, setAgentPopoverOpen] = useState(false);
   const [agentInstructions, setAgentInstructions] = useState("");
+  const [contextMode, setContextMode] = useState<AgentContextMode>(DEFAULT_AGENT_CONTEXT_MODE);
+  const [conversationExcerptMode, setConversationExcerptMode] =
+    useState<AgentConversationExcerptMode>(DEFAULT_AGENT_CONVERSATION_EXCERPT_MODE);
+  const [excerptMaxMessages, setExcerptMaxMessages] = useState(
+    DEFAULT_AGENT_CONVERSATION_EXCERPT_MAX_MESSAGES,
+  );
+  /** "all" o lista de `documents.id` incluidos. */
+  const [knowledgeDocSelection, setKnowledgeDocSelection] = useState<"all" | string[]>("all");
 
   const agentList = useAgentList(selectedClientId);
+
+  const effectiveMaxKnowledgeBytes = useMemo(
+    () => projectContextDefaults?.agent_max_knowledge_bytes ?? DEFAULT_AGENT_MAX_KNOWLEDGE_BYTES,
+    [projectContextDefaults?.agent_max_knowledge_bytes],
+  );
+
+  const allKnowledgeDocIds = useMemo(
+    () =>
+      (projectDocuments ?? [])
+        .map((d) => d.document_id)
+        .filter((x): x is string => Boolean(x)),
+    [projectDocuments],
+  );
+
+  const knowledge = useMemo(() => {
+    if (!projectDocuments?.length) return null;
+    return buildProjectKnowledgeForAgentDispatch(projectDocuments, {
+      includedDocumentIds: knowledgeDocSelection === "all" ? null : knowledgeDocSelection,
+      maxTotalBytes: effectiveMaxKnowledgeBytes,
+    });
+  }, [projectDocuments, knowledgeDocSelection, effectiveMaxKnowledgeBytes]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -211,7 +287,25 @@ export function DelegateToAgentDialog({
     setClientPopoverOpen(false);
     setAgentPopoverOpen(false);
     setAgentInstructions((projectInstructions ?? "").trim());
-  }, [isOpen, defaultClientId, defaultTitle, defaultAgentTemplateId, projectInstructions, previousTaskId]);
+    setKnowledgeDocSelection("all");
+    setContextMode(coalesceContextMode(projectContextDefaults?.agent_context_mode));
+    setConversationExcerptMode(
+      coalesceExcerptMode(projectContextDefaults?.agent_conversation_excerpt_mode),
+    );
+    setExcerptMaxMessages(
+      typeof projectContextDefaults?.agent_conversation_excerpt_max_messages === "number"
+        ? projectContextDefaults.agent_conversation_excerpt_max_messages
+        : DEFAULT_AGENT_CONVERSATION_EXCERPT_MAX_MESSAGES,
+    );
+  }, [
+    isOpen,
+    defaultClientId,
+    defaultTitle,
+    defaultAgentTemplateId,
+    projectInstructions,
+    previousTaskId,
+    projectContextDefaults,
+  ]);
 
   const handleClientSelect = (id: string | null) => {
     setSelectedClientId((prev) => {
@@ -230,9 +324,13 @@ export function DelegateToAgentDialog({
     [agentList.agents, selectedAgentId],
   );
 
-  const knowledgeSupabaseRefs = projectKnowledgeForAgent?.supabaseRefs ?? [];
-  const knowledgeDropbox = projectKnowledgeForAgent?.dropboxDocuments ?? [];
+  const knowledgeSupabaseRefs = knowledge?.supabaseRefs ?? [];
+  const knowledgeDropbox = knowledge?.dropboxDocuments ?? [];
   const knowledgeTotalCount = knowledgeSupabaseRefs.length + knowledgeDropbox.length;
+  const knowledgeRoughTokens = knowledge
+    ? roughEstimateDocTokensForDispatch(knowledge.includedBytesEstimate)
+    : 0;
+  const showKnowledgeTokenWarning = knowledge != null && knowledgeRoughTokens > KNOWLEDGE_TOKEN_ROUGH_WARN;
 
   const isFollowUp = Boolean(previousTaskId);
   const instrTrim = agentInstructions.replace(/\r\n/g, "\n").trim();
@@ -243,7 +341,25 @@ export function DelegateToAgentDialog({
     hasDispatchBody &&
     !agentList.isLoading &&
     !agentList.error &&
-    !clientsLoading;
+    !clientsLoading &&
+    (allKnowledgeDocIds.length === 0 ||
+      knowledgeDocSelection === "all" ||
+      (Array.isArray(knowledgeDocSelection) && knowledgeDocSelection.length > 0));
+
+  const handleToggleKnowledgeDoc = (docId: string, checked: boolean) => {
+    setKnowledgeDocSelection((prev) => {
+      if (prev === "all") {
+        return allKnowledgeDocIds.filter((id) => id !== docId);
+      }
+      const set = new Set(prev);
+      if (checked) set.add(docId);
+      else set.delete(docId);
+      const next = allKnowledgeDocIds.filter((id) => set.has(id));
+      if (next.length === 0) return [];
+      if (next.length === allKnowledgeDocIds.length) return "all";
+      return next;
+    });
+  };
 
   const handleDelegate = async () => {
     if (!selectedAgentId) return;
@@ -269,8 +385,8 @@ export function DelegateToAgentDialog({
     setDispatchError(null);
 
     try {
-      const kConn = projectKnowledgeForAgent;
-      const kSupa = kConn?.supabaseRefs ?? [];
+      const kBuilt = knowledge;
+      const kSupa = kBuilt?.supabaseRefs ?? [];
       const fromChat = (attachments ?? []) as ChatAttachmentMeta[];
       const mergedAttachmentRefs = mergeAgentAttachmentRefs(kSupa, fromChat);
 
@@ -287,13 +403,30 @@ export function DelegateToAgentDialog({
       const ctx: Record<string, unknown> = {};
       if (conversationId) ctx.conversation_id = conversationId;
       if (aiProjectId) ctx.ai_project_id = aiProjectId;
-      /** Indicación para la VM: puede adjuntar extracto del hilo / memorias del proyecto (contrato kawiil-agents). */
-      ctx.include_conversation_excerpt = true;
+      ctx.context_mode = contextMode;
+      ctx.conversation_excerpt_mode = conversationExcerptMode;
+      if (conversationExcerptMode === "last_n") {
+        ctx.conversation_excerpt_max_messages = Math.min(
+          500,
+          Math.max(0, Math.floor(excerptMaxMessages)),
+        );
+      } else {
+        ctx.conversation_excerpt_max_messages = 0;
+      }
+      ctx.include_conversation_excerpt = conversationExcerptMode !== "off";
       if (kSupa.length) {
         ctx.knowledge_supabase_ref_count = kSupa.length;
       }
-      if (kConn?.dropboxDocuments && kConn.dropboxDocuments.length > 0) {
-        ctx.knowledge_dropbox_documents = kConn.dropboxDocuments;
+      if (kBuilt?.dropboxDocuments && kBuilt.dropboxDocuments.length > 0) {
+        ctx.knowledge_dropbox_documents = kBuilt.dropboxDocuments;
+      }
+      if (kBuilt && kBuilt.includedDocumentIds.length > 0) {
+        ctx.knowledge_included_document_ids = kBuilt.includedDocumentIds;
+      }
+      if (kBuilt) {
+        ctx.knowledge_max_total_bytes = kBuilt.includedBytesEstimate;
+        const est = roughEstimateDocTokensForDispatch(kBuilt.includedBytesEstimate);
+        if (est > 0) ctx.max_estimated_input_tokens = est;
       }
       if (previousTaskId) {
         ctx.previous_task_id = previousTaskId;
@@ -353,34 +486,131 @@ export function DelegateToAgentDialog({
   const primaryLoadingLabel = isFollowUp ? "Enviando…" : "Delegando…";
   const dialogTitle = isFollowUp ? "Seguimiento con el agente" : "Delegar tarea a un agente";
 
-  const sharedKnowledgeBlock =
-    knowledgeTotalCount > 0 ? (
+  const maxMbLabel = (effectiveMaxKnowledgeBytes / (1024 * 1024)).toFixed(1);
+
+  const contextTuningBlock = (
+    <div className="space-y-3 rounded-md border border-border/50 bg-muted/20 px-2.5 py-3">
+      <p className="text-xs font-medium text-foreground">Contexto del modelo (kawiil-agents)</p>
       <div className="space-y-1.5">
-        <Label>Conocimiento del proyecto (incluido en el envío)</Label>
-        <div className="rounded-md border border-sky-200/60 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-950/20 px-2.5 py-2 text-[10.5px] text-muted-foreground space-y-1.5">
-          <p>
-            <span className="font-medium text-foreground/90">{knowledgeSupabaseRefs.length}</span> en Storage
-            {knowledgeDropbox.length > 0 && (
-              <>
-                {" "}
-                y <span className="font-medium text-foreground/90">{knowledgeDropbox.length}</span> en Dropbox
-              </>
-            )}
-            . Documentos del proyecto y adjuntos del chat (sin duplicar ruta en Storage).
-          </p>
-          <ul className="max-h-20 overflow-y-auto space-y-0.5 list-none p-0 m-0 text-[10px]">
-            {knowledgeSupabaseRefs.map((r, i) => (
-              <li key={`ks-${i}-${r.path}`} className="truncate">
-                {r.name}
-              </li>
-            ))}
-            {knowledgeDropbox.map((d) => (
-              <li key={d.document_id} className="truncate">
-                {d.name} <span className="text-muted-foreground/80">(Dropbox)</span>
-              </li>
-            ))}
-          </ul>
+        <Label className="text-[11px]">Modo de expediente</Label>
+        <Select value={contextMode} onValueChange={(v) => setContextMode(v as AgentContextMode)}>
+          <SelectTrigger className="h-9 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="refs_budget">Equilibrar por tamaño (recomendado)</SelectItem>
+            <SelectItem value="full_refs">Cuerpos completos (si la VM aplica el modo)</SelectItem>
+            <SelectItem value="rag_first">Priorizar búsqueda (RAG) en el proyecto</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-[11px]">Extracto de esta conversación en el contexto</Label>
+        <Select
+          value={conversationExcerptMode}
+          onValueChange={(v) => setConversationExcerptMode(v as AgentConversationExcerptMode)}
+        >
+          <SelectTrigger className="h-9 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="last_n">Últimos N mensajes</SelectItem>
+            <SelectItem value="full">Hilo completo (alto riesgo de límite 200k tokens)</SelectItem>
+            <SelectItem value="off">No incluir el chat (solo instrucciones y documentos)</SelectItem>
+          </SelectContent>
+        </Select>
+        {conversationExcerptMode === "last_n" && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <Label className="text-[10px] shrink-0">Mensajes (máx. 500)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={500}
+              className="h-8 text-xs w-20"
+              value={excerptMaxMessages}
+              onChange={(e) =>
+                setExcerptMaxMessages(
+                  Math.min(500, Math.max(0, Math.floor(Number(e.target.value) || 0))),
+                )
+              }
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const knowledgeSelectionBlock =
+    allKnowledgeDocIds.length > 0 ? (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <Label>Documentos de conocimiento a enviar</Label>
+          {knowledgeDocSelection !== "all" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-[10px]"
+              onClick={() => setKnowledgeDocSelection("all")}
+            >
+              Incluir todos
+            </Button>
+          )}
         </div>
+        <p className="text-[10px] text-muted-foreground leading-snug">
+          Tope acumulado: {maxMbLabel} MB (por tamaño en disco; la VM aplica límite global al prompt, ~200k
+          tokens). Prioridad: documentos más recientes.
+        </p>
+        {showKnowledgeTokenWarning && (
+          <p className="text-[10px] text-amber-800 dark:text-amber-100/90 rounded border border-amber-200/60 bg-amber-50/50 dark:bg-amber-950/30 px-2 py-1.5 leading-snug">
+            Estimación de contexto alta. Usa RAG, menos archivos, extracto mínimo del chat, o un seguimiento
+            aparte.
+          </p>
+        )}
+        <div className="rounded-md border border-sky-200/60 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 max-h-40 overflow-y-auto space-y-2">
+          {(projectDocuments ?? [])
+            .filter((d) => d.document_id)
+            .map((row) => {
+              const id = row.document_id!;
+              const isDrop = Boolean(row.documents?.external_path);
+              const checked = knowledgeDocSelection === "all" || knowledgeDocSelection.includes(id);
+              return (
+                <label
+                  key={row.id}
+                  className="flex items-start gap-2 text-[10px] text-muted-foreground cursor-pointer"
+                >
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={checked}
+                    onCheckedChange={(v) => handleToggleKnowledgeDoc(id, v === true)}
+                  />
+                  <span className="min-w-0 break-words">
+                    <span className="text-foreground/90 font-medium">{row.name}</span>{" "}
+                    <span className="text-muted-foreground/80">{isDrop ? "· Dropbox" : "· Storage"}</span>
+                  </span>
+                </label>
+              );
+            })}
+        </div>
+        {knowledge != null && knowledge.skippedForByteBudget > 0 && (
+          <p className="text-[10px] text-amber-800 dark:text-amber-100/90">
+            {knowledge.skippedForByteBudget} documento(s) excluido(s) al superar el tope de {maxMbLabel} MB; se
+            priorizan los más recientes.
+          </p>
+        )}
+        <p className="text-[10px] text-muted-foreground">
+          En el envío: {knowledgeSupabaseRefs.length} en Storage
+          {knowledgeDropbox.length > 0
+            ? ` y ${knowledgeDropbox.length} en Dropbox.`
+            : ". "}
+          Los adjuntos del chat se combinan y no se duplican por ruta en Storage.
+        </p>
+        {knowledgeTotalCount < 1 && (knowledgeDocSelection === "all" || knowledgeDocSelection.length > 0) && (
+          <p className="text-[10px] text-destructive/90">
+            Ninguna referencia incluida con los filtros actuales. Aumenta el tope en el proyecto, quita
+            documentos, o reactiva al menos un archivo.
+          </p>
+        )}
       </div>
     ) : null;
 
@@ -541,7 +771,8 @@ export function DelegateToAgentDialog({
             </>
           )}
 
-          {sharedKnowledgeBlock}
+          {contextTuningBlock}
+          {knowledgeSelectionBlock}
 
           {attachments && attachments.length > 0 && (
             <div className="space-y-1.5">
