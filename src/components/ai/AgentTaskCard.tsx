@@ -18,6 +18,7 @@ import {
   UserPlus,
   RotateCw,
 } from "lucide-react";
+import { humanizeAgentErrorMessage } from "@/lib/agentTaskErrorUserMessage";
 import { cn } from "@/lib/utils";
 import {
   useAgentTaskProgress,
@@ -631,9 +632,20 @@ function ResultPreview({
 }
 
 function FailureMessage({ error }: { error: string | null }) {
+  const { title, raw } = humanizeAgentErrorMessage(error);
   return (
-    <div className="text-sm text-destructive bg-destructive/10 rounded-md p-2 border border-destructive/20">
-      {error ?? "Error desconocido"}
+    <div className="text-sm text-destructive bg-destructive/10 rounded-md p-2 border border-destructive/20 space-y-2">
+      <p className="text-foreground/95 leading-relaxed">{title}</p>
+      {raw && raw !== title && (
+        <details className="text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer select-none font-medium text-destructive/80">
+            Detalle técnico
+          </summary>
+          <pre className="mt-1.5 p-2 rounded bg-background/80 border border-border/50 overflow-x-auto whitespace-pre-wrap break-words max-h-40">
+            {raw}
+          </pre>
+        </details>
+      )}
     </div>
   );
 }

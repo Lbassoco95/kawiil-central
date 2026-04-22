@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useQuery,
   useMutation,
@@ -143,6 +143,7 @@ export default function Comunicacion() {
   const { isTransformador } = useUserRole();
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const { isConnected, isLoading: loadingConn, connect, isConnecting, connection } = useSlackConnection();
   const [mobileListOpen, setMobileListOpen] = useState(false);
@@ -518,15 +519,20 @@ export default function Comunicacion() {
   }, [user?.id, isConnected, slackPrefsFetched, slackCommPrefs, qc]);
 
   const historyInfinite = useInfiniteQuery({
-    queryKey: ["slack-history", selectedChannel],
+    queryKey: ["slack-history", selectedChannel, tsFromUrl || ""],
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam, signal }): Promise<HistoryPage> => {
-      const payload = {
-        action: "conversations.history",
+      const base = {
+        action: "conversations.history" as const,
         channel: selectedChannel!,
         limit: 50,
-        cursor: pageParam,
-      } as const;
+      };
+      const anchorTs = (tsFromUrl || "").trim();
+      const payload = pageParam
+        ? { ...base, cursor: pageParam }
+        : anchorTs
+          ? { ...base, latest: anchorTs }
+          : { ...base };
       let data: {
         ok: boolean;
         messages?: SlackMessage[];
@@ -1056,11 +1062,14 @@ export default function Comunicacion() {
   const onSlackFileUploadError = (e: Error) =>
     toastSlackPermissionDenied(e, SLACK_FILE_UPLOAD_PERMISSION_HINT);
 
-  const onSlackReactionMutationError = (e: Error) =>
-    toastSlackPermissionDenied(e, SLACK_REACTIONS_PERMISSION_HINT);
-
   const reactionMutation = useMutation({
-    mutationFn: async (vars: { ts: string; name: string; add: boolean }) => {
+    mutationFn: async (vars: {
+      ts: string;
+      name: string;
+      add: boolean;
+      /** Set en el panel de hilo: construye `?ts` + `reply` al mostrar el toast «Ir al mensaje». */
+      navThreadRootTs?: string | null;
+    }) => {
       const name = vars.name.replace(/^:|:$/g, "").trim();
       if (!selectedChannel || !name) throw new Error("Datos incompletos");
       const action = vars.add ? "reactions.add" : "reactions.remove";
@@ -1078,7 +1087,39 @@ export default function Comunicacion() {
         qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, threadRootTs] });
       }
     },
-    onError: onSlackReactionMutationError,
+    onError: (e, vars) => {
+      const buildMessagePath = (): string | null => {
+        if (!selectedChannel) return null;
+        const q = new URLSearchParams();
+        q.set("channel", selectedChannel);
+        if (vars.navThreadRootTs && vars.navThreadRootTs !== vars.ts) {
+          q.set("ts", vars.navThreadRootTs);
+          q.set("reply", vars.ts);
+        } else {
+          q.set("ts", vars.ts);
+        }
+        return `/comunicacion?${q.toString()}`;
+      };
+      const path = buildMessagePath();
+      const actionBtn =
+        path != null
+          ? ({
+              label: "Ir al mensaje",
+              onClick: () => {
+                navigate(path);
+              },
+            } as const)
+          : undefined;
+      const msg = e instanceof Error ? e.message : "";
+      if (isSlackPermissionDeniedMessage(msg)) {
+        toast.error(SLACK_REACTIONS_PERMISSION_HINT, {
+          duration: SLACK_PERMISSION_TOAST_MS,
+          ...(actionBtn ? { action: actionBtn } : {}),
+        });
+        return;
+      }
+      toast.error(msg, { ...(actionBtn ? { action: actionBtn } : {}) });
+    },
   });
 
   const postMutation = useMutation({
@@ -1205,11 +1246,17 @@ export default function Comunicacion() {
 
   const handleJumpToSlackMessage = useCallback(
     (channelId: string, ts: string, threadTs?: string | null) => {
+      const inThread = !!(threadTs && threadTs !== ts);
+      const nextParams: { channel: string; ts: string; reply?: string } = inThread
+        ? { channel: channelId, ts: threadTs!, reply: ts }
+        : { channel: channelId, ts };
       if (channelId !== selectedChannel) {
         switchChannel(channelId, false);
-        setSearchParams({ channel: channelId, ts });
+        setSearchParams(nextParams);
       } else {
-        const el = document.getElementById(`slack-msg-${ts.replace(/\./g, "-")}`);
+        setSearchParams(nextParams);
+        const mainListTs = inThread ? threadTs! : ts;
+        const el = document.getElementById(`slack-msg-${mainListTs.replace(/\./g, "-")}`);
         el?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
       // Si el mensaje pertenece a un hilo (thread_ts distinto del ts raíz),
@@ -1721,7 +1768,14 @@ export default function Comunicacion() {
                 ? { messageTs: reactionMutation.variables.ts, name: reactionMutation.variables.name }
                 : null
             }
-            onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
+            onToggleReaction={(ts, name, add) =>
+              reactionMutation.mutate({
+                ts,
+                name,
+                add,
+                ...(threadRootTs ? { navThreadRootTs: threadRootTs } : {}),
+              })
+            }
             onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
           />
           <SlackActivityPanel

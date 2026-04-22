@@ -562,12 +562,17 @@ Deno.serve(async (req) => {
       if (!channel) {
         return jsonOk({ ok: false, error: "channel required" });
       }
-      const histParams = {
+      const cursor = (json.cursor as string | undefined)?.trim() || undefined;
+      const latest = (json.latest as string | undefined)?.trim() || undefined;
+      const oldest = (json.oldest as string | undefined)?.trim() || undefined;
+      const histParams: Record<string, string | number | undefined> = {
         channel,
-        cursor: json.cursor as string | undefined,
         limit: (json.limit as number) || 50,
         inclusive: "true",
       };
+      if (cursor) histParams.cursor = cursor;
+      if (latest) histParams.latest = latest;
+      if (oldest) histParams.oldest = oldest;
       let data = await slackCall(conn.access_token, "conversations.history", histParams);
       // Canales públicos: a veces aparecen en lista pero el user token no está joined.
       if (data?.ok === false && data?.error === "not_in_channel" && channel.startsWith("C")) {

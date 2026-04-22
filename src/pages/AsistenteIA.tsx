@@ -930,18 +930,18 @@ const AsistenteIA = () => {
             className="shrink-0 border-b border-sky-200/60 px-3 py-2.5 sm:px-4 sm:py-3 dark:border-sky-800/40"
             style={{ background: KAWIIL_AI_HEADER_BG }}
           >
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0 text-white">
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => setShowSidebar(!showSidebar)}
-                className="h-8 w-8 shrink-0 p-0 text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10"
+                className="h-8 w-8 shrink-0 p-0 text-white/90 hover:text-white hover:bg-white/20"
                 aria-label={showSidebar ? "Ocultar panel" : "Mostrar panel"}
               >
                 {showSidebar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
               </Button>
               <span
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white shadow-sm ring-1 ring-white/25"
                 style={{ background: KAWIIL_AI_GRADIENT }}
                 aria-hidden
               >
@@ -949,42 +949,39 @@ const AsistenteIA = () => {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground leading-tight">
+                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight drop-shadow-sm">
                     Kawiil{" "}
-                    <span
-                      className="bg-clip-text text-transparent"
-                      style={{ backgroundImage: KAWIIL_AI_GRADIENT }}
-                    >
+                    <span className="text-white/95 font-extrabold" aria-hidden>
                       AI
                     </span>
                   </h1>
                   <Badge
                     variant="outline"
-                    className="h-4 border-sky-300/70 bg-sky-50/70 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300"
+                    className="h-4 border border-white/40 bg-white/10 px-1.5 text-[9.5px] font-bold uppercase tracking-wider text-white shadow-sm"
                   >
                     v2.4
                   </Badge>
                   {activeProject ? (
-                    <span className="inline-flex max-w-[min(100%,14rem)] items-center gap-1 truncate rounded-full border border-sky-300/70 bg-sky-50/80 px-2 py-0.5 text-[10px] sm:text-[11px] text-sky-700 dark:border-sky-400/40 dark:bg-sky-400/10 dark:text-sky-300">
+                    <span className="inline-flex max-w-[min(100%,14rem)] items-center gap-1 truncate rounded-full border border-white/30 bg-white/10 px-2 py-0.5 text-[10px] sm:text-[11px] text-white">
                       <BrainCircuit className="h-3 w-3 shrink-0" />
                       <span className="truncate">{activeProject.name}</span>
                     </span>
                   ) : (
-                    <span className="rounded-full bg-white/60 px-2 py-0.5 text-[10px] sm:text-[11px] text-muted-foreground dark:bg-white/10">
+                    <span className="rounded-full border border-white/25 bg-white/10 px-2 py-0.5 text-[10px] sm:text-[11px] text-white/95">
                       Asistente interno
                     </span>
                   )}
                 </div>
                 {activeConversationId && displayAgentSession && (
                   <div className="sm:hidden flex items-center justify-between gap-2 mt-1 min-w-0 max-w-full">
-                    <span className="text-[10px] text-muted-foreground truncate min-w-0">
+                    <span className="text-[10px] text-white/90 truncate min-w-0">
                       Agente: {displayAgentSession.task_ref.agent_display_name}
                     </span>
                     <Button
                       type="button"
                       size="sm"
                       variant="secondary"
-                      className="h-7 text-[10px] px-2 shrink-0"
+                      className="h-7 text-[10px] px-2 shrink-0 bg-white/95 text-slate-800 hover:bg-white border-0 shadow-sm"
                       onClick={() => {
                         void openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
                       }}
@@ -998,7 +995,7 @@ const AsistenteIA = () => {
               {activeConversationId && displayAgentSession && (
                 <div className="hidden sm:flex items-center gap-1.5 shrink-0 max-w-[min(100%,14rem)] flex-wrap justify-end">
                   <span
-                    className="text-[9.5px] sm:text-[10px] text-muted-foreground truncate max-w-[7rem] sm:max-w-[10rem]"
+                    className="text-[9.5px] sm:text-[10px] text-white/90 truncate max-w-[7rem] sm:max-w-[10rem] drop-shadow-sm"
                     title={displayAgentSession.task_ref.agent_display_name}
                   >
                     {displayAgentSession.task_ref.agent_display_name}
@@ -1007,7 +1004,7 @@ const AsistenteIA = () => {
                     type="button"
                     size="sm"
                     variant="secondary"
-                    className="h-7 text-[9.5px] sm:text-[10px] px-2"
+                    className="h-7 text-[9.5px] sm:text-[10px] px-2 bg-white/95 text-slate-800 hover:bg-white border-0 shadow-sm"
                     onClick={() => {
                       void openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
                     }}
@@ -1026,7 +1023,7 @@ const AsistenteIA = () => {
                       void openDelegateWithProjectInstructionPrefill();
                     }}
                     disabled={isStreaming || isPreparingDelegate}
-                    className="h-8 shrink-0 gap-1 text-[10px] sm:text-[11px] px-1.5 sm:px-2 text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10"
+                    className="h-8 shrink-0 gap-1 text-[10px] sm:text-[11px] px-1.5 sm:px-2 text-white/95 hover:text-white hover:bg-white/20"
                     title="Abrir delegación; las instrucciones del proyecto se rellenan en el formulario"
                   >
                     <ListChecks className="h-3.5 w-3.5 shrink-0" />
@@ -1038,10 +1035,10 @@ const AsistenteIA = () => {
                     variant="ghost"
                     onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
                     className={cn(
-                      "h-8 shrink-0 gap-1.5 text-[11px]",
+                      "h-8 shrink-0 gap-1.5 text-[11px] text-white/95 hover:text-white",
                       showKnowledge
-                        ? "bg-sky-100/80 text-sky-700 hover:bg-sky-100 dark:bg-sky-400/15 dark:text-sky-300"
-                        : "text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10",
+                        ? "bg-white/25 hover:bg-white/30"
+                        : "hover:bg-white/20",
                     )}
                   >
                     {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}

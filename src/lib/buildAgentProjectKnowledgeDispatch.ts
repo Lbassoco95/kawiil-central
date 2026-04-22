@@ -2,8 +2,9 @@ import type { ChatAttachmentMeta } from "@/hooks/useChat";
 import type { AiProjectDocumentWithFile } from "@/hooks/useAiProjects";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 
-const MAX_KNOWLEDGE_SUPABASE_REFS = 50;
-const MAX_KNOWLEDGE_DROPBOX = 40;
+/** Por tarea, para no forzar a la VM a inyectar decenas de PDFs en un solo prompt (límite ~200k tokens en el modelo). */
+const MAX_KNOWLEDGE_SUPABASE_REFS = 20;
+const MAX_KNOWLEDGE_DROPBOX = 12;
 
 /**
  * Construye referencias que la VM (kawiil-agents) puede usar junto a `ai_project_id`:

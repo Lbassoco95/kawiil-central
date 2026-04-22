@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -88,6 +89,8 @@ type Props = {
    */
   lastReadTs?: string | null;
 };
+
+const ANCHOR_PREFETCH_MAX = 40;
 
 /** Reacciones rápidas inline del toolbar hover (antes del picker completo). */
 const QUICK_REACTION_KEYS = ["thumbsup", "heart", "white_check_mark", "eyes"] as const;
@@ -360,6 +363,7 @@ export function SlackMessageList({
   const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
   const prevLenRef = useRef(0);
   const stickBottomRef = useRef(true);
+  const anchorPrefetchCountRef = useRef(0);
 
   const formatCtx: FormatContext = {
     userMap,
@@ -391,14 +395,19 @@ export function SlackMessageList({
     stickBottomRef.current = true;
   }, [selectedChannelId]);
 
+  useEffect(() => {
+    anchorPrefetchCountRef.current = 0;
+  }, [selectedChannelId, highlightTs]);
+
   useLayoutEffect(() => {
+    if (highlightTs?.trim()) return;
     stickBottomRef.current = true;
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
-  }, [selectedChannelId]);
+  }, [selectedChannelId, highlightTs]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -415,14 +424,37 @@ export function SlackMessageList({
     }
   }, [hasMore, isFetchingMore, onLoadMore]);
 
+  const highlightAnchorInList = useMemo(
+    () => (highlightTs?.trim() ? messages.some((m) => m.ts === highlightTs) : false),
+    [messages, highlightTs],
+  );
+
   useEffect(() => {
-    if (!highlightTs || !messages.length) return;
+    if (!highlightTs?.trim() || !messages.length) return;
     const idSafe = highlightTs.replace(/\./g, "-");
     const t = setTimeout(() => {
       document.getElementById(`slack-msg-${idSafe}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 200);
     return () => clearTimeout(t);
-  }, [highlightTs, messages.length]);
+  }, [highlightTs, messages.length, highlightAnchorInList]);
+
+  /** Mientras haya ancla en la URL y el mensaje no esté en el lote cargado, pide más historial (tope). */
+  useEffect(() => {
+    if (!highlightTs?.trim() || !onLoadMore || !hasMore) return;
+    if (highlightAnchorInList) return;
+    if (isFetchingMore) return;
+    const idSafe = highlightTs.replace(/\./g, "-");
+    if (document.getElementById(`slack-msg-${idSafe}`)) return;
+    if (anchorPrefetchCountRef.current >= ANCHOR_PREFETCH_MAX) return;
+    anchorPrefetchCountRef.current += 1;
+    onLoadMore();
+  }, [
+    highlightTs,
+    highlightAnchorInList,
+    hasMore,
+    isFetchingMore,
+    onLoadMore,
+  ]);
 
   if (isLoading) {
     return (
