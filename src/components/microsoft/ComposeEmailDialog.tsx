@@ -274,7 +274,7 @@ export function ComposeEmailDialog({
     syncDirectoryMutate({ silent: true });
   }, [open, isConnected, syncDirectoryMutate]);
 
-  /** Firma desde perfil Microsoft (/me); Graph no expone la firma HTML de Outlook de forma oficial. */
+  /** Orden: Kawiil (perfil) → inferida (Enviados) → bloque /me; Graph no expone firma OWA. */
   useEffect(() => {
     if (!open || !composeSignature?.html) return;
     const t = window.setTimeout(() => {
@@ -848,7 +848,26 @@ export function ComposeEmailDialog({
 
               <div className="space-y-2 shrink-0">
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>Adjuntos (documentos, imágenes, zip…). La firma del nuevo correo usa tu perfil de Microsoft 365.</span>
+                  <span>
+                    Adjuntos (documentos, imágenes, zip…).{" "}
+                    {(() => {
+                      const s = composeSignature;
+                      if (!s) return "Cargando origen de la firma…";
+                      if (!s.html) return "Conecta Microsoft para añadir firma al redactar.";
+                      if (s.source === "kawiil_profile") {
+                        return "La firma es la que guardaste en la sección de arriba (Correo).";
+                      }
+                      if (s.source === "inferred_from_sent") {
+                        return s.confidence === "low"
+                          ? "La firma se aproxima con tus enviados; revisa o pégala en «Firma de correo»."
+                          : "La firma se aproxima según Enviados (imágenes embebidas pueden faltar).";
+                      }
+                      if (s.source === "microsoft_profile") {
+                        return "La firma se genera con tu perfil M365; para la misma que en Outlook, pégala en «Firma de correo».";
+                      }
+                      return "Se añade firma al abrir el redactor.";
+                    })()}
+                  </span>
                   <label className="inline-flex items-center gap-2 shrink-0">
                     <Switch checked={keepZips} onCheckedChange={setKeepZips} />
                     <span className="text-xs">Mantener .zip</span>

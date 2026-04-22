@@ -1005,12 +1005,20 @@ export function useCreateForwardDraft() {
   });
 }
 
-/** Firma para redactar correo nuevo: perfil Microsoft (/me) + heurística opcional con borrador. */
+export type OutlookComposeSignatureResult = {
+  html: string;
+  source?: "kawiil_profile" | "inferred_from_sent" | "microsoft_profile";
+  confidence?: "high" | "low";
+  displayName?: string;
+  mail?: string;
+};
+
+/** Firma para redactar correo nuevo: Kawiil (DB) → inferida (Enviados) → perfil /me (Graph no expone firma OWA). */
 export function useOutlookComposeSignature(enabled: boolean) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ["outlook-compose-signature"],
+    queryKey: ["outlook-compose-signature", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "get-email-signature-html" },
@@ -1018,10 +1026,10 @@ export function useOutlookComposeSignature(enabled: boolean) {
       if (isNotConnectedError(data, error)) return null;
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      return data as { html: string; source?: string; displayName?: string; mail?: string };
+      return data as OutlookComposeSignatureResult;
     },
     enabled: !!user && enabled,
-    staleTime: 60 * 60 * 1000,
+    staleTime: 24 * 60 * 60 * 1000,
     retry: 1,
   });
 }
@@ -1085,6 +1093,7 @@ export function useSendDraft() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
       queryClient.invalidateQueries({ queryKey: ["email-conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["outlook-compose-signature"] });
       invalidateInboxUnreadAndMailFolders(queryClient);
       toast.success("Correo enviado");
     },
@@ -1377,6 +1386,7 @@ export function useSendNewEmail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["outlook-compose-signature"] });
       toast.success("Correo enviado");
     },
     onError: (err: Error) => toast.error("Error al enviar correo: " + getActionableError(err)),

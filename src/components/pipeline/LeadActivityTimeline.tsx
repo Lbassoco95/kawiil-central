@@ -16,6 +16,7 @@ import {
   Inbox,
 } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 
 interface Activity {
   id: string;
@@ -192,7 +193,9 @@ export function LeadActivityTimeline({ activities, tasks }: Props) {
                     </span>
                   </div>
                   {description && (
-                    <p className="text-xs text-muted-foreground mt-0.5 break-words">{description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 break-words">
+                      {renderTextWithMentionHighlights(description, `pipe-act-${a.id}`)}
+                    </p>
                   )}
                 </div>
               </div>

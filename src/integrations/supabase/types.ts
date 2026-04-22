@@ -3516,6 +3516,7 @@ export type Database = {
           notify_slack_vip: boolean
           onboarding_status: string
           organization_id: string
+          outlook_signature_html: string | null
           phone: string | null
           proactive_ai_notifications: boolean
           reminders_hourly_digest: boolean
@@ -3547,6 +3548,7 @@ export type Database = {
           notify_slack_vip?: boolean
           onboarding_status?: string
           organization_id: string
+          outlook_signature_html?: string | null
           phone?: string | null
           proactive_ai_notifications?: boolean
           reminders_hourly_digest?: boolean
@@ -3578,6 +3580,7 @@ export type Database = {
           notify_slack_vip?: boolean
           onboarding_status?: string
           organization_id?: string
+          outlook_signature_html?: string | null
           phone?: string | null
           proactive_ai_notifications?: boolean
           reminders_hourly_digest?: boolean

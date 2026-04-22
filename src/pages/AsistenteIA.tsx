@@ -6,7 +6,11 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
-import { useChat, type ChatAgentTaskRef } from "@/hooks/useChat";
+import {
+  useChat,
+  type ChatAgentTaskRef,
+  syntheticChatAgentSessionFromMessages,
+} from "@/hooks/useChat";
 import { useAiProjects, useAiProjectDocuments, useAiProjectMembers } from "@/hooks/useAiProjects";
 import { useAiSharedMemories } from "@/hooks/useAiSharedMemories";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
@@ -23,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Send, Sparkles, Loader2, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight,
-  BrainCircuit, Settings2, FileText, UserPlus, Copy, MessageSquare,
+  BrainCircuit, Settings2, FileText, UserPlus, Copy, MessageSquare, ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -59,9 +63,11 @@ import {
   KAWIIL_AI_HEADER_BG,
   KAWIIL_AI_SOFT_BG,
 } from "@/lib/kawiilAi";
+import { buildProjectKnowledgeForAgentDispatch } from "@/lib/buildAgentProjectKnowledgeDispatch";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 import type { AgentTaskDeliverableLink } from "@/lib/agentTaskResult";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 
 /** Si `storage.upload` no responde, el botón "Delegar" quedaría en spinner indefinidamente. */
 const DELEGATE_UPLOAD_TIMEOUT_MS = 150_000;
@@ -269,6 +275,18 @@ const AsistenteIA = () => {
     () => aiProjects.find((p) => p.id === activeAiProjectId),
     [aiProjects, activeAiProjectId]
   );
+
+  /** Cubre hilo con tareas de agente aunque falle `agent_session` en conversación. */
+  const displayAgentSession = useMemo(
+    () => agentSession ?? syntheticChatAgentSessionFromMessages(messages),
+    [agentSession, messages],
+  );
+
+  /** Rutas de Storage y metadatos Dropbox de documentos de Conocimiento → dispatch a la VM. */
+  const projectKnowledgeForAgent = useMemo(() => {
+    if (!activeAiProjectId) return null;
+    return buildProjectKnowledgeForAgentDispatch(projectDocs);
+  }, [activeAiProjectId, projectDocs]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -517,6 +535,15 @@ const AsistenteIA = () => {
     [isStreaming],
   );
 
+  /** Abre el modal de delegar con las instrucciones del proyecto pre-rellenadas (si existen). */
+  const openDelegateWithProjectInstructionPrefill = useCallback(async () => {
+    if (isStreaming) return;
+    if (!activeProject?.instructions?.trim()) {
+      toast.info("Añade instrucciones al proyecto en Conocimiento o edita el proyecto para reenviarlas al agente.");
+    }
+    await openDelegateModal();
+  }, [isStreaming, activeProject?.instructions, openDelegateModal]);
+
   const handleAgentDeliverableLinks = useCallback((taskId: string, links: AgentTaskDeliverableLink[]) => {
     setAgentTaskDeliverables((prev) => {
       const prevL = prev[taskId];
@@ -746,7 +773,7 @@ const AsistenteIA = () => {
     content: string,
     role: string,
     attachments?: { name: string; mime_type?: string }[],
-    options?: { isError?: boolean }
+    options?: { isError?: boolean; messageId?: string }
   ) => {
     if (role === "assistant" && options?.isError) {
       return (
@@ -756,9 +783,15 @@ const AsistenteIA = () => {
       );
     }
     if (role === "user") {
+      const keyP = `ai-user-${options?.messageId ?? "m"}`;
       return (
         <div className="space-y-2">
-          <p className="text-sm whitespace-pre-wrap">{content}</p>
+          <p className="text-sm whitespace-pre-wrap">
+            {renderTextWithMentionHighlights(content, keyP, {
+              mentionClassName:
+                "font-bold text-primary-foreground underline decoration-primary-foreground/70 underline-offset-2",
+            })}
+          </p>
           {attachments && attachments.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {attachments.map((a, idx) => (
@@ -938,22 +971,89 @@ const AsistenteIA = () => {
                 <p className="hidden sm:block mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
                   Chat con contexto de proyectos, documentos y memorias del equipo.
                 </p>
+                {(activeProject || displayAgentSession) && (
+                  <p className="hidden md:block text-[10px] text-muted-foreground/80 mt-0.5 max-w-[42rem] leading-snug">
+                    {activeProject
+                      ? "Kawiil usa RAG, memorias del proyecto e historial de este hilo. Al delegar, la VM (kawiil-agents) recibe "
+                      : "Kawiil consulta RAG e historial de este hilo. Al delegar, la VM (kawiil-agents) recibe "}
+                    <span className="text-foreground/80">instrucciones</span> e{" "}
+                    <span className="text-foreground/80">input_context</span> según lo soportado en el servidor; no
+                    replica automáticamente toda la memoria del chat.
+                  </p>
+                )}
+                {activeConversationId && displayAgentSession && (
+                  <div className="sm:hidden flex items-center justify-between gap-2 mt-1 min-w-0 max-w-full">
+                    <span className="text-[10px] text-muted-foreground truncate min-w-0">
+                      Agente: {displayAgentSession.task_ref.agent_display_name}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 text-[10px] px-2 shrink-0"
+                      onClick={() => {
+                        void openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
+                      }}
+                      disabled={isStreaming || isPreparingDelegate}
+                    >
+                      Continuar
+                    </Button>
+                  </div>
+                )}
               </div>
+              {activeConversationId && displayAgentSession && (
+                <div className="hidden sm:flex items-center gap-1.5 shrink-0 max-w-[min(100%,14rem)] flex-wrap justify-end">
+                  <span
+                    className="text-[9.5px] sm:text-[10px] text-muted-foreground truncate max-w-[7rem] sm:max-w-[10rem]"
+                    title={displayAgentSession.task_ref.agent_display_name}
+                  >
+                    {displayAgentSession.task_ref.agent_display_name}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 text-[9.5px] sm:text-[10px] px-2"
+                    onClick={() => {
+                      void openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
+                    }}
+                    disabled={isStreaming || isPreparingDelegate}
+                  >
+                    Continuar
+                  </Button>
+                </div>
+              )}
               {activeProject && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
-                  className={cn(
-                    "h-8 shrink-0 gap-1.5 text-[11px]",
-                    showKnowledge
-                      ? "bg-sky-100/80 text-sky-700 hover:bg-sky-100 dark:bg-sky-400/15 dark:text-sky-300"
-                      : "text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10",
-                  )}
-                >
-                  {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                  <span className="hidden sm:inline">Conocimiento</span>
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      void openDelegateWithProjectInstructionPrefill();
+                    }}
+                    disabled={isStreaming || isPreparingDelegate}
+                    className="h-8 shrink-0 gap-1 text-[10px] sm:text-[11px] px-1.5 sm:px-2 text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10"
+                    title="Delegar con instrucciones del proyecto en el cuerpo de la petición a la VM"
+                  >
+                    <ListChecks className="h-3.5 w-3.5 shrink-0" />
+                    <span className="hidden sm:inline">Próxima tarea (instrucciones)</span>
+                    <span className="sm:hidden">Instrucciones</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { setShowKnowledge(!showKnowledge); setActiveArtifactId(null); }}
+                    className={cn(
+                      "h-8 shrink-0 gap-1.5 text-[11px]",
+                      showKnowledge
+                        ? "bg-sky-100/80 text-sky-700 hover:bg-sky-100 dark:bg-sky-400/15 dark:text-sky-300"
+                        : "text-muted-foreground hover:bg-white/60 hover:text-foreground dark:hover:bg-white/10",
+                    )}
+                  >
+                    {showKnowledge ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
+                    <span className="hidden sm:inline">Conocimiento</span>
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -1066,6 +1166,7 @@ const AsistenteIA = () => {
                               <div className="rounded-2xl px-4 py-3 bg-secondary/40 border border-border/40">
                                 {renderMessageContent(msg.content, "assistant", msg.attachments, {
                                   isError: msg.isError,
+                                  messageId: msg.id,
                                 })}
                               </div>
                               {msg.id && !msg.isError && (
@@ -1169,6 +1270,7 @@ const AsistenteIA = () => {
                           >
                             {renderMessageContent(msg.content, msg.role, msg.attachments, {
                               isError: msg.isError,
+                              messageId: msg.id,
                             })}
                             {msg.role === "assistant" &&
                               msg.activityLog &&
@@ -1236,91 +1338,100 @@ const AsistenteIA = () => {
             )}
           </div>
 
-          {pdfIndexingStatus && (
-            <div className="shrink-0 border-t border-sky-300/40 bg-sky-50/60 px-4 py-2 dark:border-sky-800/40 dark:bg-sky-950/30">
-              <div className="max-w-3xl mx-auto flex items-center gap-2 text-[11px] text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600 dark:text-sky-400 shrink-0" />
-                <span className="min-w-0">
-                  {pdfIndexingStatus.phase === "extracting"
-                    ? `Leyendo «${pdfIndexingStatus.fileName}» para indexar búsqueda semántica…`
-                    : (() => {
-                        const s = pdfIndexingStatus;
-                        const frag =
-                          s.lastBatchChunks != null && s.lastBatchChunks > 0
-                            ? ` · último lote: ${s.lastBatchChunks} fragmentos`
-                            : "";
-                        return `Indexando «${s.fileName}»: página ${s.pageDone} de ${s.totalPages}${frag}. Sigue en segundo plano; puedes chatear. La búsqueda semántica mejora al terminar.`;
-                      })()}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {agentSession && (
-            <div
-              className="shrink-0 border-t border-sky-200/50 px-4 py-2.5 dark:border-sky-800/30"
-              style={{ background: KAWIIL_AI_SOFT_BG }}
-            >
-              <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-xl border border-sky-200/60 dark:border-sky-800/40 bg-card/80 px-3 py-2.5 shadow-sm">
-                <div className="flex items-start gap-2 min-w-0 text-[11px] sm:text-xs text-foreground/90 leading-snug">
-                  <MessageSquare className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400 mt-0.5" />
-                  {agentSession.last_interaction === "delegate" ? (
-                    <p>
-                      Tarea reciente con{" "}
-                      <span className="font-semibold text-foreground">
-                        {agentSession.task_ref.agent_display_name}
-                      </span>
-                      . Puedes volver al asistente Kawiil o seguir con el mismo agente; el hilo y la memoria del proyecto
-                      se guardan.
-                    </p>
-                  ) : (
-                    <p>
-                      Hablando con el asistente Kawiil. Puedes{" "}
-                      <span className="font-medium">continuar con {agentSession.task_ref.agent_display_name}</span> para
-                      una nueva tarea ligada a la anterior.
-                    </p>
-                  )}
+          <div
+            className="shrink-0 sticky bottom-0 z-20 border-t border-sky-200/50 dark:border-sky-800/30"
+            style={{
+              background: KAWIIL_AI_SOFT_BG,
+              boxShadow: "0 -8px 28px rgba(15, 23, 42, 0.07)",
+            }}
+          >
+            {pdfIndexingStatus && (
+              <div className="shrink-0 border-b border-sky-300/40 bg-sky-50/60 px-4 py-2 dark:border-sky-800/40 dark:bg-sky-950/30">
+                <div className="max-w-3xl mx-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600 dark:text-sky-400 shrink-0" />
+                  <span className="min-w-0">
+                    {pdfIndexingStatus.phase === "extracting"
+                      ? `Leyendo «${pdfIndexingStatus.fileName}» para indexar búsqueda semántica…`
+                      : (() => {
+                          const s = pdfIndexingStatus;
+                          const frag =
+                            s.lastBatchChunks != null && s.lastBatchChunks > 0
+                              ? ` · último lote: ${s.lastBatchChunks} fragmentos`
+                              : "";
+                          return `Indexando «${s.fileName}»: página ${s.pageDone} de ${s.totalPages}${frag}. Sigue en segundo plano; puedes chatear. La búsqueda semántica mejora al terminar.`;
+                        })()}
+                  </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="sm"
-                    className="h-8 text-xs"
-                    style={{ background: KAWIIL_AI_GRADIENT }}
-                    onClick={() => {
-                      openFollowUpWithAgent(agentSession.task_ref, "continuation");
-                    }}
-                    disabled={isStreaming || isPreparingDelegate}
-                  >
-                    Continuar con {agentSession.task_ref.agent_display_name}
-                  </Button>
-                  {agentSession.last_interaction === "delegate" && (
+              </div>
+            )}
+
+            {displayAgentSession && (
+              <div className="shrink-0 px-4 py-2.5">
+                <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 rounded-xl border border-sky-200/60 dark:border-sky-800/40 bg-card/80 px-3 py-2.5 shadow-sm">
+                  <div className="flex items-start gap-2 min-w-0 text-[11px] sm:text-xs text-foreground/90 leading-snug">
+                    <MessageSquare className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400 mt-0.5" />
+                    <div className="space-y-1 min-w-0">
+                      {displayAgentSession.last_interaction === "delegate" ? (
+                        <p>
+                          Tarea reciente con{" "}
+                          <span className="font-semibold text-foreground">
+                            {displayAgentSession.task_ref.agent_display_name}
+                          </span>
+                          . Puedes volver al asistente Kawiil o seguir con el mismo agente; el hilo y la memoria del
+                          proyecto se guardan.
+                        </p>
+                      ) : (
+                        <p>
+                          Hablando con el asistente Kawiil. Puedes{" "}
+                          <span className="font-medium">
+                            continuar con {displayAgentSession.task_ref.agent_display_name}
+                          </span>{" "}
+                          para una nueva tarea ligada a la anterior.
+                        </p>
+                      )}
+                      <p className="text-[9.5px] text-muted-foreground/90 leading-snug">
+                        Kawiil usa RAG y memoria del hilo aquí; el agente en VM recibe lo que envía la edge (instrucciones,
+                        input_context), no una copia íntegra del chat.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="default"
                       size="sm"
-                      className="h-8 text-xs border-sky-200/70 dark:border-sky-800/50"
+                      className="h-8 text-xs"
+                      style={{ background: KAWIIL_AI_GRADIENT }}
                       onClick={() => {
-                        returnToKawiilAssistant();
-                        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                        setTimeout(() => textareaRef.current?.focus(), 200);
+                        openFollowUpWithAgent(displayAgentSession.task_ref, "continuation");
                       }}
+                      disabled={isStreaming || isPreparingDelegate}
                     >
-                      Volver al asistente
+                      Continuar con {displayAgentSession.task_ref.agent_display_name}
                     </Button>
-                  )}
+                    {displayAgentSession.last_interaction === "delegate" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs border-sky-200/70 dark:border-sky-800/50"
+                        onClick={() => {
+                          returnToKawiilAssistant();
+                          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                          setTimeout(() => textareaRef.current?.focus(), 200);
+                        }}
+                      >
+                        Volver al asistente
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Input */}
-          <div
-            className="border-t border-sky-200/50 px-4 py-3 dark:border-sky-800/30"
-            style={{ background: KAWIIL_AI_SOFT_BG }}
-          >
-            <div className="max-w-3xl mx-auto flex flex-col gap-2">
+            {/* Input */}
+            <div className="px-4 py-3">
+              <div className="max-w-3xl mx-auto flex flex-col gap-2">
               <ChatAttachmentChips
                 files={pendingFiles}
                 disabled={isStreaming}
@@ -1340,7 +1451,7 @@ const AsistenteIA = () => {
                   onChange={handleTextareaChange}
                   onKeyDown={handleKeyDown}
                   placeholder={
-                    agentSession?.last_interaction === "delegate"
+                    displayAgentSession?.last_interaction === "delegate"
                       ? "Escribe al asistente Kawiil o usa «Continuar con el agente» arriba…"
                       : "Escribe tu mensaje o adjunta archivos…"
                   }
@@ -1377,27 +1488,28 @@ const AsistenteIA = () => {
                   )}
                 </Button>
               </div>
-            </div>
-            {activeAiProjectId && (
-              <div className="max-w-3xl mx-auto flex items-center gap-2 mt-2">
-                <Checkbox
-                  id="link-project-files"
-                  checked={linkFilesToProject}
-                  onCheckedChange={(c) => setLinkFilesToProject(!!c)}
-                  disabled={isStreaming}
-                />
-                <Label htmlFor="link-project-files" className="text-[10px] text-muted-foreground cursor-pointer font-normal">
-                  También vincular adjuntos al conocimiento del proyecto (documentos Kawiil)
-                </Label>
               </div>
-            )}
-            <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
-              Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
-              {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
-              MB total. Tras la respuesta de la IA, los PDF se indexan en segundo plano para búsqueda semántica en
-              mensajes siguientes (puedes seguir escribiendo mientras indexa). Imágenes/Excel u otros sí se procesan en
-              el mensaje. Kawiil AI puede cometer errores.
-            </p>
+              {activeAiProjectId && (
+                <div className="max-w-3xl mx-auto flex items-center gap-2 mt-2">
+                  <Checkbox
+                    id="link-project-files"
+                    checked={linkFilesToProject}
+                    onCheckedChange={(c) => setLinkFilesToProject(!!c)}
+                    disabled={isStreaming}
+                  />
+                  <Label htmlFor="link-project-files" className="text-[10px] text-muted-foreground cursor-pointer font-normal">
+                    También vincular adjuntos al conocimiento del proyecto (documentos Kawiil)
+                  </Label>
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground text-center mt-2 px-1">
+                Adjuntos: imágenes, PDF, Excel, texto, SQLite — hasta {MAX_CHAT_ATTACHMENT_FILES} archivos,{" "}
+                {formatMb(MAX_CHAT_ATTACHMENT_BYTES_PER_FILE)} MB por archivo, {formatMb(MAX_CHAT_ATTACHMENT_BATCH_BYTES)}{" "}
+                MB total. Tras la respuesta de la IA, los PDF se indexan en segundo plano para búsqueda semántica en
+                mensajes siguientes (puedes seguir escribiendo mientras indexa). Imágenes/Excel u otros sí se procesan
+                en el mensaje. Kawiil AI puede cometer errores.
+              </p>
+            </div>
           </div>
         </FileDropzone>
 
@@ -1592,6 +1704,8 @@ const AsistenteIA = () => {
         previousTaskId={delegatePreviousTaskId}
         followUpKind={delegateFollowUpKind}
         onDelegated={handleAgentDelegated}
+        projectInstructions={activeProject?.instructions ?? null}
+        projectKnowledgeForAgent={projectKnowledgeForAgent}
       />
     </AppLayout>
   );

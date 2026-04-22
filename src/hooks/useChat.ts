@@ -59,6 +59,30 @@ export function parseChatAgentSession(raw: unknown): ChatAgentSession | null {
   return { task_ref: ref, last_interaction: li };
 }
 
+/** Última tarea de agente en el hilo, si en DB aún no hay `agent_session` o falló el UPDATE. */
+export function syntheticChatAgentSessionFromMessages(messages: ChatMessage[]): ChatAgentSession | null {
+  let lastRef: ChatAgentTaskRef | null = null;
+  let lastRefIndex = -1;
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].agent_task_ref) {
+      lastRef = messages[i].agent_task_ref as ChatAgentTaskRef;
+      lastRefIndex = i;
+    }
+  }
+  if (!lastRef) return null;
+  let userAfter = false;
+  for (let j = lastRefIndex + 1; j < messages.length; j++) {
+    if (messages[j].role === "user" && (messages[j].content?.trim() || (messages[j].attachments && messages[j].attachments.length > 0))) {
+      userAfter = true;
+      break;
+    }
+  }
+  return {
+    task_ref: lastRef,
+    last_interaction: userAfter ? "chat" : "delegate",
+  };
+}
+
 export interface ChatMessage {
   id?: string;
   role: "user" | "assistant";
@@ -382,32 +406,54 @@ export function useChat() {
       return;
     }
     const rows = (data as any[]) || [];
-    setMessages(
-      rows.map((r) => ({
-        id: r.id,
-        role: r.role as "user" | "assistant",
-        content: r.content,
-        attachments: Array.isArray(r.attachments) && r.attachments.length ? r.attachments : undefined,
-        agent_task_ref: (r as any).agent_task_ref ?? null,
-      }))
-    );
+    const msgRows: ChatMessage[] = rows.map((r) => ({
+      id: r.id,
+      role: r.role as "user" | "assistant",
+      content: r.content,
+      attachments: Array.isArray(r.attachments) && r.attachments.length ? r.attachments : undefined,
+      agent_task_ref: (r as any).agent_task_ref ?? null,
+    }));
+    setMessages(msgRows);
     setActiveConversationId(conversationId);
     setPdfIndexingStatus(null);
 
-    const { data: conv } = await supabase
+    let conv: { ai_project_id?: string | null; agent_session?: unknown } | null = null;
+    const { data: convData, error: convError } = await supabase
       .from("chat_conversations" as any)
       .select("ai_project_id, agent_session")
       .eq("id", conversationId)
-      .single();
-    if (conv) {
-      setActiveAiProjectId((conv as any).ai_project_id || null);
-      const parsed = parseChatAgentSession((conv as { agent_session?: unknown }).agent_session);
-      setAgentSession(parsed);
-      agentSessionRef.current = parsed;
+      .maybeSingle();
+
+    if (convError) {
+      const em = (convError as { message?: string; code?: string }).message || "";
+      const code = (convError as { code?: string }).code;
+      const missingCol =
+        code === "PGRST204" || /agent_session|column|does not exist/i.test(em);
+      if (missingCol) {
+        const { data: row2, error: e2 } = await supabase
+          .from("chat_conversations" as any)
+          .select("ai_project_id")
+          .eq("id", conversationId)
+          .maybeSingle();
+        if (!e2 && row2) conv = row2 as typeof conv;
+        else if (e2) console.warn("loadConversation: fallback ai_project_id", e2.message);
+      } else {
+        console.warn("loadConversation: chat_conversations", convError);
+      }
     } else {
-      setAgentSession(null);
-      agentSessionRef.current = null;
+      conv = (convData as typeof conv) ?? null;
     }
+
+    if (conv) {
+      setActiveAiProjectId(conv.ai_project_id || null);
+    } else {
+      setActiveAiProjectId(null);
+    }
+    const fromDb = conv ? parseChatAgentSession((conv as { agent_session?: unknown }).agent_session) : null;
+    const fromMsgs = syntheticChatAgentSessionFromMessages(msgRows);
+    const effective = fromDb ?? fromMsgs;
+    setAgentSession(effective);
+    agentSessionRef.current = effective;
   }, []);
 
   const createConversation = useCallback(
@@ -783,15 +829,21 @@ export function useChat() {
           .catch(() => {});
       }
 
-      const sess0 = agentSessionRef.current;
-      if (sess0 && sess0.last_interaction !== "chat") {
-        const next: ChatAgentSession = { ...sess0, last_interaction: "chat" };
-        setAgentSession(next);
-        agentSessionRef.current = next;
-        void supabase
-          .from("chat_conversations" as any)
-          .update({ agent_session: next as any, updated_at: new Date().toISOString() } as any)
-          .eq("id", convId);
+      const fromSyn = syntheticChatAgentSessionFromMessages(allMessages);
+      if (fromSyn) {
+        const cur = agentSessionRef.current;
+        const needsUpdate =
+          !cur ||
+          cur.last_interaction !== fromSyn.last_interaction ||
+          cur.task_ref.task_id !== fromSyn.task_ref.task_id;
+        if (needsUpdate) {
+          setAgentSession(fromSyn);
+          agentSessionRef.current = fromSyn;
+          void supabase
+            .from("chat_conversations" as any)
+            .update({ agent_session: fromSyn as any, updated_at: new Date().toISOString() } as any)
+            .eq("id", convId);
+        }
       }
 
       const refsForAiChat: ChatAttachmentMeta[] = [...savedMeta];
@@ -1205,8 +1257,12 @@ export function useChat() {
 
   const returnToKawiilAssistant = useCallback(() => {
     if (!activeConversationId) return;
-    const s = agentSessionRef.current;
-    if (!s || s.last_interaction === "chat") return;
+    let s = agentSessionRef.current;
+    if (!s) {
+      s = syntheticChatAgentSessionFromMessages(messages) ?? null;
+      if (!s) return;
+    }
+    if (s.last_interaction === "chat") return;
     const next: ChatAgentSession = { ...s, last_interaction: "chat" };
     setAgentSession(next);
     agentSessionRef.current = next;
@@ -1214,7 +1270,7 @@ export function useChat() {
       .from("chat_conversations" as any)
       .update({ agent_session: next as any, updated_at: new Date().toISOString() } as any)
       .eq("id", activeConversationId);
-  }, [activeConversationId]);
+  }, [activeConversationId, messages]);
 
   const startNewChat = useCallback(() => {
     setActiveConversationId(null);

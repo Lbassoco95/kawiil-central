@@ -424,6 +424,80 @@ async function syncProfilePhotoFor(
   return { url, source: "microsoft", contentType };
 }
 
+/**
+ * Firma en “Nuevo correo”: Microsoft Graph no expone el HTML de firma de Outlook/OWA de forma oficial.
+ * Orden aplicado en get-email-signature-html: 1) columna Kawiil (profiles) 2) inferencia Enviados 3) /me
+ */
+function stripQuotedThreadFromBodyHtml(html: string): string {
+  if (!html || html.length < 24) return html;
+  const lower = html.toLowerCase();
+  const markers = [
+    'id="divrplyfwdmsg"',
+    "id='divrplyfwdmsg'",
+    "id=\"divrplyfwdmsg\"",
+    "-----original message-----",
+    "-----mensaje original-----",
+    'class="gmail_quote"',
+    "class='gmail_quote'",
+  ];
+  let cut = html.length;
+  for (const m of markers) {
+    const idx = lower.indexOf(m);
+    if (idx >= 0 && idx < cut) cut = idx;
+  }
+  return cut < html.length && cut > 12 ? html.slice(0, cut) : html;
+}
+
+function inferSignatureFromSentBodies(
+  contents: string[],
+): { html: string; confidence: "high" | "low" } | null {
+  if (contents.length < 2) return null;
+  const stripped = contents.map(stripQuotedThreadFromBodyHtml);
+  const tails = stripped.map((s) => s.slice(-Math.min(5000, Math.max(0, s.length))));
+  for (let len = 2000; len >= 120; len -= 40) {
+    for (const t of tails) {
+      if (t.length < len) continue;
+      const end = t.slice(-len);
+      if (end.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").trim().length < 28) continue;
+      const n = tails.filter((x) => x.endsWith(end)).length;
+      if (n >= 2) {
+        const hasContact = /mailto:|@[a-z0-9.\-]+\.[a-z]{2,}/i.test(end);
+        const html = end.trim().startsWith("<") ? end.trim() : `<p>${end.trim()}</p>`;
+        return { html, confidence: hasContact ? "high" : "low" };
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchRecentSentMessageBodies(
+  accessToken: string,
+  max: number,
+): Promise<string[]> {
+  const path =
+    `/me/mailFolders/sentitems/messages?` +
+    `$top=${max}` +
+    `&$orderby=createdDateTime%20desc` +
+    `&$select=body,subject`;
+  let data: { value?: Array<{ body?: { content?: string; contentType?: string } }> };
+  try {
+    data = (await graphRequest(accessToken, path, {
+      headers: GRAPH_MAIL_PREFER_IMMUTABLE,
+    })) as { value?: Array<{ body?: { content?: string; contentType?: string } }> };
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const m of data.value || []) {
+    const ct = String(m?.body?.contentType || "").toLowerCase();
+    const c = m?.body?.content;
+    if (typeof c !== "string" || c.length < 40) continue;
+    if (ct.includes("text") && !ct.includes("html")) continue;
+    out.push(c);
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -1228,8 +1302,8 @@ Deno.serve(async (req) => {
       }
 
       /**
-       * Firma para “Nuevo correo”: Graph no expone la firma HTML de Outlook de forma oficial.
-       * Solo GET /me (perfil Microsoft). No creamos borradores aquí (evita 400/500 y confusión con otras acciones).
+       * Firma para “Nuevo correo”.
+       * Graph no expone el HTML de firma de Outlook/OWA; orden: Kawiil (DB) → inferida (Enviados) → /me
        */
       case "get-email-signature-html": {
         const escapeHtml = (s: string) =>
@@ -1238,6 +1312,31 @@ Deno.serve(async (req) => {
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;");
+
+        const { data: profileRow, error: profileSigErr } = await supabaseAdmin
+          .from("profiles")
+          .select("outlook_signature_html")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (!profileSigErr && profileRow) {
+          const manual = String((profileRow as { outlook_signature_html?: string }).outlook_signature_html || "")
+            .trim();
+          if (manual) {
+            result = { html: manual, source: "kawiil_profile" };
+            break;
+          }
+        }
+
+        const sentBodies = await fetchRecentSentMessageBodies(accessToken, 8);
+        const inferred = inferSignatureFromSentBodies(sentBodies);
+        if (inferred) {
+          result = {
+            html: inferred.html,
+            source: "inferred_from_sent",
+            confidence: inferred.confidence,
+          };
+          break;
+        }
 
         const me = await graphRequest(
           accessToken,

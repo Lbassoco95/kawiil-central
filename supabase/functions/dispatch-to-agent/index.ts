@@ -58,6 +58,8 @@ function jsonResponse(payload: unknown, status = 200): Response {
  * - include_conversation_excerpt: si true, la VM puede solicitar a Supabase un extracto de mensajes memorias
  * - previous_task_id: tarea de agente previa (segunda búsqueda / seguimiento)
  * - follow_up_kind: "retry" | "continuation" (metadata opcional)
+ * - knowledge_supabase_ref_count: número de refs de documentos de proyecto (bucket `documents`) incluidas en `attachment_refs`
+ * - knowledge_dropbox_documents: [{ document_id, name, external_path }] — enlaces a Dropbox (sin archivo en Storage)
  * La edge no interpreta el contenido; solo valida y reenvía.
  */
 interface DispatchBody {

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Command,
@@ -30,6 +31,9 @@ import { useAgentList, type Agent } from "@/hooks/useAgentList";
 import { useClients } from "@/hooks/useClients";
 import type { Client } from "@/hooks/useClients";
 import type { ChatAttachmentMeta } from "@/hooks/useChat";
+import {
+  mergeAgentAttachmentRefs,
+} from "@/lib/buildAgentProjectKnowledgeDispatch";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
@@ -72,6 +76,21 @@ export interface DelegateToAgentDialogProps {
   /** Tipo de seguimiento (metadata para la VM). */
   followUpKind?: "retry" | "continuation" | null;
 
+  /**
+   * Instrucciones del proyecto IA; se rellenan al abrir el modal y se envían
+   * en el body como `instructions` a la VM (kawiil-agents), además de lo que ya vaya en el chat.
+   */
+  projectInstructions?: string | null;
+
+  /**
+   * Documentos del panel Conocimiento (proyecto): rutas de Storage y/o metadatos Dropbox
+   * para que la VM no dependa solo de adjuntos del chat.
+   */
+  projectKnowledgeForAgent?: {
+    supabaseRefs: ChatAttachmentMeta[];
+    dropboxDocuments: { document_id: string; name: string; external_path: string }[];
+  } | null;
+
   /** Tras un dispatch exitoso desde la VM (vía edge `dispatch-to-agent`). */
   onDelegated: (ref: {
     task_id: string;
@@ -101,6 +120,8 @@ const GROUP_LABELS: Record<AgentGroupKey, string> = {
   INVESTIGACION_ANALISIS: "Investigación y Análisis",
   OTROS: "Otros",
 };
+
+const MAX_DELEGATE_INSTRUCTIONS = 12_000;
 
 const GROUP_ORDER: AgentGroupKey[] = [
   "LEGAL",
@@ -153,6 +174,8 @@ export function DelegateToAgentDialog({
   aiProjectId = null,
   previousTaskId = null,
   followUpKind = null,
+  projectInstructions = null,
+  projectKnowledgeForAgent = null,
   onDelegated,
 }: DelegateToAgentDialogProps) {
   const { data: clients = [], isLoading: clientsLoading } = useClients();
@@ -167,6 +190,7 @@ export function DelegateToAgentDialog({
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false);
   const [agentPopoverOpen, setAgentPopoverOpen] = useState(false);
+  const [agentInstructions, setAgentInstructions] = useState("");
 
   const agentList = useAgentList(selectedClientId);
 
@@ -179,7 +203,8 @@ export function DelegateToAgentDialog({
     setTitle((defaultTitle ?? "").trim().slice(0, 200));
     setClientPopoverOpen(false);
     setAgentPopoverOpen(false);
-  }, [isOpen, defaultClientId, defaultTitle, defaultAgentTemplateId]);
+    setAgentInstructions((projectInstructions ?? "").trim());
+  }, [isOpen, defaultClientId, defaultTitle, defaultAgentTemplateId, projectInstructions]);
 
   const handleClientSelect = (id: string | null) => {
     setSelectedClientId((prev) => {
@@ -197,6 +222,10 @@ export function DelegateToAgentDialog({
     () => agentList.agents.find((a) => a.template_id === selectedAgentId),
     [agentList.agents, selectedAgentId],
   );
+
+  const knowledgeSupabaseRefs = projectKnowledgeForAgent?.supabaseRefs ?? [];
+  const knowledgeDropbox = projectKnowledgeForAgent?.dropboxDocuments ?? [];
+  const knowledgeTotalCount = knowledgeSupabaseRefs.length + knowledgeDropbox.length;
 
   const canSubmit =
     selectedAgentId !== null &&
@@ -218,10 +247,15 @@ export function DelegateToAgentDialog({
     setDispatchError(null);
 
     try {
+      const kConn = projectKnowledgeForAgent;
+      const kSupa = kConn?.supabaseRefs ?? [];
+      const fromChat = (attachments ?? []) as ChatAttachmentMeta[];
+      const mergedAttachmentRefs = mergeAgentAttachmentRefs(kSupa, fromChat);
+
       const body: Record<string, unknown> = {
         agent_id: agent.template_id,
         title: title.trim(),
-        attachment_refs: attachments ?? [],
+        attachment_refs: mergedAttachmentRefs,
       };
 
       if (selectedClientId) {
@@ -233,12 +267,23 @@ export function DelegateToAgentDialog({
       if (aiProjectId) ctx.ai_project_id = aiProjectId;
       /** Indicación para la VM: puede adjuntar extracto del hilo / memorias del proyecto (contrato kawiil-agents). */
       ctx.include_conversation_excerpt = true;
+      if (kSupa.length) {
+        ctx.knowledge_supabase_ref_count = kSupa.length;
+      }
+      if (kConn?.dropboxDocuments && kConn.dropboxDocuments.length > 0) {
+        ctx.knowledge_dropbox_documents = kConn.dropboxDocuments;
+      }
       if (previousTaskId) {
         ctx.previous_task_id = previousTaskId;
         if (followUpKind) ctx.follow_up_kind = followUpKind;
       }
       if (Object.keys(ctx).length > 0) {
         body.input_context = ctx;
+      }
+
+      const inst = agentInstructions.replace(/\r\n/g, "\n").trim();
+      if (inst.length > 0) {
+        body.instructions = inst.slice(0, MAX_DELEGATE_INSTRUCTIONS);
       }
 
       const { data, error } = await supabase.functions.invoke(
@@ -313,7 +358,9 @@ export function DelegateToAgentDialog({
             >
               Segunda búsqueda o seguimiento: se envía el id de la tarea anterior (
               <span className="font-mono text-[10px] opacity-90">{previousTaskId.slice(0, 8)}…</span>
-              ) a la VM junto con el chat, para que el agente pueda enlazar el contexto.
+              ) a la VM junto con el hilo. Puedes <span className="text-foreground/85">cambiar el título y las
+              instrucciones</span> abajo para acotar el enfoque; también se reenvían los documentos del conocimiento
+              (proyecto) y los adjuntos del chat, si aplica.
               {followUpKind === "retry" && (
                 <span className="block mt-1 text-foreground/80">Modo: reintento de búsqueda.</span>
               )}
@@ -355,6 +402,60 @@ export function DelegateToAgentDialog({
               maxLength={200}
             />
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="agent-instructions">Instrucciones para el agente (opcional)</Label>
+            <Textarea
+              id="agent-instructions"
+              value={agentInstructions}
+              onChange={(e) => setAgentInstructions(e.target.value.slice(0, MAX_DELEGATE_INSTRUCTIONS))}
+              placeholder="Se envían a la VM con la tarea. Pueden repetir o ampliar las instrucciones del proyecto de IA."
+              className="min-h-[100px] max-h-48 text-sm resize-y"
+              rows={4}
+            />
+            <p className="text-[10.5px] text-muted-foreground leading-snug">
+              El asistente Kawiil en este hilo ya usa el proyecto, memorias e índice semántico. El agente en servidor
+              recibe este texto, referencias a archivos y <span className="text-foreground/80">input_context</span> (hilo,
+              proyecto, Dropbox si aplica); el uso final depende de kawiil-agents.
+            </p>
+          </div>
+
+          {knowledgeTotalCount > 0 && (
+            <div className="space-y-1.5">
+              <Label>Conocimiento del proyecto (incluido en la tarea)</Label>
+              <div className="rounded-md border border-sky-200/60 dark:border-sky-800/40 bg-sky-50/40 dark:bg-sky-950/20 px-2.5 py-2 text-[10.5px] text-muted-foreground space-y-1.5">
+                <p>
+                  <span className="font-medium text-foreground/90">
+                    {knowledgeSupabaseRefs.length}
+                  </span>{" "}
+                  en Storage
+                  {knowledgeDropbox.length > 0 && (
+                    <>
+                      {" "}
+                      y{" "}
+                      <span className="font-medium text-foreground/90">
+                        {knowledgeDropbox.length}
+                      </span>{" "}
+                      en Dropbox
+                    </>
+                  )}{" "}
+                  (además de los adjuntos del chat, sin duplicar ruta en Storage).
+                </p>
+                <ul className="max-h-20 overflow-y-auto space-y-0.5 list-none p-0 m-0 text-[10px]">
+                  {knowledgeSupabaseRefs.map((r, i) => (
+                    <li key={`ks-${i}-${r.path}`} className="truncate">
+                      {r.name}
+                    </li>
+                  ))}
+                  {knowledgeDropbox.map((d) => (
+                    <li key={d.document_id} className="truncate">
+                      {d.name} <span className="text-muted-foreground/80">(Dropbox)</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
 
           {attachments && attachments.length > 0 && (
             <div className="space-y-1.5">

@@ -32,6 +32,7 @@ import {
 import { playNotificationBeep } from "@/lib/notificationBeep";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
 import { cn } from "@/lib/utils";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import { NotificationsKawiilCard } from "@/components/notifications/NotificationsKawiilCard";
@@ -997,7 +998,7 @@ export default function Notificaciones() {
                           </div>
                           {m.body && (
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                              {m.body}
+                              {renderTextWithMentionHighlights(m.body, `notif-${m.id}`)}
                             </p>
                           )}
                           {(() => {

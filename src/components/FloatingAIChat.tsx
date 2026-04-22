@@ -17,6 +17,7 @@ import {
   type DuplicateResolutionChoice,
 } from "@/components/shared/DuplicateFileResolutionDialog";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
+import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
 
 export function FloatingAIChat() {
   const [open, setOpen] = useState(false);
@@ -239,7 +240,12 @@ export function FloatingAIChat() {
                         </div>
                       ) : (
                         <div className="space-y-1">
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          <p className="whitespace-pre-wrap">
+                            {renderTextWithMentionHighlights(msg.content, `fc-${msg.id || `i-${i}`}`, {
+                              mentionClassName:
+                                "font-bold text-primary-foreground underline decoration-primary-foreground/70 underline-offset-2",
+                            })}
+                          </p>
                           {msg.attachments && msg.attachments.length > 0 && (
                             <div className="flex flex-wrap gap-0.5">
                               {msg.attachments.map((a, idx) => (

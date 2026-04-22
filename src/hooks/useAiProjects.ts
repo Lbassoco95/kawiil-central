@@ -26,6 +26,16 @@ export interface AiProjectDocument {
   created_at: string;
 }
 
+/** Fila con join a `documents` para Storage / Dropbox (p. ej. dispatch a agentes). */
+export type AiProjectDocumentWithFile = AiProjectDocument & {
+  documents?: {
+    file_path: string | null;
+    mime_type: string | null;
+    external_path: string | null;
+    source: string | null;
+  } | null;
+};
+
 export function useAiProjects() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -138,11 +148,22 @@ export function useAiProjectDocuments(projectId: string | null) {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("ai_project_documents")
-        .select("*")
+        .select(
+          `
+          id,
+          ai_project_id,
+          document_id,
+          dropbox_path,
+          name,
+          source,
+          created_at,
+          documents ( file_path, mime_type, external_path, source )
+        `,
+        )
         .eq("ai_project_id", projectId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as AiProjectDocument[];
+      return (data ?? []) as AiProjectDocumentWithFile[];
     },
     enabled: !!projectId,
   });
@@ -180,7 +201,7 @@ export function useAiProjectDocuments(projectId: string | null) {
   });
 
   return {
-    documents: documents ?? [],
+    documents: (documents ?? []) as AiProjectDocumentWithFile[],
     isLoading,
     addDocument,
     removeDocument,
