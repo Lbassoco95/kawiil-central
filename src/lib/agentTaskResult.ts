@@ -1,12 +1,15 @@
 /**
  * Normaliza `agent_tasks.result` (Json) y `result_summary` para el chat.
- * `result_summary` suele ser un resumen corto; el texto completo va en `result` (string o JSON con claves tipo text/markdown).
+ * `result_summary` suele ser un resumen corto; el texto completo va en `result` (string o JSON con claves tipo text/markdown)
+ * o a veces en `execution_metadata` (p. ej. salida de la VM kawiil-agents).
  */
 
 const TEXT_KEYS = [
   "markdown",
   "final_report",
   "full_text",
+  "report_text",
+  "plain_text",
   "text",
   "content",
   "output",
@@ -17,26 +20,27 @@ const TEXT_KEYS = [
   "response",
   "body",
   "revised",
-  "summary", // a veces el informe vive aquí; se compara longitud con result_summary abajo
+  "summary",
+  "user_visible",
+  "display_text",
+  "llm_output",
+  "completion",
 ] as const;
 
-const NESTED_KEYS = ["data", "result", "payload", "output", "response"] as const;
+const NESTED_KEYS = ["data", "result", "payload", "output", "response", "details", "task_result"] as const;
 
-const MAX_NEST_DEPTH = 2;
+/** Más capas: algunas VMs anidan `data.result.markdown`. */
+const MAX_NEST_DEPTH = 6;
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
 /**
- * Reúne cadenas candidatas en `result` (sin `result_summary`) y elige la **más larga**:
- * la VM a veces rellena `message` con un intro corto y `markdown` con el cuerpo completo.
+ * Reúne cadenas candidatas y elige la **más larga**; además, si hay arrays de tramos
+ * (`sections`, `content_blocks`, etc.) las une para no quedarnos solo con un bloque.
  */
-function collectStringCandidates(
-  value: unknown,
-  depth: number,
-  out: string[],
-): void {
+function collectStringCandidates(value: unknown, depth: number, out: string[]): void {
   if (value == null || depth > MAX_NEST_DEPTH) return;
 
   if (typeof value === "string") {
@@ -45,7 +49,16 @@ function collectStringCandidates(
     return;
   }
 
-  if (typeof value !== "object" || Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    const joined = joinArrayToReadableText(value);
+    if (joined) out.push(joined);
+    for (const item of value) {
+      collectStringCandidates(item, depth + 1, out);
+    }
+    return;
+  }
+
+  if (typeof value !== "object") {
     return;
   }
 
@@ -59,7 +72,7 @@ function collectStringCandidates(
     if (keySet.has(k)) continue;
     const v = o[k];
     if (typeof v === "string" && v.trim().length > 0) {
-      if (/^(markdown|md|html|text|content)$/i.test(k)) {
+      if (/^(markdown|md|html|text|content|report|body|answer)$/i.test(k)) {
         out.push(v.trim());
       }
     }
@@ -68,57 +81,116 @@ function collectStringCandidates(
   for (const nk of NESTED_KEYS) {
     if (!(nk in o)) continue;
     const inner = o[nk];
-    if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    if (inner && typeof inner === "object") {
       collectStringCandidates(inner, depth + 1, out);
     }
   }
 }
 
-/** Extrae texto mostrable desde `result` sin usar `result_summary` (candidata más larga). */
+/**
+ * Une arrays de strings u objetos con un solo campo de texto, típico de informes por secciones.
+ */
+function joinArrayToReadableText(arr: unknown[]): string | null {
+  if (arr.length === 0) return null;
+  const pieces: string[] = [];
+  for (const el of arr) {
+    if (typeof el === "string") {
+      const t = el.trim();
+      if (t) pieces.push(t);
+    } else if (el && typeof el === "object" && !Array.isArray(el)) {
+      const o = el as Record<string, unknown>;
+      let found = false;
+      for (const k of TEXT_KEYS) {
+        if (isNonEmptyString(o[k])) {
+          pieces.push((o[k] as string).trim());
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        for (const k of Object.keys(o)) {
+          const v = o[k];
+          if (typeof v === "string" && v.trim().length > 0 && /text|content|body|md|markdown|html/i.test(k)) {
+            pieces.push(v.trim());
+            found = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (pieces.length === 0) return null;
+  if (pieces.length === 1) return pieces[0];
+  return pieces.join("\n\n");
+}
+
+function longestCandidate(candidates: string[]): string {
+  if (candidates.length === 0) return "";
+  return candidates.reduce((a, b) => (a.length >= b.length ? a : b), "");
+}
+
+/** Extrae texto mostrable desde un valor (objeto, array, string; si el string es JSON, lo parsea). */
 function extractTextFromResultValue(result: unknown): string {
   if (result == null) return "";
   if (typeof result === "string") {
-    return result.trim();
+    const s = result.trim();
+    if (!s) return "";
+    if (
+      (s.startsWith("{") && s.endsWith("}")) ||
+      (s.startsWith("[") && s.endsWith("]"))
+    ) {
+      try {
+        const parsed = JSON.parse(s) as unknown;
+        const fromParsed = extractTextFromResultValueInner(parsed);
+        if (fromParsed.length > 0) return fromParsed;
+      } catch {
+        /* literal string, no JSON */
+      }
+    }
+    return s;
   }
+  return extractTextFromResultValueInner(result);
+}
+
+function extractTextFromResultValueInner(result: unknown): string {
   const out: string[] = [];
   collectStringCandidates(result, 0, out);
-  if (out.length === 0) return "";
-  return out.reduce((a, b) => (a.length >= b.length ? a : b), "");
+  return longestCandidate(out);
+}
+
+function pickLongestNonEmpty(...parts: (string | undefined)[]): string {
+  const n = parts.filter((p): p is string => typeof p === "string" && p.trim().length > 0);
+  if (n.length === 0) return "";
+  return n.reduce((a, b) => (a.length >= b.length ? a : b), "");
 }
 
 /**
  * Texto canónico para el chat, copiar y sincronizar a `chat_messages.content`.
- * Prefiere el cuerpo largo en `result`; si no hay, `result_summary`.
- * Si ambos existen, se elige el **más largo** (evita quedarse con el resumen truncado).
+ * Combina `result`, opcionalmente `execution_metadata` y `result_summary`.
+ * Elige la variante **más larga** en cada paso (evita resumen o `message` intro corto).
  */
 export function resolveAgentTaskDisplayText(
   result: unknown,
   resultSummary: string | null | undefined,
+  executionMetadata?: unknown,
 ): string {
   const summary = typeof resultSummary === "string" ? resultSummary.trim() : "";
+  const fromResult = extractTextFromResultValue(result);
+  const fromMeta =
+    executionMetadata !== undefined && executionMetadata !== null
+      ? extractTextFromResultValue(executionMetadata)
+      : "";
 
-  if (typeof result === "string") {
-    const s = result.trim();
-    if (!s) return summary;
-    if (!summary) return s;
-    return s.length >= summary.length ? s : summary;
-  }
+  let text = pickLongestNonEmpty(fromResult, fromMeta, summary);
+  if (text) return text;
 
-  const fromObject = extractTextFromResultValue(result);
-  if (fromObject && summary) {
-    return fromObject.length >= summary.length ? fromObject : summary;
-  }
-  if (fromObject) return fromObject;
-  if (summary) return summary;
-
-  if (result != null && typeof result === "object" && !Array.isArray(result)) {
+  if (result != null && typeof result === "object") {
     try {
       return JSON.stringify(result, null, 2);
     } catch {
       return "";
     }
   }
-
   return "";
 }
 
@@ -126,15 +198,21 @@ export function resolveAgentTaskDisplayText(
 export function getAgentTaskPreviewModel(
   result: unknown,
   resultSummary: string | null | undefined,
+  executionMetadata?: unknown,
 ): { preview: string; isJson: boolean } {
   const fromObject = extractTextFromResultValue(result);
+  const fromMeta =
+    executionMetadata != null && executionMetadata !== undefined
+      ? extractTextFromResultValue(executionMetadata)
+      : "";
   const summary = typeof resultSummary === "string" ? resultSummary.trim() : "";
-  const text = resolveAgentTaskDisplayText(result, resultSummary);
+  const text = resolveAgentTaskDisplayText(result, resultSummary, executionMetadata);
   const isJson =
     result != null &&
     typeof result === "object" &&
     !Array.isArray(result) &&
     !fromObject &&
+    !fromMeta &&
     !summary;
   return { preview: text, isJson };
 }

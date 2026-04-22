@@ -238,7 +238,11 @@ export function AgentTaskCard({
   const canonicalText = useMemo(
     () =>
       fetched
-        ? resolveAgentTaskDisplayText(fetched.result, fetched.result_summary).trim()
+        ? resolveAgentTaskDisplayText(
+            fetched.result,
+            fetched.result_summary,
+            fetched.execution_metadata,
+          ).trim()
         : "",
     [fetched],
   );
@@ -327,7 +331,11 @@ export function AgentTaskCard({
   }, [dbRow, fetched, events]);
 
   const handleCopy = async () => {
-    const text = resolveAgentTaskDisplayText(fetched?.result, fetched?.result_summary);
+    const text = resolveAgentTaskDisplayText(
+      fetched?.result,
+      fetched?.result_summary,
+      fetched?.execution_metadata,
+    );
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -396,6 +404,7 @@ export function AgentTaskCard({
             <ResultPreview
               result={fetched?.result ?? null}
               resultSummary={fetched?.result_summary ?? null}
+              executionMetadata={fetched?.execution_metadata ?? null}
               fetchError={fetchError}
               syncedToChatBelow={hasChatContent}
             />
@@ -565,11 +574,13 @@ function EventTimeline({
 function ResultPreview({
   result,
   resultSummary,
+  executionMetadata,
   fetchError,
   syncedToChatBelow,
 }: {
   result: unknown;
   resultSummary: string | null;
+  executionMetadata: unknown | null;
   fetchError: string | null;
   syncedToChatBelow: boolean;
 }) {
@@ -591,7 +602,7 @@ function ResultPreview({
     );
   }
 
-  const { preview, isJson } = getAgentTaskPreviewModel(result, resultSummary);
+  const { preview, isJson } = getAgentTaskPreviewModel(result, resultSummary, executionMetadata ?? undefined);
 
   if (!preview) {
     return (
@@ -753,5 +764,8 @@ function humanizeEventType(type: string): string {
 
 function canCopyResult(fetched: FetchedResult | null): boolean {
   if (!fetched) return false;
-  return resolveAgentTaskDisplayText(fetched.result, fetched.result_summary).trim().length > 0;
+  return (
+    resolveAgentTaskDisplayText(fetched.result, fetched.result_summary, fetched.execution_metadata).trim()
+      .length > 0
+  );
 }
