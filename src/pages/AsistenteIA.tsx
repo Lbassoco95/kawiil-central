@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Send, Sparkles, Loader2, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight,
-  BrainCircuit, Settings2, FileText, UserPlus,
+  BrainCircuit, Settings2, FileText, UserPlus, Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -61,6 +61,7 @@ import {
 } from "@/lib/kawiilAi";
 import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
+import type { AgentTaskDeliverableLink } from "@/lib/agentTaskResult";
 
 /** Si `storage.upload` no responde, el botón "Delegar" quedaría en spinner indefinidamente. */
 const DELEGATE_UPLOAD_TIMEOUT_MS = 150_000;
@@ -83,7 +84,8 @@ const AsistenteIA = () => {
   const { user } = useAuth();
   const {
     messages, isStreaming, streamProgressSteps, pdfIndexingStatus, conversations, activeConversationId, activeAiProjectId,
-    sendMessage, loadConversation, addAgentTaskMessage, startNewChat, deleteConversation,
+    sendMessage, loadConversation, addAgentTaskMessage, patchMessageContent, startNewChat,
+    deleteConversation,
     updateConversationFolder, renameConversation, setAiProject,
   } = useChat();
   const {
@@ -167,7 +169,15 @@ const AsistenteIA = () => {
   const [artifactDialogLoading, setArtifactDialogLoading] = useState(false);
   const [isDelegateModalOpen, setIsDelegateModalOpen] = useState(false);
   const [delegateAttachments, setDelegateAttachments] = useState<AttachmentRef[]>([]);
+  /** Título sugerido al abrir el modal (p. ej. seguimiento de tarea); si es null se usa el input del composer. */
+  const [delegateModalTitleOverride, setDelegateModalTitleOverride] = useState<string | null>(null);
+  const [delegateDefaultAgentTemplateId, setDelegateDefaultAgentTemplateId] = useState<string | null>(null);
+  const [delegatePreviousTaskId, setDelegatePreviousTaskId] = useState<string | null>(null);
+  const [delegateFollowUpKind, setDelegateFollowUpKind] = useState<"retry" | "continuation" | null>(null);
   const [isPreparingDelegate, setIsPreparingDelegate] = useState(false);
+  const [agentTaskDeliverables, setAgentTaskDeliverables] = useState<Record<string, AgentTaskDeliverableLink[]>>(
+    () => ({}),
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMobile = useIsMobile();
@@ -480,12 +490,49 @@ const AsistenteIA = () => {
         toast.error("No se pudo preparar ningún adjunto para delegar.");
         return;
       }
+      setDelegateModalTitleOverride(null);
+      setDelegateDefaultAgentTemplateId(null);
+      setDelegatePreviousTaskId(null);
+      setDelegateFollowUpKind(null);
       setDelegateAttachments(refs);
       setIsDelegateModalOpen(true);
     } finally {
       setIsPreparingDelegate(false);
     }
   }, [isStreaming, pendingFiles.length, uploadPendingFilesForDelegate]);
+
+  const openFollowUpWithAgent = useCallback(
+    (ref: ChatAgentTaskRef, mode: "continuation" | "retry") => {
+      if (isStreaming) return;
+      setDelegatePreviousTaskId(ref.task_id);
+      setDelegateFollowUpKind(mode);
+      setDelegateModalTitleOverride(
+        (mode === "retry" ? `Reintento: ${ref.title}` : `Seguimiento: ${ref.title}`).trim().slice(0, 200),
+      );
+      setDelegateDefaultAgentTemplateId(ref.agent_id);
+      setDelegateAttachments([]);
+      setIsDelegateModalOpen(true);
+    },
+    [isStreaming],
+  );
+
+  const handleAgentDeliverableLinks = useCallback((taskId: string, links: AgentTaskDeliverableLink[]) => {
+    setAgentTaskDeliverables((prev) => {
+      const prevL = prev[taskId];
+      if (
+        prevL &&
+        prevL.length === links.length &&
+        prevL.every((p, i) => p.href === links[i]?.href && p.label === links[i]?.label)
+      ) {
+        return prev;
+      }
+      return { ...prev, [taskId]: links };
+    });
+  }, []);
+
+  useEffect(() => {
+    setAgentTaskDeliverables({});
+  }, [activeConversationId]);
 
   const handleAgentDelegated = useCallback(
     async (ref: ChatAgentTaskRef) => {
@@ -984,6 +1031,7 @@ const AsistenteIA = () => {
                 {messages.map((msg, i) => {
                   const taskRef = msg.agent_task_ref;
                   if (taskRef) {
+                    const hasAgentContent = Boolean(msg.content?.trim());
                     return (
                       <Fragment key={msg.id || `task-${taskRef.task_id}-${i}`}>
                         <div className="flex gap-3 justify-start">
@@ -996,8 +1044,79 @@ const AsistenteIA = () => {
                             }}
                             title={taskRef.title}
                             className="flex-1 min-w-0 max-w-[85%]"
+                            chatMessageId={msg.id}
+                            patchMessageContent={patchMessageContent}
+                            hasChatContent={hasAgentContent}
+                            onFollowUpSameAgent={() => openFollowUpWithAgent(taskRef, "continuation")}
+                            onRetryAgentSearch={() => openFollowUpWithAgent(taskRef, "retry")}
+                            serverMessageContent={msg.content ?? ""}
+                            onDeliverableLinksChange={handleAgentDeliverableLinks}
                           />
                         </div>
+                        {hasAgentContent && (
+                          <div className="flex gap-3 justify-start">
+                            <div
+                              className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 text-white shadow-sm"
+                              style={{ background: KAWIIL_AI_GRADIENT }}
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="flex flex-col min-w-0 max-w-[85%]">
+                              <div className="rounded-2xl px-4 py-3 bg-secondary/40 border border-border/40">
+                                {renderMessageContent(msg.content, "assistant", msg.attachments, {
+                                  isError: msg.isError,
+                                })}
+                              </div>
+                              {msg.id && !msg.isError && (
+                                <AiMessageFeedback messageId={msg.id} />
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {(agentTaskDeliverables[taskRef.task_id] ?? []).length > 0 && (
+                          <div className="flex gap-3 justify-start">
+                            <div className="h-7 w-7 shrink-0" aria-hidden="true" />
+                            <div className="min-w-0 max-w-[85%] flex-1">
+                              <div className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-[11px] w-full">
+                                <p className="font-medium text-foreground/80 mb-1.5">Entregables</p>
+                                <ul className="space-y-1.5 list-none p-0 m-0">
+                                  {(agentTaskDeliverables[taskRef.task_id] ?? []).map((d, di) => (
+                                    <li key={`${d.href.slice(0, 64)}-${di}`} className="flex items-start gap-2 min-w-0">
+                                      <FileText className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
+                                      {/^https?:\/\//i.test(d.href) ? (
+                                        <a
+                                          href={d.href}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-primary hover:underline break-all"
+                                        >
+                                          {d.label}
+                                        </a>
+                                      ) : (
+                                        <span className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1.5 min-w-0 w-full">
+                                          <span className="text-muted-foreground break-all">{d.label}</span>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 text-[10px] shrink-0 w-fit -ml-1"
+                                            onClick={() => {
+                                              void navigator.clipboard.writeText(d.href);
+                                              toast.success("Ruta copiada al portapapeles");
+                                            }}
+                                          >
+                                            <Copy className="h-3 w-3 mr-1" />
+                                            Copiar ruta
+                                          </Button>
+                                        </span>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </Fragment>
                     );
                   }
@@ -1395,11 +1514,18 @@ const AsistenteIA = () => {
         onClose={() => {
           setIsDelegateModalOpen(false);
           setDelegateAttachments([]);
+          setDelegateModalTitleOverride(null);
+          setDelegateDefaultAgentTemplateId(null);
+          setDelegatePreviousTaskId(null);
+          setDelegateFollowUpKind(null);
         }}
-        defaultTitle={input.slice(0, 100)}
+        defaultTitle={(delegateModalTitleOverride ?? input).slice(0, 200)}
         attachments={delegateAttachments}
         conversationId={activeConversationId ?? undefined}
         defaultClientId={activeProject?.client_id ?? null}
+        defaultAgentTemplateId={delegateDefaultAgentTemplateId}
+        previousTaskId={delegatePreviousTaskId}
+        followUpKind={delegateFollowUpKind}
         onDelegated={handleAgentDelegated}
       />
     </AppLayout>

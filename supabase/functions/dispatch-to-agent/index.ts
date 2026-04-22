@@ -51,6 +51,12 @@ function jsonResponse(payload: unknown, status = 200): Response {
   });
 }
 
+/**
+ * input_context (objeto reenviado a la VM) puede incluir p. ej.:
+ * - conversation_id: hilo del chat
+ * - previous_task_id: tarea de agente previa (segunda búsqueda / seguimiento)
+ * - follow_up_kind: "retry" | "continuation" (metadata opcional)
+ */
 interface DispatchBody {
   title?: unknown;
   agent_id?: unknown;

@@ -57,6 +57,18 @@ export interface DelegateToAgentDialogProps {
    */
   defaultClientId?: string | null;
 
+  /** `template_id` del agente (mismo valor que en `agent_task_ref.agent_id`). */
+  defaultAgentTemplateId?: string | null;
+
+  /**
+   * Tarea de agente previa en este hilo. La edge reenvía `input_context.previous_task_id`
+   * a la VM para segunda búsqueda o seguimiento enlazado.
+   */
+  previousTaskId?: string | null;
+
+  /** Tipo de seguimiento (metadata para la VM). */
+  followUpKind?: "retry" | "continuation" | null;
+
   /** Tras un dispatch exitoso desde la VM (vía edge `dispatch-to-agent`). */
   onDelegated: (ref: {
     task_id: string;
@@ -134,6 +146,9 @@ export function DelegateToAgentDialog({
   attachments,
   conversationId,
   defaultClientId = null,
+  defaultAgentTemplateId = null,
+  previousTaskId = null,
+  followUpKind = null,
   onDelegated,
 }: DelegateToAgentDialogProps) {
   const { data: clients = [], isLoading: clientsLoading } = useClients();
@@ -156,15 +171,18 @@ export function DelegateToAgentDialog({
     setDispatchError(null);
     setIsDispatching(false);
     setSelectedClientId(defaultClientId ?? null);
-    setSelectedAgentId(null);
+    setSelectedAgentId(defaultAgentTemplateId ?? null);
     setTitle((defaultTitle ?? "").trim().slice(0, 200));
     setClientPopoverOpen(false);
     setAgentPopoverOpen(false);
-  }, [isOpen, defaultClientId, defaultTitle]);
+  }, [isOpen, defaultClientId, defaultTitle, defaultAgentTemplateId]);
 
-  useEffect(() => {
-    setSelectedAgentId(null);
-  }, [selectedClientId]);
+  const handleClientSelect = (id: string | null) => {
+    setSelectedClientId((prev) => {
+      if (prev !== id) setSelectedAgentId(null);
+      return id;
+    });
+  };
 
   const groupedAgents = useMemo(
     () => groupAgents(agentList.agents),
@@ -206,8 +224,14 @@ export function DelegateToAgentDialog({
         body.client_id = selectedClientId;
       }
 
-      if (conversationId) {
-        body.input_context = { conversation_id: conversationId };
+      const ctx: Record<string, unknown> = {};
+      if (conversationId) ctx.conversation_id = conversationId;
+      if (previousTaskId) {
+        ctx.previous_task_id = previousTaskId;
+        if (followUpKind) ctx.follow_up_kind = followUpKind;
+      }
+      if (Object.keys(ctx).length > 0) {
+        body.input_context = ctx;
       }
 
       const { data, error } = await supabase.functions.invoke(
@@ -265,7 +289,7 @@ export function DelegateToAgentDialog({
             <ClientCombobox
               clients={clientList}
               selected={selectedClientId}
-              onSelect={setSelectedClientId}
+              onSelect={handleClientSelect}
               open={clientPopoverOpen}
               onOpenChange={setClientPopoverOpen}
               disabled={clientsLoading}
@@ -274,6 +298,23 @@ export function DelegateToAgentDialog({
               Deja vacío si es una tarea general del despacho.
             </p>
           </div>
+
+          {previousTaskId && (
+            <div
+              role="status"
+              className="rounded-md border border-primary/20 bg-primary/5 px-2.5 py-2 text-[11px] text-muted-foreground leading-snug"
+            >
+              Segunda búsqueda o seguimiento: se envía el id de la tarea anterior (
+              <span className="font-mono text-[10px] opacity-90">{previousTaskId.slice(0, 8)}…</span>
+              ) a la VM junto con el chat, para que el agente pueda enlazar el contexto.
+              {followUpKind === "retry" && (
+                <span className="block mt-1 text-foreground/80">Modo: reintento de búsqueda.</span>
+              )}
+              {followUpKind === "continuation" && (
+                <span className="block mt-1 text-foreground/80">Modo: nueva solicitud enlazada.</span>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Agente</Label>

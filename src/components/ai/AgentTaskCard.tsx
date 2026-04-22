@@ -15,6 +15,8 @@ import {
   ChevronUp,
   Copy,
   ExternalLink,
+  UserPlus,
+  RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -23,6 +25,12 @@ import {
   type AgentTaskStatus as HookStatus,
 } from "@/hooks/useAgentTaskProgress";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  resolveAgentTaskDisplayText,
+  getAgentTaskPreviewModel,
+  extractDeliverableLinks,
+  type AgentTaskDeliverableLink,
+} from "@/lib/agentTaskResult";
 
 /**
  * AgentTaskCard (Bloque B1.6.4)
@@ -35,8 +43,7 @@ import { supabase } from "@/integrations/supabase/client";
  *    tarea y último evento en vivo (siempre visible, click = toggle).
  *  - Timeline de eventos expandible (Collapsible) con traducción humana
  *    de cada `event_type` de `ai_task_events`.
- *  - Preview del resultado cuando la tarea se completa (result_summary
- *    o los primeros ~300 chars de `result`).
+ *  - Preview del resultado (texto canónico desde `result` / `result_summary` vía `agentTaskResult`).
  *  - Mensaje de error cuando la tarea falla.
  *  - Footer con acciones "Ver detalles" y "Copiar resultado".
  *
@@ -46,7 +53,7 @@ import { supabase } from "@/integrations/supabase/client";
  *  - Resultado final: fetch puntual de `agent_tasks` cuando el status
  *    transita a `completed`/`failed`.
  *
- * No integrado aún en `AsistenteIA.tsx` — eso es B1.6.6.
+ * En `AsistenteIA.tsx` el resultado se sincroniza además al `content` del mensaje del hilo.
  */
 
 export interface AgentTaskCardProps {
@@ -65,6 +72,19 @@ export interface AgentTaskCardProps {
   className?: string;
   /** Callback del botón "Ver detalles" (p.ej. abrir panel lateral). */
   onViewDetails?: () => void;
+  /** Mensaje del hilo donde volcar el Markdown del resultado (una sola vez al completar). */
+  chatMessageId?: string;
+  patchMessageContent?: (messageId: string, content: string) => Promise<boolean>;
+  /** Si el contenido ya está en `chat_messages` (recarga o tras sync), no duplicar el cuerpo en la card. */
+  hasChatContent?: boolean;
+  /** Abre el modal con el mismo agente y contexto de seguimiento (no reintento). */
+  onFollowUpSameAgent?: () => void;
+  /** Segunda búsqueda / reintento enlazado a esta tarea (`previous_task_id` en dispatch). */
+  onRetryAgentSearch?: () => void;
+  /** Contenido actual del mensaje en el hilo (para re-sincronizar si el canónico del servidor es más largo). */
+  serverMessageContent?: string;
+  /** Entregables detectados al cargar `result` / `execution_metadata`. */
+  onDeliverableLinksChange?: (taskId: string, links: AgentTaskDeliverableLink[]) => void;
 }
 
 type TaskStatus = "pending" | "running" | "completed" | "failed";
@@ -73,6 +93,7 @@ interface FetchedResult {
   result: unknown;
   result_summary: string | null;
   error_message: string | null;
+  execution_metadata: unknown;
 }
 
 /**
@@ -179,14 +200,19 @@ function mergeTaskStatus(
   return hookMapped;
 }
 
-const RESULT_PREVIEW_MAX_CHARS = 300;
-
 export function AgentTaskCard({
   taskId,
   agent,
   title,
   className,
   onViewDetails,
+  chatMessageId,
+  patchMessageContent,
+  hasChatContent = false,
+  onFollowUpSameAgent,
+  onRetryAgentSearch,
+  serverMessageContent = "",
+  onDeliverableLinksChange,
 }: AgentTaskCardProps) {
   const { events, status: hookStatus, isConnected } = useAgentTaskProgress(taskId);
   const dbRow = useAgentTaskDbPoll(taskId);
@@ -200,19 +226,39 @@ export function AgentTaskCard({
   const [fetched, setFetched] = useState<FetchedResult | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  /** Guard para auto-colapsar solo en la primera transición a completed. */
-  const hasAutoCollapsedRef = useRef(false);
   /** Guard para evitar refetch si el status oscila por polling. */
   const hasFetchedRef = useRef(false);
   /** Timer de reset del estado "Copiado" — se limpia si el componente desmonta. */
   const copyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (status !== "completed") return;
-    if (hasAutoCollapsedRef.current) return;
-    hasAutoCollapsedRef.current = true;
-    setIsExpanded(false);
-  }, [status]);
+    hasFetchedRef.current = false;
+  }, [taskId]);
+
+  const canonicalText = useMemo(
+    () =>
+      fetched
+        ? resolveAgentTaskDisplayText(fetched.result, fetched.result_summary).trim()
+        : "",
+    [fetched],
+  );
+
+  useEffect(() => {
+    if (status !== "completed" || !chatMessageId || !patchMessageContent || !fetched) return;
+    const text = canonicalText;
+    if (!text) return;
+    const serverLen = (serverMessageContent ?? "").trim().length;
+    if (text.length <= serverLen) return;
+
+    let cancelled = false;
+    void (async () => {
+      const ok = await patchMessageContent(chatMessageId, text);
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, chatMessageId, patchMessageContent, fetched, canonicalText, serverMessageContent]);
 
   useEffect(() => {
     if (status !== "completed" && status !== "failed") return;
@@ -223,7 +269,7 @@ export function AgentTaskCard({
     (async () => {
       const { data, error } = await supabase
         .from("agent_tasks")
-        .select("result, result_summary, error_message")
+        .select("result, result_summary, error_message, execution_metadata")
         .eq("id", taskId)
         .maybeSingle();
       if (cancelled) return;
@@ -237,6 +283,7 @@ export function AgentTaskCard({
         result: data.result ?? null,
         result_summary: data.result_summary ?? null,
         error_message: data.error_message ?? null,
+        execution_metadata: data.execution_metadata ?? null,
       });
     })();
 
@@ -244,6 +291,12 @@ export function AgentTaskCard({
       cancelled = true;
     };
   }, [status, taskId]);
+
+  useEffect(() => {
+    if (!fetched || !onDeliverableLinksChange) return;
+    const links = extractDeliverableLinks(fetched.result, fetched.execution_metadata);
+    onDeliverableLinksChange(taskId, links);
+  }, [fetched, taskId, onDeliverableLinksChange]);
 
   useEffect(() => {
     return () => {
@@ -274,7 +327,7 @@ export function AgentTaskCard({
   }, [dbRow, fetched, events]);
 
   const handleCopy = async () => {
-    const text = resultToCopyString(fetched?.result, fetched?.result_summary);
+    const text = resolveAgentTaskDisplayText(fetched?.result, fetched?.result_summary);
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
@@ -344,6 +397,7 @@ export function AgentTaskCard({
               result={fetched?.result ?? null}
               resultSummary={fetched?.result_summary ?? null}
               fetchError={fetchError}
+              syncedToChatBelow={hasChatContent}
             />
           )}
 
@@ -353,6 +407,12 @@ export function AgentTaskCard({
             <Footer
               onCopy={handleCopy}
               onViewDetails={onViewDetails}
+              onFollowUpSameAgent={
+                status === "completed" || status === "failed" ? onFollowUpSameAgent : undefined
+              }
+              onRetryAgentSearch={
+                status === "completed" || status === "failed" ? onRetryAgentSearch : undefined
+              }
               isCopied={isCopied}
               canCopy={canCopyResult(fetched)}
             />
@@ -506,11 +566,23 @@ function ResultPreview({
   result,
   resultSummary,
   fetchError,
+  syncedToChatBelow,
 }: {
   result: unknown;
   resultSummary: string | null;
   fetchError: string | null;
+  syncedToChatBelow: boolean;
 }) {
+  if (syncedToChatBelow) {
+    return (
+      <div className="rounded-md bg-background/60 border border-border/50 p-2.5">
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          El resultado completo está en el mensaje de abajo en el hilo.
+        </p>
+      </div>
+    );
+  }
+
   if (fetchError) {
     return (
       <div className="text-[11px] text-muted-foreground italic">
@@ -519,7 +591,7 @@ function ResultPreview({
     );
   }
 
-  const { preview, isJson, truncated } = buildResultPreview(result, resultSummary);
+  const { preview, isJson } = getAgentTaskPreviewModel(result, resultSummary);
 
   if (!preview) {
     return (
@@ -535,14 +607,12 @@ function ResultPreview({
         Resultado
       </p>
       {isJson ? (
-        <pre className="text-[11px] font-mono text-foreground/90 whitespace-pre-wrap break-words max-h-48 overflow-auto">
+        <pre className="text-[11px] font-mono text-foreground/90 whitespace-pre-wrap break-words max-h-[min(70vh,520px)] overflow-auto">
           {preview}
-          {truncated && <span className="text-muted-foreground">{"\n[…]"}</span>}
         </pre>
       ) : (
-        <div className="text-sm text-foreground/90 whitespace-pre-wrap break-words">
+        <div className="text-sm text-foreground/90 whitespace-pre-wrap break-words max-h-[min(70vh,520px)] overflow-y-auto">
           {preview}
-          {truncated && <span className="text-muted-foreground"> […]</span>}
         </div>
       )}
     </div>
@@ -560,16 +630,44 @@ function FailureMessage({ error }: { error: string | null }) {
 function Footer({
   onCopy,
   onViewDetails,
+  onFollowUpSameAgent,
+  onRetryAgentSearch,
   isCopied,
   canCopy,
 }: {
   onCopy: () => void;
   onViewDetails?: () => void;
+  onFollowUpSameAgent?: () => void;
+  onRetryAgentSearch?: () => void;
   isCopied: boolean;
   canCopy: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-2 pt-2 border-t border-border/30">
+      {onRetryAgentSearch && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs border-primary/35"
+          onClick={onRetryAgentSearch}
+        >
+          <RotateCw className="h-3 w-3 mr-1" />
+          Reintentar búsqueda
+        </Button>
+      )}
+      {onFollowUpSameAgent && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="h-7 text-xs"
+          onClick={onFollowUpSameAgent}
+        >
+          <UserPlus className="h-3 w-3 mr-1" />
+          Nueva tarea con este agente
+        </Button>
+      )}
       {onViewDetails && (
         <Button
           size="sm"
@@ -653,72 +751,7 @@ function humanizeEventType(type: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-/**
- * Prioriza `result_summary` (ya resumido por el backend) y recurre a `result`
- * cuando no existe. Si `result` es objeto/array, lo pretty-prints. Si es string,
- * se muestra tal cual. En cualquier caso trunca a RESULT_PREVIEW_MAX_CHARS.
- */
-function buildResultPreview(
-  result: unknown,
-  resultSummary: string | null,
-): { preview: string; isJson: boolean; truncated: boolean } {
-  if (resultSummary && resultSummary.trim().length > 0) {
-    const trimmed = resultSummary.trim();
-    const truncated = trimmed.length > RESULT_PREVIEW_MAX_CHARS;
-    return {
-      preview: truncated
-        ? trimmed.slice(0, RESULT_PREVIEW_MAX_CHARS)
-        : trimmed,
-      isJson: false,
-      truncated,
-    };
-  }
-
-  if (result == null) return { preview: "", isJson: false, truncated: false };
-
-  if (typeof result === "string") {
-    const truncated = result.length > RESULT_PREVIEW_MAX_CHARS;
-    return {
-      preview: truncated
-        ? result.slice(0, RESULT_PREVIEW_MAX_CHARS)
-        : result,
-      isJson: false,
-      truncated,
-    };
-  }
-
-  try {
-    const serialized = JSON.stringify(result, null, 2);
-    const truncated = serialized.length > RESULT_PREVIEW_MAX_CHARS;
-    return {
-      preview: truncated
-        ? serialized.slice(0, RESULT_PREVIEW_MAX_CHARS)
-        : serialized,
-      isJson: true,
-      truncated,
-    };
-  } catch {
-    return { preview: "", isJson: false, truncated: false };
-  }
-}
-
 function canCopyResult(fetched: FetchedResult | null): boolean {
   if (!fetched) return false;
-  if (fetched.result_summary && fetched.result_summary.trim().length > 0) return true;
-  if (fetched.result != null) return true;
-  return false;
-}
-
-function resultToCopyString(
-  result: unknown,
-  resultSummary: string | null | undefined,
-): string {
-  if (resultSummary && resultSummary.trim().length > 0) return resultSummary;
-  if (result == null) return "";
-  if (typeof result === "string") return result;
-  try {
-    return JSON.stringify(result, null, 2);
-  } catch {
-    return String(result);
-  }
+  return resolveAgentTaskDisplayText(fetched.result, fetched.result_summary).trim().length > 0;
 }
