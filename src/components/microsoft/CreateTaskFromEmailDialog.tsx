@@ -19,7 +19,9 @@ import {
 } from "@/components/ui/select";
 import { useCreateTask } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
+import { useProjects } from "@/hooks/useProjects";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { Loader2, Sparkles, Wand2, X, Check, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -76,6 +78,7 @@ export function CreateTaskFromEmailDialog({
   const [priority, setPriority] = useState("media");
   const [assignedTo, setAssignedTo] = useState(UNASSIGNED_VALUE);
   const [clientId, setClientId] = useState(NO_CLIENT_VALUE);
+  const [projectId, setProjectId] = useState("");
   const [dueDate, setDueDate] = useState<string>("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -84,6 +87,7 @@ export function CreateTaskFromEmailDialog({
 
   const createTask = useCreateTask();
   const { data: clients } = useClients();
+  const { data: projects } = useProjects();
   const { data: users } = useOrgUsers();
   const { data: currentProfile } = useCurrentProfile();
 
@@ -103,6 +107,7 @@ export function CreateTaskFromEmailDialog({
       setPriority("media");
       setAssignedTo(UNASSIGNED_VALUE);
       setClientId(NO_CLIENT_VALUE);
+      setProjectId("");
       setDueDate("");
       setAiSuggestion(null);
       setAiError(null);
@@ -165,6 +170,38 @@ export function CreateTaskFromEmailDialog({
     setAiApplied(true);
   }, [aiSuggestion]);
 
+  const projectOptions = useMemo(() => {
+    const filtered =
+      clientId !== NO_CLIENT_VALUE
+        ? projects?.filter((p) => p.client_id === clientId)
+        : projects;
+    return [
+      { value: NO_CLIENT_VALUE, label: "Sin proyecto" },
+      ...(filtered ?? [])
+        .map((p) => ({ value: p.id, label: p.name }))
+        .sort((a, b) => a.label.localeCompare(b.label, "es")),
+    ];
+  }, [projects, clientId]);
+
+  const handleProjectChange = (value: string) => {
+    const nextProjectId = value === NO_CLIENT_VALUE ? "" : value;
+    setProjectId(nextProjectId);
+    if (nextProjectId && clientId === NO_CLIENT_VALUE) {
+      const proj = projects?.find((p) => p.id === nextProjectId);
+      if (proj?.client_id) setClientId(proj.client_id);
+    }
+  };
+
+  const handleClientChange = (value: string) => {
+    setClientId(value);
+    if (!projectId) return;
+    const proj = projects?.find((p) => p.id === projectId);
+    const nextClient = value === NO_CLIENT_VALUE ? "" : value;
+    if (proj && nextClient && proj.client_id !== nextClient) {
+      setProjectId("");
+    }
+  };
+
   const handleCreate = () => {
     if (!title.trim()) return;
     createTask.mutate(
@@ -175,6 +212,7 @@ export function CreateTaskFromEmailDialog({
         due_date: dueDate || undefined,
         assigned_to: assignedTo === UNASSIGNED_VALUE ? undefined : assignedTo,
         client_id: clientId === NO_CLIENT_VALUE ? undefined : clientId,
+        project_id: projectId || undefined,
       },
       {
         onSuccess: () => {
@@ -389,7 +427,7 @@ export function CreateTaskFromEmailDialog({
             </div>
             <div className="space-y-1">
               <Label>Cliente (opcional)</Label>
-              <Select value={clientId} onValueChange={setClientId}>
+              <Select value={clientId} onValueChange={handleClientChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sin cliente" />
                 </SelectTrigger>
@@ -403,6 +441,16 @@ export function CreateTaskFromEmailDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Proyecto (opcional)</Label>
+            <SearchableSelect
+              options={projectOptions}
+              value={projectId || NO_CLIENT_VALUE}
+              onValueChange={handleProjectChange}
+              placeholder="Sin proyecto"
+              searchPlaceholder="Buscar proyecto..."
+            />
           </div>
         </div>
         <DialogFooter className="border-t border-border/60 px-5 py-3">

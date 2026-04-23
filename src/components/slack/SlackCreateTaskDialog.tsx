@@ -66,7 +66,7 @@ export function SlackCreateTaskDialog({
   const [additionalAssignees, setAdditionalAssignees] = useState<string[]>([]);
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const messageLink = useMemo(() => {
     if (!message?.ts) return "";
@@ -98,7 +98,7 @@ export function SlackCreateTaskDialog({
     setAdditionalAssignees([]);
     setDropboxLinks([]);
     setNewLink("");
-    setShowAdvanced(true);
+    setShowAdvanced(false);
   }, [open, message, channelTitle, channelId, authorLabel, messageLink]);
 
   const sortedAreaOptions = useMemo(
@@ -278,40 +278,40 @@ export function SlackCreateTaskDialog({
             />
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Cliente (opcional)</Label>
+              <SearchableSelect
+                options={clientOptions}
+                value={clientId || NONE_VALUE}
+                onValueChange={handleClientChange}
+                placeholder="Tarea interna"
+                searchPlaceholder="Buscar cliente..."
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Proyecto (opcional)</Label>
+              <SearchableSelect
+                options={projectOptions}
+                value={projectId || NONE_VALUE}
+                onValueChange={handleProjectChange}
+                placeholder="Sin proyecto"
+                searchPlaceholder="Buscar proyecto..."
+              />
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-1.5 transition-colors"
           >
             {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {showAdvanced ? "Menos opciones" : "Más opciones (cliente, proyecto, célula, colaboradores, enlaces...)"}
+            {showAdvanced ? "Menos opciones" : "Más opciones (célula, colaboradores, enlaces Dropbox...)"}
           </button>
 
           {showAdvanced && (
             <div className="space-y-4 pt-1 border-t border-border/40 animate-fade-in">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Cliente</Label>
-                  <SearchableSelect
-                    options={clientOptions}
-                    value={clientId || NONE_VALUE}
-                    onValueChange={handleClientChange}
-                    placeholder="Tarea interna"
-                    searchPlaceholder="Buscar cliente..."
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Proyecto</Label>
-                  <SearchableSelect
-                    options={projectOptions}
-                    value={projectId || NONE_VALUE}
-                    onValueChange={handleProjectChange}
-                    placeholder="Opcional"
-                    searchPlaceholder="Buscar proyecto..."
-                  />
-                </div>
-              </div>
-
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
                   <Label className="text-xs mb-0">Célula</Label>
