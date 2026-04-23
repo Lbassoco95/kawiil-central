@@ -180,7 +180,32 @@ function normalizeMailFolderDisplayName(s: string): string {
 
 const MAIL_FOLDER_LIST_SELECT =
   "id,displayName,parentFolderId,wellKnownFolderName,unreadItemCount,totalItemCount,childFolderCount";
-const MAIL_FOLDER_LIST_QUERY = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
+/** Raíz: incluye carpetas ocultas. Algunos tenants fallan al combinar $select+includeHiddenFolders en childFolders. */
+const MAIL_FOLDER_ROOT_LIST_QUERY =
+  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
+/** Hijos: sin includeHiddenFolders para máxima compatibilidad. */
+const MAIL_FOLDER_CHILD_LIST_QUERY = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100`;
+
+/** Listado plano solo nivel raíz (fallback si el recursivo falla o devuelve vacío por error Graph). */
+async function listMailFoldersRootOnlyLegacy(accessToken: string): Promise<unknown[]> {
+  const all: unknown[] = [];
+  let path = "/me/mailFolders?$top=100";
+  const maxPages = 25;
+  for (let page = 0; page < maxPages; page++) {
+    const data = (await graphRequest(accessToken, path)) as {
+      value?: unknown[];
+      "@odata.nextLink"?: string;
+    };
+    if (Array.isArray(data?.value)) {
+      for (const v of data.value) all.push(v);
+    }
+    const nl = data?.["@odata.nextLink"];
+    if (typeof nl !== "string" || !nl) break;
+    path = nextLinkToPath(nl);
+    if (!path) break;
+  }
+  return all;
+}
 
 function nextLinkToPath(nextLink: string): string {
   const m = nextLink.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
@@ -226,8 +251,8 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
     if (isRootLevel) rootFolderIds.add(id);
 
     const cc = row.childFolderCount;
-    const n = typeof cc === "number" ? cc : NaN;
-    const maybeHasKids = Number.isFinite(n) ? n > 0 : true;
+    /** Solo encolar hijos si Graph indica >0. Si falta el campo en niveles profundos, no expandir (evita cientos de llamadas y timeouts). En la raíz, si falta el contador, sí intentamos listar hijos una vez. */
+    const maybeHasKids = typeof cc === "number" ? cc > 0 : isRootLevel;
     if (maybeHasKids && all.length < MAX_FOLDERS && listCalls < MAX_GRAPH_LIST_CALLS) {
       if (!enqueuedChildren.has(id)) {
         enqueuedChildren.add(id);
@@ -253,7 +278,7 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
     }
   };
 
-  await paginateInto(`/me/mailFolders${MAIL_FOLDER_LIST_QUERY}`, true);
+  await paginateInto(`/me/mailFolders${MAIL_FOLDER_ROOT_LIST_QUERY}`, true);
 
   while (
     childQueue.length > 0 &&
@@ -263,7 +288,7 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
     const parentId = childQueue.shift();
     if (!parentId) break;
     const enc = encodeURIComponent(parentId);
-    await paginateInto(`/me/mailFolders/${enc}/childFolders${MAIL_FOLDER_LIST_QUERY}`, false);
+    await paginateInto(`/me/mailFolders/${enc}/childFolders${MAIL_FOLDER_CHILD_LIST_QUERY}`, false);
   }
 
   if (all.length >= MAX_FOLDERS || listCalls >= MAX_GRAPH_LIST_CALLS) {
@@ -1300,8 +1325,21 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
-        const { folders } = await listAllMailFoldersRecursive(accessToken);
-        result = folders;
+        try {
+          const { folders } = await listAllMailFoldersRecursive(accessToken);
+          result = folders;
+        } catch (e) {
+          console.error("[microsoft-api] mail-folders recursive failed, using root-only fallback:", e);
+          result = await listMailFoldersRootOnlyLegacy(accessToken);
+        }
+        if (!Array.isArray(result) || result.length === 0) {
+          try {
+            const again = await listMailFoldersRootOnlyLegacy(accessToken);
+            if (Array.isArray(again) && again.length > 0) result = again;
+          } catch {
+            /* mantener result previo */
+          }
+        }
         break;
       }
 

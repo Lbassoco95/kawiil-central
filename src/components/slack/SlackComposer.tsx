@@ -1,7 +1,14 @@
 import { FormEvent, KeyboardEvent, useRef, useEffect, useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Loader2, SendHorizontal, Smile, AtSign, CalendarClock, Paperclip, Mic, Square, RotateCcw, Sparkles, Wand2 } from "lucide-react";
@@ -12,6 +19,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const EMOJI_PICKER_KEYS = Object.keys(SLACK_EMOJI).slice(0, 48);
+
+const MENTION_LIST_CAP = 120;
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
@@ -63,7 +72,8 @@ type Props = {
   mentionUserIds?: string[];
   userMap?: Record<string, SlackUserProfile | undefined>;
   compact?: boolean;
-  onSchedule?: (postAtUnixSeconds: number) => void;
+  /** `messageText` es el borrador actual del compositor (incl. hilo). Puede devolver una promesa. */
+  onSchedule?: (postAtUnixSeconds: number, messageText: string) => void | Promise<void>;
   scheduling?: boolean;
   onUploadFile?: (file: File, initialComment?: string) => void;
   uploading?: boolean;
@@ -98,8 +108,11 @@ export function SlackComposer({
 }: Props) {
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mentionSearchInputRef = useRef<HTMLInputElement>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
+  /** Filtro del cuadro de búsqueda del popover (no reescribe el @ en el textarea hasta elegir). */
+  const [mentionOverrideFilter, setMentionOverrideFilter] = useState<string | null>(null);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleLocal, setScheduleLocal] = useState(defaultScheduleLocalValue);
   const [aiOpen, setAiOpen] = useState(false);
@@ -126,6 +139,17 @@ export function SlackComposer({
     };
   }, []);
 
+  useEffect(() => {
+    if (!mentionOpen) {
+      setMentionOverrideFilter(null);
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      mentionSearchInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [mentionOpen]);
+
   const submit = () => {
     const t = value.trim();
     if (!t || sending || disabled) return;
@@ -149,15 +173,34 @@ export function SlackComposer({
     });
   };
 
+  const effectiveMentionFilter = mentionOverrideFilter ?? mentionFilter;
+
   const filteredMentions = useMemo(() => {
-    const q = mentionFilter.toLowerCase();
-    return mentionUserIds
-      .filter((id) => {
-        const name = slackUserDisplayName(id, userMap).toLowerCase();
-        return !q || name.includes(q) || id.toLowerCase().includes(q);
+    const q = effectiveMentionFilter.toLowerCase();
+    const rows = mentionUserIds
+      .map((id) => {
+        const label = slackUserDisplayName(id, userMap);
+        const name = label.toLowerCase();
+        const idLower = id.toLowerCase();
+        if (q && !name.includes(q) && !idLower.includes(q)) return null;
+        let score = 4;
+        if (!q) score = 0;
+        else if (name.startsWith(q)) score = 0;
+        else if (name.split(/\s+/).some((part) => part.startsWith(q))) score = 1;
+        else if (idLower.startsWith(q)) score = 2;
+        else score = 3;
+        return { id, score, label };
       })
-      .slice(0, 8);
-  }, [mentionUserIds, mentionFilter, userMap]);
+      .filter((x): x is { id: string; score: number; label: string } => x != null)
+      .sort(
+        (a, b) =>
+          a.score - b.score ||
+          a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
+      )
+      .slice(0, MENTION_LIST_CAP)
+      .map((x) => x.id);
+    return rows;
+  }, [mentionUserIds, effectiveMentionFilter, userMap]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -175,8 +218,9 @@ export function SlackComposer({
     const at = before.lastIndexOf("@");
     if (at >= 0 && (at === 0 || /[\s\n]/.test(before[at - 1]))) {
       const frag = before.slice(at + 1);
-      if (!frag.includes(" ") && frag.length <= 40) {
+      if (!frag.includes(" ") && frag.length <= 80) {
         setMentionFilter(frag);
+        setMentionOverrideFilter(null);
         setMentionOpen(true);
         return;
       }
@@ -194,6 +238,7 @@ export function SlackComposer({
     const next = value.slice(0, at) + `<@${id}> ` + value.slice(pos);
     onChange(next);
     setMentionOpen(false);
+    setMentionOverrideFilter(null);
     requestAnimationFrame(() => {
       el.focus();
       const p = at + id.length + 4;
@@ -294,8 +339,19 @@ export function SlackComposer({
       toast.error("Elige una hora al menos 90 segundos en el futuro");
       return;
     }
-    onSchedule(postAt);
-    setScheduleOpen(false);
+    const msg = value.trim();
+    if (!msg) {
+      toast.error("Escribe un mensaje para programar");
+      return;
+    }
+    void (async () => {
+      try {
+        await Promise.resolve(onSchedule(postAt, msg));
+        setScheduleOpen(false);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo programar");
+      }
+    })();
   };
 
   const placeholder = channelLabel
@@ -303,6 +359,9 @@ export function SlackComposer({
     : "Escribe un mensaje…";
 
   const busy = disabled || sending || scheduling || uploading;
+
+  const iconBtnClass = compact ? "h-8 w-8 shrink-0 rounded-md" : "h-9 w-9 shrink-0 rounded-lg";
+  const iconClass = compact ? "h-3.5 w-3.5" : "h-4 w-4";
 
   const runImprove = async (mode: AiImproveMode) => {
     if (!onImproveWithAi) return;
@@ -382,30 +441,48 @@ export function SlackComposer({
       )}
       <div
         className={cn(
-          "mx-auto flex gap-2 items-end rounded-xl border border-border/80 bg-background shadow-sm px-2 py-2 focus-within:ring-1 focus-within:ring-primary/25",
+          "mx-auto flex flex-nowrap gap-1 sm:gap-1.5 items-end min-w-0 rounded-xl border border-border/80 bg-background shadow-sm px-1.5 py-1.5 sm:px-2 sm:py-2 focus-within:ring-1 focus-within:ring-primary/25",
           compact ? "max-w-none" : "max-w-4xl",
         )}
       >
-        <Popover open={mentionOpen} onOpenChange={setMentionOpen}>
+        <div className="flex shrink-0 items-end gap-0.5">
+        <Popover
+          open={mentionOpen}
+          onOpenChange={(o) => {
+            setMentionOpen(o);
+            if (!o) setMentionOverrideFilter(null);
+          }}
+        >
           <PopoverTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-10 w-10 shrink-0 rounded-lg"
+              className={iconBtnClass}
               disabled={busy}
               onClick={() => {
                 insertAtCursor("@");
                 setMentionFilter("");
+                setMentionOverrideFilter(null);
                 setMentionOpen(true);
               }}
             >
-              <AtSign className="h-4 w-4" />
+              <AtSign className={iconClass} />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-64 p-1" align="start" side="top">
-            <p className="text-[10px] text-muted-foreground px-2 py-1">Mencionar</p>
-            <ul className="max-h-48 overflow-y-auto">
+          <PopoverContent className="w-72 p-2" align="start" side="top">
+            <p className="text-[10px] text-muted-foreground px-0.5 pb-1.5">Mencionar</p>
+            <Input
+              ref={mentionSearchInputRef}
+              className="h-8 text-sm mb-2"
+              placeholder="Buscar por nombre…"
+              value={mentionOverrideFilter !== null ? mentionOverrideFilter : mentionFilter}
+              onChange={(e) => setMentionOverrideFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setMentionOpen(false);
+              }}
+            />
+            <ul className="max-h-60 overflow-y-auto -mx-0.5">
               {filteredMentions.map((id) => (
                 <li key={id}>
                   <button
@@ -425,8 +502,8 @@ export function SlackComposer({
         </Popover>
         <Popover>
           <PopoverTrigger asChild>
-            <Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0 rounded-lg" disabled={busy}>
-              <Smile className="h-4 w-4" />
+            <Button type="button" variant="ghost" size="icon" className={iconBtnClass} disabled={busy}>
+              <Smile className={iconClass} />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-72 p-2" align="start" side="top">
@@ -445,38 +522,67 @@ export function SlackComposer({
             </div>
           </PopoverContent>
         </Popover>
-        {onUploadFile && (
+        {onUploadFile && compact && recState === "idle" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={iconBtnClass}
+                disabled={busy}
+                title="Adjuntos y voz"
+              >
+                {uploading ? <Loader2 className={`${iconClass} animate-spin`} /> : <Paperclip className={iconClass} />}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                disabled={busy || uploading}
+                onSelect={() => {
+                  window.setTimeout(() => fileInputRef.current?.click(), 0);
+                }}
+              >
+                Adjuntar archivo…
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={busy} onSelect={() => void startRecording()}>
+                Nota de voz…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {onUploadFile && !compact && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-lg"
+            className={iconBtnClass}
             disabled={busy}
             title="Adjuntar archivo (máx. 50 MB)"
             onClick={() => fileInputRef.current?.click()}
           >
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+            {uploading ? <Loader2 className={`${iconClass} animate-spin`} /> : <Paperclip className={iconClass} />}
           </Button>
         )}
-        {onUploadFile && (
+        {onUploadFile && !compact && (
           <>
             {recState === "recording" ? (
               <Button
                 type="button"
                 variant="destructive"
                 size="icon"
-                className="h-10 w-10 shrink-0 rounded-lg"
+                className={iconBtnClass}
                 onClick={stopRecording}
                 title="Detener grabación"
               >
-                <Square className="h-4 w-4" />
+                <Square className={iconClass} />
               </Button>
             ) : recState === "stopped" ? (
               <>
-                <Button type="button" variant="secondary" size="sm" className="shrink-0 h-10" onClick={cancelRecording}>
+                <Button type="button" variant="secondary" size="sm" className="shrink-0 h-9 text-xs px-2" onClick={cancelRecording}>
                   Cancelar
                 </Button>
-                <Button type="button" size="sm" className="shrink-0 h-10" onClick={sendRecording}>
+                <Button type="button" size="sm" className="shrink-0 h-9 text-xs px-2" onClick={sendRecording}>
                   Enviar nota
                 </Button>
               </>
@@ -485,29 +591,45 @@ export function SlackComposer({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-10 w-10 shrink-0 rounded-lg"
+                className={iconBtnClass}
                 disabled={busy}
                 title="Grabar nota de voz"
                 onClick={() => void startRecording()}
               >
-                <Mic className="h-4 w-4" />
+                <Mic className={iconClass} />
               </Button>
             )}
           </>
         )}
-        {onSchedule && (
-          <Dialog
-            open={scheduleOpen}
-            onOpenChange={(o) => {
-              setScheduleOpen(o);
-              if (o) setScheduleLocal(defaultScheduleLocalValue());
-            }}
+        {onUploadFile && compact && recState === "recording" && (
+          <Button
+            type="button"
+            variant="destructive"
+            size="icon"
+            className={iconBtnClass}
+            onClick={stopRecording}
+            title="Detener grabación"
           >
+            <Square className={iconClass} />
+          </Button>
+        )}
+        {onUploadFile && compact && recState === "stopped" && (
+          <>
+            <Button type="button" variant="secondary" size="sm" className="shrink-0 h-8 text-xs px-2" onClick={cancelRecording}>
+              Cancelar
+            </Button>
+            <Button type="button" size="sm" className="shrink-0 h-8 text-xs px-2" onClick={sendRecording}>
+              Enviar nota
+            </Button>
+          </>
+        )}
+        {onSchedule && (
+          <>
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-10 w-10 shrink-0 rounded-lg"
+              className={iconBtnClass}
               disabled={!value.trim() || busy}
               title="Programar envío"
               onClick={() => {
@@ -515,51 +637,60 @@ export function SlackComposer({
                 setScheduleOpen(true);
               }}
             >
-              {scheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+              {scheduling ? <Loader2 className={`${iconClass} animate-spin`} /> : <CalendarClock className={iconClass} />}
             </Button>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Programar mensaje en Slack</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3 py-2">
-                <p className="text-xs text-muted-foreground">
-                  La hora es la de tu dispositivo. Slack exige al menos ~90 s en el futuro.
-                </p>
-                <div className="space-y-2">
-                  <Label htmlFor="slack-schedule-dt">Fecha y hora</Label>
-                  <input
-                    id="slack-schedule-dt"
-                    name="slack_schedule_datetime"
-                    type="datetime-local"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={scheduleLocal}
-                    onChange={(e) => setScheduleLocal(e.target.value)}
-                  />
+            <Dialog
+              open={scheduleOpen}
+              onOpenChange={(o) => {
+                setScheduleOpen(o);
+                if (o) setScheduleLocal(defaultScheduleLocalValue());
+              }}
+            >
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Programar mensaje en Slack</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    La hora es la de tu dispositivo. Slack exige al menos ~90 s en el futuro.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="slack-schedule-dt">Fecha y hora</Label>
+                    <input
+                      id="slack-schedule-dt"
+                      name="slack_schedule_datetime"
+                      type="datetime-local"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={scheduleLocal}
+                      onChange={(e) => setScheduleLocal(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setScheduleOpen(false)}>
-                  Cerrar
-                </Button>
-                <Button type="button" onClick={applySchedule} disabled={scheduling}>
-                  {scheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : "Programar"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setScheduleOpen(false)}>
+                    Cerrar
+                  </Button>
+                  <Button type="button" onClick={applySchedule} disabled={scheduling}>
+                    {scheduling ? <Loader2 className="h-4 w-4 animate-spin" /> : "Programar"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </>
         )}
         {showRestoreDraft && onRestoreDraft && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-lg"
+            className={iconBtnClass}
             title="Restaurar borrador guardado"
             onClick={onRestoreDraft}
           >
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className={iconClass} />
           </Button>
         )}
+        </div>
         <Textarea
           ref={ta}
           id="comunicacion-slack-mensaje"
@@ -572,27 +703,33 @@ export function SlackComposer({
           disabled={busy}
           rows={1}
           className={cn(
-            "min-h-[40px] max-h-[160px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm py-2.5",
-            compact && "min-h-[36px] max-h-[120px]",
+            "min-w-0 flex-1 min-h-[36px] max-h-[160px] resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 text-sm py-2 sm:py-2.5",
+            compact ? "max-h-[120px] min-h-[32px]" : "min-h-[40px]",
           )}
         />
+        <div className="flex shrink-0 items-end gap-0.5">
         {onImproveWithAi && (
           <Popover open={aiOpen} onOpenChange={setAiOpen}>
             <PopoverTrigger asChild>
               <Button
                 type="button"
                 size="sm"
-                className="h-10 shrink-0 rounded-lg gap-1.5 px-3 text-white shadow-sm hover:opacity-90"
+                className={cn(
+                  "shrink-0 rounded-lg gap-1 text-white shadow-sm hover:opacity-90",
+                  compact ? "h-8 w-8 p-0" : "h-9 px-2.5 gap-1.5",
+                )}
                 style={{ background: KAWIIL_AI_GRADIENT }}
                 disabled={busy || !value.trim()}
                 title="Mejorar con Kawiil AI"
               >
                 {aiBusy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className={`${iconClass} animate-spin`} />
                 ) : (
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className={iconClass} />
                 )}
-                <span className="hidden sm:inline text-[11px] font-semibold">Mejorar</span>
+                {!compact && (
+                  <span className="hidden sm:inline text-[11px] font-semibold">Mejorar</span>
+                )}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-56 p-1" align="end" side="top">
@@ -656,9 +793,10 @@ export function SlackComposer({
             </PopoverContent>
           </Popover>
         )}
-        <Button type="submit" size="icon" className="shrink-0 h-10 w-10 rounded-lg" disabled={sending || disabled || !value.trim()}>
-          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+        <Button type="submit" size="icon" className={iconBtnClass} disabled={sending || disabled || !value.trim()}>
+          {sending ? <Loader2 className={`${iconClass} animate-spin`} /> : <SendHorizontal className={iconClass} />}
         </Button>
+        </div>
       </div>
     </form>
   );

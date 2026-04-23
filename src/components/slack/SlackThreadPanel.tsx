@@ -23,6 +23,17 @@ type Props = {
   mentionUserIds?: string[];
   /** Resaltar una respuesta concreta (p. ej. deep link desde notificación). */
   highlightReplyTs?: string | null;
+  onEditSlackMessage?: (ts: string, text: string) => void;
+  onDeleteSlackMessage?: (ts: string) => void;
+  slackMessageActionPending?: boolean;
+  onUploadThreadFile?: (file: File, initialComment?: string) => void;
+  uploadingThreadFile?: boolean;
+  onScheduleThreadMessage?: (postAtUnixSeconds: number, text: string) => Promise<void>;
+  schedulingThreadMessage?: boolean;
+  onImproveThreadDraft?: (
+    draft: string,
+    mode: "improve" | "shorter" | "formal" | "friendly",
+  ) => Promise<string>;
 };
 
 export function SlackThreadPanel({
@@ -39,6 +50,14 @@ export function SlackThreadPanel({
   onCreateTaskFromMessage,
   mentionUserIds,
   highlightReplyTs = null,
+  onEditSlackMessage,
+  onDeleteSlackMessage,
+  slackMessageActionPending = false,
+  onUploadThreadFile,
+  uploadingThreadFile = false,
+  onScheduleThreadMessage,
+  schedulingThreadMessage = false,
+  onImproveThreadDraft,
 }: Props) {
   const [draft, setDraft] = useState("");
 
@@ -114,6 +133,9 @@ export function SlackThreadPanel({
                 reactionPending={reactionPending}
                 onToggleReaction={onToggleReaction}
                 onCreateTaskFromMessage={onCreateTaskFromMessage}
+                onEditSlackMessage={onEditSlackMessage}
+                onDeleteSlackMessage={onDeleteSlackMessage}
+                slackMessageActionPending={slackMessageActionPending}
               />
             </div>
           )}
@@ -133,6 +155,18 @@ export function SlackThreadPanel({
               mentionUserIds={effectiveMentionIds}
               userMap={userMap}
               compact
+              onUploadFile={onUploadThreadFile}
+              uploading={uploadingThreadFile}
+              onSchedule={
+                onScheduleThreadMessage
+                  ? async (postAt, text) => {
+                      await onScheduleThreadMessage(postAt, text);
+                      setDraft("");
+                    }
+                  : undefined
+              }
+              scheduling={schedulingThreadMessage}
+              onImproveWithAi={onImproveThreadDraft}
             />
           </div>
         </div>

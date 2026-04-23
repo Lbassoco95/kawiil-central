@@ -308,6 +308,9 @@ export type SlackMessage = {
   user?: string;
   text?: string;
   bot_id?: string;
+  /** Nombre publicado en mensajes de bot/integración (API Slack). */
+  username?: string;
+  bot_profile?: { name?: string; icons?: Record<string, unknown> };
   subtype?: string;
   type?: string;
   reply_count?: number;

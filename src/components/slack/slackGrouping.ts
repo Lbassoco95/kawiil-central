@@ -1,4 +1,5 @@
-import type { SlackConversation } from "@/lib/slackApi";
+import type { SlackConversation, SlackMessage } from "@/lib/slackApi";
+import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 
 export type SlackConversationGroups = {
   publicChannels: SlackConversation[];
@@ -41,6 +42,20 @@ export function slackUserDisplayName(
   const n = p?.display_name || p?.real_name;
   if (n?.trim()) return n.trim();
   return slackUserId.slice(0, 10) + (slackUserId.length > 10 ? "…" : "");
+}
+
+/** Autor visible en la lista de mensajes (humanos, apps y bots con nombre en el payload). */
+export function slackMessageAuthorDisplayName(
+  m: SlackMessage,
+  userMap: Record<string, SlackUserProfile | undefined>,
+): string {
+  const fromProfile = m.bot_profile?.name?.trim();
+  if (fromProfile) return fromProfile;
+  const fromUsername = m.username?.trim();
+  if (fromUsername && fromUsername.toLowerCase() !== "slackbot") return fromUsername;
+  if (m.user) return slackUserDisplayName(m.user, userMap);
+  if (m.bot_id) return "App";
+  return "Sistema";
 }
 
 export type ConversationTitleOpts = {

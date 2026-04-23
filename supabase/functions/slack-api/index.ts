@@ -35,12 +35,14 @@ async function slackFilesUploadClassic(
   filename: string,
   bytes: Uint8Array,
   initialComment?: string,
+  threadTs?: string,
 ) {
   const form = new FormData();
   form.append("channels", channel);
   form.append("filename", filename);
   form.append("file", new Blob([bytes]), filename);
   if (initialComment?.trim()) form.append("initial_comment", initialComment.trim());
+  if (threadTs?.trim()) form.append("thread_ts", threadTs.trim());
   const res = await fetch("https://slack.com/api/files.upload", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -60,6 +62,8 @@ type SlackMethod =
   | "conversations.info"
   | "chat.postMessage"
   | "chat.scheduleMessage"
+  | "chat.update"
+  | "chat.delete"
   | "reactions.add"
   | "reactions.remove"
   | "users.info"
@@ -80,6 +84,7 @@ async function slackFilesUploadExternal(
   filename: string,
   bytes: Uint8Array,
   initialComment?: string,
+  threadTs?: string,
 ) {
   const step1Params = new URLSearchParams({
     filename,
@@ -124,6 +129,7 @@ async function slackFilesUploadExternal(
     files: [{ id: gu.file_id, title: filename }],
   };
   if (initialComment?.trim()) completePayload.initial_comment = initialComment.trim();
+  if (threadTs?.trim()) completePayload.thread_ts = threadTs.trim();
 
   let cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
     method: "POST",
@@ -141,6 +147,7 @@ async function slackFilesUploadExternal(
     comp.set("files", JSON.stringify([{ id: gu.file_id, title: filename }]));
     comp.set("channels", channel);
     if (initialComment?.trim()) comp.set("initial_comment", initialComment.trim());
+    if (threadTs?.trim()) comp.set("thread_ts", threadTs.trim());
     cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
       method: "POST",
       headers: {
@@ -162,6 +169,7 @@ async function slackFilesUploadExternal(
       files: [{ id: gu.file_id, title: filename }],
     };
     if (initialComment?.trim()) alt.initial_comment = initialComment.trim();
+    if (threadTs?.trim()) alt.thread_ts = threadTs.trim();
     cRes = await fetch("https://slack.com/api/files.completeUploadExternal", {
       method: "POST",
       headers: {
@@ -183,12 +191,13 @@ async function slackFilesUploadWithFallback(
   filename: string,
   bytes: Uint8Array,
   initialComment?: string,
+  threadTs?: string,
 ): Promise<Record<string, unknown>> {
-  const ext = await slackFilesUploadExternal(token, channel, filename, bytes, initialComment);
+  const ext = await slackFilesUploadExternal(token, channel, filename, bytes, initialComment, threadTs);
   if (ext.ok === true) return ext as Record<string, unknown>;
   const err = String((ext as { error?: string }).error || "");
   if (err.includes("missing_scope")) return ext as Record<string, unknown>;
-  const classic = await slackFilesUploadClassic(token, channel, filename, bytes, initialComment);
+  const classic = await slackFilesUploadClassic(token, channel, filename, bytes, initialComment, threadTs);
   return annotateSlackResponse(classic);
 }
 
@@ -450,6 +459,8 @@ Deno.serve(async (req) => {
       const channel = String(multipart.get("channel") || "");
       const filename = String(multipart.get("filename") || "upload");
       const initialComment = multipart.get("initial_comment")?.toString();
+      const threadTsRaw = multipart.get("thread_ts")?.toString();
+      const threadTs = threadTsRaw?.trim() || undefined;
       const file = multipart.get("file");
       if (!channel) {
         return jsonOk({ ok: false, error: "channel required" });
@@ -463,7 +474,14 @@ Deno.serve(async (req) => {
         return jsonOk({ ok: false, error: "file too large (max ~50MB)" });
       }
            const name = filename || file.name || "upload";
-      const data = await slackFilesUploadWithFallback(conn.access_token, channel, name, binary, initialComment);
+      const data = await slackFilesUploadWithFallback(
+        conn.access_token,
+        channel,
+        name,
+        binary,
+        initialComment,
+        threadTs,
+      );
       return jsonOk(data);
     }
 
@@ -715,6 +733,34 @@ Deno.serve(async (req) => {
       return jsonOk(data);
     }
 
+    if (action === "chat.update") {
+      const channel = json.channel as string;
+      const ts = json.ts as string;
+      const text = json.text as string;
+      if (!channel || !ts?.trim() || !text?.trim()) {
+        return jsonOk({ ok: false, error: "channel, ts and text required" });
+      }
+      const data = await slackCall(conn.access_token, "chat.update", {
+        channel,
+        ts: ts.trim(),
+        text: text.trim(),
+      });
+      return jsonOk(data);
+    }
+
+    if (action === "chat.delete") {
+      const channel = json.channel as string;
+      const ts = json.ts as string;
+      if (!channel || !ts?.trim()) {
+        return jsonOk({ ok: false, error: "channel and ts required" });
+      }
+      const data = await slackCall(conn.access_token, "chat.delete", {
+        channel,
+        ts: ts.trim(),
+      });
+      return jsonOk(data);
+    }
+
     if (action === "auth.test") {
       // Diagnóstico: devuelve identidad + scopes del token de usuario actual.
       // Slack devuelve los scopes efectivos en el header `x-oauth-scopes` de la respuesta.
@@ -821,6 +867,7 @@ Deno.serve(async (req) => {
       const filename = (json.filename as string) || "upload";
       const base64 = json.base64 as string;
       const initialComment = json.initial_comment as string | undefined;
+      const threadTs = (json.thread_ts as string | undefined)?.trim() || undefined;
       if (!channel || !base64?.length) {
         return jsonOk({ ok: false, error: "channel and base64 required" });
       }
@@ -833,7 +880,14 @@ Deno.serve(async (req) => {
       if (binary.byteLength > MAX_UPLOAD_BYTES) {
         return jsonOk({ ok: false, error: "file too large (max ~50MB)" });
       }
-      const data = await slackFilesUploadWithFallback(conn.access_token, channel, filename, binary, initialComment);
+      const data = await slackFilesUploadWithFallback(
+        conn.access_token,
+        channel,
+        filename,
+        binary,
+        initialComment,
+        threadTs,
+      );
       return jsonOk(data);
     }
 
@@ -888,6 +942,8 @@ Deno.serve(async (req) => {
         "conversations.info",
         "chat.postMessage",
         "chat.scheduleMessage",
+        "chat.update",
+        "chat.delete",
         "users.profile.set",
         "files.fetch_private",
         "files.upload",

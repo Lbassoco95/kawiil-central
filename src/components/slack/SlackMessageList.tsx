@@ -10,7 +10,17 @@ import {
 } from "react";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ClipboardPlus,
@@ -21,8 +31,10 @@ import {
   Loader2,
   MessageSquareText,
   MoreHorizontal,
+  Pencil,
   Smile,
   Sparkles,
+  Trash2,
   UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,7 +48,7 @@ import { toast } from "sonner";
 import { fetchSlackPrivateFileBlob, type SlackFile, type SlackMessage } from "@/lib/slackApi";
 import { KAWIIL_AI_GRADIENT } from "@/lib/kawiilAi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
-import { slackUserDisplayName } from "./slackGrouping";
+import { slackMessageAuthorDisplayName, slackUserDisplayName } from "./slackGrouping";
 import { cn } from "@/lib/utils";
 import {
   formatDaySeparatorLabel,
@@ -88,6 +100,11 @@ type Props = {
    * consumirlo cuando tengamos persistencia de last_read por conversación.
    */
   lastReadTs?: string | null;
+  /** Editar mensaje propio (Slack `chat.update`). Requiere canal real en `slackReactionChannelId`. */
+  onEditSlackMessage?: (ts: string, text: string) => void;
+  /** Eliminar mensaje propio (Slack `chat.delete`). */
+  onDeleteSlackMessage?: (ts: string) => void;
+  slackMessageActionPending?: boolean;
 };
 
 const ANCHOR_PREFETCH_MAX = 25;
@@ -357,11 +374,17 @@ export function SlackMessageList({
   savedMessageKeys,
   currentChannelName = null,
   lastReadTs = null,
+  onEditSlackMessage,
+  onDeleteSlackMessage,
+  slackMessageActionPending = false,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [mentionUserId, setMentionUserId] = useState<string | null>(null);
   const [reactionPickerTs, setReactionPickerTs] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
+  const [editTarget, setEditTarget] = useState<SlackMessage | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [deleteTargetTs, setDeleteTargetTs] = useState<string | null>(null);
   const prevLenRef = useRef(0);
   const stickBottomRef = useRef(true);
   const anchorPrefetchCountRef = useRef(0);
@@ -497,7 +520,7 @@ export function SlackMessageList({
     const idSafe = m.ts.replace(/\./g, "-");
     const highlight = highlightTs && m.ts === highlightTs;
     const uid = m.user;
-    const label = m.bot_id ? "Bot" : slackUserDisplayName(uid, userMap);
+    const label = slackMessageAuthorDisplayName(m, userMap);
     const prof = uid ? userMap[uid] : undefined;
     const av = prof?.avatar_url;
 
@@ -580,6 +603,13 @@ export function SlackMessageList({
     const replyUserIds = (m.reply_users ?? []).slice(0, 3);
     const latestReplyTs = m.latest_reply ?? null;
     const isSaved = !!(selectedChannelId && savedMessageKeys?.has(`${selectedChannelId}|${m.ts}`));
+
+    const isOwnMessage = !!(slackSelfUserId && uid === slackSelfUserId);
+    const canModifyOwnMessage =
+      isOwnMessage &&
+      !isSlackSystemSubtype(m.subtype) &&
+      !!slackReactionChannelId &&
+      !!(onEditSlackMessage || onDeleteSlackMessage);
 
     rows.push(
       <div
@@ -872,6 +902,28 @@ export function SlackMessageList({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" side="top" className="w-56">
+                    {canModifyOwnMessage && onEditSlackMessage && (
+                      <DropdownMenuItem
+                        disabled={slackMessageActionPending}
+                        onSelect={() => {
+                          setEditTarget(m);
+                          setEditDraft(m.text ?? "");
+                        }}
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Editar mensaje
+                      </DropdownMenuItem>
+                    )}
+                    {canModifyOwnMessage && onDeleteSlackMessage && (
+                      <DropdownMenuItem
+                        disabled={slackMessageActionPending}
+                        className="text-destructive focus:text-destructive"
+                        onSelect={() => setDeleteTargetTs(m.ts)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Eliminar…
+                      </DropdownMenuItem>
+                    )}
                     {onCreateTaskFromMessage && (
                       <DropdownMenuItem onSelect={() => onCreateTaskFromMessage(m)}>
                         <ClipboardPlus className="h-4 w-4 mr-2" />
@@ -980,6 +1032,90 @@ export function SlackMessageList({
           )}
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={!!editTarget}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditTarget(null);
+            setEditDraft("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar mensaje</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            rows={5}
+            className="text-sm"
+            disabled={slackMessageActionPending}
+            placeholder="Texto del mensaje (mrkdwn de Slack)"
+          />
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditTarget(null);
+                setEditDraft("");
+              }}
+              disabled={slackMessageActionPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={slackMessageActionPending || !editDraft.trim() || !editTarget}
+              onClick={() => {
+                if (!editTarget || !onEditSlackMessage) return;
+                const t = editDraft.trim();
+                if (!t) return;
+                onEditSlackMessage(editTarget.ts, t);
+                setEditTarget(null);
+                setEditDraft("");
+              }}
+            >
+              {slackMessageActionPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Guardar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={!!deleteTargetTs} onOpenChange={(o) => !o && setDeleteTargetTs(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar mensaje</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esto borrará el mensaje en Slack para todos. No se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={slackMessageActionPending}>Cancelar</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={slackMessageActionPending}
+              onClick={() => {
+                if (deleteTargetTs && onDeleteSlackMessage) {
+                  onDeleteSlackMessage(deleteTargetTs);
+                }
+                setDeleteTargetTs(null);
+              }}
+            >
+              {slackMessageActionPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Eliminar"
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

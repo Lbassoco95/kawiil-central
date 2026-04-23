@@ -1008,12 +1008,33 @@ export default function Comunicacion() {
   const { data: channelMembers = [] } = useQuery({
     queryKey: ["slack-channel-members", selectedChannel],
     queryFn: async () => {
-      const d = await invokeSlackApi<{ ok: boolean; members?: string[] }>({
-        action: "conversations.members",
-        channel: selectedChannel!,
-        limit: 200,
-      }, { timeoutMs: 25_000 });
-      return d.members || [];
+      const acc: string[] = [];
+      let cursor: string | undefined;
+      const MAX_PAGES = 40;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const d = await invokeSlackApi<{
+          ok: boolean;
+          members?: string[];
+          response_metadata?: { next_cursor?: string };
+        }>(
+          {
+            action: "conversations.members",
+            channel: selectedChannel!,
+            limit: 200,
+            ...(cursor ? { cursor } : {}),
+          },
+          { timeoutMs: 55_000 },
+        );
+        if (!d.ok) {
+          if (page === 0) return [];
+          break;
+        }
+        if (Array.isArray(d.members) && d.members.length) acc.push(...d.members);
+        const next = d.response_metadata?.next_cursor?.trim();
+        if (!next) break;
+        cursor = next;
+      }
+      return [...new Set(acc)];
     },
     enabled: isConnected && !!selectedChannel,
     staleTime: 120_000,
@@ -1194,28 +1215,72 @@ export default function Comunicacion() {
     onError: onSlackChatMutationError,
   });
 
+  const invalidateSlackHistoryAndOpenThread = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+    if (threadRootTs) {
+      qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, threadRootTs] });
+    }
+  }, [qc, selectedChannel, threadRootTs]);
+
+  const slackMessageEditMutation = useMutation({
+    mutationFn: async (vars: { ts: string; text: string }) => {
+      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+        action: "chat.update",
+        channel: selectedChannel!,
+        ts: vars.ts,
+        text: vars.text,
+      });
+      if (!data.ok) throw new Error(data.error || "No se pudo editar el mensaje");
+    },
+    onSuccess: () => {
+      toast.success("Mensaje actualizado");
+      invalidateSlackHistoryAndOpenThread();
+    },
+    onError: onSlackChatMutationError,
+  });
+
+  const slackMessageDeleteMutation = useMutation({
+    mutationFn: async (ts: string) => {
+      const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
+        action: "chat.delete",
+        channel: selectedChannel!,
+        ts,
+      });
+      if (!data.ok) throw new Error(data.error || "No se pudo eliminar el mensaje");
+    },
+    onSuccess: () => {
+      toast.success("Mensaje eliminado");
+      invalidateSlackHistoryAndOpenThread();
+    },
+    onError: onSlackChatMutationError,
+  });
+
   const scheduleMutation = useMutation({
-    mutationFn: async (postAt: number) => {
-      const text = draft.trim();
+    mutationFn: async (vars: { postAt: number; text: string; thread_ts?: string }) => {
+      const text = vars.text.trim();
       if (!text) throw new Error("Escribe un mensaje para programar");
       const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
         action: "chat.scheduleMessage",
         channel: selectedChannel!,
         text,
-        post_at: postAt,
+        post_at: vars.postAt,
+        thread_ts: vars.thread_ts,
       });
       if (!data.ok) throw new Error(data.error || "No se pudo programar el mensaje");
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       toast.success("Mensaje programado en Slack");
-      setDraft("");
-      if (user?.id && selectedChannel) clearSlackDraft(user.id, selectedChannel);
+      if (!vars.thread_ts) {
+        setDraft("");
+        if (user?.id && selectedChannel) clearSlackDraft(user.id, selectedChannel);
+      }
+      invalidateSlackHistoryAndOpenThread();
     },
     onError: onSlackChatMutationError,
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (vars: { file: File; initial_comment?: string }) => {
+    mutationFn: async (vars: { file: File; initial_comment?: string; thread_ts?: string }) => {
       if (vars.file.size > MAX_UPLOAD_BYTES) throw new Error("El archivo supera 50 MB");
       const form = new FormData();
       form.append("action", "files.upload");
@@ -1223,12 +1288,17 @@ export default function Comunicacion() {
       form.append("filename", vars.file.name);
       form.append("file", vars.file);
       if (vars.initial_comment?.trim()) form.append("initial_comment", vars.initial_comment.trim());
+      if (vars.thread_ts?.trim()) form.append("thread_ts", vars.thread_ts.trim());
       const data = (await invokeSlackFileUpload(form)) as { ok?: boolean; error?: string };
       if (!data.ok) throw new Error(String(data.error || "No se pudo subir el archivo"));
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       toast.success("Archivo enviado a Slack");
       qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+      const t = vars.thread_ts?.trim();
+      if (t) {
+        qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, t] });
+      }
     },
     onError: onSlackFileUploadError,
   });
@@ -1686,6 +1756,11 @@ export default function Comunicacion() {
               onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
               savedMessageKeys={savedKeySet}
               currentChannelName={headerTitle}
+              onEditSlackMessage={(ts, text) => slackMessageEditMutation.mutate({ ts, text })}
+              onDeleteSlackMessage={(ts) => slackMessageDeleteMutation.mutate(ts)}
+              slackMessageActionPending={
+                slackMessageEditMutation.isPending || slackMessageDeleteMutation.isPending
+              }
             />
             <SlackQuickReplyBar
               channelId={selectedChannel}
@@ -1726,7 +1801,7 @@ export default function Comunicacion() {
               channelLabel={headerTitle}
               mentionUserIds={composerMemberIds}
               userMap={userMap}
-              onSchedule={(postAt) => scheduleMutation.mutate(postAt)}
+              onSchedule={(postAt, text) => scheduleMutation.mutateAsync({ postAt, text })}
               scheduling={scheduleMutation.isPending}
               onUploadFile={(file, initial_comment) =>
                 uploadMutation.mutate({ file, initial_comment })
@@ -1809,6 +1884,56 @@ export default function Comunicacion() {
               })
             }
             onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
+            onEditSlackMessage={(ts, text) => slackMessageEditMutation.mutate({ ts, text })}
+            onDeleteSlackMessage={(ts) => slackMessageDeleteMutation.mutate(ts)}
+            slackMessageActionPending={
+              slackMessageEditMutation.isPending || slackMessageDeleteMutation.isPending
+            }
+            onUploadThreadFile={
+              threadRootTs
+                ? (file, initial_comment) =>
+                    uploadMutation.mutate({ file, initial_comment, thread_ts: threadRootTs })
+                : undefined
+            }
+            uploadingThreadFile={uploadMutation.isPending}
+            onScheduleThreadMessage={
+              threadRootTs
+                ? (postAt, text) =>
+                    scheduleMutation.mutateAsync({ postAt, text, thread_ts: threadRootTs })
+                : undefined
+            }
+            schedulingThreadMessage={scheduleMutation.isPending}
+            onImproveThreadDraft={async (draftText, mode) => {
+              const channelType = selectedMeta?.is_im
+                ? "im"
+                : selectedMeta?.is_mpim
+                  ? "mpim"
+                  : selectedMeta?.is_private
+                    ? "private"
+                    : "channel";
+              const { data, error } = await supabase.functions.invoke<{
+                improved?: string;
+                error?: string;
+                message?: string;
+              }>("slack-ai-improve", {
+                body: {
+                  draft: draftText,
+                  mode,
+                  channelTitle: headerTitle,
+                  channelType,
+                  userName:
+                    (user?.user_metadata as { full_name?: string } | undefined)?.full_name ||
+                    user?.email ||
+                    "",
+                  locale: "es",
+                },
+              });
+              if (error) throw new Error(error.message || "Error invocando slack-ai-improve");
+              if (!data || data.error) {
+                throw new Error(data?.message || data?.error || "Sin sugerencia");
+              }
+              return (data.improved || "").trim();
+            }}
           />
           <SlackActivityPanel
             open={activityPanelOpen}

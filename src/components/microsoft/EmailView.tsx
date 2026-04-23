@@ -810,6 +810,9 @@ export function EmailView() {
   const [newFolderName, setNewFolderName] = useState("");
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
+  const [moveFolderSearch, setMoveFolderSearch] = useState("");
+  const [movePopoverCreateOpen, setMovePopoverCreateOpen] = useState(false);
+  const [moveFolderCreateName, setMoveFolderCreateName] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<AttachmentPreviewState | null>(null);
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
@@ -1068,6 +1071,17 @@ export function EmailView() {
     );
   }, [folders, selectedFolderId, folderTreeData]);
 
+  const foldersForMoveListFiltered = useMemo(() => {
+    const q = moveFolderSearch.trim().toLowerCase();
+    if (!q) return foldersForMoveList;
+    return (foldersForMoveList as any[]).filter((f) => {
+      const pathStr = folderPathFromId(f.id, folderById).toLowerCase();
+      const dn = String(f.displayName || "").toLowerCase();
+      const label = getFolderLabel(String(f.displayName || "")).toLowerCase();
+      return pathStr.includes(q) || dn.includes(q) || label.includes(q);
+    });
+  }, [foldersForMoveList, moveFolderSearch, folderById]);
+
   const resolvedSelectedFolder = useMemo(() => {
     const list = folders as any[];
     const direct = list.find((f) => f.id === selectedFolderId);
@@ -1111,7 +1125,24 @@ export function EmailView() {
         setMovePopoverOpen(false);
       },
     });
-  }, [moveEmail, selectedEmailId, allEmails]);
+  }, [moveEmail, selectedEmailId, allEmails, resetAction]);
+
+  const handleCreateFolderAndMove = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed || !selectedEmailId) return;
+      createMailFolder.mutate(trimmed, {
+        onSuccess: (data) => {
+          setMovePopoverCreateOpen(false);
+          setMoveFolderCreateName("");
+          setMoveFolderSearch("");
+          const id = typeof (data as { id?: unknown })?.id === "string" ? (data as { id: string }).id : undefined;
+          if (id) handleMoveEmail(selectedEmailId, id);
+        },
+      });
+    },
+    [createMailFolder, selectedEmailId, handleMoveEmail],
+  );
 
   const handleOpenEmail = useCallback((email: any) => {
     setSelectedEmailId(email.id);
@@ -2709,7 +2740,17 @@ export function EmailView() {
                   </TooltipContent>
                 </Tooltip>
 
-                <Popover open={movePopoverOpen} onOpenChange={setMovePopoverOpen}>
+                <Popover
+                  open={movePopoverOpen}
+                  onOpenChange={(o) => {
+                    setMovePopoverOpen(o);
+                    if (!o) {
+                      setMoveFolderSearch("");
+                      setMovePopoverCreateOpen(false);
+                      setMoveFolderCreateName("");
+                    }
+                  }}
+                >
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <PopoverTrigger asChild>
@@ -2722,32 +2763,130 @@ export function EmailView() {
                       Mover
                     </TooltipContent>
                   </Tooltip>
-                  <PopoverContent className="w-72 p-2" align="start">
-                    <ScrollArea className="max-h-64">
-                      <div className="flex flex-col gap-0.5 pr-2">
-                        {foldersForMoveList.map((folder: any) => {
-                          const Icon = getFolderIcon(folder.displayName);
-                          const label = getFolderLabel(folder.displayName);
-                          const pathStr = folderPathFromId(folder.id, folderById);
-                          return (
-                            <button
-                              key={folder.id}
-                              type="button"
-                              className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent"
-                              onClick={() => {
-                                if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
-                              }}
-                            >
-                              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate">{label}</span>
-                                <span className="block truncate text-[11px] text-muted-foreground">{pathStr}</span>
-                              </span>
-                            </button>
-                          );
-                        })}
+                  <PopoverContent className="flex w-72 flex-col p-0" align="start">
+                    <div className="shrink-0 border-b border-border/50 p-2">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={moveFolderSearch}
+                          onChange={(e) => setMoveFolderSearch(e.target.value)}
+                          placeholder="Buscar carpeta…"
+                          className="h-8 border-0 bg-muted/50 pl-8 text-xs"
+                          autoFocus
+                          aria-label="Buscar carpeta para mover"
+                        />
+                      </div>
+                    </div>
+                    <ScrollArea className="max-h-72">
+                      <div className="flex flex-col gap-0.5 p-2 pr-2">
+                        {foldersForMoveListFiltered.length === 0 ? (
+                          <div className="space-y-2 px-1 py-2">
+                            <p className="text-center text-xs text-muted-foreground">
+                              {!moveFolderSearch.trim() && foldersForMoveList.length === 0
+                                ? "No hay otras carpetas"
+                                : "Sin coincidencias"}
+                            </p>
+                            {moveFolderSearch.trim() ? (
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                className="h-8 w-full text-xs"
+                                onClick={() => handleCreateFolderAndMove(moveFolderSearch)}
+                                disabled={createMailFolder.isPending || !selectedEmailId}
+                              >
+                                Crear «{moveFolderSearch.trim()}» y mover
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : (
+                          foldersForMoveListFiltered.map((folder: any) => {
+                            const Icon = getFolderIcon(folder.displayName);
+                            const label = getFolderLabel(folder.displayName);
+                            const pathStr = folderPathFromId(folder.id, folderById);
+                            return (
+                              <button
+                                key={folder.id}
+                                type="button"
+                                className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent"
+                                onClick={() => {
+                                  if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
+                                }}
+                              >
+                                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate">{label}</span>
+                                  <span className="block truncate text-[11px] text-muted-foreground">{pathStr}</span>
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
                     </ScrollArea>
+                    <div className="shrink-0 border-t border-border p-2">
+                      {movePopoverCreateOpen ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            autoFocus
+                            placeholder="Nombre de la carpeta…"
+                            className="h-8 flex-1 text-xs"
+                            value={moveFolderCreateName}
+                            onChange={(e) => setMoveFolderCreateName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && moveFolderCreateName.trim()) {
+                                handleCreateFolderAndMove(moveFolderCreateName);
+                              }
+                              if (e.key === "Escape") {
+                                setMovePopoverCreateOpen(false);
+                                setMoveFolderCreateName("");
+                              }
+                            }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => {
+                              if (moveFolderCreateName.trim()) handleCreateFolderAndMove(moveFolderCreateName);
+                            }}
+                            disabled={createMailFolder.isPending}
+                            aria-label="Crear y mover"
+                          >
+                            {createMailFolder.isPending ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => {
+                              setMovePopoverCreateOpen(false);
+                              setMoveFolderCreateName("");
+                            }}
+                            aria-label="Cancelar"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-full justify-start gap-2 text-xs"
+                          onClick={() => {
+                            setMovePopoverCreateOpen(true);
+                            setMoveFolderCreateName("");
+                          }}
+                        >
+                          <FolderPlus className="h-3.5 w-3.5" />
+                          Nueva carpeta
+                        </Button>
+                      )}
+                    </div>
                   </PopoverContent>
                 </Popover>
 
