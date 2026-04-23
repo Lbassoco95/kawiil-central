@@ -14,19 +14,32 @@ const Login = () => {
   const { toast } = useToast();
   const supabaseHost = ACTIVE_SUPABASE_HOST;
 
+  const isInvalidCredentialsMessage = (message: string) => {
+    const n = message.toLowerCase();
+    return n.includes("invalid login credentials") || n.includes("invalid email or password");
+  };
+
   const mapAuthErrorMessage = (message: string) => {
     const normalized = message.toLowerCase();
 
-    if (normalized.includes("invalid login credentials")) {
-      return `Correo o contraseña inválidos. Si sigues dentro en producción, revisa que esta app apunte al Supabase correcto (${supabaseHost}).`;
+    if (isInvalidCredentialsMessage(message)) {
+      return "Correo o contraseña incorrectos. Revisa mayúsculas y espacios. Si no recuerdas tu contraseña, pide al administrador el correo para restablecerla.";
     }
 
     if (normalized.includes("email not confirmed")) {
-      return "Tu correo aún no está confirmado. Revisa tu bandeja de entrada o solicita un nuevo acceso desde administración.";
+      return "Tu correo aún no está confirmado. Revisa tu bandeja (y spam) o pide a administración que reenvíe la invitación o el acceso.";
     }
 
-    if (normalized.includes("too many requests")) {
+    if (
+      normalized.includes("too many requests") ||
+      normalized.includes("rate limit") ||
+      normalized.includes("email rate limit")
+    ) {
       return "Demasiados intentos de inicio de sesión. Espera unos minutos e intenta de nuevo.";
+    }
+
+    if (normalized.includes("user is banned") || normalized.includes("banned")) {
+      return "Esta cuenta está deshabilitada. Contacta a administración.";
     }
 
     return message;
@@ -44,7 +57,9 @@ const Login = () => {
 
     if (error) {
       toast({
-        title: "Error al iniciar sesión",
+        title: isInvalidCredentialsMessage(error.message)
+          ? "No pudimos validar tu acceso"
+          : "Error al iniciar sesión",
         description: mapAuthErrorMessage(error.message),
         variant: "destructive",
       });
