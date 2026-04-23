@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArtifactPdfPreview } from "./ArtifactPdfPreview";
+import { ArtifactSpreadsheetPreview } from "./ArtifactSpreadsheetPreview";
 import { FORMAT_LABEL, getTemplateMeta } from "@/lib/ai-templates";
 import { KAWIIL_AI_SOFT_BG, KAWIIL_AI_TEXT_GRADIENT_CLASS } from "@/lib/kawiilAi";
 
@@ -91,14 +92,44 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
   }, [outputs]);
 
   const pdfOutput = useMemo(() => outputs.find((o) => o.format === "pdf") || null, [outputs]);
+  const xlsxOutput = useMemo(() => outputs.find((o) => o.format === "xlsx") || null, [outputs]);
   const isKawiilDoc = outputs.length > 0;
   const isLegacyMarkdown = !isKawiilDoc;
+  const hasPreviewPanel = Boolean(pdfOutput || xlsxOutput);
 
-  /** Word / Excel: abrir "Texto" primero; el PDF es solo apoyo (no refleja la malla de la hoja ni el .docx). */
   const resolvedPrimaryFormat = (artifact.primary_format || primaryOutput?.format || "pdf") as KawiilOutputFormat;
-  const openTextTabFirst =
-    (resolvedPrimaryFormat === "docx" || resolvedPrimaryFormat === "xlsx") && !!pdfOutput;
-  const tabsDefaultTab = openTextTabFirst ? "text" : "pdf";
+
+  const { tabOrder, defaultTab } = useMemo(() => {
+    const hasP = !!pdfOutput;
+    const hasX = !!xlsxOutput;
+    const fmt = resolvedPrimaryFormat;
+    let order: ("spreadsheet" | "text" | "pdf")[] = ["text"];
+    if (fmt === "xlsx" && hasX) {
+      order = ["spreadsheet", "text"];
+      if (hasP) order.push("pdf");
+    } else if (fmt === "pdf" && hasP) {
+      order = ["pdf", "text"];
+      if (hasX) order.push("spreadsheet");
+    } else if (fmt === "docx") {
+      order = ["text"];
+      if (hasP) order.push("pdf");
+      if (hasX) order.push("spreadsheet");
+    } else {
+      order = ["text"];
+      if (hasP) order.push("pdf");
+      if (hasX) order.push("spreadsheet");
+    }
+    let def: "spreadsheet" | "text" | "pdf" = "text";
+    if (fmt === "xlsx" && hasX) def = "spreadsheet";
+    else if (fmt === "pdf" && hasP) def = "pdf";
+    else if (fmt === "docx" || fmt === "pptx") def = "text";
+    else {
+      if (hasP) def = "pdf";
+      else if (hasX) def = "spreadsheet";
+    }
+    if (!order.includes(def)) def = order[0] ?? "text";
+    return { tabOrder: order, defaultTab: def };
+  }, [resolvedPrimaryFormat, pdfOutput, xlsxOutput]);
 
   const availableFormats = useMemo(() => new Set(outputs.map((o) => o.format)), [outputs]);
   const missingFormats = useMemo(
@@ -226,8 +257,9 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 {resolvedPrimaryFormat === "xlsx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
                     La entrega estructurada es el Excel: usa <span className="font-medium">Descargar</span> y elige
-                    XLSX. El PDF es solo copia de presentación/lectura. En <span className="font-medium">Texto</span>{" "}
-                    hay un resumen en markdown.
+                    XLSX. <span className="font-medium">Vista previa Excel</span> muestra la primera hoja (tabular,
+                    podría truncarse); el PDF, si existe, es solo copia de presentación/lectura. En{" "}
+                    <span className="font-medium">Texto</span> verás un resumen en markdown.
                   </p>
                 ) : null}
               </div>
@@ -340,37 +372,66 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        {pdfOutput ? (
+        {hasPreviewPanel ? (
           <Tabs
             key={`${artifact.id}-${resolvedPrimaryFormat}`}
-            defaultValue={tabsDefaultTab}
+            defaultValue={defaultTab}
             className="h-full min-h-0 flex flex-1 flex-col"
           >
             <div className="px-3 pt-2 border-b border-border/30 shrink-0">
               <TabsList className="h-7">
-                {openTextTabFirst ? (
-                  <>
-                    <TabsTrigger value="text" className="text-[11px] h-5 px-2 gap-1"><FileTextIcon className="h-3 w-3" /> Texto</TabsTrigger>
-                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF (lectura)</TabsTrigger>
-                  </>
-                ) : (
-                  <>
-                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF (lectura)</TabsTrigger>
-                    <TabsTrigger value="text" className="text-[11px] h-5 px-2 gap-1"><FileTextIcon className="h-3 w-3" /> Texto</TabsTrigger>
-                  </>
-                )}
+                {tabOrder.map((value) => {
+                  if (value === "spreadsheet" && xlsxOutput) {
+                    return (
+                      <TabsTrigger key="spreadsheet" value="spreadsheet" className="text-[11px] h-5 px-2 gap-1">
+                        <FileSpreadsheet className="h-3 w-3" /> Vista previa Excel (lectura)
+                      </TabsTrigger>
+                    );
+                  }
+                  if (value === "pdf" && pdfOutput) {
+                    return (
+                      <TabsTrigger key="pdf" value="pdf" className="text-[11px] h-5 px-2 gap-1">
+                        <FileText className="h-3 w-3" /> Vista previa PDF (lectura)
+                      </TabsTrigger>
+                    );
+                  }
+                  if (value === "text") {
+                    return (
+                      <TabsTrigger key="text" value="text" className="text-[11px] h-5 px-2 gap-1">
+                        <FileTextIcon className="h-3 w-3" /> Texto
+                      </TabsTrigger>
+                    );
+                  }
+                  return null;
+                })}
               </TabsList>
             </div>
-            <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 flex flex-col data-[state=active]:flex-1">
-              <div className="flex-1 min-h-[50vh] min-[900px]:min-h-0 flex flex-col">
-                <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
-              </div>
-            </TabsContent>
+            {xlsxOutput ? (
+              <TabsContent
+                value="spreadsheet"
+                className="flex-1 m-0 p-0 min-h-0 flex flex-col data-[state=active]:flex-1"
+              >
+                <div className="flex min-h-0 flex-1 min-h-[50vh] min-[900px]:min-h-0 flex-col">
+                  <ArtifactSpreadsheetPreview
+                    bucket={xlsxOutput.storage_bucket}
+                    storagePath={xlsxOutput.storage_path}
+                    fileName={xlsxOutput.file_name}
+                  />
+                </div>
+              </TabsContent>
+            ) : null}
             <TabsContent value="text" className="flex-1 m-0 overflow-y-auto p-4 min-h-0">
               <div className="prose prose-sm max-w-none [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
                 <ReactMarkdown>{artifact.content}</ReactMarkdown>
               </div>
             </TabsContent>
+            {pdfOutput ? (
+              <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 flex flex-col data-[state=active]:flex-1">
+                <div className="flex-1 min-h-[50vh] min-[900px]:min-h-0 flex flex-col">
+                  <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
+                </div>
+              </TabsContent>
+            ) : null}
           </Tabs>
         ) : (
           // IMPORTANTE: el contenedor padre es `flex-1 min-h-0 overflow-hidden`
