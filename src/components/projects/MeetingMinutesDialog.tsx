@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,9 +27,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { FileDropzone } from "@/components/shared/FileDropzone";
+import { documentsLimits, withLimits, STANDARD_BATCH_MAX_FILES } from "@/lib/fileIntake/limits";
 import {
   Loader2,
-  Upload,
   Sparkles,
   Calendar,
   User,
@@ -77,8 +78,11 @@ export function MeetingMinutesDialog({
 }: MeetingMinutesDialogProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const fileRef = useRef<HTMLInputElement>(null);
   const { data: orgUsers = [] } = useOrgUsers();
+  const meetingUploadLimits = withLimits(documentsLimits, {
+    accept: ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx",
+    maxFiles: STANDARD_BATCH_MAX_FILES,
+  });
 
   const [step, setStep] = useState<"input" | "preview">("input");
   const [content, setContent] = useState("");
@@ -93,18 +97,24 @@ export function MeetingMinutesDialog({
   const [newProjectName, setNewProjectName] = useState("");
   const isStandalone = !projectId;
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-
+  const processMeetingFile = async (
+    file: File,
+    ctx: { append: boolean; pdfUseFullPipeline: boolean },
+  ) => {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     const isText = file.type.startsWith("text/") || [".md", ".txt", ".csv", ".log"].some((e) => file.name.toLowerCase().endsWith(e));
 
+    const merge = (value: string) => {
+      if (ctx.append) {
+        setContent((c) => (c.trim() ? `${c}\n\n---\n\n${value}` : value));
+      } else {
+        setContent(value);
+      }
+    };
+
     if (isText) {
       const text = await file.text();
-      setContent(text);
-      if (fileRef.current) fileRef.current.value = "";
+      merge(text);
       return;
     }
 
@@ -138,7 +148,6 @@ export function MeetingMinutesDialog({
           extractedText = t.trim();
         } catch {
           setAnalyzing(false);
-          if (fileRef.current) fileRef.current.value = "";
           toast.error("No se pudo leer el PDF. Pega el contenido en el cuadro de texto.");
           return;
         }
@@ -146,8 +155,14 @@ export function MeetingMinutesDialog({
 
       if (!extractedText) {
         setAnalyzing(false);
-        if (fileRef.current) fileRef.current.value = "";
         toast.error("El PDF no tiene texto legible. Pega el contenido abajo.");
+        return;
+      }
+
+      if (!ctx.pdfUseFullPipeline) {
+        setAnalyzing(false);
+        merge(extractedText);
+        toast.info("Texto de PDF añadido. Pulsa «Analizar y proponer tareas» para unificar con el resto.");
         return;
       }
 
@@ -164,7 +179,11 @@ export function MeetingMinutesDialog({
         });
         if (error) throw new Error(data?.message ?? data?.error ?? error.message);
         if (data?.error) throw new Error(data.message ?? data.error);
-        setContent(extractedText);
+        if (ctx.append) {
+          setContent((c) => (c.trim() ? `${c}\n\n---\n\n${extractedText}` : extractedText));
+        } else {
+          setContent(extractedText);
+        }
         setSummary(data.summary ?? "");
         setPhases(data.phases ?? []);
         setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true, phase: t.phase || null })));
@@ -172,11 +191,10 @@ export function MeetingMinutesDialog({
         toast.success("Análisis listo. Revisa las tareas propuestas.");
       } catch (err: any) {
         console.error("PDF analysis error:", err);
-        setContent(extractedText);
+        merge(extractedText);
         toast.info("Texto cargado. Pulsa «Analizar y proponer tareas» para reintentar.");
       } finally {
         setAnalyzing(false);
-        if (fileRef.current) fileRef.current.value = "";
       }
       return;
     }
@@ -187,13 +205,12 @@ export function MeetingMinutesDialog({
         const mammoth = await import("mammoth");
         const arrayBuffer = await file.arrayBuffer();
         const result = await mammoth.extractRawText({ arrayBuffer });
-        setContent(result.value.trim() || "(No se pudo extraer texto del documento)");
+        merge(result.value.trim() || "(No se pudo extraer texto del documento)");
         toast.success("Texto del Word cargado");
       } catch (err: any) {
         console.error(err);
         toast.error("No se pudo leer el Word. Pega el contenido en el cuadro de texto.");
       }
-      if (fileRef.current) fileRef.current.value = "";
       return;
     }
 
@@ -232,18 +249,30 @@ export function MeetingMinutesDialog({
           parts.push(`--- ${sheetName} ---\n${lines.join("\n")}`);
         }
         const text = parts.join("\n\n").trim();
-        setContent(text || "(No se pudo extraer texto del archivo)");
+        merge(text || "(No se pudo extraer texto del archivo)");
         toast.success("Contenido de Excel cargado");
       } catch (err: any) {
         console.error(err);
         toast.error("No se pudo leer el Excel. Pega el contenido o exporta a CSV.");
       }
-      if (fileRef.current) fileRef.current.value = "";
       return;
     }
 
     toast.info("Para este tipo de archivo, copia y pega el contenido en el campo de texto.");
-    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  const onMeetingFilesChange = async (next: File[]) => {
+    const list = next.slice(0, STANDARD_BATCH_MAX_FILES);
+    if (list.length === 0) return;
+    setFileName(list.map((f) => f.name).join(", "));
+    let firstPdf = true;
+    for (const file of list) {
+      const fext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const isPdf = fext === "pdf";
+      const pdfUseFull = !isPdf || firstPdf;
+      if (isPdf) firstPdf = false;
+      await processMeetingFile(file, { append: list.length > 1, pdfUseFullPipeline: pdfUseFull });
+    }
   };
 
   const handleAnalyze = async () => {
@@ -459,23 +488,21 @@ export function MeetingMinutesDialog({
             ) : (
               <>
                 <div>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    className="hidden"
-                    accept=".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx"
-                    onChange={handleFileUpload}
+                  <p className="text-xs text-muted-foreground mb-1">
+                    {fileName
+                      ? `Seleccionado: ${fileName}`
+                      : `Hasta ${STANDARD_BATCH_MAX_FILES} archivos (PDF, Word, Excel, .txt, .md, .csv)`}
+                  </p>
+                  <FileDropzone
+                    files={[]}
+                    onChange={(next) => void onMeetingFilesChange(next)}
+                    limits={meetingUploadLimits}
+                    variant="area"
+                    className="min-h-20"
+                    showChips={false}
+                    hint="Arrastra o elige documentos (mismo criterio que el resto de Kawiil)"
+                    subhint="El primer PDF con análisis IA; los demás se unen al texto. Pulsa Analizar para unificar."
                   />
-                  <Button
-                    variant="outline"
-                    className="w-full h-20 border-dashed flex flex-col gap-1"
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    <Upload className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      {fileName || "Sube un archivo (PDF, Word, Excel, .txt, .md, .csv)"}
-                    </span>
-                  </Button>
                 </div>
 
                 <div className="space-y-1">

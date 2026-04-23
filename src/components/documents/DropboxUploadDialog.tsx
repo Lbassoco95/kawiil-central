@@ -144,7 +144,6 @@ export function DropboxUploadDialog({
         path: result.path,
         url: result.url,
       });
-      onClose();
       toast.success(`"${file.name}" subido a Dropbox`);
     } catch (e: any) {
       toast.error("Error al subir: " + (e.message || "Error desconocido"));

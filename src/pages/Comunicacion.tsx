@@ -1280,20 +1280,28 @@ export default function Comunicacion() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (vars: { file: File; initial_comment?: string; thread_ts?: string }) => {
-      if (vars.file.size > MAX_UPLOAD_BYTES) throw new Error("El archivo supera 50 MB");
-      const form = new FormData();
-      form.append("action", "files.upload");
-      form.append("channel", selectedChannel!);
-      form.append("filename", vars.file.name);
-      form.append("file", vars.file);
-      if (vars.initial_comment?.trim()) form.append("initial_comment", vars.initial_comment.trim());
-      if (vars.thread_ts?.trim()) form.append("thread_ts", vars.thread_ts.trim());
-      const data = (await invokeSlackFileUpload(form)) as { ok?: boolean; error?: string };
-      if (!data.ok) throw new Error(String(data.error || "No se pudo subir el archivo"));
+    mutationFn: async (vars: { files: File[]; initial_comment?: string; thread_ts?: string }) => {
+      const list = vars.files.filter(Boolean).slice(0, 10);
+      if (list.length === 0) return;
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        if (f.size > MAX_UPLOAD_BYTES) throw new Error(`«${f.name}» supera 50 MB`);
+        const form = new FormData();
+        form.append("action", "files.upload");
+        form.append("channel", selectedChannel!);
+        form.append("filename", f.name);
+        form.append("file", f);
+        if (i === 0 && vars.initial_comment?.trim()) {
+          form.append("initial_comment", vars.initial_comment.trim());
+        }
+        if (vars.thread_ts?.trim()) form.append("thread_ts", vars.thread_ts.trim());
+        const data = (await invokeSlackFileUpload(form)) as { ok?: boolean; error?: string };
+        if (!data.ok) throw new Error(String(data.error || "No se pudo subir el archivo"));
+      }
     },
     onSuccess: (_d, vars) => {
-      toast.success("Archivo enviado a Slack");
+      const n = vars.files.length;
+      toast.success(n === 1 ? "Archivo enviado a Slack" : `${n} archivos enviados a Slack`);
       qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
       const t = vars.thread_ts?.trim();
       if (t) {
@@ -1803,8 +1811,8 @@ export default function Comunicacion() {
               userMap={userMap}
               onSchedule={(postAt, text) => scheduleMutation.mutateAsync({ postAt, text })}
               scheduling={scheduleMutation.isPending}
-              onUploadFile={(file, initial_comment) =>
-                uploadMutation.mutate({ file, initial_comment })
+              onUploadFiles={(files, initial_comment) =>
+                uploadMutation.mutate({ files, initial_comment })
               }
               uploading={uploadMutation.isPending}
               showRestoreDraft={showRestoreDraft}
@@ -1889,10 +1897,10 @@ export default function Comunicacion() {
             slackMessageActionPending={
               slackMessageEditMutation.isPending || slackMessageDeleteMutation.isPending
             }
-            onUploadThreadFile={
+            onUploadThreadFiles={
               threadRootTs
-                ? (file, initial_comment) =>
-                    uploadMutation.mutate({ file, initial_comment, thread_ts: threadRootTs })
+                ? (files, initial_comment) =>
+                    uploadMutation.mutate({ files, initial_comment, thread_ts: threadRootTs })
                 : undefined
             }
             uploadingThreadFile={uploadMutation.isPending}

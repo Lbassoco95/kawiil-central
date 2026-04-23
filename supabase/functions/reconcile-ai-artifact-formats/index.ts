@@ -6,8 +6,8 @@
 //
 //   1. Lee su `content` markdown.
 //   2. Lo convierte al shape `generico` (markdownToGenericContent).
-//   3. Invoca `render-ai-document` pidiendo PDF + DOCX + los formatos extra
-//      solicitados por el cliente (o deducidos por heurística).
+//   3. Invoca `render-ai-document` pidiendo DOCX (+ heurísticos) y PDF solo si el
+//      cliente lo incluye en `formats` (p. ej. "Generar PDF" o "Regenerar todos").
 //   4. Sube los bytes al bucket `documents` en `ai-artifacts/<org>/<user>/…`.
 //   5. Fusiona los nuevos `output_formats` con los ya existentes (no duplica)
 //      y actualiza `primary_format`, `storage_*`, `render_status = 'ready'`.
@@ -128,18 +128,22 @@ Deno.serve(async (req) => {
 
     const generic = markdownToGenericContent(markdown, title);
 
-    // Qué formatos generar: los explícitamente pedidos ∪ (pdf+docx por defecto) ∪
-    // los deducidos por heurística. Si el caller pidió algo concreto y ya está en
-    // `output_formats`, el render igual se regenera (sobrescribe), lo que permite
-    // al visor forzar una regeneración "Generar XLSX" aunque ya exista.
+    // Qué formatos generar: sin `formats` en el body → Word + heurísticos (xlsx/pptx) sin PDF.
+    // Con `formats` explícitos (p. ej. solo "pdf" o los cuatro) → esos + heurísticos de apoyo
+    // (p. ej. tablas largas) sin añadir PDF de oficio.
     const heuristicExtras = detectExtraFormats(markdown, generic);
-    const mergedFormats = new Set<KawiilOutputFormat>([
-      "pdf",
-      "docx",
-      ...heuristicExtras,
-      ...requestedFormats,
-    ]);
-    const finalFormats = Array.from(mergedFormats) as KawiilOutputFormat[];
+    let mergedFormats: Set<KawiilOutputFormat>;
+    if (requestedFormats.length === 0) {
+      mergedFormats = new Set<KawiilOutputFormat>(["docx", ...heuristicExtras]);
+    } else {
+      mergedFormats = new Set<KawiilOutputFormat>([...requestedFormats]);
+      for (const h of heuristicExtras) mergedFormats.add(h);
+    }
+    const FMT_ORDER: KawiilOutputFormat[] = ["docx", "xlsx", "pptx", "pdf"];
+    const finalFormats = (FMT_ORDER.filter((f) => mergedFormats.has(f)) as KawiilOutputFormat[]);
+    const primaryForRender: KawiilOutputFormat = finalFormats.includes("docx")
+      ? "docx"
+      : (finalFormats.includes("xlsx") ? "xlsx" : (finalFormats.includes("pptx") ? "pptx" : finalFormats[0]));
 
     // Marcamos pending mientras trabajamos para que el UI muestre "Generando…"
     // aunque la llamada venga de un reintento automático.
@@ -171,6 +175,7 @@ Deno.serve(async (req) => {
             title,
             template_key: "generico",
             requested_formats: finalFormats,
+            primary_format: primaryForRender,
             content: generic,
             confidence: 0.9,
             reason: "reconcile-ai-artifact-formats",

@@ -1002,7 +1002,7 @@ const anthropicTools = [
   {
     name: "create_artifact",
     description:
-      "FALLBACK: crea un documento entregable a partir de markdown libre. El backend lo convierte automáticamente al pipeline Kawiil (PDF + DOCX con portada, tipografía y tablas con color), así que SIEMPRE sale con diseño profesional (igual que los artifacts de Claude), nunca como markdown plano.\n\n" +
+      "FALLBACK: crea un documento entregable a partir de markdown libre. El backend lo convierte al pipeline Kawiil (por defecto Word/DOCX con portada, tipografía y tablas; el PDF se genera solo si el usuario lo pide en el visor o en el chat), así que SIEMPRE sale con diseño profesional (igual que los artifacts de Claude), nunca como markdown plano.\n\n" +
       "PREFIERE `create_ai_document` cuando el documento encaja en uno de los 6 templates (informe_ejecutivo, minuta_reunion, propuesta_cotizacion, factura_remision, reporte_financiero, generico): el resultado es más rico porque incluye portada con metadata/clasificación, callouts, tablas estructuradas, recomendaciones, firmas, totales, KPIs, etc.\n\n" +
       "Usa `create_artifact` SOLO para contenido muy libre / narrativo que no encaja en ningún template, o para snippets de código (content_type: \"code\").",
     input_schema: {
@@ -1024,9 +1024,10 @@ const anthropicTools = [
     description:
       "Genera un documento PROFESIONAL con diseño Kawiil (portada, tipografía, tablas con color, paginación). ÚSALA para cualquier documento largo/formal: informes ejecutivos, minutas de reunión, propuestas/cotizaciones, facturas/remisiones, reportes financieros.\n\n" +
       "FORMATO DE SALIDA (MUY IMPORTANTE):\n" +
-      "- Si el usuario pide Word / DOCX / editable → incluye 'docx' y 'pdf' y pon 'primary_format': 'docx'. Orden sugerido en requested_formats: primero docx, luego pdf (el primario es el que verá como principal en la app).\n" +
-      "- Si pide solo PDF o no especifica y conviene entregar PDF de presentación → 'primary_format': 'pdf' y requested_formats puede ser ['pdf','docx'] o ['pdf'].\n" +
-      "- Si el usuario NO ha indicado en qué formato quiere el entregable (PDF, Word, Excel, PowerPoint), NO llames a esta herramienta todavía: pregúntale en una frase qué formato prefiere (PDF para presentar, Word para editar, Excel para tablas, PowerPoint para diapositivas, o combinación).\n\n" +
+      "- **Por defecto** la entrega es **Word (DOCX)**: usa 'requested_formats': ['docx'] y 'primary_format': 'docx' salvo que el usuario pida otra cosa (Excel, PPT, solo PDF, etc.).\n" +
+      "- Si pide **solo PDF** o explícitamente un PDF de lectura/para enviar, usa 'primary_format': 'pdf' y requested_formats: ['pdf'] o ['docx', 'pdf'] (docx primero si también quiere editar).\n" +
+      "- Añade **'pdf'** a requested_formats solo cuando el usuario (o el contexto) pida un PDF, copia de lectura o 'exportar a PDF'.\n" +
+      "- Si la petición de formato es ambigua **entre** Word / Excel / PowerPoint (qué tipo de entregable), pregunta en una frase; si solo falta '¿PDF o Word?' y un informe es lo esperable, asume **DOCX**.\n\n" +
       "REGLAS:\n" +
       "0) No afirmes que el documento ya está listo para descargar si el resultado JSON de esta herramienta trae 'error' o no trae 'artifact_id'. Lee el tool_result y comunícalo al usuario.\n" +
       "1) Elige 'template_key' según la intención del usuario:\n" +
@@ -1036,7 +1037,7 @@ const anthropicTools = [
       "   - 'factura_remision' → documento fiscal con emisor, receptor, conceptos y totales.\n" +
       "   - 'reporte_financiero' → reporte con KPIs, tablas y notas del periodo.\n" +
       "   - 'generico' → fallback sin template específico.\n" +
-      "2) Incluye 'pdf' en requested_formats salvo que el usuario pida explícitamente SOLO otro formato (p. ej. solo Excel). El backend puede añadir pdf al final si falta.\n" +
+      "2) **No añadas 'pdf' por costumbre**; el usuario puede generar el PDF luego en el visor de artefactos.\n" +
       "3) 'content' debe seguir EXACTAMENTE el shape del template elegido (ver descripción de cada template en este documento).\n" +
       "4) Si confidence < 0.55, pide aclaración al usuario en lugar de generar el archivo.\n\n" +
       "SHAPES DE CONTENT POR TEMPLATE (ejemplos abreviados):\n" +
@@ -1067,13 +1068,13 @@ const anthropicTools = [
           type: "array",
           items: { type: "string", enum: ["pdf", "docx", "xlsx", "pptx"] },
           description:
-            "Formatos a generar. El orden importa junto con primary_format: el primario debe coincidir con primary_format (p. ej. Word: ['docx','pdf']). Incluye normalmente pdf+docx para informes editables.",
+            "Formatos a generar. Por defecto ['docx']. Añade 'pdf' solo si el usuario lo pidió. El orden y primary_format deben alinearse (p. ej. ['docx','pdf'] y primary 'docx' si quiere editar y también PDF).",
         },
         primary_format: {
           type: "string",
           enum: ["pdf", "docx", "xlsx", "pptx"],
           description:
-            "Formato que el usuario verá como principal en la app (preview/badge). Debe estar incluido en requested_formats. Si pidió Word → docx. Si pidió PDF o no especificó → pdf. Si pidió Excel/PPT → xlsx o pptx.",
+            "Formato principal en la app. Por defecto 'docx'. Usa 'pdf' si pidió entrega o lectura en PDF. Excel/PPT: xlsx o pptx según corresponda.",
         },
         content: {
           type: "object",
@@ -2186,7 +2187,7 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 ### 5. Generación de documentos (Artifacts)
 **NUNCA escribas en tu respuesta bloques como \`[artifact:UUID|…|…]\`.** Esos marcadores los añade el servidor al final cuando la herramienta crea el archivo; si los inventas, el usuario verá un error "artefacto no existe".
 
-**TODO artifact que generes sale con diseño Kawiil profesional (PDF + DOCX con portada, tipografía, tablas con color y paginación), igual que los artifacts de Claude.** Ya no existe la salida "markdown plano": incluso si llamas \`create_artifact\`, el backend convierte automáticamente el markdown a documento genérico (template \`generico\`) y genera PDF+DOCX. Por eso:
+**TODO artifact que generes sale con diseño Kawiil profesional (por defecto Word/DOCX con portada, tipografía, tablas con color y paginación), igual que los artifacts de Claude.** El PDF de lectura es **opcional** (se puede generar luego en el visor o si el usuario lo pide). Ya no existe la salida "markdown plano": incluso si llamas \`create_artifact\`, el backend convierte el markdown a documento genérico (template \`generico\`) y rinde DOCX. Por eso:
 
 - **PREFIERE SIEMPRE \`create_ai_document\`** con el \`template_key\` adecuado. El resultado es más rico (portada con metadata, callouts, tablas estructuradas, recomendaciones, firmas, totales, KPIs, etc.).
 - **Usa \`create_artifact\` solo como fallback** cuando el contenido es tan libre / narrativo que no encaja en ningún template. Igualmente saldrá con diseño Kawiil, pero **pierdes estructura rica** (sin portada con clasificación, sin callouts, sin tablas profesionales con colores por columna).
@@ -2204,21 +2205,21 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - Cualquier otro documento formal sin encaje claro → \`generico\` (fallback).
 
 **requested_formats** y **primary_format**:
-- Incluye normalmente \`pdf\` y \`docx\` para informes largos (PDF para leer, Word para editar).
-- **Si el usuario pide Word / editable / DOCX** → \`primary_format\` debe ser \`"docx"\` y el orden en \`requested_formats\` debe poner \`docx\` **antes** que \`pdf\` (ej. \`["docx","pdf"]\`). Así la app muestra Word como formato principal.
-- **Si el usuario pide PDF o no especifica formato de entrega** → \`primary_format\`: \`"pdf"\` y puedes usar \`["pdf","docx"]\` o \`["pdf"]\`.
-- **Si el usuario NO ha dicho si quiere PDF, Word, Excel o PowerPoint** para un documento de entrega, **pregunta primero** (una pregunta corta con opciones) y **no** llames a \`create_ai_document\` hasta que responda o quede claro por contexto.
+- **Por defecto** los informes y documentos formales: \`requested_formats: ["docx"]\`, \`primary_format: "docx"\` (entrega editable). **No añadas PDF** salvo que el usuario pida un PDF, copia de lectura, “para el cliente en PDF” o “solo PDF”.
+- **Si el usuario pide además o solo un PDF** → incluye \`"pdf"\` en \`requested_formats\` y, si el foco es lectura, \`primary_format: "pdf"\` o, si quiere editar y adjuntar PDF, \`["docx","pdf"]\` con \`primary_format: "docx"\`.
+- **Si el usuario pide Word / editable** → \`primary_format: "docx"\`.
+- **Si hace falta clarificar** si el entregable debe ser hoja de cálculo, diapositivas o prosa (p. ej. “¿Excel o memoria en Word?”), pregunta; si solo falta detalle y el caso es claramente un informe, asume \`docx\`.
 - Propuestas / facturas / reportes financieros → agrega \`"xlsx"\` si necesitan editar montos en Excel; fija \`primary_format\` al formato que el usuario priorice.
 - Presentaciones → \`"pptx"\` y \`primary_format\` acorde.
 
 **content** debe seguir el shape del template elegido (ver descripción del tool). **Siempre incluye \`metadata\`** (code / emisor / destinatario / fecha / clasificacion / version) cuando tengas datos; mejora mucho la portada del PDF. Para estudios fiscales usa \`clasificacion\` tipo "Confidencial — Uso Fiscal" o "Confidencial — Uso Interno".
 
-**Ejemplo: Estudio de Precios de Transferencia** cuando el usuario quiere **Word como entrega principal** (→ \`informe_ejecutivo\` + \`requested_formats: ["docx","pdf"]\` + \`primary_format: "docx"\`):
+**Ejemplo: Estudio de Precios de Transferencia** (→ \`informe_ejecutivo\` + \`requested_formats: ["docx"]\` + \`primary_format: "docx"\`; el PDF se puede generar en el visor si lo pide el usuario):
 \`\`\`json
 {
   "title": "Estudio de Precios de Transferencia - Empathy Design S.A.P.I. 2024-2025",
   "template_key": "informe_ejecutivo",
-  "requested_formats": ["docx", "pdf"],
+  "requested_formats": ["docx"],
   "primary_format": "docx",
   "content": {
     "metadata": { "emisor": "Kawiil - Servicios Profesionales", "fecha": "21 de abril de 2026", "clasificacion": "Confidencial — Uso Fiscal" },
@@ -2234,7 +2235,7 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 \`\`\`
 
 Si \`confidence < 0.55\`, pide aclaración al usuario antes de generar el archivo.
-Los artifacts aparecen en un panel lateral con preview real del PDF y descargas multi-formato.
+Los artifacts aparecen en un panel lateral: vista de texto, descarga de DOCX, y el PDF (si se genera) como vista de lectura opcional.
 
 ### 5b. Creación de proyectos y tareas
 - **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto. Puedes incluir fases y tareas directamente en la herramienta.
@@ -3166,6 +3167,24 @@ function userRequestedExcelLike(text: string): boolean {
   return false;
 }
 
+/**
+ * Heurística: el usuario pidió PDF de lectura o entrega (es/en). No añadimos si dejó
+ * claro "solo Word/Excel/…" en el mismo mensaje.
+ */
+function userRequestedPdfLike(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/\b(solo|únicamente|unicamente|only)\s+(docx|word|xlsx|excel|pptx|powerpoint|ppt|hoja)\b/i.test(t)) {
+    return false;
+  }
+  if (/\b(solo|únicamente|unicamente|only)\s+pdf\b/i.test(t)) return true;
+  if (/\b(?:^|[\s,;])(en|de|para|al|formato)\s+pdf\b/i.test(t) || /\bpdf\b|\.pdf\b/i.test(t)) return true;
+  if (/(dame|genera|crea|descarg|entrega|exporta|mándame|mandame|env[ií]a).{0,80}\bpdf\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
 /** Último mensaje: el usuario pide un archivo o entregable estructurado (aviso si no hubo artifact en el turno). */
 function userLastMessageRequestedFileDeliverable(text: string): boolean {
   const t = text.trim();
@@ -3197,7 +3216,7 @@ async function handleCreateAiDocument(
   const legacyKind = typeof input?.requested_kind === "string" ? input.requested_kind : undefined;
   if (legacyKind && !input.template_key) {
     input.template_key = LEGACY_OFFICE_KIND_TO_TEMPLATE[legacyKind] || "generico";
-    input.requested_formats = ["pdf", LEGACY_OFFICE_KIND_TO_FORMAT[legacyKind] || "docx"];
+    input.requested_formats = [LEGACY_OFFICE_KIND_TO_FORMAT[legacyKind] || "docx"];
     // Convertir data legacy a `generico.sections`.
     const legacySections: Array<{ heading?: string; paragraphs?: string[]; tables?: unknown[] }> = [];
     if (input.word_document && typeof input.word_document === "object") {
@@ -3249,10 +3268,10 @@ async function handleCreateAiDocument(
     });
   }
 
-  const rawFormats = Array.isArray(input.requested_formats) ? input.requested_formats : ["pdf"];
+  const rawFormats = Array.isArray(input.requested_formats) ? input.requested_formats : ["docx"];
   const formats: KawiilOutputFormat[] = (rawFormats as string[])
     .filter((f): f is KawiilOutputFormat => (["pdf", "docx", "xlsx", "pptx"] as string[]).includes(f));
-  let requestedFormats: KawiilOutputFormat[] = formats.length ? formats : ["pdf"];
+  let requestedFormats: KawiilOutputFormat[] = formats.length ? formats : ["docx"];
 
   const primaryFmtRaw = typeof (input as Record<string, unknown>).primary_format === "string"
     ? (input as Record<string, unknown>).primary_format as string
@@ -3265,9 +3284,15 @@ async function handleCreateAiDocument(
     requestedFormats.unshift(primaryFmtRaw);
   }
 
-  // PDF como lectura/archivo: si falta, se añade al final para no adelantar el formato
-  // que el usuario pidió como primario (p. ej. Word → docx primero, pdf segundo).
-  if (!requestedFormats.includes("pdf")) requestedFormats.push("pdf");
+  if (lastUserPlainText) {
+    if (
+      /\b(solo|únicamente|unicamente|only)\s+pdf\b/i.test(lastUserPlainText.trim()) &&
+      !userRequestedWordLike(lastUserPlainText) &&
+      !userRequestedExcelLike(lastUserPlainText)
+    ) {
+      requestedFormats = ["pdf"];
+    }
+  }
 
   if (primaryFmtRaw && isValidPrimary(primaryFmtRaw) && requestedFormats.includes(primaryFmtRaw)) {
     const pf = primaryFmtRaw as KawiilOutputFormat;
@@ -3286,26 +3311,22 @@ async function handleCreateAiDocument(
     }
   }
 
-  // Último mensaje: Excel primero (xlsx) si aplica; si no, Word (docx). Corrige primary_format del modelo.
+  // Último mensaje: Excel/Word primero; PDF solo si el usuario (o el modelo) lo pidió.
   if (lastUserPlainText) {
     if (userRequestedExcelLike(lastUserPlainText)) {
-      if (!requestedFormats.includes("xlsx")) {
-        requestedFormats = ["xlsx", ...requestedFormats];
-      }
-      if (!requestedFormats.includes("pdf")) {
-        requestedFormats.push("pdf");
-      }
+      if (!requestedFormats.includes("xlsx")) requestedFormats = ["xlsx", ...requestedFormats];
+      const wantPdf = userRequestedPdfLike(lastUserPlainText) || requestedFormats.includes("pdf");
+      if (wantPdf && !requestedFormats.includes("pdf")) requestedFormats.push("pdf");
       const rest = requestedFormats.filter((f) => f !== "xlsx" && f !== "pdf");
-      requestedFormats = ["xlsx", "pdf", ...rest];
+      requestedFormats = wantPdf ? ["xlsx", "pdf", ...rest] : ["xlsx", ...rest];
     } else if (userRequestedWordLike(lastUserPlainText)) {
-      if (!requestedFormats.includes("docx")) {
-        requestedFormats = ["docx", ...requestedFormats];
-      }
-      if (!requestedFormats.includes("pdf")) {
-        requestedFormats.push("pdf");
-      }
+      if (!requestedFormats.includes("docx")) requestedFormats = ["docx", ...requestedFormats];
+      const wantPdf = userRequestedPdfLike(lastUserPlainText) || requestedFormats.includes("pdf");
+      if (wantPdf && !requestedFormats.includes("pdf")) requestedFormats.push("pdf");
       const rest = requestedFormats.filter((f) => f !== "docx" && f !== "pdf");
-      requestedFormats = ["docx", "pdf", ...rest];
+      requestedFormats = wantPdf ? ["docx", "pdf", ...rest] : ["docx", ...rest];
+    } else if (userRequestedPdfLike(lastUserPlainText) && !requestedFormats.includes("pdf")) {
+      requestedFormats.push("pdf");
     }
   }
 
@@ -4065,23 +4086,19 @@ async function handleClaudeChat(
           console.log(`Artifact Tool (auto-upgrade → create_ai_document): ${inputTitle}`);
           sseWriter.writeProgress(
             "tool",
-            `Generando documento: ${inputTitle} (Word + PDF con diseño Kawiil)…`,
+            `Generando documento: ${inputTitle} (Word con diseño Kawiil)…`,
           );
           // Solo tiene sentido auto-upgrade para markdown/html/csv (texto). Para `code`
           // mantenemos el comportamiento legacy (artifact de código plano).
           const canUpgrade = rawContentType === "markdown" || rawContentType === "html" || rawContentType === "csv";
           if (canUpgrade && mdContent.trim()) {
             const genericContent = markdownToGenericContent(mdContent, inputTitle);
-            // Siempre PDF+DOCX como mínimo. Añadimos XLSX/PPTX solo si la heurística
-            // lo justifica (tablas grandes o estructura de slides): eso evita generar
-            // ppts/xls vacíos y ahorra tiempo de render.
+            // DOCX + formatos extra (XLSX/PPTX) si la heurística lo justifica. PDF no se
+            // genera aquí: el usuario lo pide en el visor o en el chat.
             const extraFormats = detectExtraFormats(mdContent, genericContent);
-            // Word primero + PDF (lectura/archivo): el usuario suele querer editar; el PDF
-            // queda como segundo formato. primary_format docx alinea UI y descargas.
             const requestedFormats: KawiilOutputFormat[] = [
               "docx",
-              "pdf",
-              ...extraFormats.filter((f) => f !== "pdf" && f !== "docx"),
+              ...extraFormats.filter((f) => f !== "docx"),
             ];
 
             // 2 reintentos del render completo antes de degradar a markdown plano.

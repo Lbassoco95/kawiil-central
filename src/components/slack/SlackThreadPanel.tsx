@@ -26,7 +26,7 @@ type Props = {
   onEditSlackMessage?: (ts: string, text: string) => void;
   onDeleteSlackMessage?: (ts: string) => void;
   slackMessageActionPending?: boolean;
-  onUploadThreadFile?: (file: File, initialComment?: string) => void;
+  onUploadThreadFiles?: (files: File[], initialComment?: string) => void | Promise<void>;
   uploadingThreadFile?: boolean;
   onScheduleThreadMessage?: (postAtUnixSeconds: number, text: string) => Promise<void>;
   schedulingThreadMessage?: boolean;
@@ -53,7 +53,7 @@ export function SlackThreadPanel({
   onEditSlackMessage,
   onDeleteSlackMessage,
   slackMessageActionPending = false,
-  onUploadThreadFile,
+  onUploadThreadFiles,
   uploadingThreadFile = false,
   onScheduleThreadMessage,
   schedulingThreadMessage = false,
@@ -155,7 +155,7 @@ export function SlackThreadPanel({
               mentionUserIds={effectiveMentionIds}
               userMap={userMap}
               compact
-              onUploadFile={onUploadThreadFile}
+              onUploadFiles={onUploadThreadFiles}
               uploading={uploadingThreadFile}
               onSchedule={
                 onScheduleThreadMessage

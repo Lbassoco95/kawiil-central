@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadFileToDropbox } from "@/lib/dropboxUpload";
 import { toast } from "sonner";
+import { STANDARD_BATCH_MAX_FILES } from "@/lib/fileIntake/limits";
 import {
   Folder,
   FileText,
@@ -101,13 +102,21 @@ export function DropboxFolderBrowser({ folderPath }: DropboxFolderBrowserProps) 
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const list = Array.from(e.target.files ?? []).slice(0, STANDARD_BATCH_MAX_FILES);
+    if (!list.length) return;
     setUploading(true);
     try {
-      const uploadPath = `${currentPath}/${file.name}`;
-      await uploadFileToDropbox(file, uploadPath);
-      toast.success(`"${file.name}" subido a Dropbox`);
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i];
+        const unique = `${Date.now()}_${i}_${file.name.replace(/[\\/]+/g, "_")}`;
+        const uploadPath = `${currentPath}/${unique}`;
+        await uploadFileToDropbox(file, uploadPath);
+      }
+      toast.success(
+        list.length === 1
+          ? `«${list[0].name}» subido a Dropbox`
+          : `${list.length} archivos subidos a Dropbox`,
+      );
       browse(currentPath);
     } catch (err: any) {
       toast.error("Error al subir: " + err.message);
@@ -136,7 +145,13 @@ export function DropboxFolderBrowser({ folderPath }: DropboxFolderBrowserProps) 
           <span className="truncate font-medium">{relativePath === "/" ? "Raíz del cliente" : relativePath}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <input ref={fileRef} type="file" className="hidden" onChange={handleUpload} />
+          <input
+            ref={fileRef}
+            type="file"
+            className="hidden"
+            multiple
+            onChange={handleUpload}
+          />
           <Button
             variant="outline"
             size="sm"
@@ -145,7 +160,7 @@ export function DropboxFolderBrowser({ folderPath }: DropboxFolderBrowserProps) 
             onClick={() => fileRef.current?.click()}
           >
             {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-            Subir archivo
+            Subir (máx. {STANDARD_BATCH_MAX_FILES})
           </Button>
         </div>
       </div>
