@@ -3146,6 +3146,23 @@ function userRequestedWordLike(text: string): boolean {
   return false;
 }
 
+/**
+ * Heurística: el usuario pidió entrega en Excel / hoja de cálculo (es/en).
+ * Si también pide Word en el mismo mensaje, priorizamos Excel cuando hay señales
+ * claras de xlsx/plantilla/hoja (caso típico: papel de trabajo tabular).
+ */
+function userRequestedExcelLike(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/\b(solo|únicamente|unicamente|only)\s+pdf\b/i.test(t)) return false;
+  if (/\b(xlsx|\.xlsx)\b/i.test(t)) return true;
+  if (/\b(en|de|para|formato|plantilla)\s+excel\b/i.test(t)) return true;
+  if (/hoja\s+de\s+c[aá]lculo/i.test(t)) return true;
+  if (/\bspreadsheet\b/i.test(t)) return true;
+  if (/\bexcel\b/i.test(t)) return true;
+  return false;
+}
+
 async function handleCreateAiDocument(
   input: Record<string, unknown>,
   userId: string,
@@ -3248,16 +3265,27 @@ async function handleCreateAiDocument(
     }
   }
 
-  // Último mensaje de usuario: si pidió Word y el modelo devolvió primary_format: pdf o omitió docx.
-  if (lastUserPlainText && userRequestedWordLike(lastUserPlainText)) {
-    if (!requestedFormats.includes("docx")) {
-      requestedFormats = ["docx", ...requestedFormats];
+  // Último mensaje: Excel primero (xlsx) si aplica; si no, Word (docx). Corrige primary_format del modelo.
+  if (lastUserPlainText) {
+    if (userRequestedExcelLike(lastUserPlainText)) {
+      if (!requestedFormats.includes("xlsx")) {
+        requestedFormats = ["xlsx", ...requestedFormats];
+      }
+      if (!requestedFormats.includes("pdf")) {
+        requestedFormats.push("pdf");
+      }
+      const rest = requestedFormats.filter((f) => f !== "xlsx" && f !== "pdf");
+      requestedFormats = ["xlsx", "pdf", ...rest];
+    } else if (userRequestedWordLike(lastUserPlainText)) {
+      if (!requestedFormats.includes("docx")) {
+        requestedFormats = ["docx", ...requestedFormats];
+      }
+      if (!requestedFormats.includes("pdf")) {
+        requestedFormats.push("pdf");
+      }
+      const rest = requestedFormats.filter((f) => f !== "docx" && f !== "pdf");
+      requestedFormats = ["docx", "pdf", ...rest];
     }
-    if (!requestedFormats.includes("pdf")) {
-      requestedFormats.push("pdf");
-    }
-    const rest = requestedFormats.filter((f) => f !== "docx" && f !== "pdf");
-    requestedFormats = ["docx", "pdf", ...rest];
   }
 
   const renderPayload = {

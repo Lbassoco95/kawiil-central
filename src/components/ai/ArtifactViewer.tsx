@@ -94,9 +94,10 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
   const isKawiilDoc = outputs.length > 0;
   const isLegacyMarkdown = !isKawiilDoc;
 
-  /** Si el formato primario es Word, abrimos la pestaña de texto primero (no hay preview nativo de DOCX). */
+  /** Word / Excel: abrir "Texto" primero; el PDF es solo apoyo (no refleja la malla de la hoja ni el .docx). */
   const resolvedPrimaryFormat = (artifact.primary_format || primaryOutput?.format || "pdf") as KawiilOutputFormat;
-  const openTextTabFirst = resolvedPrimaryFormat === "docx" && !!pdfOutput;
+  const openTextTabFirst =
+    (resolvedPrimaryFormat === "docx" || resolvedPrimaryFormat === "xlsx") && !!pdfOutput;
   const tabsDefaultTab = openTextTabFirst ? "text" : "pdf";
 
   const availableFormats = useMemo(() => new Set(outputs.map((o) => o.format)), [outputs]);
@@ -218,7 +219,15 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 {resolvedPrimaryFormat === "docx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
                     Entrega principal en Word: usa <span className="font-medium">Descargar</span> y elige DOCX; el
-                    PDF es copia de lectura.
+                    PDF es copia de presentación/lectura. En <span className="font-medium">Texto</span> verás un
+                    resumen en markdown.
+                  </p>
+                ) : null}
+                {resolvedPrimaryFormat === "xlsx" && outputs.length > 0 ? (
+                  <p className="text-[10px] text-foreground/80">
+                    La entrega estructurada es el Excel: usa <span className="font-medium">Descargar</span> y elige
+                    XLSX. El PDF es solo copia de presentación/lectura. En <span className="font-medium">Texto</span>{" "}
+                    hay un resumen en markdown.
                   </p>
                 ) : null}
               </div>
@@ -342,11 +351,11 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 {openTextTabFirst ? (
                   <>
                     <TabsTrigger value="text" className="text-[11px] h-5 px-2 gap-1"><FileTextIcon className="h-3 w-3" /> Texto</TabsTrigger>
-                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF</TabsTrigger>
+                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF (lectura)</TabsTrigger>
                   </>
                 ) : (
                   <>
-                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF</TabsTrigger>
+                    <TabsTrigger value="pdf" className="text-[11px] h-5 px-2 gap-1"><FileText className="h-3 w-3" /> Vista previa PDF (lectura)</TabsTrigger>
                     <TabsTrigger value="text" className="text-[11px] h-5 px-2 gap-1"><FileTextIcon className="h-3 w-3" /> Texto</TabsTrigger>
                   </>
                 )}

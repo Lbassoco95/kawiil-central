@@ -3,6 +3,7 @@ import ExcelJS from "npm:exceljs@4.4.0";
 import {
   type FinancialReportData,
   type InvoiceData,
+  type KawiilSection,
   type KawiilTable,
   type KawiilTemplateKey,
   KAWIIL_BRAND,
@@ -190,17 +191,98 @@ function buildFinancialReportXlsx(wb: AnyWs, title: string, data: FinancialRepor
   }
 }
 
-function buildGenericXlsx(wb: AnyWs, title: string, tables: KawiilTable[]) {
-  if (!tables.length) {
-    const ws = wb.addWorksheet("Documento");
-    titleCell(ws, title, "Sin tablas");
-    return;
+function uniqueWorksheetName(wb: AnyWs, base: string, idx: number): string {
+  const clean = base.replace(/[\[\]\\\/\?:*]/g, " ").replace(/\s+/g, " ").trim().slice(0, 28) || `Hoja${idx + 1}`;
+  const used = new Set(
+    (wb.worksheets as Array<{ name: string }>).map((w) => w.name),
+  );
+  let name = clean.slice(0, 31);
+  if (!used.has(name)) return name;
+  for (let n = 2; n < 50; n++) {
+    const suffix = `(${n})`;
+    name = `${clean.slice(0, Math.max(1, 31 - suffix.length))}${suffix}`.slice(0, 31);
+    if (!used.has(name)) return name;
   }
-  tables.forEach((t, idx) => {
-    const ws = wb.addWorksheet(t.caption?.slice(0, 30) || `Hoja ${idx + 1}`);
-    titleCell(ws, t.caption || title, "Kawiil");
-    addKawiilTable(ws, 4, t);
-  });
+  return `T${idx}-${Date.now() % 1e5}`.slice(0, 31);
+}
+
+function sectionNarrativeText(s: KawiilSection): string {
+  const parts: string[] = [];
+  if (s.paragraphs?.length) parts.push(s.paragraphs.join("\n\n"));
+  if (s.bullets?.length) parts.push(s.bullets.map((b) => `• ${b}`).join("\n"));
+  if (s.callout?.body) {
+    const co = s.callout;
+    const line = [co.title, co.body].filter(Boolean).join("\n");
+    if (line) parts.push(line);
+  }
+  return parts.join("\n\n");
+}
+
+/**
+ * Hoja "Narrativa" alineada al PDF (párrafos, listas, callouts) + hojas por tabla.
+ * Si no hay tablas ni texto, hoja mínima.
+ */
+function buildGenericXlsx(
+  wb: AnyWs,
+  title: string,
+  sections: KawiilSection[],
+  topLevelTables: KawiilTable[],
+  summary?: string
+) {
+  const tables: KawiilTable[] = [...(topLevelTables || [])];
+  if (sections?.length) {
+    for (const s of sections) {
+      if (s.tables?.length) {
+        for (const t of s.tables) {
+          tables.push({ ...t, caption: t.caption || s.heading });
+        }
+      }
+    }
+  }
+
+  const narrativeRows: { heading: string; text: string }[] = [];
+  if (summary?.trim()) {
+    narrativeRows.push({ heading: "Resumen", text: summary.trim() });
+  }
+  for (const s of sections || []) {
+    const text = sectionNarrativeText(s);
+    if (text.trim()) {
+      narrativeRows.push({ heading: s.heading?.trim() || "Contenido", text });
+    }
+  }
+
+  if (narrativeRows.length) {
+    const ws = wb.addWorksheet("Narrativa");
+    titleCell(ws, title, "Contenido · Kawiil");
+    let row = 4;
+    ws.getRow(row).getCell(1).value = "Sección";
+    ws.getRow(row).getCell(2).value = "Texto";
+    styleHeaderRow(ws, row, 2);
+    row++;
+    for (const nr of narrativeRows) {
+      ws.getRow(row).getCell(1).value = nr.heading;
+      ws.getRow(row).getCell(2).value = nr.text;
+      const c2 = ws.getRow(row).getCell(2);
+      c2.alignment = { wrapText: true, vertical: "top" as const };
+      const lineCount = Math.max(1, String(nr.text).split("\n").length);
+      ws.getRow(row).height = Math.min(180, 14 * Math.min(15, lineCount + 2));
+      row++;
+    }
+  }
+
+  if (tables.length) {
+    tables.forEach((t, idx) => {
+      const name = uniqueWorksheetName(wb, t.caption || `Hoja ${idx + 1}` || "Tabla", idx);
+      const ws = wb.addWorksheet(name);
+      titleCell(ws, t.caption || title, "Kawiil");
+      addKawiilTable(ws, 4, t);
+    });
+  }
+
+  if (!narrativeRows.length && !tables.length) {
+    const ws = wb.addWorksheet("Documento");
+    titleCell(ws, title, "Sin contenido estructurado");
+  }
 }
 
 export async function renderKawiilXlsx(input: {
@@ -225,18 +307,20 @@ export async function renderKawiilXlsx(input: {
       buildFinancialReportXlsx(wb, input.title, input.data as FinancialReportData);
       break;
     default: {
-      // Para informe / minuta / genérico: extraer todas las tablas de las secciones.
-      const raw = input.data as { sections?: Array<{ tables?: KawiilTable[]; heading?: string }>; tables?: KawiilTable[] };
-      const tables: KawiilTable[] = [];
-      if (raw.tables?.length) tables.push(...raw.tables);
-      if (raw.sections?.length) {
-        for (const s of raw.sections) {
-          if (s.tables?.length) {
-            for (const t of s.tables) tables.push({ ...t, caption: t.caption || s.heading });
-          }
-        }
+      const raw = input.data as {
+        sections?: KawiilSection[];
+        tables?: KawiilTable[];
+        summary?: string;
+        recommendations?: string[];
+      };
+      const sections = raw.sections || [];
+      const topTables = raw.tables || [];
+      let summary = raw.summary;
+      if (raw.recommendations?.length) {
+        const recBlock = raw.recommendations.map((r) => `• ${r}`).join("\n");
+        summary = [summary, `Recomendaciones\n\n${recBlock}`].filter(Boolean).join("\n\n");
       }
-      buildGenericXlsx(wb, input.title, tables);
+      buildGenericXlsx(wb, input.title, sections, topTables, summary);
     }
   }
 
