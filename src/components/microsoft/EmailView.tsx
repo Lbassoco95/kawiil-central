@@ -840,6 +840,21 @@ export function EmailView() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
+  const resetAction = useCallback(() => {
+    setEmailAction(null);
+    setDraftHtml("");
+    setDraftId(null);
+    setForwardTo("");
+    setForwardCc("");
+    setForwardBcc("");
+    setReplyTo("");
+    setReplyCc("");
+    setReplyBcc("");
+    setReplyFiles([]);
+    setRequestDeliveryReceipt(false);
+    setRequestReadReceipt(false);
+  }, []);
+
   const { data: outlookCategories = [] } = useOutlookCategories();
   const categoryColorMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -1149,7 +1164,7 @@ export function EmailView() {
     resetAction();
     setQuickAIPrompt(null);
     if (!email.isRead) markRead.mutate(email.id);
-  }, [markRead]);
+  }, [markRead, resetAction]);
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -1454,21 +1469,6 @@ export function EmailView() {
     }
   };
 
-  const resetAction = () => {
-    setEmailAction(null);
-    setDraftHtml("");
-    setDraftId(null);
-    setForwardTo("");
-    setForwardCc("");
-    setForwardBcc("");
-    setReplyTo("");
-    setReplyCc("");
-    setReplyBcc("");
-    setReplyFiles([]);
-    setRequestDeliveryReceipt(false);
-    setRequestReadReceipt(false);
-  };
-
   const handleArchive = useCallback((emailId: string) => {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
     const next = allEmails[idx + 1] || allEmails[idx - 1];
@@ -1477,7 +1477,7 @@ export function EmailView() {
       resetAction();
     }
     archiveEmail.mutate(emailId);
-  }, [archiveEmail, allEmails, selectedEmailId]);
+  }, [archiveEmail, allEmails, selectedEmailId, resetAction]);
 
   const handleDelete = useCallback((emailId: string) => {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
@@ -1487,7 +1487,7 @@ export function EmailView() {
       resetAction();
     }
     deleteEmail.mutate(emailId);
-  }, [deleteEmail, allEmails, selectedEmailId]);
+  }, [deleteEmail, allEmails, selectedEmailId, resetAction]);
 
   const closeDetailAiPanel = useCallback(() => {
     setDetailAiPanel(null);
