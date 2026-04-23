@@ -1,4 +1,15 @@
-import { useState, useCallback, useEffect, useRef, useMemo, type DragEvent, type ReactNode } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+  type ComponentType,
+  type Dispatch,
+  type DragEvent,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,7 +78,32 @@ import {
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, RefreshCw,
   Eye, Download, CalendarClock, Copy, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  EMAIL_FOLDER_ORDER_ROOT_KEY,
+  defaultFolderOrdersFromTree,
+  mergeSiblingOrder,
+  readEmailFolderOrder,
+  writeEmailFolderOrder,
+} from "@/lib/emailFolderOrder";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import DOMPurify from "dompurify";
 import {
@@ -205,12 +241,31 @@ function sortFolderRowsAtLevel(rows: any[]): any[] {
   });
 }
 
+function normalizeMailFolderId(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim();
+  return s || null;
+}
+
 function buildFolderTreeData(folders: any[]): {
   roots: any[];
   childrenMap: Map<string, any[]>;
   byId: Map<string, any>;
 } {
-  const list = (folders || []).filter((f) => f && typeof f.id === "string" && f.id);
+  const list = (folders || [])
+    .map((f) => {
+      if (!f || typeof f !== "object") return null;
+      const id = normalizeMailFolderId((f as { id?: unknown }).id);
+      if (!id) return null;
+      const rawPid = (f as { parentFolderId?: unknown }).parentFolderId;
+      const parentFolderId =
+        rawPid === null || rawPid === undefined
+          ? undefined
+          : normalizeMailFolderId(rawPid) ?? undefined;
+      return { ...f, id, parentFolderId };
+    })
+    .filter(Boolean) as any[];
+
   const byId = new Map<string, any>();
   for (const f of list) byId.set(f.id, f);
   const childrenMap = new Map<string, any[]>();
@@ -225,6 +280,11 @@ function buildFolderTreeData(folders: any[]): {
       roots.push(f);
     }
   }
+  /** Ciclo o datos raros de Graph: sin raíces pero hay filas → mostrar todas como lista plana. */
+  if (roots.length === 0 && list.length > 0) {
+    sortFolderRowsAtLevel(list);
+    return { roots: list, childrenMap: new Map(), byId };
+  }
   sortFolderRowsAtLevel(roots);
   for (const [k, arr] of childrenMap.entries()) {
     childrenMap.set(k, sortFolderRowsAtLevel(arr));
@@ -236,9 +296,23 @@ function computeFolderSearchVisibility(
   roots: any[],
   childrenMap: Map<string, any[]>,
   query: string,
+  allFolderIds: string[],
+  byId: Map<string, any>,
 ): Set<string> {
   const q = query.trim().toLowerCase();
   const visible = new Set<string>();
+  if (roots.length === 0) {
+    if (!q) return new Set(allFolderIds);
+    for (const id of allFolderIds) {
+      const node = byId.get(id);
+      if (!node) continue;
+      const label = getFolderLabel(String(node.displayName || "")).toLowerCase();
+      const raw = String(node.displayName || "").toLowerCase();
+      const pathStr = folderPathFromId(id, byId).toLowerCase();
+      if (label.includes(q) || raw.includes(q) || pathStr.includes(q)) visible.add(id);
+    }
+    return visible;
+  }
   function dfs(node: any): boolean {
     const label = getFolderLabel(String(node.displayName || "")).toLowerCase();
     const raw = String(node.displayName || "").toLowerCase();
@@ -251,6 +325,9 @@ function computeFolderSearchVisibility(
     return selfMatch || anyChild;
   }
   for (const r of roots) dfs(r);
+  if (visible.size === 0 && allFolderIds.length > 0 && !q) {
+    return new Set(allFolderIds);
+  }
   return visible;
 }
 
@@ -523,6 +600,183 @@ function readFoldersCollapsedPref(): boolean {
   }
 }
 
+type EmailFolderRowBundle = {
+  Icon: ComponentType<{ className?: string }>;
+  label: string;
+  isActive: boolean;
+  folderBadge: number | null;
+  dragHandlers: {
+    onDragOver: (e: DragEvent) => void;
+    onDragLeave: () => void;
+    onDrop: (e: DragEvent) => void;
+  };
+  onSelect: () => void;
+};
+
+type EmailFolderTreeItemProps = {
+  folder: any;
+  depth: number;
+  /** Clave en `byParent` del orden guardado (`__root__` o id del padre). */
+  parentListKey: string;
+  orderedFolderChildrenMap: Map<string, any[]>;
+  folderVisibleIds: Set<string>;
+  expandedFolderIds: Set<string>;
+  setExpandedFolderIds: Dispatch<SetStateAction<Set<string>>>;
+  dragOverFolderId: string | null;
+  folderRow: (folder: any) => EmailFolderRowBundle;
+};
+
+function EmailFolderTreeItem({
+  folder,
+  depth,
+  parentListKey,
+  orderedFolderChildrenMap,
+  folderVisibleIds,
+  expandedFolderIds,
+  setExpandedFolderIds,
+  dragOverFolderId,
+  folderRow,
+}: EmailFolderTreeItemProps) {
+  if (!folder?.id || !folderVisibleIds.has(folder.id)) return null;
+
+  const allKids = orderedFolderChildrenMap.get(folder.id) ?? [];
+  const kids = allKids.filter((k: any) => folderVisibleIds.has(k.id));
+  const hasChildren = kids.length > 0;
+  const expanded = expandedFolderIds.has(folder.id);
+  const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: folder.id,
+    data: { parentKey: parentListKey, type: "email-folder-sidebar" },
+  });
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const rowClass =
+    "flex min-w-0 flex-1 items-center gap-2 rounded-none py-2 pl-2 pr-1 text-left text-sm transition-all hover:bg-accent/60";
+
+  const rowInner = (
+    <>
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
+      {folderBadge != null && folderBadge > 0 && (
+        <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-bold tabular-nums bg-primary/15 text-primary">
+          {folderBadge}
+        </Badge>
+      )}
+    </>
+  );
+
+  const grip = (
+    <button
+      type="button"
+      className="inline-flex h-9 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-accent/60 active:cursor-grabbing"
+      aria-label="Arrastrar para reordenar carpeta"
+      {...listeners}
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+
+  if (!hasChildren) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={sortableStyle}
+        className={cn("min-w-0", isDragging && "opacity-60")}
+        {...attributes}
+      >
+        <div className="flex min-w-0 items-stretch" style={{ marginLeft: depth * 10 }}>
+          {grip}
+          <span className="inline-flex w-5 shrink-0" aria-hidden />
+          <button
+            type="button"
+            className={cn(
+              rowClass,
+              isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
+              dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
+            )}
+            onClick={onSelect}
+            {...dragHandlers}
+          >
+            {rowInner}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={sortableStyle}
+      className={cn("min-w-0", isDragging && "opacity-60")}
+      {...attributes}
+    >
+      <Collapsible
+        open={expanded}
+        onOpenChange={(open) => {
+          setExpandedFolderIds((prev) => {
+            const n = new Set(prev);
+            if (open) n.add(folder.id);
+            else n.delete(folder.id);
+            return n;
+          });
+        }}
+      >
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-stretch" style={{ marginLeft: depth * 10 }}>
+            {grip}
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-9 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/60"
+                aria-label={expanded ? "Contraer subcarpetas" : "Expandir subcarpetas"}
+              >
+                <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")} />
+              </button>
+            </CollapsibleTrigger>
+            <button
+              type="button"
+              className={cn(
+                rowClass,
+                isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
+                dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
+              )}
+              onClick={onSelect}
+              {...dragHandlers}
+            >
+              {rowInner}
+            </button>
+          </div>
+          <CollapsibleContent>
+            <div className="min-w-0 border-l border-border/40 ml-[calc(0.625rem+10px)]">
+              <SortableContext items={kids.map((k: any) => k.id)} strategy={verticalListSortingStrategy}>
+                {kids.map((ch: any) => (
+                  <EmailFolderTreeItem
+                    key={ch.id}
+                    folder={ch}
+                    depth={depth + 1}
+                    parentListKey={folder.id}
+                    orderedFolderChildrenMap={orderedFolderChildrenMap}
+                    folderVisibleIds={folderVisibleIds}
+                    expandedFolderIds={expandedFolderIds}
+                    setExpandedFolderIds={setExpandedFolderIds}
+                    dragOverFolderId={dragOverFolderId}
+                    folderRow={folderRow}
+                  />
+                ))}
+              </SortableContext>
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </div>
+  );
+}
+
 export function EmailView() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -572,6 +826,8 @@ export function EmailView() {
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(readExpandedFolderIds);
   const [folderRailPickerOpen, setFolderRailPickerOpen] = useState(false);
   const [folderRailPickerQuery, setFolderRailPickerQuery] = useState("");
+  /** Orden manual de carpetas por padre (localStorage); no se sincroniza con Outlook. */
+  const [folderOrderByParent, setFolderOrderByParent] = useState<Record<string, string[]>>({});
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -614,6 +870,11 @@ export function EmailView() {
     if (!selectedEmailId) setListPaneCollapsed(false);
     setEmailAiSummary(null);
   }, [selectedEmailId]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setFolderOrderByParent(readEmailFolderOrder(user.id));
+  }, [user?.id]);
 
   const { data: folders = [] } = useMailFolders();
   const draftsFolderId = useMemo(() => {
@@ -721,10 +982,80 @@ export function EmailView() {
 
   const folderTreeData = useMemo(() => buildFolderTreeData(folders as any[]), [folders]);
   const { roots: folderRoots, childrenMap: folderChildrenMap, byId: folderById } = folderTreeData;
+  const allMailFolderIds = useMemo(() => [...folderById.keys()], [folderById]);
 
   const folderVisibleIds = useMemo(
-    () => computeFolderSearchVisibility(folderRoots, folderChildrenMap, folderSidebarSearch),
-    [folderRoots, folderChildrenMap, folderSidebarSearch],
+    () =>
+      computeFolderSearchVisibility(
+        folderRoots,
+        folderChildrenMap,
+        folderSidebarSearch,
+        allMailFolderIds,
+        folderById,
+      ),
+    [folderRoots, folderChildrenMap, folderSidebarSearch, allMailFolderIds, folderById],
+  );
+
+  const defaultFolderOrders = useMemo(
+    () => defaultFolderOrdersFromTree(folderRoots, folderChildrenMap),
+    [folderRoots, folderChildrenMap],
+  );
+
+  const mergedFolderOrderByParent = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    const keys = new Set([...Object.keys(defaultFolderOrders), ...Object.keys(folderOrderByParent)]);
+    for (const k of keys) {
+      const def = defaultFolderOrders[k];
+      if (!def?.length) continue;
+      out[k] = mergeSiblingOrder(folderOrderByParent[k], def);
+    }
+    return out;
+  }, [defaultFolderOrders, folderOrderByParent]);
+
+  const orderedFolderRoots = useMemo(() => {
+    const ids = mergedFolderOrderByParent[EMAIL_FOLDER_ORDER_ROOT_KEY] ?? folderRoots.map((r) => r.id);
+    return ids.map((id) => folderById.get(id)).filter(Boolean) as any[];
+  }, [mergedFolderOrderByParent, folderRoots, folderById]);
+
+  const orderedFolderChildrenMap = useMemo(() => {
+    const out = new Map<string, any[]>();
+    for (const [pid, siblings] of folderChildrenMap) {
+      const ids = mergedFolderOrderByParent[pid] ?? siblings.map((s) => s.id);
+      out.set(
+        pid,
+        ids.map((id) => folderById.get(id)).filter(Boolean) as any[],
+      );
+    }
+    return out;
+  }, [mergedFolderOrderByParent, folderChildrenMap, folderById]);
+
+  const folderDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleEmailFolderDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id || !user?.id) return;
+      const ap = active.data.current as { parentKey?: string } | undefined;
+      const op = over.data.current as { parentKey?: string } | undefined;
+      const parentKey = ap?.parentKey;
+      if (!parentKey || parentKey !== op?.parentKey) return;
+      const ids = mergedFolderOrderByParent[parentKey];
+      if (!ids?.length) return;
+      const oldIndex = ids.indexOf(String(active.id));
+      const newIndex = ids.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+      const next = arrayMove(ids, oldIndex, newIndex);
+      const uid = user.id;
+      setFolderOrderByParent((prev) => {
+        const merged = { ...prev, [parentKey]: next };
+        writeEmailFolderOrder(uid, merged);
+        return merged;
+      });
+    },
+    [mergedFolderOrderByParent, user?.id],
   );
 
   const sortedFolders = sortFolders(folders);
@@ -1350,96 +1681,33 @@ export function EmailView() {
     if (isMobile) setShowFolders(false);
   }
 
-  const renderEmailFolderBranch = (folder: any, depth: number): ReactNode => {
-    if (!folder?.id || !folderVisibleIds.has(folder.id)) return null;
-    const kids = folderChildrenMap.get(folder.id) ?? [];
-    const hasChildren = kids.length > 0;
-    const expanded = expandedFolderIds.has(folder.id);
-    const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
-
-    const rowClass =
-      "flex min-w-0 flex-1 items-center gap-2 rounded-none py-2 pl-2 pr-1 text-left text-sm transition-all hover:bg-accent/60";
-
-    const rowInner = (
-      <>
-        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
-        {folderBadge != null && folderBadge > 0 && (
-          <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-bold tabular-nums bg-primary/15 text-primary">
-            {folderBadge}
-          </Badge>
-        )}
-      </>
-    );
-
-    if (!hasChildren) {
-      return (
-        <div key={folder.id} className="min-w-0">
-          <div className="flex min-w-0 items-stretch" style={{ marginLeft: depth * 10 }}>
-            <span className="inline-flex w-5 shrink-0" aria-hidden />
-            <button
-              type="button"
-              className={cn(
-                rowClass,
-                isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
-                dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
-              )}
-              onClick={onSelect}
-              {...dragHandlers}
-            >
-              {rowInner}
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <Collapsible
-        key={folder.id}
-        open={expanded}
-        onOpenChange={(open) => {
-          setExpandedFolderIds((prev) => {
-            const n = new Set(prev);
-            if (open) n.add(folder.id);
-            else n.delete(folder.id);
-            return n;
-          });
-        }}
+  const sortableFolderSidebarTree = (
+    <DndContext sensors={folderDndSensors} collisionDetection={closestCenter} onDragEnd={handleEmailFolderDragEnd}>
+      <SortableContext
+        items={orderedFolderRoots.filter((f) => folderVisibleIds.has(f.id)).map((f) => f.id)}
+        strategy={verticalListSortingStrategy}
       >
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-stretch" style={{ marginLeft: depth * 10 }}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex h-9 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/60"
-                aria-label={expanded ? "Contraer subcarpetas" : "Expandir subcarpetas"}
-              >
-                <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")} />
-              </button>
-            </CollapsibleTrigger>
-            <button
-              type="button"
-              className={cn(
-                rowClass,
-                isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
-                dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
-              )}
-              onClick={onSelect}
-              {...dragHandlers}
-            >
-              {rowInner}
-            </button>
-          </div>
-          <CollapsibleContent>
-            <div className="min-w-0 border-l border-border/40 ml-[calc(0.625rem+10px)]">
-              {kids.map((ch: any) => renderEmailFolderBranch(ch, depth + 1))}
-            </div>
-          </CollapsibleContent>
+        <div className="py-1 pr-2.5 pl-1">
+          {orderedFolderRoots.map((folder: any) =>
+            folderVisibleIds.has(folder.id) ? (
+              <EmailFolderTreeItem
+                key={folder.id}
+                folder={folder}
+                depth={0}
+                parentListKey={EMAIL_FOLDER_ORDER_ROOT_KEY}
+                orderedFolderChildrenMap={orderedFolderChildrenMap}
+                folderVisibleIds={folderVisibleIds}
+                expandedFolderIds={expandedFolderIds}
+                setExpandedFolderIds={setExpandedFolderIds}
+                dragOverFolderId={dragOverFolderId}
+                folderRow={folderRow}
+              />
+            ) : null,
+          )}
         </div>
-      </Collapsible>
-    );
-  };
+      </SortableContext>
+    </DndContext>
+  );
 
   const folderRailPickerFlat = useMemo(() => {
     const q = folderRailPickerQuery.trim().toLowerCase();
@@ -1538,11 +1806,7 @@ export function EmailView() {
                 />
               </div>
             </div>
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="py-1 pr-2.5 pl-1">
-                {folderRoots.map((folder: any) => renderEmailFolderBranch(folder, 0))}
-              </div>
-            </ScrollArea>
+            <ScrollArea className="min-h-0 flex-1">{sortableFolderSidebarTree}</ScrollArea>
             <div className="shrink-0 border-t border-border p-2">
               {creatingFolder ? (
                 <div className="flex items-center gap-1">
@@ -1595,7 +1859,7 @@ export function EmailView() {
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="flex flex-col items-center gap-0.5 py-1 pl-0.5 pr-1">
-                    {folderRoots.map((folder: any) => {
+                    {orderedFolderRoots.map((folder: any) => {
                       const { Icon, label, folderBadge, dragHandlers, onSelect } = folderRow(folder);
                       const railActive = folderRailRootIsActive(folder.id, selectedFolderId, folderById);
                       const tip = folderPathFromId(folder.id, folderById);
@@ -1737,9 +2001,7 @@ export function EmailView() {
                   </div>
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
-                  <div className="py-1 pr-2.5 pl-1">
-                    {folderRoots.map((folder: any) => renderEmailFolderBranch(folder, 0))}
-                  </div>
+                  {sortableFolderSidebarTree}
                   {/* Etiquetas AI (categorías Outlook) */}
                   {(outlookCategories as any[]).length > 0 && (
                     <div className="mt-2 border-t border-border/50 pt-2">
