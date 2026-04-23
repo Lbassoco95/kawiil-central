@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo, type DragEvent } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, type DragEvent, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -175,6 +175,115 @@ function getFolderLabel(displayName: string) {
 
 const WELL_KNOWN_ORDER = ["inbox", "sentitems", "drafts", "deleteditems", "junkemail"];
 
+function wellKnownSortIndex(f: any): number | null {
+  const wk = String(f.wellKnownFolderName || f.wellKnownName || "").toLowerCase();
+  const ordIdx = WELL_KNOWN_ORDER.indexOf(wk);
+  if (ordIdx >= 0) return ordIdx;
+  const key = normFolderKey(String(f.displayName || ""));
+  if (WELL_KNOWN_ORDER.some((wkPart) => key.includes(wkPart))) {
+    for (let i = 0; i < WELL_KNOWN_ORDER.length; i++) {
+      if (key.includes(WELL_KNOWN_ORDER[i])) return i;
+    }
+  }
+  if (key.includes("inbox") || key.includes("bandeja")) return 0;
+  if (key.includes("sent") || key.includes("enviado")) return 1;
+  if (key.includes("draft") || key.includes("borrador")) return 2;
+  if (key.includes("deleted") || key.includes("eliminad")) return 3;
+  if (key.includes("junk") || key.includes("spam") || key.includes("correonodeseado")) return 4;
+  return null;
+}
+
+/** Orden dentro de un mismo nivel (well-known primero, luego alfabético). */
+function sortFolderRowsAtLevel(rows: any[]): any[] {
+  return [...rows].sort((a, b) => {
+    const ia = wellKnownSortIndex(a);
+    const ib = wellKnownSortIndex(b);
+    if (ia != null && ib != null && ia !== ib) return ia - ib;
+    if (ia != null && ib == null) return -1;
+    if (ia == null && ib != null) return 1;
+    return String(a.displayName || "").localeCompare(String(b.displayName || ""), "es", { sensitivity: "base" });
+  });
+}
+
+function buildFolderTreeData(folders: any[]): {
+  roots: any[];
+  childrenMap: Map<string, any[]>;
+  byId: Map<string, any>;
+} {
+  const list = (folders || []).filter((f) => f && typeof f.id === "string" && f.id);
+  const byId = new Map<string, any>();
+  for (const f of list) byId.set(f.id, f);
+  const childrenMap = new Map<string, any[]>();
+  const roots: any[] = [];
+  for (const f of list) {
+    const pid = f.parentFolderId;
+    if (typeof pid === "string" && byId.has(pid)) {
+      const arr = childrenMap.get(pid) ?? [];
+      arr.push(f);
+      childrenMap.set(pid, arr);
+    } else {
+      roots.push(f);
+    }
+  }
+  sortFolderRowsAtLevel(roots);
+  for (const [k, arr] of childrenMap.entries()) {
+    childrenMap.set(k, sortFolderRowsAtLevel(arr));
+  }
+  return { roots, childrenMap, byId };
+}
+
+function computeFolderSearchVisibility(
+  roots: any[],
+  childrenMap: Map<string, any[]>,
+  query: string,
+): Set<string> {
+  const q = query.trim().toLowerCase();
+  const visible = new Set<string>();
+  function dfs(node: any): boolean {
+    const label = getFolderLabel(String(node.displayName || "")).toLowerCase();
+    const raw = String(node.displayName || "").toLowerCase();
+    const selfMatch = !q || label.includes(q) || raw.includes(q);
+    let anyChild = false;
+    for (const ch of childrenMap.get(node.id) ?? []) {
+      if (dfs(ch)) anyChild = true;
+    }
+    if (selfMatch || anyChild) visible.add(node.id);
+    return selfMatch || anyChild;
+  }
+  for (const r of roots) dfs(r);
+  return visible;
+}
+
+/** Ruta corta para tooltips y mover (ej. Bandeja · Clientes). */
+function folderPathFromId(folderId: string, byId: Map<string, any>): string {
+  const segments: string[] = [];
+  let cur: any = byId.get(folderId);
+  for (let i = 0; i < 48 && cur; i++) {
+    segments.unshift(getFolderLabel(String(cur.displayName || "")));
+    const pid = cur.parentFolderId;
+    if (typeof pid !== "string" || !byId.has(pid)) break;
+    cur = byId.get(pid);
+  }
+  return segments.join(" · ");
+}
+
+/** Riel de iconos: marca activo si la carpeta seleccionada es esta raíz o una subcarpeta bajo ella. */
+function folderRailRootIsActive(
+  rootId: string,
+  selectedId: string,
+  byId: Map<string, any>,
+): boolean {
+  if (selectedId === rootId) return true;
+  let cur: any = byId.get(selectedId);
+  for (let i = 0; i < 64 && cur; i++) {
+    const pid = cur.parentFolderId;
+    if (pid === rootId) return true;
+    if (typeof pid !== "string" || !byId.has(pid)) break;
+    cur = byId.get(pid);
+  }
+  return false;
+}
+
 /**
  * Badges del listado de carpetas: misma fuente que el sidebar para Inbox (`useUnreadEmailCount` / Graph inbox).
  * Borradores: total; Spam: no leídos; resto sin badge.
@@ -208,20 +317,7 @@ function getFolderSidebarBadge(folder: any, inboxUnread: number): number | null 
 }
 
 function sortFolders(folders: any[]) {
-  const wellKnown: any[] = [];
-  const custom: any[] = [];
-  for (const f of folders) {
-    const key = (f.displayName || "").toLowerCase().replace(/\s/g, "");
-    const isWK = WELL_KNOWN_ORDER.some(wk => key.includes(wk)) ||
-      key.includes("inbox") || key.includes("bandeja") ||
-      key.includes("sent") || key.includes("enviado") ||
-      key.includes("draft") || key.includes("borrador") ||
-      key.includes("deleted") || key.includes("eliminad") ||
-      key.includes("junk") || key.includes("spam") || key.includes("correo no deseado");
-    if (isWK) wellKnown.push(f);
-    else custom.push(f);
-  }
-  return [...wellKnown, ...custom];
+  return sortFolderRowsAtLevel([...(folders || [])]);
 }
 
 /** Abreviaturas de día (getDay: 0=Dom … 6=Sáb), estilo bandeja tipo Superhuman */
@@ -403,6 +499,20 @@ function triggerBlobDownload(blobUrl: string, filename: string) {
 }
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
+const LS_EMAIL_FOLDERS_EXPANDED_IDS = "kawiil-email-folders-expanded-ids";
+
+function readExpandedFolderIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(LS_EMAIL_FOLDERS_EXPANDED_IDS);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.filter((x): x is string => typeof x === "string"));
+  } catch {
+    return new Set();
+  }
+}
 
 function readFoldersCollapsedPref(): boolean {
   if (typeof window === "undefined") return false;
@@ -458,6 +568,10 @@ export function EmailView() {
   const [listPaneCollapsed, setListPaneCollapsed] = useState(false);
   /** Filtro rápido sobre la lista (mock v2.4 — chips arriba de la lista) */
   const [listFilter, setListFilter] = useState<"all" | "unread" | "attachments" | "sat" | "facturas">("all");
+  const [folderSidebarSearch, setFolderSidebarSearch] = useState("");
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(readExpandedFolderIds);
+  const [folderRailPickerOpen, setFolderRailPickerOpen] = useState(false);
+  const [folderRailPickerQuery, setFolderRailPickerQuery] = useState("");
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -488,14 +602,23 @@ export function EmailView() {
   }, [foldersCollapsed]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(LS_EMAIL_FOLDERS_EXPANDED_IDS, JSON.stringify([...expandedFolderIds]));
+    } catch {
+      /* ignore */
+    }
+  }, [expandedFolderIds]);
+
+  useEffect(() => {
     if (!selectedEmailId) setListPaneCollapsed(false);
     setEmailAiSummary(null);
   }, [selectedEmailId]);
 
   const { data: folders = [] } = useMailFolders();
   const draftsFolderId = useMemo(() => {
-    const f = (folders as { id?: string; displayName?: string; wellKnownName?: string }[]).find((x) => {
-      const wk = typeof x.wellKnownName === "string" ? x.wellKnownName.toLowerCase() : "";
+    const f = (folders as { id?: string; displayName?: string; wellKnownName?: string; wellKnownFolderName?: string }[]).find((x) => {
+      const wk = String(x.wellKnownFolderName || x.wellKnownName || "").toLowerCase();
       if (wk === "drafts") return true;
       const dn = normFolderKey(String(x.displayName || ""));
       return dn.includes("draft") || dn.includes("borrador");
@@ -596,7 +719,54 @@ export function EmailView() {
     debouncedSearch,
   ]);
 
+  const folderTreeData = useMemo(() => buildFolderTreeData(folders as any[]), [folders]);
+  const { roots: folderRoots, childrenMap: folderChildrenMap, byId: folderById } = folderTreeData;
+
+  const folderVisibleIds = useMemo(
+    () => computeFolderSearchVisibility(folderRoots, folderChildrenMap, folderSidebarSearch),
+    [folderRoots, folderChildrenMap, folderSidebarSearch],
+  );
+
   const sortedFolders = sortFolders(folders);
+
+  const foldersForMoveList = useMemo(() => {
+    const list = (folders as any[]).filter((f) => f?.id && f.id !== selectedFolderId);
+    const { byId: bid } = folderTreeData;
+    return [...list].sort((a, b) =>
+      folderPathFromId(a.id, bid).localeCompare(folderPathFromId(b.id, bid), "es", { sensitivity: "base" }),
+    );
+  }, [folders, selectedFolderId, folderTreeData]);
+
+  const resolvedSelectedFolder = useMemo(() => {
+    const list = folders as any[];
+    const direct = list.find((f) => f.id === selectedFolderId);
+    if (direct) return direct;
+    if (selectedFolderId === "inbox") {
+      return list.find((f) => {
+        const sw = String(f.wellKnownFolderName || f.wellKnownName || "").toLowerCase();
+        if (sw === "inbox") return true;
+        const k = normFolderKey(String(f.displayName || ""));
+        return k.includes("inbox") || k.includes("bandejadeentrada");
+      });
+    }
+    return undefined;
+  }, [folders, selectedFolderId]);
+
+  useEffect(() => {
+    const id = resolvedSelectedFolder?.id;
+    if (!id || typeof id !== "string") return;
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      let cur: any = folderById.get(id);
+      for (let i = 0; i < 48 && cur?.parentFolderId; i++) {
+        const pid = cur.parentFolderId;
+        if (typeof pid !== "string") break;
+        next.add(pid);
+        cur = folderById.get(pid);
+      }
+      return next;
+    });
+  }, [resolvedSelectedFolder?.id, folderById]);
 
   const handleMoveEmail = useCallback((messageId: string, destinationId: string) => {
     moveEmail.mutate({ messageId, destinationId }, {
@@ -1171,6 +1341,116 @@ export function EmailView() {
     return { Icon, label, isActive, folderBadge, dragHandlers, onSelect };
   };
 
+  function selectFolderAndClosePickers(folder: { id: string }) {
+    setSelectedFolderId(folder.id);
+    setSelectedEmailId(null);
+    resetAction();
+    setFolderRailPickerOpen(false);
+    setFolderRailPickerQuery("");
+    if (isMobile) setShowFolders(false);
+  }
+
+  const renderEmailFolderBranch = (folder: any, depth: number): ReactNode => {
+    if (!folder?.id || !folderVisibleIds.has(folder.id)) return null;
+    const kids = folderChildrenMap.get(folder.id) ?? [];
+    const hasChildren = kids.length > 0;
+    const expanded = expandedFolderIds.has(folder.id);
+    const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
+
+    const rowClass =
+      "flex min-w-0 flex-1 items-center gap-2 rounded-none py-2 pl-2 pr-1 text-left text-sm transition-all hover:bg-accent/60";
+
+    const rowInner = (
+      <>
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
+        {folderBadge != null && folderBadge > 0 && (
+          <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-bold tabular-nums bg-primary/15 text-primary">
+            {folderBadge}
+          </Badge>
+        )}
+      </>
+    );
+
+    if (!hasChildren) {
+      return (
+        <div key={folder.id} className="min-w-0">
+          <div className="flex min-w-0 items-stretch" style={{ marginLeft: depth * 10 }}>
+            <span className="inline-flex w-5 shrink-0" aria-hidden />
+            <button
+              type="button"
+              className={cn(
+                rowClass,
+                isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
+                dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
+              )}
+              onClick={onSelect}
+              {...dragHandlers}
+            >
+              {rowInner}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible
+        key={folder.id}
+        open={expanded}
+        onOpenChange={(open) => {
+          setExpandedFolderIds((prev) => {
+            const n = new Set(prev);
+            if (open) n.add(folder.id);
+            else n.delete(folder.id);
+            return n;
+          });
+        }}
+      >
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-stretch" style={{ marginLeft: depth * 10 }}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex h-9 w-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent/60"
+                aria-label={expanded ? "Contraer subcarpetas" : "Expandir subcarpetas"}
+              >
+                <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-90")} />
+              </button>
+            </CollapsibleTrigger>
+            <button
+              type="button"
+              className={cn(
+                rowClass,
+                isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
+                dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
+              )}
+              onClick={onSelect}
+              {...dragHandlers}
+            >
+              {rowInner}
+            </button>
+          </div>
+          <CollapsibleContent>
+            <div className="min-w-0 border-l border-border/40 ml-[calc(0.625rem+10px)]">
+              {kids.map((ch: any) => renderEmailFolderBranch(ch, depth + 1))}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    );
+  };
+
+  const folderRailPickerFlat = useMemo(() => {
+    const q = folderRailPickerQuery.trim().toLowerCase();
+    const list = sortedFolders as any[];
+    if (!q) return list;
+    return list.filter((f) => {
+      const pathStr = folderPathFromId(f.id, folderById).toLowerCase();
+      return pathStr.includes(q) || String(f.displayName || "").toLowerCase().includes(q);
+    });
+  }, [sortedFolders, folderRailPickerQuery, folderById]);
+
   return (
     <>
       <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background">
@@ -1231,7 +1511,7 @@ export function EmailView() {
         className={cn(
           "relative z-[1] flex min-h-0 flex-col border-r border-border bg-muted/30 transition-[width] duration-200 ease-out",
           isMobile
-            ? cn(showFolders ? "absolute z-30 h-full w-56 shadow-xl" : "w-0 shrink-0 overflow-hidden border-0")
+            ? cn(showFolders ? "absolute z-30 h-full w-[17rem] shadow-xl" : "w-0 shrink-0 overflow-hidden border-0")
             : cn(
                 "shrink-0 overflow-hidden",
                 foldersCollapsed ? "w-[3.25rem]" : "w-[15rem]",
@@ -1246,32 +1526,21 @@ export function EmailView() {
                 <X className="h-3.5 w-3.5" />
               </Button>
             </div>
+            <div className="shrink-0 border-b border-border/40 px-2 py-1.5">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={folderSidebarSearch}
+                  onChange={(e) => setFolderSidebarSearch(e.target.value)}
+                  placeholder="Buscar carpeta…"
+                  className="h-8 border-0 bg-muted/50 pl-8 text-xs"
+                  aria-label="Buscar carpeta"
+                />
+              </div>
+            </div>
             <ScrollArea className="min-h-0 flex-1">
               <div className="py-1 pr-2.5 pl-1">
-                {sortedFolders.map((folder: any) => {
-                  const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
-                  return (
-                    <button
-                      key={folder.id}
-                      type="button"
-                      className={cn(
-                        "flex min-w-0 w-full items-center gap-2 py-2 pl-2 pr-1 text-sm transition-all hover:bg-accent/60 text-left rounded-none",
-                        isActive && "bg-accent text-accent-foreground font-medium border-l-2 border-primary",
-                        dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
-                      )}
-                      onClick={onSelect}
-                      {...dragHandlers}
-                    >
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
-                      {folderBadge != null && folderBadge > 0 && (
-                        <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-bold tabular-nums bg-primary/15 text-primary">
-                          {folderBadge}
-                        </Badge>
-                      )}
-                    </button>
-                  );
-                })}
+                {folderRoots.map((folder: any) => renderEmailFolderBranch(folder, 0))}
               </div>
             </ScrollArea>
             <div className="shrink-0 border-t border-border p-2">
@@ -1326,8 +1595,10 @@ export function EmailView() {
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="flex flex-col items-center gap-0.5 py-1 pl-0.5 pr-1">
-                    {sortedFolders.map((folder: any) => {
-                      const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
+                    {folderRoots.map((folder: any) => {
+                      const { Icon, label, folderBadge, dragHandlers, onSelect } = folderRow(folder);
+                      const railActive = folderRailRootIsActive(folder.id, selectedFolderId, folderById);
+                      const tip = folderPathFromId(folder.id, folderById);
                       return (
                         <Tooltip key={folder.id}>
                           <TooltipTrigger asChild>
@@ -1335,7 +1606,7 @@ export function EmailView() {
                               type="button"
                               className={cn(
                                 "relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-md transition-colors hover:bg-accent/60",
-                                isActive && "bg-accent text-accent-foreground ring-1 ring-primary",
+                                railActive && "bg-accent text-accent-foreground ring-1 ring-primary",
                                 dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
                               )}
                               onClick={onSelect}
@@ -1349,13 +1620,72 @@ export function EmailView() {
                               )}
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="right">{label}</TooltipContent>
+                          <TooltipContent side="right" className="max-w-[14rem]">
+                            <span className="block font-medium">{label}</span>
+                            <span className="block text-[11px] text-muted-foreground">{tip}</span>
+                          </TooltipContent>
                         </Tooltip>
                       );
                     })}
                   </div>
                 </ScrollArea>
-                <div className="flex shrink-0 justify-center border-t border-border p-1">
+                <div className="flex shrink-0 flex-col items-center gap-0.5 border-t border-border py-1">
+                  <Popover
+                    open={folderRailPickerOpen}
+                    onOpenChange={(o) => {
+                      setFolderRailPickerOpen(o);
+                      if (!o) setFolderRailPickerQuery("");
+                    }}
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <PopoverTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Más carpetas">
+                            <List className="h-4 w-4" />
+                          </Button>
+                        </PopoverTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">Más carpetas</TooltipContent>
+                    </Tooltip>
+                    <PopoverContent side="right" align="end" className="w-72 p-2">
+                      <div className="relative mb-2">
+                        <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={folderRailPickerQuery}
+                          onChange={(e) => setFolderRailPickerQuery(e.target.value)}
+                          placeholder="Buscar carpeta…"
+                          className="h-8 border-0 bg-muted/50 pl-8 text-xs"
+                          autoFocus
+                        />
+                      </div>
+                      <ScrollArea className="max-h-72">
+                        <div className="flex flex-col gap-0.5 pr-2">
+                          {folderRailPickerFlat.length === 0 ? (
+                            <p className="px-2 py-3 text-center text-xs text-muted-foreground">Sin coincidencias</p>
+                          ) : (
+                            folderRailPickerFlat.map((folder: any) => {
+                              const Icon = getFolderIcon(folder.displayName);
+                              const pathStr = folderPathFromId(folder.id, folderById);
+                              return (
+                                <button
+                                  key={folder.id}
+                                  type="button"
+                                  className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
+                                  onClick={() => selectFolderAndClosePickers(folder)}
+                                >
+                                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate">{getFolderLabel(folder.displayName)}</span>
+                                    <span className="block truncate text-[11px] text-muted-foreground">{pathStr}</span>
+                                  </span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </PopoverContent>
+                  </Popover>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -1394,32 +1724,21 @@ export function EmailView() {
                     <TooltipContent side="bottom">Solo iconos</TooltipContent>
                   </Tooltip>
                 </div>
+                <div className="shrink-0 border-b border-border/40 px-2 py-1.5">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={folderSidebarSearch}
+                      onChange={(e) => setFolderSidebarSearch(e.target.value)}
+                      placeholder="Buscar carpeta…"
+                      className="h-8 border-0 bg-muted/50 pl-8 text-xs"
+                      aria-label="Buscar carpeta"
+                    />
+                  </div>
+                </div>
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="py-1 pr-2.5 pl-1">
-                    {sortedFolders.map((folder: any) => {
-                      const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
-                      return (
-                        <button
-                          key={folder.id}
-                          type="button"
-                          className={cn(
-                            "flex min-w-0 w-full items-center gap-2 rounded-none py-2 pl-2 pr-1 text-left text-sm transition-all hover:bg-accent/60",
-                            isActive && "border-l-2 border-primary bg-accent font-medium text-accent-foreground",
-                            dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
-                          )}
-                          onClick={onSelect}
-                          {...dragHandlers}
-                        >
-                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
-                          {folderBadge != null && folderBadge > 0 && (
-                            <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-bold tabular-nums bg-primary/15 text-primary">
-                              {folderBadge}
-                            </Badge>
-                          )}
-                        </button>
-                      );
-                    })}
+                    {folderRoots.map((folder: any) => renderEmailFolderBranch(folder, 0))}
                   </div>
                   {/* Etiquetas AI (categorías Outlook) */}
                   {(outlookCategories as any[]).length > 0 && (
@@ -2141,24 +2460,31 @@ export function EmailView() {
                       Mover
                     </TooltipContent>
                   </Tooltip>
-                  <PopoverContent className="w-48 p-1" align="start">
+                  <PopoverContent className="w-72 p-2" align="start">
                     <ScrollArea className="max-h-64">
-                      {sortedFolders.filter((f: any) => f.id !== selectedFolderId).map((folder: any) => {
-                        const Icon = getFolderIcon(folder.displayName);
-                        const label = getFolderLabel(folder.displayName);
-                        return (
-                          <button
-                            key={folder.id}
-                            className="w-full flex items-center gap-2 px-2.5 py-2 text-sm hover:bg-accent rounded-md text-left transition-colors"
-                            onClick={() => {
-                              if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
-                            }}
-                          >
-                            <Icon className="h-4 w-4 text-muted-foreground" />
-                            <span className="truncate">{label}</span>
-                          </button>
-                        );
-                      })}
+                      <div className="flex flex-col gap-0.5 pr-2">
+                        {foldersForMoveList.map((folder: any) => {
+                          const Icon = getFolderIcon(folder.displayName);
+                          const label = getFolderLabel(folder.displayName);
+                          const pathStr = folderPathFromId(folder.id, folderById);
+                          return (
+                            <button
+                              key={folder.id}
+                              type="button"
+                              className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent"
+                              onClick={() => {
+                                if (selectedEmailId) handleMoveEmail(selectedEmailId, folder.id);
+                              }}
+                            >
+                              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate">{label}</span>
+                                <span className="block truncate text-[11px] text-muted-foreground">{pathStr}</span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </ScrollArea>
                   </PopoverContent>
                 </Popover>
@@ -2467,7 +2793,9 @@ export function EmailView() {
           handleOpenEmail(email);
         }}
         folderLabel={
-          sortedFolders.find((f: any) => f.id === selectedFolderId)?.displayName ?? undefined
+          resolvedSelectedFolder?.id
+            ? folderPathFromId(resolvedSelectedFolder.id, folderById)
+            : (sortedFolders.find((f: any) => f.id === selectedFolderId)?.displayName ?? undefined)
         }
       />
       </div>

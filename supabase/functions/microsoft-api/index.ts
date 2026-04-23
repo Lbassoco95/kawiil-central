@@ -178,25 +178,102 @@ function normalizeMailFolderDisplayName(s: string): string {
     .replace(/[\u00b7\u2219\u2022\u30fb\u318d\ufe52]/g, "\u00b7");
 }
 
-async function listAllRootMailFolders(accessToken: string): Promise<unknown[]> {
+const MAIL_FOLDER_LIST_SELECT =
+  "id,displayName,parentFolderId,wellKnownFolderName,unreadItemCount,totalItemCount,childFolderCount";
+const MAIL_FOLDER_LIST_QUERY = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
+
+function nextLinkToPath(nextLink: string): string {
+  const m = nextLink.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
+  return m?.[1] ?? "";
+}
+
+/**
+ * Todas las carpetas del buzón (raíz + subcarpetas vía childFolders), aplanadas.
+ * Incluye carpetas ocultas (paridad Outlook). Límites para evitar timeouts en buzones enormes.
+ */
+async function listAllMailFoldersRecursive(accessToken: string): Promise<{
+  folders: unknown[];
+  rootFolderIds: Set<string>;
+}> {
+  const MAX_FOLDERS = 3500;
+  const MAX_GRAPH_LIST_CALLS = 450;
+  let listCalls = 0;
+
   const all: unknown[] = [];
-  let path = "/me/mailFolders?$top=100";
-  const maxPages = 25;
-  for (let page = 0; page < maxPages; page++) {
-    const data = (await graphRequest(accessToken, path)) as {
+  const seenIds = new Set<string>();
+  const rootFolderIds = new Set<string>();
+  /** Cola BFS: ids de carpeta cuyos hijos faltan por listar. */
+  const childQueue: string[] = [];
+  const enqueuedChildren = new Set<string>();
+
+  const graphList = async (path: string): Promise<{
+    value?: unknown[];
+    "@odata.nextLink"?: string;
+  } | null> => {
+    if (listCalls >= MAX_GRAPH_LIST_CALLS) return null;
+    listCalls += 1;
+    return (await graphRequest(accessToken, path)) as {
       value?: unknown[];
       "@odata.nextLink"?: string;
     };
-    if (Array.isArray(data?.value)) {
-      for (const v of data.value) all.push(v);
+  };
+
+  const ingestFolderRow = (row: Record<string, unknown>, isRootLevel: boolean) => {
+    const id = row.id;
+    if (typeof id !== "string" || !id || seenIds.has(id)) return;
+    seenIds.add(id);
+    all.push(row);
+    if (isRootLevel) rootFolderIds.add(id);
+
+    const cc = row.childFolderCount;
+    const n = typeof cc === "number" ? cc : NaN;
+    const maybeHasKids = Number.isFinite(n) ? n > 0 : true;
+    if (maybeHasKids && all.length < MAX_FOLDERS && listCalls < MAX_GRAPH_LIST_CALLS) {
+      if (!enqueuedChildren.has(id)) {
+        enqueuedChildren.add(id);
+        childQueue.push(id);
+      }
     }
-    const nl = data?.["@odata.nextLink"];
-    if (typeof nl !== "string" || !nl) break;
-    const m = nl.match(/graph\.microsoft\.com\/v1\.0(\/.+)/i);
-    path = m?.[1] ?? "";
-    if (!path) break;
+  };
+
+  const paginateInto = async (firstPath: string, isRootLevel: boolean) => {
+    let path: string | null = firstPath;
+    for (let page = 0; page < 25 && all.length < MAX_FOLDERS && path; page++) {
+      const data = await graphList(path);
+      if (!data) break;
+      if (Array.isArray(data.value)) {
+        for (const v of data.value) {
+          if (!v || typeof v !== "object") continue;
+          ingestFolderRow(v as Record<string, unknown>, isRootLevel);
+          if (all.length >= MAX_FOLDERS) break;
+        }
+      }
+      const nl = data["@odata.nextLink"];
+      path = typeof nl === "string" && nl ? nextLinkToPath(nl) : null;
+    }
+  };
+
+  await paginateInto(`/me/mailFolders${MAIL_FOLDER_LIST_QUERY}`, true);
+
+  while (
+    childQueue.length > 0 &&
+    all.length < MAX_FOLDERS &&
+    listCalls < MAX_GRAPH_LIST_CALLS
+  ) {
+    const parentId = childQueue.shift();
+    if (!parentId) break;
+    const enc = encodeURIComponent(parentId);
+    await paginateInto(`/me/mailFolders/${enc}/childFolders${MAIL_FOLDER_LIST_QUERY}`, false);
   }
-  return all;
+
+  if (all.length >= MAX_FOLDERS || listCalls >= MAX_GRAPH_LIST_CALLS) {
+    console.warn("[microsoft-api] listAllMailFoldersRecursive: listado truncado por límites", {
+      folderCount: all.length,
+      listCalls,
+    });
+  }
+
+  return { folders: all, rootFolderIds };
 }
 
 async function findRootMailFolderByDisplayName(
@@ -204,11 +281,12 @@ async function findRootMailFolderByDisplayName(
   wanted: string,
 ): Promise<Record<string, unknown> | null> {
   const target = normalizeMailFolderDisplayName(wanted);
-  const all = await listAllRootMailFolders(accessToken);
-  for (const f of all) {
+  const { folders, rootFolderIds } = await listAllMailFoldersRecursive(accessToken);
+  for (const f of folders) {
     if (!f || typeof f !== "object") continue;
     const row = f as { id?: string; displayName?: string };
     if (typeof row.id !== "string" || typeof row.displayName !== "string") continue;
+    if (!rootFolderIds.has(row.id)) continue;
     if (normalizeMailFolderDisplayName(row.displayName) === target) return f as Record<string, unknown>;
   }
   return null;
@@ -1222,7 +1300,8 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
-        result = await listAllRootMailFolders(accessToken);
+        const { folders } = await listAllMailFoldersRecursive(accessToken);
+        result = folders;
         break;
       }
 
