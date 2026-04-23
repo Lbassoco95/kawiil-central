@@ -3925,6 +3925,16 @@ async function handleClaudeChat(
   conversationId: string | null,
 ): Promise<void> {
   const lastUserPlainText = getLastUserPlainTextFromOpenAiMessages(userMessages);
+  const deliverableIntent = userLastMessageRequestedFileDeliverable(lastUserPlainText);
+  const systemWithDeliverable = deliverableIntent
+    ? systemPrompt +
+      "\n\n## ENTREGABLES (obligatorio en esta petición)\n" +
+      "El **último mensaje del usuario** pide un documento o archivo (Excel, Word, PDF, etc.). " +
+      "La conversación no puede darse por terminada con éxito sin al menos **una** llamada exitosa a `create_ai_document` " +
+      "(el JSON de la herramienta debe incluir `artifact_id`), salvo que el propio `tool_result` muestre un `error` explicable. " +
+      "No describas un archivo como “ya creado” o “listo” sin haber ejecutado y completado la herramienta.\n" +
+      "Tras reunir contexto (búsquedas, memoria), el siguiente paso debe ser **invocar** `create_ai_document`, no resumir en prosa en su lugar."
+    : systemPrompt;
   let anthropicMsgs = pruneClaudeMessages(
     toAnthropicMessages(userMessages),
     MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
@@ -3936,6 +3946,7 @@ async function handleClaudeChat(
   const createdArtifacts: { id: string; title: string; content_type: string; office_kind?: string; template_key?: string; primary_format?: string }[] = [];
   /** Intentos de generate Kawiil (create_ai_document / auto-upgrade) que devolvieron error sin artifact_id. */
   const documentPipelineFailures: { error: string; code?: string }[] = [];
+  let repairDocumentAttempted = false;
 
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
   const memoryToolDef = {
@@ -3979,7 +3990,7 @@ async function handleClaudeChat(
       // create_ai_document) sin que Claude termine con stop_reason="max_tokens"
       // y un bloque de texto vacío.
       max_tokens: 8192,
-      system: systemPrompt,
+      system: systemWithDeliverable,
       messages: anthropicMsgs,
       tools: isLastChance ? undefined : allTools,
       stream: false,
@@ -4271,6 +4282,113 @@ async function handleClaudeChat(
     textContent = textContent.replace(/\s*\[artifact:[a-f0-9-]{36}\|[^\]]*\]\s*/gi, "\n");
     textContent = textContent.replace(/\n{3,}/g, "\n\n").trim();
 
+    // Reintento automático: el modelo a veces cierra en prosa sin create_ai_document; forzamos 1 invocación.
+    const canAutoRepair =
+      !repairDocumentAttempted &&
+      lastUserPlainText &&
+      userLastMessageRequestedFileDeliverable(lastUserPlainText) &&
+      assistantTextClaimsFileDelivered(textContent) &&
+      createdArtifacts.length === 0 &&
+      documentPipelineFailures.length === 0 &&
+      textContent.trim().length > 20;
+
+    if (canAutoRepair) {
+      repairDocumentAttempted = true;
+      try {
+        sseWriter.writeProgress("response", "Generando el documento descargable (reintento automático)…");
+        const repairUserContent =
+          "INSTRUCCIÓN OBLIGATORIA (mensaje de sistema; no se muestra en la UI del chat al usuario): " +
+          "el usuario pidió un entregable con plantilla. " +
+          "Debes invocar AHORA la herramienta `create_ai_document` " +
+          "con `template_key` adecuado (p. ej. `generico` o `informe_ejecutivo`), " +
+          "`requested_formats` y `primary_format` alineados al hilo (p. ej. xlsx+pdf, primary xlsx si pidió Excel), " +
+          "y `content` estructurado (sections, tables, resumen) según el contexto ya presente. " +
+          "No cierres solo con texto: produce el bloque tool_use de `create_ai_document`.";
+
+        const repairCallMsgs = pruneClaudeMessages(
+          [
+            ...anthropicMsgs,
+            { role: "assistant", content: textContent },
+            { role: "user", content: repairUserContent },
+          ],
+          MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
+        );
+
+        const repairResp = await anthropicMessagesFetch(apiKey, {
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8192,
+          system: systemWithDeliverable,
+          messages: repairCallMsgs,
+          tools: allTools,
+          tool_choice: { type: "tool", name: "create_ai_document" },
+          stream: false,
+        });
+
+        if (repairResp.ok) {
+          const rData = await repairResp.json();
+          const rBlocks = (rData.content || []) as Array<{ type?: string; [k: string]: unknown }>;
+          const rToolUses = rBlocks.filter((b) => b.type === "tool_use") as Array<{
+            type: "tool_use";
+            name: string;
+            input: unknown;
+          }>;
+          for (const tu of rToolUses) {
+            if (tu.name === "create_ai_document" || tu.name === "create_office_document") {
+              sseWriter.writeProgress("tool", "Generando documento (reintento automático)…");
+              const rResult = await handleCreateAiDocument(
+                (tu.input || {}) as Record<string, unknown>,
+                userId,
+                orgId,
+                aiProjectId,
+                authHeader,
+                lastUserPlainText,
+              );
+              try {
+                const parsed = JSON.parse(rResult) as {
+                  artifact_id?: string;
+                  title?: string;
+                  error?: string;
+                  code?: string;
+                  content_type?: string;
+                  template_key?: string;
+                  primary_format?: string;
+                };
+                if (parsed.artifact_id) {
+                  createdArtifacts.push({
+                    id: parsed.artifact_id,
+                    title: String(parsed.title || ""),
+                    content_type: parsed.content_type || "pdf",
+                    template_key: parsed.template_key,
+                    primary_format: parsed.primary_format,
+                  });
+                } else if (typeof parsed.error === "string" && parsed.error.trim()) {
+                  documentPipelineFailures.push({
+                    error: parsed.error.trim().slice(0, 500),
+                    code: typeof parsed.code === "string" ? parsed.code : undefined,
+                  });
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+        } else {
+          const errT = await repairResp.text();
+          console.warn("artifact_repair: anthropic not ok", repairResp.status, errT.slice(0, 300));
+        }
+        console.log(
+          JSON.stringify({
+            kawiil_event: "artifact_repair",
+            had_deliverable_intent: deliverableIntent,
+            success: createdArtifacts.length > 0,
+            pipeline_errors: documentPipelineFailures.length,
+          }),
+        );
+      } catch (e) {
+        console.warn("artifact_repair: threw", e);
+      }
+    }
+
     if (createdArtifacts.length > 0) {
       // Los marcadores usan `|` como separador y `]` como cierre; si el título los
       // contiene el regex del cliente puede extraer campos incorrectos o cortar el
@@ -4308,11 +4426,16 @@ async function handleClaudeChat(
       userLastMessageRequestedFileDeliverable(lastUserPlainText) &&
       assistantTextClaimsFileDelivered(textContent)
     ) {
+      const afterRepair = repairDocumentAttempted
+        ? " Ya se intentó de nuevo automáticamente el generador y tampoco quedó un archivo. "
+        : " ";
       textContent +=
-        "\n\n---\n\n**Nota (sistema):** En esta respuesta no se registró un archivo adjunto (la tarjeta con descargas " +
-        "solo aparece cuando la herramienta `create_ai_document` termina con éxito). " +
-        "Puedes indicar: **Genera el documento con la plantilla Kawiil (Excel, Word o el formato que necesites)** " +
-        "en un mensaje corto para forzar el generador.";
+        "\n\n---\n\n**Nota (sistema):**" +
+        afterRepair +
+        "No se registró un archivo descargable (la tarjeta solo aparece cuando `create_ai_document` responde con `artifact_id`). " +
+        "Puedes enviar un **mensaje corto** p. ej.: " +
+        "*«Genera con create_ai_document, template generico, requested_formats: xlsx y pdf, primary xlsx, título: [tu título]»* " +
+        "o pide *Word/Excel* explícitamente con **plantilla Kawiil**.";
     }
 
     // Salvavidas: si Claude termina la ronda sin texto y sin artefactos, NO cerrar el
