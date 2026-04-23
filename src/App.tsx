@@ -29,6 +29,7 @@ import AsistenteIA from "./pages/AsistenteIA";
 import BaseConocimiento from "./pages/BaseConocimiento";
 import Finanzas from "./pages/Finanzas";
 import NotFound from "./pages/NotFound";
+import Accesibilidad from "./pages/Accesibilidad";
 import PipelineLayout from "./pages/pipeline/PipelineLayout";
 import PipelineBoard from "./pages/pipeline/PipelineBoard";
 import PipelineDashboard from "./pages/pipeline/PipelineDashboard";
@@ -120,6 +121,7 @@ const App = () => (
                 <Route path="settings" element={<PipelineSettings />} />
               </Route>
               <Route path="/contabilidad/plantillas" element={<ProtectedRoute><EmailTemplatesContabilidad /></ProtectedRoute>} />
+              <Route path="/accesibilidad" element={<ProtectedRoute><Accesibilidad /></ProtectedRoute>} />
               <Route path="/configuracion" element={<ProtectedRoute><ModuleGate moduleKey="admin"><Configuracion /></ModuleGate></ProtectedRoute>} />
               <Route path="/admin" element={<Navigate to="/configuracion" replace />} />
               <Route path="*" element={<NotFound />} />

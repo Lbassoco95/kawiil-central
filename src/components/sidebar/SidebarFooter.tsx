@@ -1,4 +1,5 @@
-import { LogOut } from "lucide-react";
+import { Accessibility, LogOut } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import {
@@ -18,6 +19,8 @@ interface SidebarFooterProps {
 export function SidebarFooter({ collapsed }: SidebarFooterProps) {
   const { signOut, user } = useAuth();
   const { data: profile } = useCurrentProfile();
+  const location = useLocation();
+  const onAccesibilidad = location.pathname === "/accesibilidad";
 
   return (
     <TooltipProvider delayDuration={250}>
@@ -35,7 +38,7 @@ export function SidebarFooter({ collapsed }: SidebarFooterProps) {
         <div
           className={cn(
             "grid items-center gap-1.5",
-            collapsed ? "grid-cols-1" : "grid-cols-[1fr_auto_auto]",
+            collapsed ? "grid-cols-1" : "grid-cols-[1fr_auto_auto_auto]",
           )}
         >
           <div
@@ -69,6 +72,23 @@ export function SidebarFooter({ collapsed }: SidebarFooterProps) {
               </div>
             )}
           </div>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                to="/accesibilidad"
+                className={cn(
+                  "kw-sb-iconbtn",
+                  onAccesibilidad && "bg-[color:var(--sb-hover)]",
+                )}
+                aria-label="Accesibilidad y apariencia"
+                aria-current={onAccesibilidad ? "page" : undefined}
+              >
+                <Accessibility className="h-[15px] w-[15px]" />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="top">Accesibilidad y apariencia</TooltipContent>
+          </Tooltip>
 
           <ThemeToggle />
 

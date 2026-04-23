@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Accessibility,
   BookOpen,
   Briefcase,
   Calendar,
@@ -57,6 +58,7 @@ const VIEWS: ViewLink[] = [
   { label: "Kawiil AI", to: "/asistente", icon: Sparkles, moduleKey: "ai" },
   { label: "Conocimiento", to: "/conocimiento", icon: BookOpen, moduleKey: "conocimiento" },
   { label: "Hub", to: "/hub", icon: Briefcase, moduleKey: "hub" },
+  { label: "Accesibilidad", to: "/accesibilidad", icon: Accessibility },
   { label: "Configuración", to: "/configuracion", icon: Settings, moduleKey: "admin" },
 ];
 
