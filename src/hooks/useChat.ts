@@ -903,8 +903,20 @@ export function useChat() {
       }, AI_CHAT_CLIENT_TIMEOUT_MS);
 
       try {
-        const session = await supabase.auth.getSession();
-        const token = session.data.session?.access_token;
+        let { data: { session: initialSession } } = await supabase.auth.getSession();
+        let accessToken = initialSession?.access_token;
+        const expiresAt = initialSession?.expires_at;
+        if (
+          !accessToken ||
+          (typeof expiresAt === "number" && expiresAt * 1000 < Date.now() + 90_000)
+        ) {
+          const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+          accessToken = refreshed?.access_token;
+        }
+        if (!accessToken) {
+          throw new Error("Sesión expirada. Inicia sesión de nuevo.");
+        }
+        const token = accessToken;
 
         const chatBody = JSON.stringify({
           messages: allMessages

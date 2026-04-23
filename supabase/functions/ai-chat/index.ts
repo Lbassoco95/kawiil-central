@@ -1028,6 +1028,7 @@ const anthropicTools = [
       "- Si pide solo PDF o no especifica y conviene entregar PDF de presentación → 'primary_format': 'pdf' y requested_formats puede ser ['pdf','docx'] o ['pdf'].\n" +
       "- Si el usuario NO ha indicado en qué formato quiere el entregable (PDF, Word, Excel, PowerPoint), NO llames a esta herramienta todavía: pregúntale en una frase qué formato prefiere (PDF para presentar, Word para editar, Excel para tablas, PowerPoint para diapositivas, o combinación).\n\n" +
       "REGLAS:\n" +
+      "0) No afirmes que el documento ya está listo para descargar si el resultado JSON de esta herramienta trae 'error' o no trae 'artifact_id'. Lee el tool_result y comunícalo al usuario.\n" +
       "1) Elige 'template_key' según la intención del usuario:\n" +
       "   - 'informe_ejecutivo' → reporte formal con resumen ejecutivo, secciones y recomendaciones.\n" +
       "   - 'minuta_reunion' → acta con asistentes, temas, acuerdos y plan de acción.\n" +
@@ -2190,6 +2191,8 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 - **PREFIERE SIEMPRE \`create_ai_document\`** con el \`template_key\` adecuado. El resultado es más rico (portada con metadata, callouts, tablas estructuradas, recomendaciones, firmas, totales, KPIs, etc.).
 - **Usa \`create_artifact\` solo como fallback** cuando el contenido es tan libre / narrativo que no encaja en ningún template. Igualmente saldrá con diseño Kawiil, pero **pierdes estructura rica** (sin portada con clasificación, sin callouts, sin tablas profesionales con colores por columna).
 - **NUNCA** respondas con un bloque largo de markdown en el chat pensando "es un entregable": lo correcto es llamar a \`create_ai_document\`.
+- **NUNCA** digas que el archivo "ya quedó generado", "aquí lo tienes" o "puedes descargar" el Excel/Word/PDF **si en esta interacción no hubo una llamada exitosa a** \`create_ai_document\` (o a \`create_artifact\` con conversión) **cuyo resultado incluya** \`artifact_id\` **en el JSON de la herramienta**. Si el tool devuelve \`error\`, explica el fallo con lo que venga en el resultado; no inventes éxito.
+- Tras un \`error\` del tool, pide reintento o ofrece acortar el contenido; el usuario no verá la tarjeta de descargas mientras falle el pipeline.
 
 **Elección de \`template_key\` en \`create_ai_document\`** (reglas por intención):
 - **Estudios fiscales / precios de transferencia / papeles de trabajo / dictámenes / análisis jurídicos / opinión contable / informe de hallazgos** → \`informe_ejecutivo\` con \`metadata.clasificacion\` (p. ej. "Confidencial — Uso Fiscal") y secciones con \`paragraphs\`, \`tables\` (obligatorias si hay cifras) y \`recommendations\` (conclusiones del estudio).
@@ -3163,6 +3166,24 @@ function userRequestedExcelLike(text: string): boolean {
   return false;
 }
 
+/** Último mensaje: el usuario pide un archivo o entregable estructurado (aviso si no hubo artifact en el turno). */
+function userLastMessageRequestedFileDeliverable(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 4) return false;
+  return /excel|xlsx|hoja\s+de\s+c[aá]lculo|word|docx|\.docx|documento|pdf|papel\s+de\s+trabajo|plantilla|entregable|archivo|descarg|genera\s+el\s+documento|powerpoint|pptx/i
+    .test(t);
+}
+
+/**
+ * Heurística: el texto del asistente sugiere que ya entregó un archivo (no sustituye al marcador [artifact:…]).
+ */
+function assistantTextClaimsFileDelivered(text: string): boolean {
+  if (!text || text.length < 12) return false;
+  return /gener(é|e|ó)|aqu[ií]\s+tiene|te\s+he\s+genera|papel\s+de\s+trabajo|descarg|\.xlsx|\.docx|archivo|listo\s+para|ya\s+qued[oó]|quedó\s+el/i.test(
+    text,
+  );
+}
+
 async function handleCreateAiDocument(
   input: Record<string, unknown>,
   userId: string,
@@ -3908,9 +3929,13 @@ async function handleClaudeChat(
     toAnthropicMessages(userMessages),
     MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
   );
-  const MAX_ROUNDS = 8;
+  // 9 rondas: 8 con herramientas (create_ai_document + búsquedas) y 1 cierre en texto, para no quedar
+  // sin ronda al usar varias tools antes del documento.
+  const MAX_ROUNDS = 9;
   const taskMutationTally: TaskMutationTally = { updateSingles: 0, updateBatchOk: 0, comments: 0, errors: 0 };
   const createdArtifacts: { id: string; title: string; content_type: string; office_kind?: string; template_key?: string; primary_format?: string }[] = [];
+  /** Intentos de generate Kawiil (create_ai_document / auto-upgrade) que devolvieron error sin artifact_id. */
+  const documentPipelineFailures: { error: string; code?: string }[] = [];
 
   // Build tools array: custom tools + memory tool (as custom tool definition for compatibility)
   const memoryToolDef = {
@@ -4140,16 +4165,24 @@ async function handleClaudeChat(
                 { renderStatus: "pending", renderError: errSummary },
               );
               try {
-                const legacyParsed = JSON.parse(result);
+                const legacyParsed = JSON.parse(result) as { artifact_id?: string; title?: string; error?: string; content_type?: string };
                 if (legacyParsed.artifact_id) {
                   createdArtifacts.push({
                     id: legacyParsed.artifact_id,
                     title: legacyParsed.title,
                     content_type: legacyParsed.content_type || "markdown",
                   });
+                } else {
+                  documentPipelineFailures.push({
+                    error: errSummary,
+                    code: "kawiil_upgrade_and_markdown_failed",
+                  });
                 }
               } catch {
-                /* ignore parse issues */
+                documentPipelineFailures.push({
+                  error: errSummary,
+                  code: "kawiil_upgrade_and_markdown_failed",
+                });
               }
             }
           } else {
@@ -4178,14 +4211,27 @@ async function handleClaudeChat(
             lastUserPlainText,
           );
           try {
-            const parsed = JSON.parse(result);
+            const parsed = JSON.parse(result) as {
+              artifact_id?: string;
+              title?: string;
+              error?: string;
+              code?: string;
+              content_type?: string;
+              template_key?: string;
+              primary_format?: string;
+            };
             if (parsed.artifact_id) {
               createdArtifacts.push({
                 id: parsed.artifact_id,
-                title: parsed.title,
+                title: String(parsed.title || ""),
                 content_type: parsed.content_type || "pdf",
                 template_key: parsed.template_key,
                 primary_format: parsed.primary_format,
+              });
+            } else if (typeof parsed.error === "string" && parsed.error.trim()) {
+              documentPipelineFailures.push({
+                error: parsed.error.trim().slice(0, 500),
+                code: typeof parsed.code === "string" ? parsed.code : undefined,
               });
             }
           } catch {
@@ -4246,6 +4292,27 @@ async function handleClaudeChat(
         return `[artifact:${a.id}|${safeTitle}|${a.office_kind ? `office:${a.office_kind}` : a.content_type}]`;
       }).join("\n");
       textContent = textContent + "\n\n" + markers;
+    }
+
+    if (documentPipelineFailures.length > 0 && createdArtifacts.length === 0) {
+      const last = documentPipelineFailures[documentPipelineFailures.length - 1];
+      const detail = String(last.error).replace(/\s+/g, " ").trim().slice(0, 280);
+      const codeLine = last.code
+        ? ` Código: \`${last.code}\`.`
+        : "";
+      textContent += `\n\n---\n\n**Nota (sistema):** No se pudo generar el archivo descargable en Kawiil.${codeLine} ${detail}`;
+    } else if (
+      createdArtifacts.length === 0 &&
+      documentPipelineFailures.length === 0 &&
+      lastUserPlainText &&
+      userLastMessageRequestedFileDeliverable(lastUserPlainText) &&
+      assistantTextClaimsFileDelivered(textContent)
+    ) {
+      textContent +=
+        "\n\n---\n\n**Nota (sistema):** En esta respuesta no se registró un archivo adjunto (la tarjeta con descargas " +
+        "solo aparece cuando la herramienta `create_ai_document` termina con éxito). " +
+        "Puedes indicar: **Genera el documento con la plantilla Kawiil (Excel, Word o el formato que necesites)** " +
+        "en un mensaje corto para forzar el generador.";
     }
 
     // Salvavidas: si Claude termina la ronda sin texto y sin artefactos, NO cerrar el
