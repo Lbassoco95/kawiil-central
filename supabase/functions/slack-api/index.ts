@@ -74,6 +74,14 @@ const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
 const MAX_PRIVATE_FILE_FETCH_BYTES = 20 * 1024 * 1024;
 const SLACK_HTTP_TIMEOUT_MS = 25_000;
 
+/** Presupuesto total por invocación `conversations.history` (varias llamadas encadenadas a Slack). Debe quedar por debajo del timeout del cliente (~55–62 s). */
+const SLACK_HISTORY_HANDLER_BUDGET_MS = 48_000;
+
+/** Presupuesto para reunir todas las páginas de `conversations.replies` en una sola respuesta. */
+const SLACK_THREAD_REPLIES_BUDGET_MS = 45_000;
+const SLACK_THREAD_REPLIES_MAX_PAGES = 25;
+const SLACK_THREAD_REPLIES_MAX_MESSAGES = 2500;
+
 /**
  * Flujo recomendado por Slack (sustituye files.upload clásico, a menudo rechazado o limitado).
  * 1) getUploadURLExternal 2) PUT binario 3) completeUploadExternal
@@ -255,6 +263,31 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
     }
   }
   return { ok: false, error: "ratelimited" };
+}
+
+function slackHistoryBudgetLeftMs(startedAt: number): number {
+  return SLACK_HISTORY_HANDLER_BUDGET_MS - (Date.now() - startedAt);
+}
+
+/** Evita encadenar otra llamada a Slack si no cabe un margen razonable antes del presupuesto total. */
+function slackHistoryCanAttemptRecovery(startedAt: number): boolean {
+  return slackHistoryBudgetLeftMs(startedAt) > SLACK_HTTP_TIMEOUT_MS + 2_000;
+}
+
+type SlackRepliesPage = {
+  ok?: boolean;
+  messages?: Array<Record<string, unknown>>;
+  has_more?: boolean;
+  error?: string;
+  response_metadata?: { next_cursor?: string };
+};
+
+function sortSlackMessagesByTs(messages: Array<Record<string, unknown>>): void {
+  messages.sort((a, b) => {
+    const ta = parseFloat(String(a.ts ?? "0"));
+    const tb = parseFloat(String(b.ts ?? "0"));
+    return ta - tb;
+  });
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -603,6 +636,7 @@ Deno.serve(async (req) => {
       if (!channel) {
         return jsonOk({ ok: false, error: "channel required" });
       }
+      const historyBudgetStart = Date.now();
       const cursor = (json.cursor as string | undefined)?.trim() || undefined;
       const latest = (json.latest as string | undefined)?.trim() || undefined;
       const oldest = (json.oldest as string | undefined)?.trim() || undefined;
@@ -616,23 +650,32 @@ Deno.serve(async (req) => {
       if (oldest) histParams.oldest = oldest;
       let data = await slackCall(conn.access_token, "conversations.history", histParams);
       // Canales públicos: a veces aparecen en lista pero el user token no está joined.
-      if (data?.ok === false && data?.error === "not_in_channel" && channel.startsWith("C")) {
+      if (
+        data?.ok === false && data?.error === "not_in_channel" && channel.startsWith("C") &&
+        slackHistoryCanAttemptRecovery(historyBudgetStart)
+      ) {
         const joined = await slackCall(conn.access_token, "conversations.join", { channel });
-        if (joined?.ok) {
+        if (joined?.ok && slackHistoryBudgetLeftMs(historyBudgetStart) > 3_000) {
           data = await slackCall(conn.access_token, "conversations.history", histParams);
         }
         // Algunos workspaces requieren además "reanudar" la conversación para este user token.
-        if (data?.ok === false && data?.error === "not_in_channel") {
+        if (
+          data?.ok === false && data?.error === "not_in_channel" &&
+          slackHistoryCanAttemptRecovery(historyBudgetStart)
+        ) {
           const reopened = await slackCall(conn.access_token, "conversations.open", { channel });
-          if (reopened?.ok) {
+          if (reopened?.ok && slackHistoryBudgetLeftMs(historyBudgetStart) > 3_000) {
             data = await slackCall(conn.access_token, "conversations.history", histParams);
           }
         }
       }
       // MPIM / DM / privado (G…, D…): `not_in_channel` suele resolverse reabriendo la conversación.
-      if (data?.ok === false && data?.error === "not_in_channel" && (channel.startsWith("G") || channel.startsWith("D"))) {
+      if (
+        data?.ok === false && data?.error === "not_in_channel" && (channel.startsWith("G") || channel.startsWith("D")) &&
+        slackHistoryCanAttemptRecovery(historyBudgetStart)
+      ) {
         const reopened = await slackCall(conn.access_token, "conversations.open", { channel });
-        if (reopened?.ok) {
+        if (reopened?.ok && slackHistoryBudgetLeftMs(historyBudgetStart) > 3_000) {
           data = await slackCall(conn.access_token, "conversations.history", histParams);
         }
       }
@@ -680,15 +723,71 @@ Deno.serve(async (req) => {
         return jsonOk({ ok: false, error: "channel and ts required" });
       }
       const rawLimit = typeof json.limit === "number" ? json.limit : 50;
-      const limit = Math.min(1000, Math.max(1, rawLimit));
-      const data = await slackCall(conn.access_token, "conversations.replies", {
-        channel,
-        ts,
-        cursor: json.cursor as string | undefined,
-        limit,
-        inclusive: "true",
+      const maxTotal = Math.min(SLACK_THREAD_REPLIES_MAX_MESSAGES, Math.max(1, rawLimit));
+      const clientCursor = (json.cursor as string | undefined)?.trim() || undefined;
+
+      // Modo compat: el cliente pasa `cursor` explícito → una sola página (sin fusión automática).
+      if (clientCursor) {
+        const perPage = Math.min(1000, Math.max(1, maxTotal));
+        const data = await slackCall(conn.access_token, "conversations.replies", {
+          channel,
+          ts,
+          cursor: clientCursor,
+          limit: perPage,
+          inclusive: "true",
+        });
+        return jsonOk(data);
+      }
+
+      const threadStarted = Date.now();
+      const merged: Array<Record<string, unknown>> = [];
+      const seenTs = new Set<string>();
+      let nextCursor: string | undefined;
+      let lastMeta: { next_cursor?: string } | undefined;
+      let lastHasMore = false;
+
+      for (let page = 0; page < SLACK_THREAD_REPLIES_MAX_PAGES; page++) {
+        if (Date.now() - threadStarted > SLACK_THREAD_REPLIES_BUDGET_MS) break;
+        if (merged.length >= maxTotal) break;
+
+        const remaining = maxTotal - merged.length;
+        const perPage = Math.min(200, Math.max(1, remaining));
+        const data = (await slackCall(conn.access_token, "conversations.replies", {
+          channel,
+          ts,
+          cursor: nextCursor,
+          limit: perPage,
+          inclusive: "true",
+        })) as SlackRepliesPage;
+
+        if (!data.ok) {
+          if (page === 0) return jsonOk(data);
+          break;
+        }
+
+        for (const m of data.messages || []) {
+          const tsk = m && typeof m.ts === "string" ? m.ts : "";
+          if (!tsk || seenTs.has(tsk)) continue;
+          seenTs.add(tsk);
+          merged.push(m);
+          if (merged.length >= maxTotal) break;
+        }
+
+        lastMeta = data.response_metadata;
+        lastHasMore = data.has_more === true;
+        nextCursor = data.response_metadata?.next_cursor?.trim() || undefined;
+        if (!lastHasMore || !nextCursor) break;
+      }
+
+      sortSlackMessagesByTs(merged);
+      return jsonOk({
+        ok: true,
+        messages: merged,
+        has_more: lastHasMore && !!nextCursor && merged.length < maxTotal,
+        response_metadata: lastMeta?.next_cursor
+          ? { next_cursor: lastMeta.next_cursor }
+          : undefined,
       });
-      return jsonOk(data);
     }
 
     if (action === "conversations.info") {
@@ -899,7 +998,7 @@ Deno.serve(async (req) => {
       const unique = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 200);
       const users: Record<string, { display_name: string | null; real_name: string | null; avatar_url: string | null }> = {};
 
-      const chunk = 8;
+      const chunk = 4;
       for (let i = 0; i < unique.length; i += chunk) {
         const part = unique.slice(i, i + chunk);
         await Promise.all(

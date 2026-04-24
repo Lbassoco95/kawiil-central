@@ -17,6 +17,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import {
   markSlackConversationRead,
   invokeSlackApi,
+  withHardTimeout,
   invokeSlackFileUpload,
   formatSlackHistoryLoadError,
   isSlackPermissionDeniedMessage,
@@ -74,22 +75,6 @@ type HistoryPage = {
   messages: SlackMessage[];
   nextCursor?: string;
 };
-
-function withHardTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const tid = setTimeout(() => reject(new Error(message)), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(tid);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(tid);
-        reject(error);
-      },
-    );
-  });
-}
 
 function bumpParentReplyInSlackHistory(
   old: InfiniteData<HistoryPage> | undefined,
@@ -633,6 +618,18 @@ export default function Comunicacion() {
     selectedChannel,
     isConnected,
   ]);
+
+  const [historyLoadSlow, setHistoryLoadSlow] = useState(false);
+  useEffect(() => {
+    const fetching =
+      !!selectedChannel && isConnected && historyInfinite.isFetching && !historyInfinite.data;
+    if (!fetching) {
+      setHistoryLoadSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setHistoryLoadSlow(true), 12_000);
+    return () => clearTimeout(t);
+  }, [selectedChannel, isConnected, historyInfinite.isFetching, historyInfinite.data]);
 
   const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
   slackLatestMessageTsRef.current = lastMessageTs;
@@ -1770,6 +1767,8 @@ export default function Comunicacion() {
               userMap={userMap}
               highlightTs={tsFromUrl}
               isLoading={historyInfinite.isLoading && !historyInfinite.data}
+              loadSlowHint={historyLoadSlow}
+              onRetryLoad={() => void historyInfinite.refetch()}
               error={historyPanelError}
               bottomRef={bottomRef}
               hasMore={historyInfinite.hasNextPage}

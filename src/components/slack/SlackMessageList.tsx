@@ -73,6 +73,9 @@ type Props = {
   userMap: Record<string, SlackUserProfile | undefined>;
   highlightTs: string;
   isLoading: boolean;
+  /** Tras varios segundos de carga inicial, muestra texto y reintento. */
+  loadSlowHint?: boolean;
+  onRetryLoad?: () => void;
   error: Error | null;
   bottomRef?: RefObject<HTMLDivElement | null>;
   /** Carga más mensajes antiguos al acercarse al tope. */
@@ -358,6 +361,8 @@ export function SlackMessageList({
   userMap,
   highlightTs,
   isLoading,
+  loadSlowHint = false,
+  onRetryLoad,
   error,
   bottomRef,
   hasMore,
@@ -499,8 +504,21 @@ export function SlackMessageList({
 
   if (isLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center min-h-[200px]">
+      <div className="flex flex-1 flex-col items-center justify-center min-h-[200px] gap-4 px-4">
         <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+        {loadSlowHint && (
+          <div className="text-center space-y-2 max-w-sm">
+            <p className="text-sm text-muted-foreground">
+              Slack está tardando más de lo habitual. Comprueba la red, usa «Actualizar permisos Slack» en la barra
+              lateral si falta algún permiso, o reintenta.
+            </p>
+            {onRetryLoad && (
+              <Button type="button" variant="outline" size="sm" onClick={onRetryLoad}>
+                Reintentar
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     );
   }

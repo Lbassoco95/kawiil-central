@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-import { invokeSlackApi, type SlackMessage } from "@/lib/slackApi";
+import { invokeSlackApi, withHardTimeout, formatSlackHistoryLoadError, type SlackMessage } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { SlackComposer } from "./SlackComposer";
 import { SlackMessageList } from "./SlackMessageList";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Props = {
   open: boolean;
@@ -60,28 +61,69 @@ export function SlackThreadPanel({
   onImproveThreadDraft,
 }: Props) {
   const [draft, setDraft] = useState("");
+  const [threadLoadSlow, setThreadLoadSlow] = useState(false);
 
   const threadQuery = useQuery({
     queryKey: ["slack-thread", channelId, threadTs],
     refetchOnWindowFocus: true,
     queryFn: async ({ signal }) => {
-      const data = await invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; error?: string }>(
-        {
-          action: "conversations.replies",
-          channel: channelId,
-          ts: threadTs!,
-          limit: 1000,
-        },
-        { signal, timeoutMs: 55_000 },
-      );
-      if (!data.ok) throw new Error(data.error || "No se pudo cargar el hilo");
-      return data.messages || [];
+      const payload = {
+        action: "conversations.replies" as const,
+        channel: channelId,
+        ts: threadTs!,
+        limit: 1000,
+      };
+      try {
+        const data = await withHardTimeout(
+          invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; error?: string }>(payload, {
+            signal,
+            timeoutMs: 55_000,
+          }),
+          62_000,
+          "La carga del hilo tardó demasiado. Vuelve a abrir el hilo.",
+        );
+        if (!data.ok) throw new Error(formatSlackHistoryLoadError(data.error));
+        return data.messages || [];
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        if (msg.includes("se canceló") && !msg.includes("tardó demasiado")) {
+          const data = await withHardTimeout(
+            invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; error?: string }>(payload, {
+              timeoutMs: 35_000,
+            }),
+            40_000,
+            "La recarga del hilo tardó demasiado. Vuelve a abrir el hilo.",
+          );
+          if (!data.ok) throw new Error(formatSlackHistoryLoadError(data.error));
+          return data.messages || [];
+        }
+        throw e;
+      }
+    },
+    retry(failureCount, err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
+      return failureCount < 2;
     },
     enabled: open && !!channelId && !!threadTs,
-    refetchInterval: () =>
-      typeof document !== "undefined" && document.visibilityState === "visible" ? 18_000 : false,
+    refetchInterval: (query) => {
+      if (typeof document === "undefined") return false;
+      if (document.visibilityState !== "visible") return false;
+      if (query.state.fetchStatus === "fetching") return false;
+      return 30_000;
+    },
     refetchIntervalInBackground: false,
   });
+
+  useEffect(() => {
+    const fetching = threadQuery.isFetching && !threadQuery.data;
+    if (!fetching) {
+      setThreadLoadSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setThreadLoadSlow(true), 12_000);
+    return () => clearTimeout(t);
+  }, [threadQuery.isFetching, threadQuery.data]);
 
   const messages = threadQuery.data || [];
   const parent = messages[0];
@@ -115,8 +157,18 @@ export function SlackThreadPanel({
         </SheetHeader>
         <div className="flex-1 min-h-0 flex flex-col">
           {threadQuery.isLoading ? (
-            <div className="flex flex-1 items-center justify-center p-8">
+            <div className="flex flex-1 flex-col items-center justify-center p-8 gap-4">
               <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+              {threadLoadSlow && (
+                <div className="text-center space-y-2 max-w-xs">
+                  <p className="text-xs text-muted-foreground">
+                    Slack está tardando en cargar el hilo. Puedes reintentar o comprobar la conexión.
+                  </p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => threadQuery.refetch()}>
+                    Reintentar
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">

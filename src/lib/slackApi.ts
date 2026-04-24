@@ -253,6 +253,23 @@ function isInvokeFailureRetryableRateLimit(message: string): boolean {
 
 const MAX_SLACK_INVOKE_RATE_RETRIES = 2;
 
+/** Capa extra de tiempo límite además de `invokeSlackApi` (por si el abort del cliente no llega a cortar). */
+export function withHardTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const tid = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(tid);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(tid);
+        reject(error);
+      },
+    );
+  });
+}
+
 export type InvokeSlackApiOptions = {
   signal?: AbortSignal;
   /** Aborta el fetch si supera este tiempo (ms). Evita spinners eternos si la Edge o la red cuelgan. */
