@@ -13,7 +13,7 @@ import { Plus, Search, Users, Mail, Trash2, ChevronDown, ChevronRight, Building2
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useClients, useDeleteClient } from "@/hooks/useClients";
+import { useClients, useDeleteClient, useOrgProfiles } from "@/hooks/useClients";
 import { useClientGroups } from "@/hooks/useClientGroups";
 import { ClientFormDialog } from "@/components/clients/ClientFormDialog";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -30,6 +30,7 @@ import { exportClientsCsv } from "@/lib/exportClients";
 import { toast } from "sonner";
 import type { PageHeaderStat } from "@/components/shared/PageHeader";
 import { AiHeroGrid } from "@/components/dashboard/AiHeroGrid";
+import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import type { Database } from "@/integrations/supabase/types";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
@@ -54,6 +55,9 @@ const STATUS_LABELS: Record<ClientStatus, string> = Object.fromEntries(
  * GRUPO empresarial. Intencionalmente NO se agrupa por "área de servicio" —
  * eso es la lógica del módulo Proyectos, no de Clientes. */
 type GroupMode = "tipo" | "grupo";
+
+/** Valor de filtro que no colisiona con UUIDs de perfiles */
+const RESPONSIBLE_FILTER_UNASSIGNED = "__sin_responsable__";
 
 function clientInitials(name: string): string {
   return (name || "?")
@@ -99,7 +103,10 @@ const Clientes = () => {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [groupMode, setGroupMode] = useState<GroupMode>("tipo");
   const [clientTypeFilter, setClientTypeFilter] = useState<ClientTypeFilter>("all");
+  /** "" = todos; `RESPONSIBLE_FILTER_UNASSIGNED` = sin asignar; UUID = responsable concreto */
+  const [responsibleUserFilter, setResponsibleUserFilter] = useState("");
   const { data: clients, isLoading } = useClients();
+  const { data: profiles } = useOrgProfiles();
   const { data: clientGroups } = useClientGroups();
   const deleteClient = useDeleteClient();
   const { isAdminOrManager } = useUserRole();
@@ -114,11 +121,26 @@ const Clientes = () => {
     enabled: !!clients && groupMode === "grupo",
   });
 
+  const responsibleFilterOptions = useMemo(
+    () => [
+      { value: RESPONSIBLE_FILTER_UNASSIGNED, label: "Sin responsable" },
+      ...(profiles || []).map((p) => ({ value: p.user_id, label: p.full_name })),
+    ],
+    [profiles]
+  );
+
   const filtered = useMemo(() => {
     if (!clients) return [];
     let list = clients;
     if (clientTypeFilter !== "all") {
       list = list.filter((c) => c.client_type === clientTypeFilter);
+    }
+    if (responsibleUserFilter) {
+      if (responsibleUserFilter === RESPONSIBLE_FILTER_UNASSIGNED) {
+        list = list.filter((c) => !c.responsible_user_id);
+      } else {
+        list = list.filter((c) => c.responsible_user_id === responsibleUserFilter);
+      }
     }
     if (!search.trim()) return list;
     const q = search.toLowerCase();
@@ -128,7 +150,7 @@ const Clientes = () => {
         c.rfc?.toLowerCase().includes(q) ||
         c.email?.toLowerCase().includes(q)
     );
-  }, [clients, search, clientTypeFilter]);
+  }, [clients, search, clientTypeFilter, responsibleUserFilter]);
 
   const groupedByType = useMemo(() => {
     const buckets: Record<ClientType, typeof filtered> = {
@@ -231,13 +253,20 @@ const Clientes = () => {
   const grouped = groupMode === "tipo" ? groupedByType : groupedByEmpresa;
 
   const typeCounts = useMemo(() => {
-    const base = clients ?? [];
+    let base = clients ?? [];
+    if (responsibleUserFilter) {
+      if (responsibleUserFilter === RESPONSIBLE_FILTER_UNASSIGNED) {
+        base = base.filter((c) => !c.responsible_user_id);
+      } else {
+        base = base.filter((c) => c.responsible_user_id === responsibleUserFilter);
+      }
+    }
     return {
       all: base.length,
       persona_fisica: base.filter((c) => c.client_type === "persona_fisica").length,
       persona_moral: base.filter((c) => c.client_type === "persona_moral").length,
     };
-  }, [clients]);
+  }, [clients, responsibleUserFilter]);
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -385,6 +414,21 @@ const Clientes = () => {
                 <Building2 className="h-3 w-3 shrink-0" /> Grupo
               </button>
             </div>
+            <div
+              className="w-full min-w-[200px] sm:w-56 sm:shrink-0"
+              aria-label="Filtrar listado de clientes por responsable"
+            >
+              <span className="sr-only">Filtrar por responsable</span>
+              <SearchableSelect
+                options={responsibleFilterOptions}
+                value={responsibleUserFilter}
+                onValueChange={setResponsibleUserFilter}
+                placeholder="Responsable"
+                searchPlaceholder="Buscar responsable…"
+                emptyLabel="Todos los responsables"
+                className="h-9 text-sm"
+              />
+            </div>
             <span className="text-xs text-muted-foreground whitespace-nowrap">
               {filtered.length} cliente{filtered.length !== 1 ? "s" : ""}
             </span>
@@ -444,14 +488,16 @@ const Clientes = () => {
               <Users className="h-8 w-8 text-primary/60" />
             </div>
             <h3 className="text-sm font-medium text-foreground">
-              {search.trim() || clientTypeFilter !== "all" ? "Sin resultados" : "Sin clientes aún"}
+              {search.trim() || clientTypeFilter !== "all" || responsibleUserFilter
+                ? "Sin resultados"
+                : "Sin clientes aún"}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground max-w-xs mx-auto">
-              {search.trim() || clientTypeFilter !== "all"
-                ? "Prueba otro término de búsqueda o cambia el filtro de tipo de persona."
+              {search.trim() || clientTypeFilter !== "all" || responsibleUserFilter
+                ? "Prueba otra búsqueda, el tipo de persona o el filtro de responsable."
                 : "Agrega tu primer cliente para comenzar."}
             </p>
-            {!search.trim() && clientTypeFilter === "all" && (
+            {!search.trim() && clientTypeFilter === "all" && !responsibleUserFilter && (
               <Button className="mt-4" size="sm" onClick={() => setDialogOpen(true)}>
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Agregar cliente
