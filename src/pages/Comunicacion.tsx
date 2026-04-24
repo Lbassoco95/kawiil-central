@@ -20,9 +20,14 @@ import {
   invokeSlackFileUpload,
   formatSlackHistoryLoadError,
   isSlackPermissionDeniedMessage,
+  formatSlackFileUploadError,
+  extractSlackInvokeError,
+  formatSlackChatWriteError,
   SLACK_CHAT_API_PERMISSION_HINT,
   SLACK_REACTIONS_PERMISSION_HINT,
   SLACK_FILE_UPLOAD_PERMISSION_HINT,
+  SLACK_HELP_RESTRICTED_FILE_TYPES_URL,
+  SLACK_HELP_MANAGE_CONNECT_FILE_UPLOADS_URL,
   SLACK_PERMISSION_TOAST_MS,
   type SlackConversation,
   type SlackMessage,
@@ -1093,11 +1098,23 @@ export default function Comunicacion() {
     toast.error(msg);
   };
 
-  const onSlackChatMutationError = (e: Error) =>
-    toastSlackPermissionDenied(e, SLACK_CHAT_API_PERMISSION_HINT);
+  const onSlackChatMutationError = (e: Error) => {
+    const raw = e.message || "";
+    if (isSlackPermissionDeniedMessage(raw)) {
+      toastSlackPermissionDenied(e, SLACK_CHAT_API_PERMISSION_HINT);
+      return;
+    }
+    toast.error(formatSlackChatWriteError(raw));
+  };
 
-  const onSlackFileUploadError = (e: Error) =>
-    toastSlackPermissionDenied(e, SLACK_FILE_UPLOAD_PERMISSION_HINT);
+  const onSlackFileUploadError = (e: Error) => {
+    const msg = e.message || "";
+    if (isSlackPermissionDeniedMessage(msg)) {
+      toastSlackPermissionDenied(e, SLACK_FILE_UPLOAD_PERMISSION_HINT);
+      return;
+    }
+    toast.error(formatSlackFileUploadError(msg), { duration: 16_000 });
+  };
 
   const reactionMutation = useMutation({
     mutationFn: async (vars: {
@@ -1172,7 +1189,9 @@ export default function Comunicacion() {
         text: payload.text,
         thread_ts: payload.thread_ts,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo enviar");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo enviar");
+      }
       return data;
     },
     onSuccess: (posted, vars) => {
@@ -1230,7 +1249,9 @@ export default function Comunicacion() {
         ts: vars.ts,
         text: vars.text,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo editar el mensaje");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo editar el mensaje");
+      }
     },
     onSuccess: () => {
       toast.success("Mensaje actualizado");
@@ -1246,7 +1267,9 @@ export default function Comunicacion() {
         channel: selectedChannel!,
         ts,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo eliminar el mensaje");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo eliminar el mensaje");
+      }
     },
     onSuccess: () => {
       toast.success("Mensaje eliminado");
@@ -1266,7 +1289,9 @@ export default function Comunicacion() {
         post_at: vars.postAt,
         thread_ts: vars.thread_ts,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo programar el mensaje");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo programar el mensaje");
+      }
     },
     onSuccess: (_d, vars) => {
       toast.success("Mensaje programado en Slack");
@@ -1851,6 +1876,29 @@ export default function Comunicacion() {
                 return (data.improved || "").trim();
               }}
             />
+            <p className="shrink-0 border-t border-border/60 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+              Slack no publica un listado de todos los formatos permitidos. Los documentos habituales (.docx, .pdf, .pptx)
+              suelen aceptarse; en{" "}
+              <a
+                className="text-primary underline underline-offset-2 hover:text-primary/90"
+                href={SLACK_HELP_RESTRICTED_FILE_TYPES_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Slack Connect
+              </a>{" "}
+              hay extensiones explícitamente bloqueadas. Si una subida falla, revisa política de org o subidas en Connect (
+              <a
+                className="text-primary underline underline-offset-2 hover:text-primary/90"
+                href={SLACK_HELP_MANAGE_CONNECT_FILE_UPLOADS_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                guía de administración
+              </a>
+              ). Más detalle en el repositorio:{" "}
+              <code className="rounded bg-muted px-1">docs/slack-archivos-comunicacion.md</code>
+            </p>
           </div>
           <SlackThreadPanel
             open={!!threadRootTs}

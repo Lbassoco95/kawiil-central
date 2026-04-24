@@ -40,6 +40,144 @@ export function isSlackPermissionDeniedMessage(message: string): boolean {
   );
 }
 
+/**
+ * Extrae texto de error de respuestas `slack-api` / Slack (`error`, `message`, `response_metadata.messages`).
+ */
+export function extractSlackInvokeError(data: unknown): string {
+  if (data == null || typeof data !== "object") return "";
+  const o = data as Record<string, unknown>;
+  const errRaw = o.error;
+  let base = "";
+  if (typeof errRaw === "string" && errRaw.trim()) base = errRaw.trim();
+  else if (Array.isArray(errRaw)) {
+    const j = errRaw.map((x) => String(x)).filter(Boolean).join(", ");
+    if (j) base = j;
+  } else if (errRaw != null && typeof errRaw !== "object") base = String(errRaw);
+  if (!base && typeof o.message === "string" && o.message.trim()) base = o.message.trim();
+
+  let detail = "";
+  const meta = o.response_metadata;
+  if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+    const messages = (meta as { messages?: unknown }).messages;
+    if (Array.isArray(messages) && messages[0] != null) {
+      const m0 = messages[0];
+      if (typeof m0 === "string" && m0.trim()) detail = m0.trim();
+    }
+  }
+  if (detail) {
+    if (!base) return detail;
+    if (base === "invalid_arguments") return `${base}: ${detail}`;
+    return `${base} — ${detail}`;
+  }
+  return base;
+}
+
+/**
+ * Convierte códigos de Slack (envío, edición, borrado) en mensaje legible en español para toasts.
+ */
+export function formatSlackChatWriteError(raw: string): string {
+  const t = (raw || "").trim();
+  if (!t) {
+    return "No se pudo completar la acción en Slack. Vuelve a intentar o comprueba en el cliente de Slack.";
+  }
+  if (t === "unknown_action") {
+    return "La app usó una acción de Slack no reconocida. Despliega la edge «slack-api» en Supabase o pide a soporte, y vuelve a cargar Comunicación.";
+  }
+  if (t === "unknown" || t === "unknown_error" || t === "internal_error" || t === "fatal_error") {
+    return "Slack no describió el fallo. Reintenta; si pasa, prueba en la app de Slack o revisa la conexión en Comunicación.";
+  }
+  const map: Record<string, string> = {
+    not_in_channel:
+      "Slack indica que no estás en esta conversación. Ábrela en Slack o «Actualizar permisos» en Comunicación.",
+    channel_not_found: "Slack no encontró el canal. Puede haberse archivado o el id dejó de ser válido.",
+    message_not_found: "Slack no encontró el mensaje. Recarga el canal o el hilo e inténtalo de nuevo.",
+    cant_update_message: "Slack no permite editar este mensaje (permisos, ventana de edición o mensaje de otra app).",
+    cant_delete_message: "Slack no permite borrar este mensaje (permisos, mensaje de otra app o hilo restringido).",
+    is_archived: "Esta conversación está archivada en Slack.",
+    edit_window_closed: "En tu espacio de Slack el tiempo de edición del mensaje ya no permite cambios.",
+    no_text: "Falta el texto del mensaje que Slack acepta para esta acción.",
+    msg_too_long: "El texto supera el límite de Slack. Acórtalo e inténtalo otra vez.",
+    rate_limited: "Slack pidió limitar el ritmo. Espera unos segundos y vuelve a intentar.",
+    ratelimited: "Slack pidió limitar el ritmo. Espera unos segundos y vuelve a intentar.",
+    restricted_action: "La organización o Slack restringe esta acción en esta conversación.",
+    not_authed: "No hay token de Slack válido. Vuelve a conectar desde Comunicación.",
+    account_inactive: "La cuenta de Slack no está activa. Revisa con un administrador.",
+    token_revoked: "Slack revocó el acceso. Vuelve a conectar desde Comunicación.",
+    invalid_auth: "Slack no aceptó el token. Vuelve a conectar desde Comunicación.",
+    slack_timeout: "Slack tardó demasiado. Reintenta o comprueba la red.",
+    slack_network_error: "No se pudo conectar con Slack. Comprueba la red.",
+    slack_http_429: "Slack devolvió demasiadas peticiones. Espera unos segundos y reintenta.",
+    slack_function_error: "Error interno al llamar a la función de Slack. Vuelve a intentar o pide a soporte.",
+  };
+  if (map[t]) return map[t];
+  if (t.startsWith("missing_scope") || t.includes("scopes requeridos")) {
+    return t;
+  }
+  if (t === "invalid_arguments" || t.includes("invalid_arguments")) {
+    return "Slack rechazó los datos enviados. Si al editar faltan bloques o adjuntos, prueba en el cliente de Slack.";
+  }
+  if (/^slack_http_\d+$/i.test(t)) {
+    return `Error HTTP al hablar con Slack (${t.replace(/^slack_http_/i, "")}). Vuelve a intentar.`;
+  }
+  return t;
+}
+
+/** Ayuda de Slack: lista publicada de tipos bloqueados en Slack Connect (no es un catálogo de “permitidos”). */
+export const SLACK_HELP_RESTRICTED_FILE_TYPES_URL =
+  "https://slack.com/help/articles/1500002249342-Restricted-file-types-in-Slack-Connect";
+
+export const SLACK_HELP_MANAGE_CONNECT_FILE_UPLOADS_URL =
+  "https://slack.com/help/articles/1500005777562-Manage-file-uploads-canvas-sharing-and-list-sharing-for-Slack-Connect";
+
+/**
+ * Convierte el `error` devuelto por `files.*` de Slack (o nuestro edge) en un mensaje para el usuario.
+ * Incluye pistas cuando el fallo apunta a política de org o tipos, sin sustituir el código original.
+ */
+export function formatSlackFileUploadError(raw: string | undefined): string {
+  const e0 = (raw || "").trim();
+  if (!e0) {
+    return `No se pudo subir el archivo. Más: ${SLACK_HELP_RESTRICTED_FILE_TYPES_URL}`;
+  }
+  const e = e0.toLowerCase();
+  const tail = ` Documentación: ${SLACK_HELP_RESTRICTED_FILE_TYPES_URL}`;
+
+  if (e.includes("missing_scope") || e.includes("scopes requeridos")) {
+    return (
+      "Faltan permisos (files:read / files:write) en la app de Slack. Pulsa «Actualizar permisos Slack» en Comunicación."
+    );
+  }
+  if (
+    e === "not_allowed_token" ||
+    e === "invalid_auth" ||
+    e === "token_revoked" ||
+    e === "account_inactive"
+  ) {
+    return "El acceso a Slack dejó de ser válido. Vuelve a conectar desde Comunicación.";
+  }
+  if (e === "restricted_action" || e.includes("restricted_action")) {
+    return `Slack o tu organización restringe esta subida. Si el archivo es un documento normal (.docx, .pdf), pide a un admin de Slack. ${tail}`;
+  }
+  if (e.includes("file_too") || e.includes("too_large") || e.includes("file too large")) {
+    return "El archivo supera el tamaño máximo que permite Slack o Kawiil (revisa 50 MB por archivo en Comunicación).";
+  }
+  if (e === "ratelimited" || e === "rate_limited" || e.includes("slack_http_429")) {
+    return "Slack pidió limitar el ritmo. Espera unos segundos y vuelve a intentar.";
+  }
+  if (e.startsWith("upload_to_slack_url_failed_")) {
+    return "No se pudo completar la subida a los servidores de Slack. Reintenta; si falla, prueba con el cliente de Slack o un archivo más pequeño.";
+  }
+  if (e.includes("not in channel") || e === "channel_not_found") {
+    return "No se pudo publicar en esta conversación. Comprueba que el canal exista y que tengas acceso en Slack.";
+  }
+  if (e.includes("permit") && e.includes("file")) {
+    return `Slack o tu organización no permiten este adjunto. ${tail} Si aplica, revisa política DLP/IT.`;
+  }
+
+  return e0.includes("http") || e0.length > 160
+    ? `${e0} — ${SLACK_HELP_RESTRICTED_FILE_TYPES_URL}`
+    : `${e0}${tail}`;
+}
+
 export const SLACK_FILE_UPLOAD_PERMISSION_HINT =
   "Slack no permite subir archivos o audio con tu sesión actual. Un admin debe añadir en api.slack.com → tu app → OAuth & Permissions → User Token Scopes: files:write y files:read (y aceptar la app si pide revisión). Si en Supabase existe el secret SLACK_USER_SCOPES, debe incluir esos permisos o elimínalo. Después pulsa «Actualizar permisos Slack» en la barra lateral y vuelve a aceptar en Slack.";
 

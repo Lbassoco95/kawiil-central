@@ -180,11 +180,14 @@ function normalizeMailFolderDisplayName(s: string): string {
 
 const MAIL_FOLDER_LIST_SELECT =
   "id,displayName,parentFolderId,wellKnownFolderName,unreadItemCount,totalItemCount,childFolderCount";
-/** Raíz: incluye carpetas ocultas. Algunos tenants fallan al combinar $select+includeHiddenFolders en childFolders. */
+/** Raíz: incluye carpetas ocultas (paridad con Outlook). */
 const MAIL_FOLDER_ROOT_LIST_QUERY =
   `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
-/** Hijos: sin includeHiddenFolders para máxima compatibilidad. */
-const MAIL_FOLDER_CHILD_LIST_QUERY = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100`;
+/** Hijos: mismo flag que la raíz; sin él Graph puede omitir subcarpetas que el usuario sí ve en Outlook. */
+const MAIL_FOLDER_CHILD_LIST_QUERY =
+  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
+/** Algunos tenants devuelven 400 al combinar $select + includeHiddenFolders en `childFolders`; se reintenta sin el flag. */
+const MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100`;
 
 /** Listado plano solo nivel raíz (fallback si el recursivo falla o devuelve vacío por error Graph). */
 async function listMailFoldersRootOnlyLegacy(accessToken: string): Promise<unknown[]> {
@@ -220,8 +223,8 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
   folders: unknown[];
   rootFolderIds: Set<string>;
 }> {
-  const MAX_FOLDERS = 3500;
-  const MAX_GRAPH_LIST_CALLS = 450;
+  const MAX_FOLDERS = 5000;
+  const MAX_GRAPH_LIST_CALLS = 900;
   let listCalls = 0;
 
   const all: unknown[] = [];
@@ -251,8 +254,11 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
     if (isRootLevel) rootFolderIds.add(id);
 
     const cc = row.childFolderCount;
-    /** Solo encolar hijos si Graph indica >0. Si falta el campo en niveles profundos, no expandir (evita cientos de llamadas y timeouts). En la raíz, si falta el contador, sí intentamos listar hijos una vez. */
-    const maybeHasKids = typeof cc === "number" ? cc > 0 : isRootLevel;
+    /**
+     * Encolar hijos si Graph indica >0. Si `childFolderCount` falta (null/omitido en algunos buzones),
+     * sondear `childFolders` igual: de lo contrario se pierde todo el subárbol (casos reales: muchas carpetas en Outlook vs pocas en Kawiil).
+     */
+    const maybeHasKids = typeof cc === "number" ? cc > 0 : true;
     if (maybeHasKids && all.length < MAX_FOLDERS && listCalls < MAX_GRAPH_LIST_CALLS) {
       if (!enqueuedChildren.has(id)) {
         enqueuedChildren.add(id);
@@ -288,7 +294,17 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
     const parentId = childQueue.shift();
     if (!parentId) break;
     const enc = encodeURIComponent(parentId);
-    await paginateInto(`/me/mailFolders/${enc}/childFolders${MAIL_FOLDER_CHILD_LIST_QUERY}`, false);
+    const childBase = `/me/mailFolders/${enc}/childFolders`;
+    try {
+      await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY}`, false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/\[400\]/.test(msg)) {
+        await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN}`, false);
+      } else {
+        throw e;
+      }
+    }
   }
 
   if (all.length >= MAX_FOLDERS || listCalls >= MAX_GRAPH_LIST_CALLS) {

@@ -76,7 +76,7 @@ import {
   Sparkles, Languages, ListTodo, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
-  Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, RefreshCw,
+  Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, ListOrdered, RefreshCw,
   Eye, Download, CalendarClock, Copy, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   GripVertical,
 } from "lucide-react";
@@ -932,7 +932,11 @@ export function EmailView() {
     error: detailQueryError,
     refetch: refetchEmailDetail,
   } = useEmailDetail(selectedEmailId);
-  const { data: threadEmails = [] } = useEmailConversation(emailDetail?.conversationId || null);
+  const {
+    data: threadEmails = [],
+    isLoading: threadConvLoading,
+    isFetching: threadConvFetching,
+  } = useEmailConversation(emailDetail?.conversationId || null);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
   const markRead = useMarkEmailRead();
@@ -1665,6 +1669,17 @@ export function EmailView() {
       return ta - tb;
     });
   }, [threadEmails, selectedEmailId]);
+
+  /** Reposicionar historial arriba: al cambiar de mensaje, cerrar "expandir todo" para no heredar estado. */
+  const [threadExpandAll, setThreadExpandAll] = useState(false);
+  useEffect(() => {
+    setThreadExpandAll(false);
+  }, [selectedEmailId]);
+
+  const threadHistoryLoading = Boolean(
+    emailDetail && typeof (emailDetail as { conversationId?: string }).conversationId === "string" && (threadConvLoading || (threadConvFetching && threadEmails.length === 0)),
+  );
+  const hasPriorMessages = otherThreadEmails.length > 0;
 
   const threadContextForAi = useMemo(() => {
     if (!selectedEmailId) return "";
@@ -3117,6 +3132,76 @@ export function EmailView() {
                     />
                   </div>
                 )}
+
+                {/* Historial del hilo (arriba, orden antiguo → reciente) para contexto */}
+                {threadHistoryLoading && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-4">
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <ListOrdered className="h-3.5 w-3.5" />
+                      Cargando historial de la conversación…
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+                      <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+                    </div>
+                  </div>
+                )}
+
+                {!threadHistoryLoading && hasPriorMessages && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border border-border/60 bg-gradient-to-b from-muted/30 to-background/30 p-4 sm:p-5 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <ListOrdered className="h-4 w-4 text-primary" />
+                          Historial de la conversación
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} en este
+                          hilo, del más antiguo al más reciente. Toca cada uno para leerlo completo o abre
+                          todo el contexto.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => setThreadExpandAll((v) => !v)}
+                        >
+                          {threadExpandAll ? "Contraer todo" : "Expandir todo"}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-0.5">
+                      {otherThreadEmails.map((threadEmail: any) => (
+                        <ThreadEmailItem
+                          key={threadEmail.id}
+                          email={threadEmail}
+                          onPreviewAttachment={setAttachmentPreview}
+                          expandAll={threadExpandAll}
+                          onExitExpandAll={() => setThreadExpandAll(false)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!threadHistoryLoading &&
+                  !hasPriorMessages &&
+                  typeof (emailDetail as { conversationId?: string })?.conversationId === "string" &&
+                  (emailDetail as { conversationId: string }).conversationId.trim() && (
+                    <p className="max-w-[min(100%,680px)] mx-auto w-full text-xs text-muted-foreground px-0.5">
+                      Solo un mensaje en este hilo por ahora, o el buzón aún no devolvió el resto. Si
+                      acabas de enviar una respuesta, el historial puede completarse en unos segundos.
+                    </p>
+                  )}
+
+                {(hasPriorMessages || threadHistoryLoading) && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Mensaje que estás leyendo</p>
+                  </div>
+                )}
                 <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border-2 border-primary/15 bg-card/95 shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08] overflow-hidden">
                   <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
                     {emailDetail.body?.contentType === "html" ? (
@@ -3153,23 +3238,6 @@ export function EmailView() {
                             onPreview={setAttachmentPreview}
                           />
                         ))}
-                    </div>
-                  </div>
-                )}
-
-                {otherThreadEmails.length > 0 && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full border-t border-border/50 pt-5">
-                    <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
-                      {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} anterior{otherThreadEmails.length > 1 ? "es" : ""}
-                    </p>
-                    <div className="space-y-1.5">
-                      {otherThreadEmails.map((threadEmail: any) => (
-                        <ThreadEmailItem
-                          key={threadEmail.id}
-                          email={threadEmail}
-                          onPreviewAttachment={setAttachmentPreview}
-                        />
-                      ))}
                     </div>
                   </div>
                 )}
@@ -3692,28 +3760,37 @@ function EmailAttachmentTile({
 function ThreadEmailItem({
   email,
   onPreviewAttachment,
+  expandAll = false,
+  onExitExpandAll,
 }: {
   email: any;
   onPreviewAttachment: (p: AttachmentPreviewState) => void;
+  expandAll?: boolean;
+  onExitExpandAll?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const isOpen = expandAll || open;
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next && expandAll) onExitExpandAll?.();
+  };
   const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address;
   const senderEmail = email.from?.emailAddress?.address || "";
-  const { data: threadAttachments = [] } = useEmailAttachments(open ? email.id : undefined);
+  const { data: threadAttachments = [] } = useEmailAttachments(isOpen ? email.id : undefined);
   const { html: resolvedThreadHtml, loading: threadBodyLoading } = useResolvedEmailHtml(
-    open ? email.id : undefined,
+    isOpen ? email.id : undefined,
     email.body?.contentType === "html" ? email.body.content : undefined,
     threadAttachments,
   );
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger asChild>
         <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-accent/50 rounded-lg transition-colors text-left">
           <div className={cn("h-7 w-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0", getAvatarColor(senderEmail))}>
             {getInitials(senderName, senderEmail)}
           </div>
-          {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+          {isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
           <span className="font-medium text-foreground truncate">{senderName}</span>
           <span className="text-muted-foreground truncate flex-1">— {email.bodyPreview?.substring(0, 60)}</span>
           <span className="text-xs text-muted-foreground font-normal whitespace-nowrap shrink-0">

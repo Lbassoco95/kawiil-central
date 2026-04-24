@@ -448,12 +448,12 @@ Deno.serve(async (req) => {
 
     if (ct.includes("multipart/form-data")) {
       multipart = await req.formData();
-      json = { action: String(multipart.get("action") || "") };
+      json = { action: String(multipart.get("action") || "").trim() };
     } else {
       json = await req.json().catch(() => ({}));
     }
 
-    const action = json.action as string;
+    const action = String(json.action ?? "").trim();
 
     if (action === "files.upload" && multipart) {
       const channel = String(multipart.get("channel") || "");
@@ -745,7 +745,7 @@ Deno.serve(async (req) => {
         ts: ts.trim(),
         text: text.trim(),
       });
-      return jsonOk(data);
+      return jsonOk(annotateSlackResponse(data as Record<string, unknown>));
     }
 
     if (action === "chat.delete") {
@@ -758,7 +758,7 @@ Deno.serve(async (req) => {
         channel,
         ts: ts.trim(),
       });
-      return jsonOk(data);
+      return jsonOk(annotateSlackResponse(data as Record<string, unknown>));
     }
 
     if (action === "auth.test") {
@@ -952,6 +952,12 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("slack-api:", error);
-    return jsonOk({ ok: false, error: (error as Error).message });
+    const msg =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string" && error.trim()
+          ? error.trim()
+          : "slack_function_error";
+    return jsonOk({ ok: false, error: msg });
   }
 });
