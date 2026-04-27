@@ -577,6 +577,8 @@ function triggerBlobDownload(blobUrl: string, filename: string) {
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 const LS_EMAIL_FOLDERS_EXPANDED_IDS = "kawiil-email-folders-expanded-ids";
+/** Una sola vez por navegador: expande Bandeja de entrada si tiene subcarpetas (paridad con Outlook). */
+const LS_EMAIL_FOLDERS_INBOX_AUTO_EXPAND_DONE = "kawiil-email-folders-inbox-auto-expand-v1";
 
 function readExpandedFolderIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -894,7 +896,8 @@ export function EmailView() {
     setFolderOrderByParent(readEmailFolderOrder(user.id));
   }, [user?.id]);
 
-  const { data: folders = [] } = useMailFolders();
+  const { data: mailFoldersData } = useMailFolders();
+  const folders = (mailFoldersData?.folders ?? []) as any[];
   const draftsFolderId = useMemo(() => {
     const f = (folders as { id?: string; displayName?: string; wellKnownName?: string; wellKnownFolderName?: string }[]).find((x) => {
       const wk = String(x.wellKnownFolderName || x.wellKnownName || "").toLowerCase();
@@ -1050,6 +1053,63 @@ export function EmailView() {
     }
     return out;
   }, [mergedFolderOrderByParent, folderChildrenMap, folderById]);
+
+  useEffect(() => {
+    const m = mailFoldersData?.meta;
+    if (!m) return;
+    if (m.usedRootOnlyFallback) {
+      toast.warning(
+        "No se pudo cargar el árbol completo de carpetas; solo se muestran las de la raíz. Reintenta en unos segundos o revisa la conexión con Microsoft.",
+        { id: "mail-folders-root-fallback", duration: 10_000 },
+      );
+      return;
+    }
+    if (m.truncated) {
+      toast.warning(
+        "La lista de carpetas puede estar incompleta por límites del servidor. Si faltan muchas, contacta a soporte.",
+        { id: "mail-folders-truncated", duration: 8_000 },
+      );
+    }
+    if (m.partialChildErrors && m.partialChildErrors > 0) {
+      toast.info(
+        `No se pudieron cargar algunas subcarpetas (${m.partialChildErrors}). El resto debería mostrarse bien.`,
+        { id: "mail-folders-partial", duration: 7_000 },
+      );
+    }
+  }, [
+    mailFoldersData?.meta?.usedRootOnlyFallback,
+    mailFoldersData?.meta?.truncated,
+    mailFoldersData?.meta?.partialChildErrors,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !folderById.size) return;
+    if (foldersCollapsed) return;
+    try {
+      if (localStorage.getItem(LS_EMAIL_FOLDERS_INBOX_AUTO_EXPAND_DONE) === "1") return;
+    } catch {
+      return;
+    }
+    const inbox = [...folderById.values()].find((f: any) => {
+      const wk = String(f.wellKnownFolderName || "").toLowerCase();
+      if (wk === "inbox") return true;
+      const k = normFolderKey(String(f.displayName || ""));
+      return k.includes("inbox") || k.includes("bandejadeentrada");
+    });
+    if (!inbox?.id) return;
+    if ((folderChildrenMap.get(inbox.id) ?? []).length === 0) return;
+    setExpandedFolderIds((prev) => {
+      if (prev.has(inbox.id)) return prev;
+      const next = new Set(prev);
+      next.add(inbox.id);
+      return next;
+    });
+    try {
+      localStorage.setItem(LS_EMAIL_FOLDERS_INBOX_AUTO_EXPAND_DONE, "1");
+    } catch {
+      /* ignore */
+    }
+  }, [folderById, folderChildrenMap, foldersCollapsed]);
 
   const folderDndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

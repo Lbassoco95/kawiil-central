@@ -42,7 +42,11 @@ async function fetchMailFolders(): Promise<unknown[]> {
     const e = (data as { error: unknown }).error;
     throw new Error(typeof e === "string" ? e : JSON.stringify(e));
   }
-  return Array.isArray(data) ? data : [];
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object" && Array.isArray((data as { folders?: unknown[] }).folders)) {
+    return (data as { folders: unknown[] }).folders;
+  }
+  return [];
 }
 
 /**

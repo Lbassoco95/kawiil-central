@@ -215,17 +215,39 @@ function nextLinkToPath(nextLink: string): string {
   return m?.[1] ?? "";
 }
 
+/** Si conviene encolar /childFolders: hijos anunciados, contador ausente, o Inbox con `childFolderCount: 0` (Graph a veces desincroniza). */
+function rowSuggestsChildFolderProbe(row: Record<string, unknown>): boolean {
+  const cc = row.childFolderCount;
+  if (typeof cc === "number" && cc > 0) return true;
+  if (typeof cc !== "number") return true;
+  if (cc === 0) {
+    const wk = String(row.wellKnownFolderName || "").toLowerCase();
+    if (wk === "inbox") return true;
+  }
+  return false;
+}
+
+type ListAllMailFoldersMeta = {
+  /** Se alcanzó MAX_FOLDERS o MAX_GRAPH_LIST_CALLS. */
+  truncated: boolean;
+  /** Fallos al listar /childFolders de un padre (se siguió con el resto del buzón). */
+  partialChildErrors: number;
+};
+
 /**
  * Todas las carpetas del buzón (raíz + subcarpetas vía childFolders), aplanadas.
  * Incluye carpetas ocultas (paridad Outlook). Límites para evitar timeouts en buzones enormes.
+ * Un error en un solo `childFolders` no aborta todo el listado.
  */
 async function listAllMailFoldersRecursive(accessToken: string): Promise<{
   folders: unknown[];
   rootFolderIds: Set<string>;
+  meta: ListAllMailFoldersMeta;
 }> {
   const MAX_FOLDERS = 5000;
   const MAX_GRAPH_LIST_CALLS = 900;
   let listCalls = 0;
+  let partialChildErrors = 0;
 
   const all: unknown[] = [];
   const seenIds = new Set<string>();
@@ -253,13 +275,11 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
     all.push(row);
     if (isRootLevel) rootFolderIds.add(id);
 
-    const cc = row.childFolderCount;
-    /**
-     * Encolar hijos si Graph indica >0. Si `childFolderCount` falta (null/omitido en algunos buzones),
-     * sondear `childFolders` igual: de lo contrario se pierde todo el subárbol (casos reales: muchas carpetas en Outlook vs pocas en Kawiil).
-     */
-    const maybeHasKids = typeof cc === "number" ? cc > 0 : true;
-    if (maybeHasKids && all.length < MAX_FOLDERS && listCalls < MAX_GRAPH_LIST_CALLS) {
+    if (
+      rowSuggestsChildFolderProbe(row) &&
+      all.length < MAX_FOLDERS &&
+      listCalls < MAX_GRAPH_LIST_CALLS
+    ) {
       if (!enqueuedChildren.has(id)) {
         enqueuedChildren.add(id);
         childQueue.push(id);
@@ -284,6 +304,33 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
     }
   };
 
+  const listChildFolderPages = async (parentId: string) => {
+    const enc = encodeURIComponent(parentId);
+    const childBase = `/me/mailFolders/${enc}/childFolders`;
+    try {
+      await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY}`, false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/\[400\]/.test(msg)) {
+        try {
+          await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN}`, false);
+        } catch (e2) {
+          partialChildErrors += 1;
+          console.warn(
+            "[microsoft-api] listAllMailFoldersRecursive: childFolders 400+plain falló, se omite subárbol",
+            { parentId, err: e2 instanceof Error ? e2.message : String(e2) },
+          );
+        }
+      } else {
+        partialChildErrors += 1;
+        console.warn(
+          "[microsoft-api] listAllMailFoldersRecursive: childFolders falló, se continúa con otras carpetas",
+          { parentId, err: msg.slice(0, 400) },
+        );
+      }
+    }
+  };
+
   await paginateInto(`/me/mailFolders${MAIL_FOLDER_ROOT_LIST_QUERY}`, true);
 
   while (
@@ -293,28 +340,29 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
   ) {
     const parentId = childQueue.shift();
     if (!parentId) break;
-    const enc = encodeURIComponent(parentId);
-    const childBase = `/me/mailFolders/${enc}/childFolders`;
-    try {
-      await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY}`, false);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (/\[400\]/.test(msg)) {
-        await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN}`, false);
-      } else {
-        throw e;
-      }
-    }
+    await listChildFolderPages(parentId);
   }
 
-  if (all.length >= MAX_FOLDERS || listCalls >= MAX_GRAPH_LIST_CALLS) {
+  const truncated = all.length >= MAX_FOLDERS || listCalls >= MAX_GRAPH_LIST_CALLS;
+  if (truncated) {
     console.warn("[microsoft-api] listAllMailFoldersRecursive: listado truncado por límites", {
       folderCount: all.length,
       listCalls,
+      partialChildErrors,
+    });
+  } else if (partialChildErrors > 0) {
+    console.warn("[microsoft-api] listAllMailFoldersRecursive: resumen (sin truncar global)", {
+      folderCount: all.length,
+      listCalls,
+      partialChildErrors,
     });
   }
 
-  return { folders: all, rootFolderIds };
+  return {
+    folders: all,
+    rootFolderIds,
+    meta: { truncated, partialChildErrors },
+  };
 }
 
 async function findRootMailFolderByDisplayName(
@@ -322,7 +370,9 @@ async function findRootMailFolderByDisplayName(
   wanted: string,
 ): Promise<Record<string, unknown> | null> {
   const target = normalizeMailFolderDisplayName(wanted);
-  const { folders, rootFolderIds } = await listAllMailFoldersRecursive(accessToken);
+  const { folders, rootFolderIds } = await listAllMailFoldersRecursive(
+    accessToken,
+  );
   for (const f of folders) {
     if (!f || typeof f !== "object") continue;
     const row = f as { id?: string; displayName?: string };
@@ -1341,21 +1391,51 @@ Deno.serve(async (req) => {
       }
 
       case "mail-folders": {
+        type MailFoldersResult = {
+          folders: unknown[];
+          mailFoldersMeta?: {
+            truncated?: boolean;
+            partialChildErrors?: number;
+            usedRootOnlyFallback?: boolean;
+            rootOnlyFallbackReason?: string;
+          };
+        };
+        let out: MailFoldersResult;
         try {
-          const { folders } = await listAllMailFoldersRecursive(accessToken);
-          result = folders;
+          const { folders, meta } = await listAllMailFoldersRecursive(accessToken);
+          out = {
+            folders,
+            mailFoldersMeta: {
+              truncated: meta.truncated || undefined,
+              partialChildErrors: meta.partialChildErrors > 0 ? meta.partialChildErrors : undefined,
+            },
+          };
         } catch (e) {
-          console.error("[microsoft-api] mail-folders recursive failed, using root-only fallback:", e);
-          result = await listMailFoldersRootOnlyLegacy(accessToken);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.error(
+            "[microsoft-api] mail-folders recursive failed, using root-only fallback:",
+            e,
+          );
+          const rootOnly = await listMailFoldersRootOnlyLegacy(accessToken);
+          out = {
+            folders: rootOnly,
+            mailFoldersMeta: {
+              usedRootOnlyFallback: true,
+              rootOnlyFallbackReason: errMsg.slice(0, 2000),
+            },
+          };
         }
-        if (!Array.isArray(result) || result.length === 0) {
+        if (!Array.isArray(out.folders) || out.folders.length === 0) {
           try {
             const again = await listMailFoldersRootOnlyLegacy(accessToken);
-            if (Array.isArray(again) && again.length > 0) result = again;
+            if (Array.isArray(again) && again.length > 0) {
+              out = { folders: again, mailFoldersMeta: out.mailFoldersMeta };
+            }
           } catch {
-            /* mantener result previo */
+            /* mantener out previo */
           }
         }
+        result = out;
         break;
       }
 
