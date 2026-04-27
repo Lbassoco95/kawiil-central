@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,7 @@ import {
   Layers,
   X,
 } from "lucide-react";
+import { appendProjectPhases, type SyncPhase } from "@/lib/projectPhaseSync";
 
 interface ProposedTask {
   title: string;
@@ -56,7 +58,10 @@ interface ProposedTask {
   client_id: string | null;
   area: string | null;
   accepted: boolean;
+  /** Nombre mostrable de la fase (opcional, legacy). */
   phase: string | null;
+  /** Clave alineada con `projects.phases` y `tasks.phase_key`. */
+  phase_key: string | null;
 }
 
 interface MeetingMinutesDialogProps {
@@ -77,6 +82,7 @@ export function MeetingMinutesDialog({
   projectName,
 }: MeetingMinutesDialogProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: orgUsers = [] } = useOrgUsers();
   const meetingUploadLimits = withLimits(documentsLimits, {
@@ -92,10 +98,65 @@ export function MeetingMinutesDialog({
   const [proposedTasks, setProposedTasks] = useState<ProposedTask[]>([]);
   const [creating, setCreating] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [phases, setPhases] = useState<string[]>([]);
+  /** Clave → nombre visible para fases (proyecto + sugerencia IA + manuales). */
+  const [phaseKeyNameMap, setPhaseKeyNameMap] = useState<Record<string, string>>({});
   const [newPhaseName, setNewPhaseName] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
+  /** Con `projectId`: añadir al actual o crear proyecto nuevo. */
+  const [importMode, setImportMode] = useState<"same" | "new">("same");
   const isStandalone = !projectId;
+
+  const applyAnalyzeResponse = useCallback(
+    (data: {
+      summary?: string;
+      phases?: { key: string; name: string }[];
+      tasks?: any[];
+      import_mode_suggestion?: string | null;
+    }, projectRows: { key: string; name: string }[]) => {
+      const fromProject: Record<string, string> = {};
+      for (const p of projectRows) {
+        fromProject[p.key] = p.name;
+      }
+      const fromApi: { key: string; name: string }[] = Array.isArray(data.phases) ? data.phases : [];
+      for (const p of fromApi) {
+        fromProject[p.key] = p.name;
+      }
+      const rawTasks = data.tasks || [];
+      for (const t of rawTasks) {
+        if (t?.phase_key && t.phase) {
+          if (!fromProject[t.phase_key]) fromProject[t.phase_key] = t.phase;
+        }
+      }
+      setPhaseKeyNameMap({ ...fromProject });
+      setProposedTasks(
+        rawTasks.map((t: any) => ({
+          ...t,
+          accepted: true,
+          phase_key: t.phase_key ?? null,
+          phase: t.phase_key
+            ? (fromProject[t.phase_key] ?? t.phase ?? null)
+            : t.phase ?? null,
+        })),
+      );
+      if (data.import_mode_suggestion === "new_project") {
+        setImportMode("new");
+      } else {
+        setImportMode("same");
+      }
+    },
+    [],
+  );
+
+  const fetchExistingPhasesForProject = useCallback(async (): Promise<{ key: string; name: string }[]> => {
+    if (!projectId) return [];
+    const { data, error } = await supabase.from("projects").select("phases").eq("id", projectId).single();
+    if (error) return [];
+    const raw = data?.phases;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((p: { key: string; name: string }) => ({ key: p.key, name: p.name }))
+      .filter((p) => p.key && p.name);
+  }, [projectId]);
 
   const processMeetingFile = async (
     file: File,
@@ -169,12 +230,14 @@ export function MeetingMinutesDialog({
       toast.info(`Texto extraído (${Math.round(extractedText.length / 1000)}k caracteres). Analizando con IA…`);
 
       try {
+        const projectRows = await fetchExistingPhasesForProject();
         const { data, error } = await supabase.functions.invoke("analyze-meeting", {
           body: {
             content: extractedText,
             project_id: projectId,
             client_id: clientId ?? null,
             area: area ?? null,
+            existing_phases: projectRows,
           },
         });
         if (error) throw new Error(data?.message ?? data?.error ?? error.message);
@@ -185,8 +248,7 @@ export function MeetingMinutesDialog({
           setContent(extractedText);
         }
         setSummary(data.summary ?? "");
-        setPhases(data.phases ?? []);
-        setProposedTasks((data.tasks ?? []).map((t: any) => ({ ...t, accepted: true, phase: t.phase || null })));
+        applyAnalyzeResponse(data, projectRows);
         setStep("preview");
         toast.success("Análisis listo. Revisa las tareas propuestas.");
       } catch (err: any) {
@@ -282,12 +344,14 @@ export function MeetingMinutesDialog({
     }
     setAnalyzing(true);
     try {
+      const projectRows = await fetchExistingPhasesForProject();
       const { data, error } = await supabase.functions.invoke("analyze-meeting", {
         body: {
           content: content.trim(),
           project_id: projectId,
           client_id: clientId || null,
           area: area || null,
+          existing_phases: projectRows,
         },
       });
 
@@ -298,10 +362,7 @@ export function MeetingMinutesDialog({
       if (data?.error) throw new Error(data.message || data.error);
 
       setSummary(data.summary || "");
-      setPhases(data.phases || []);
-      setProposedTasks(
-        (data.tasks || []).map((t: any) => ({ ...t, accepted: true, phase: t.phase || null }))
-      );
+      applyAnalyzeResponse(data, projectRows);
       setStep("preview");
     } catch (err: any) {
       toast.error("Error al analizar: " + err.message);
@@ -341,6 +402,7 @@ export function MeetingMinutesDialog({
       area: area || null,
       accepted: true,
       phase: null,
+      phase_key: null,
     };
     setProposedTasks((prev) => [...prev, newTask]);
     setExpandedIndex(proposedTasks.length);
@@ -359,10 +421,30 @@ export function MeetingMinutesDialog({
     }
   };
 
+  const buildPhaseObjectsForNewProject = (accepted: ProposedTask[]): SyncPhase[] => {
+    const keys = new Set<string>();
+    for (const k of Object.keys(phaseKeyNameMap)) {
+      if (k) keys.add(k);
+    }
+    for (const t of accepted) {
+      if (t.phase_key) keys.add(t.phase_key);
+    }
+    return [...keys].map((k, i) => ({
+      key: k,
+      name: phaseKeyNameMap[k] || k,
+      order: i,
+    }));
+  };
+
   const handleCreateTasks = async () => {
     const accepted = proposedTasks.filter((t) => t.accepted && t.title.trim());
     if (accepted.length === 0) {
       toast.error("Selecciona al menos una tarea con título");
+      return;
+    }
+    const needsNewName = isStandalone || (!isStandalone && importMode === "new");
+    if (needsNewName && !newProjectName.trim()) {
+      toast.error("Indica un nombre para el nuevo proyecto");
       return;
     }
     setCreating(true);
@@ -371,14 +453,11 @@ export function MeetingMinutesDialog({
         _user_id: user!.id,
       });
 
-      let targetProjectId = projectId;
+      let targetProjectId = projectId || null;
+      const createNew = isStandalone || (!isStandalone && importMode === "new");
 
-      if (isStandalone && newProjectName.trim()) {
-        const phaseObjs = phases.map((name, i) => ({
-          key: `phase_${Date.now()}_${i}`,
-          name,
-          order: i,
-        }));
+      if (createNew && newProjectName.trim()) {
+        const phaseObjs = buildPhaseObjectsForNewProject(accepted);
         const { data: newProject, error: projError } = await supabase
           .from("projects")
           .insert({
@@ -395,14 +474,32 @@ export function MeetingMinutesDialog({
           .single();
         if (projError) throw projError;
         targetProjectId = newProject.id;
-        toast.success(`Proyecto "${newProjectName}" creado`);
+        toast.success(`Proyecto "${newProjectName.trim()}" creado`);
+      } else if (!createNew && projectId) {
+        const { data: projRow, error: loadErr } = await supabase
+          .from("projects")
+          .select("phases")
+          .eq("id", projectId)
+          .single();
+        if (loadErr) throw loadErr;
+        const inDb = new Set(
+          (Array.isArray(projRow?.phases) ? (projRow!.phases as { key: string }[]) : []).map((p) => p.key),
+        );
+        const additions: SyncPhase[] = [];
+        for (const [k, n] of Object.entries(phaseKeyNameMap)) {
+          if (!inDb.has(k)) {
+            additions.push({ key: k, name: n, order: 0 });
+          }
+        }
+        if (additions.length > 0) {
+          await appendProjectPhases(projectId, additions);
+        }
       }
 
       let created = 0;
       for (const task of accepted) {
-        const finalTitle = task.phase ? `[${task.phase}] ${task.title}` : task.title;
         const { error } = await supabase.from("tasks").insert({
-          title: finalTitle,
+          title: task.title,
           description: task.description || null,
           priority: task.priority || "media",
           due_date: task.due_date || null,
@@ -413,13 +510,25 @@ export function MeetingMinutesDialog({
           organization_id: orgId!,
           created_by: user!.id,
           status: "pendiente",
+          phase_key: task.phase_key || null,
         });
         if (!error) created++;
+      }
+
+      if (createNew && targetProjectId) {
+        const path =
+          area === "cumplimiento"
+            ? `/proyectos/${targetProjectId}?tab=cumplimiento`
+            : `/proyectos/${targetProjectId}?tab=tareas`;
+        navigate(path);
       }
 
       toast.success(`${created} tarea${created !== 1 ? "s" : ""} creada${created !== 1 ? "s" : ""} exitosamente`);
       if (targetProjectId) {
         queryClient.invalidateQueries({ queryKey: ["project-tasks", targetProjectId] });
+        queryClient.invalidateQueries({ queryKey: ["project", targetProjectId] });
+        queryClient.invalidateQueries({ queryKey: ["compliance-tasks", targetProjectId] });
+        queryClient.invalidateQueries({ queryKey: ["compliance-dashboard-project", targetProjectId] });
       }
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -438,9 +547,10 @@ export function MeetingMinutesDialog({
     setSummary("");
     setProposedTasks([]);
     setExpandedIndex(null);
-    setPhases([]);
+    setPhaseKeyNameMap({});
     setNewPhaseName("");
     setNewProjectName("");
+    setImportMode("same");
     onOpenChange(false);
   };
 
@@ -520,16 +630,43 @@ export function MeetingMinutesDialog({
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-2">
-            {/* New project name (standalone mode) */}
-            {isStandalone && (
+            {/* Nombre de proyecto: standalone o al crear sub-proyecto desde uno existente */}
+            {(isStandalone || (!isStandalone && importMode === "new")) && (
               <div className="space-y-1.5 pb-2 border-b border-border/40">
                 <label className="text-xs font-medium text-muted-foreground">Nombre del nuevo proyecto *</label>
                 <Input
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder="Ej: Auditoría interna Q2 2026"
+                  placeholder="Ej: Respuesta observaciones de auditoría 2026"
                   className="text-sm"
                 />
+              </div>
+            )}
+
+            {/* Destino de la importación (con proyecto abierto) */}
+            {!isStandalone && projectId && (
+              <div className="space-y-2 pb-2 border-b border-border/40">
+                <p className="text-xs font-medium text-muted-foreground">Destino de las tareas</p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={importMode === "same" ? "default" : "outline"}
+                    className="justify-start h-auto min-h-9 py-1.5 px-3"
+                    onClick={() => setImportMode("same")}
+                  >
+                    Añadir a «{projectName || "este proyecto"}»
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={importMode === "new" ? "default" : "outline"}
+                    className="justify-start h-auto min-h-9 py-1.5 px-3"
+                    onClick={() => setImportMode("new")}
+                  >
+                    Crear un proyecto nuevo (mismo cliente/área)
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -537,18 +674,25 @@ export function MeetingMinutesDialog({
             <div className="space-y-2 pb-2 border-b border-border/40">
               <div className="flex items-center gap-2">
                 <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">Fases / Etapas</span>
+                <span className="text-xs font-medium text-muted-foreground">Fases / Etapas (claves y nombres)</span>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                {phases.map((phase) => (
-                  <Badge key={phase} variant="secondary" className="text-xs gap-1 pr-1">
-                    {phase}
+                {Object.entries(phaseKeyNameMap).map(([phKey, phLabel]) => (
+                  <Badge key={phKey} variant="secondary" className="text-xs gap-1 pr-1 max-w-full">
+                    <span className="truncate">{phLabel}</span>
                     <button
+                      type="button"
                       onClick={() => {
-                        setPhases((p) => p.filter((ph) => ph !== phase));
-                        setProposedTasks((prev) => prev.map((t) => t.phase === phase ? { ...t, phase: null } : t));
+                        setPhaseKeyNameMap((m) => {
+                          const n = { ...m };
+                          delete n[phKey];
+                          return n;
+                        });
+                        setProposedTasks((prev) =>
+                          prev.map((t) => (t.phase_key === phKey ? { ...t, phase_key: null, phase: null } : t))
+                        );
                       }}
-                      className="ml-0.5 hover:text-destructive"
+                      className="ml-0.5 hover:text-destructive shrink-0"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -562,9 +706,8 @@ export function MeetingMinutesDialog({
                     className="h-7 text-xs w-32"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && newPhaseName.trim()) {
-                        if (!phases.includes(newPhaseName.trim())) {
-                          setPhases((p) => [...p, newPhaseName.trim()]);
-                        }
+                        const k = `fase_user_${Date.now()}`;
+                        setPhaseKeyNameMap((m) => ({ ...m, [k]: newPhaseName.trim() }));
                         setNewPhaseName("");
                       }
                     }}
@@ -575,10 +718,11 @@ export function MeetingMinutesDialog({
                     className="h-7 w-7"
                     disabled={!newPhaseName.trim()}
                     onClick={() => {
-                      if (newPhaseName.trim() && !phases.includes(newPhaseName.trim())) {
-                        setPhases((p) => [...p, newPhaseName.trim()]);
+                      if (newPhaseName.trim()) {
+                        const k = `fase_user_${Date.now()}`;
+                        setPhaseKeyNameMap((m) => ({ ...m, [k]: newPhaseName.trim() }));
+                        setNewPhaseName("");
                       }
-                      setNewPhaseName("");
                     }}
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -597,7 +741,7 @@ export function MeetingMinutesDialog({
                 // Group tasks by phase
                 const phaseGroups = new Map<string, { task: ProposedTask; index: number }[]>();
                 proposedTasks.forEach((task, index) => {
-                  const key = task.phase || "__none__";
+                  const key = task.phase_key || "__none__";
                   if (!phaseGroups.has(key)) phaseGroups.set(key, []);
                   phaseGroups.get(key)!.push({ task, index });
                 });
@@ -645,10 +789,10 @@ export function MeetingMinutesDialog({
                             </Badge>
                           </div>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                            {!hasPhases && task.phase && (
+                            {!hasPhases && (task.phase_key || task.phase) && (
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
                                 <Layers className="h-2.5 w-2.5 mr-0.5" />
-                                {task.phase}
+                                {(task.phase_key && phaseKeyNameMap[task.phase_key]) || task.phase}
                               </Badge>
                             )}
                             {task.due_date && (
@@ -754,25 +898,35 @@ export function MeetingMinutesDialog({
                               </SelectContent>
                             </Select>
                           </div>
-                          {phases.length > 0 && (
-                            <div className="space-y-1">
-                              <label className="text-xs font-medium text-muted-foreground">Fase / Etapa</label>
-                              <Select
-                                value={task.phase || "__none__"}
-                                onValueChange={(v) => updateTask(index, "phase", v === "__none__" ? null : v)}
-                              >
-                                <SelectTrigger className="text-sm">
-                                  <SelectValue placeholder="Sin fase" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">Sin fase</SelectItem>
-                                  {phases.map((phase) => (
-                                    <SelectItem key={phase} value={phase}>{phase}</SelectItem>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-muted-foreground">Fase / Etapa</label>
+                            <Select
+                              value={task.phase_key || "__none__"}
+                              onValueChange={(v) => {
+                                setProposedTasks((prev) =>
+                                  prev.map((t, i) => {
+                                    if (i !== index) return t;
+                                    if (v === "__none__") return { ...t, phase_key: null, phase: null };
+                                    return { ...t, phase_key: v, phase: phaseKeyNameMap[v] ?? v };
+                                  })
+                                );
+                              }}
+                            >
+                              <SelectTrigger className="text-sm">
+                                <SelectValue placeholder="Sin fase" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Sin fase</SelectItem>
+                                {Object.keys(phaseKeyNameMap)
+                                  .sort((a, b) => (phaseKeyNameMap[a] || a).localeCompare(phaseKeyNameMap[b] || b, "es"))
+                                  .map((pk) => (
+                                    <SelectItem key={pk} value={pk}>
+                                      {phaseKeyNameMap[pk] || pk}
+                                    </SelectItem>
                                   ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -785,7 +939,10 @@ export function MeetingMinutesDialog({
 
                 return orderedKeys.map((phaseKey) => {
                   const items = phaseGroups.get(phaseKey)!;
-                  const phaseName = phaseKey === "__none__" ? "Sin fase" : phaseKey;
+                  const phaseName =
+                    phaseKey === "__none__"
+                      ? "Sin fase asignada"
+                      : phaseKeyNameMap[phaseKey] || phaseKey;
                   const acceptedInPhase = items.filter(i => i.task.accepted).length;
                   return (
                     <div key={phaseKey} className="space-y-1.5">
@@ -841,7 +998,14 @@ export function MeetingMinutesDialog({
               <Button variant="outline" onClick={() => setStep("input")}>
                 Volver a editar
               </Button>
-              <Button onClick={handleCreateTasks} disabled={creating || acceptedCount === 0 || (isStandalone && !newProjectName.trim())}>
+              <Button
+                onClick={handleCreateTasks}
+                disabled={
+                  creating ||
+                  acceptedCount === 0 ||
+                  ((isStandalone || (!isStandalone && importMode === "new")) && !newProjectName.trim())
+                }
+              >
                 {creating ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />

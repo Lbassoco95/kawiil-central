@@ -14,7 +14,8 @@ export function gestoriaPhaseKey(phaseNumber: number) {
   return `gestoria_fase_${phaseNumber}`;
 }
 
-async function mergePhasesIntoProject(projectId: string, additions: SyncPhase[]): Promise<boolean> {
+/** Fusiona fases en `projects.phases` sin duplicar `key` (nuevas van al final). */
+export async function appendProjectPhases(projectId: string, additions: SyncPhase[]): Promise<boolean> {
   const { data, error } = await supabase.from("projects").select("phases").eq("id", projectId).single();
   if (error) throw error;
   const cur = Array.isArray(data?.phases) ? [...(data.phases as SyncPhase[])] : [];
@@ -44,7 +45,7 @@ export async function ensureAccountingPeriodPhasesOnProject(
     name: `${getMonthName(p.month)} ${p.year}`,
     order: 0,
   }));
-  return mergePhasesIntoProject(projectId, additions);
+  return appendProjectPhases(projectId, additions);
 }
 
 const GESTORIA_PHASE_LABELS = [
@@ -60,7 +61,7 @@ export async function ensureGestoriaPhasesOnProject(projectId: string): Promise<
     name: p.name,
     order: 0,
   }));
-  return mergePhasesIntoProject(projectId, additions);
+  return appendProjectPhases(projectId, additions);
 }
 
 /** Asegura entradas en `projects.phases` por categoría de cumplimiento (alineado con tab Tareas). */
@@ -70,5 +71,5 @@ export async function ensureCompliancePhasesOnProject(projectId: string): Promis
     name: COMPLIANCE_CATEGORY_LABELS[key] || key,
     order: 0,
   }));
-  return mergePhasesIntoProject(projectId, additions);
+  return appendProjectPhases(projectId, additions);
 }
