@@ -82,8 +82,12 @@ function markdownBoldToSlackMrkdwn(text: string): string {
   return text.replace(/\*\*((?:[^*]|\*(?!\*))+?)\*\*/g, "*$1*");
 }
 
-/** Presupuesto total por invocación `conversations.history` (varias llamadas encadenadas a Slack). Debe quedar por debajo del timeout del cliente (~55–62 s). */
-const SLACK_HISTORY_HANDLER_BUDGET_MS = 48_000;
+/**
+ * Presupuesto total por invocación `conversations.history` (join + varios history).
+ * Debe cubrir ~4 tramos de SLACK_HTTP_TIMEOUT_MS; si es demasiado bajo, se abortan
+ * recuperaciones ante `not_in_channel` y el cliente se queda cargando hasta timeout.
+ */
+const SLACK_HISTORY_HANDLER_BUDGET_MS = 115_000;
 
 /** Presupuesto para reunir todas las páginas de `conversations.replies` en una sola respuesta. */
 const SLACK_THREAD_REPLIES_BUDGET_MS = 45_000;

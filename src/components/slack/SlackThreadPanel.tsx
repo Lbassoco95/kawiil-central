@@ -10,10 +10,10 @@ import { SlackChatFileDropZone } from "./SlackChatFileDropZone";
 import { useEffect, useMemo, useState } from "react";
 
 /** Alineado con Comunicación: primera carga puede encadenar varias llamadas en la edge. */
-const SLACK_THREAD_FIRST_INVOKE_MS = 88_000;
-const SLACK_THREAD_FIRST_HARD_MS = 95_000;
-const SLACK_THREAD_RETRY_INVOKE_MS = 72_000;
-const SLACK_THREAD_RETRY_HARD_MS = 78_000;
+const SLACK_THREAD_FIRST_INVOKE_MS = 110_000;
+const SLACK_THREAD_FIRST_HARD_MS = 118_000;
+const SLACK_THREAD_RETRY_INVOKE_MS = 90_000;
+const SLACK_THREAD_RETRY_HARD_MS = 96_000;
 
 type Props = {
   open: boolean;

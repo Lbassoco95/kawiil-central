@@ -117,8 +117,8 @@ function appendChannelMessageToSlackHistory(
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /** Primera página: slack-api puede encadenar join/open + varios `history` (~25s c/u). */
-const SLACK_HISTORY_FIRST_INVOKE_MS = 88_000;
-const SLACK_HISTORY_FIRST_HARD_MS = 95_000;
+const SLACK_HISTORY_FIRST_INVOKE_MS = 110_000;
+const SLACK_HISTORY_FIRST_HARD_MS = 118_000;
 const SLACK_HISTORY_NEXT_INVOKE_MS = 55_000;
 const SLACK_HISTORY_NEXT_HARD_MS = 62_000;
 const MPIM_MEMBERS_BATCH = 40;
@@ -549,8 +549,8 @@ export default function Comunicacion() {
       const isFirstPage = pageParam == null;
       const invokeMs = isFirstPage ? SLACK_HISTORY_FIRST_INVOKE_MS : SLACK_HISTORY_NEXT_INVOKE_MS;
       const hardMs = isFirstPage ? SLACK_HISTORY_FIRST_HARD_MS : SLACK_HISTORY_NEXT_HARD_MS;
-      const retryInvokeMs = isFirstPage ? 72_000 : 35_000;
-      const retryHardMs = isFirstPage ? 78_000 : 40_000;
+      const retryInvokeMs = isFirstPage ? 90_000 : 35_000;
+      const retryHardMs = isFirstPage ? 96_000 : 40_000;
       let data: {
         ok: boolean;
         messages?: SlackMessage[];
@@ -599,9 +599,22 @@ export default function Comunicacion() {
       if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
       return failureCount < 2;
     },
-    // Sin poller: con useInfiniteQuery cada tick refetchea TODAS las páginas ya cargadas
-    // (N llamadas a conversations.history) y dispara 429. Actualizar con reacción/invalidar/envío o botón.
-    refetchInterval: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    /**
+     * Sincronización ligera con Slack: un refetch periódico solo con la pestaña visible.
+     * Intervalo alto para reducir 429; el foco de ventana también dispara refetch.
+     */
+    refetchInterval: (query) => {
+      if (typeof document === "undefined") return false;
+      if (document.visibilityState !== "visible") return false;
+      if (query.state.fetchStatus === "fetching") return false;
+      /** Cada tick refetch vuelve a pedir todas las páginas cargadas; con mucho historial desactivamos el poller. */
+      const pageCount = query.state.data?.pages?.length ?? 0;
+      if (pageCount > 4) return false;
+      return 90_000;
+    },
+    refetchIntervalInBackground: false,
   });
 
   const messages = useMemo(() => {
@@ -639,7 +652,7 @@ export default function Comunicacion() {
       setHistoryLoadSlow(false);
       return;
     }
-    const t = setTimeout(() => setHistoryLoadSlow(true), 12_000);
+    const t = setTimeout(() => setHistoryLoadSlow(true), 24_000);
     return () => clearTimeout(t);
   }, [selectedChannel, isConnected, historyInfinite.isFetching, historyInfinite.data]);
 

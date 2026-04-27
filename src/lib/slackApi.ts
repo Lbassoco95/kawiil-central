@@ -172,6 +172,18 @@ export function formatSlackFileUploadError(raw: string | undefined): string {
   if (e.includes("permit") && e.includes("file")) {
     return `Slack o tu organización no permiten este adjunto. ${tail} Si aplica, revisa política DLP/IT.`;
   }
+  if (e.includes("file_upload") && e.includes("disabled")) {
+    return `Las subidas de archivos están desactivadas en este workspace o canal. Pide a un admin de Slack. ${tail}`;
+  }
+  if (e.includes("external") && (e.includes("upload") || e.includes("file"))) {
+    return `Slack no permite este adjunto en conversaciones externas (p. ej. Slack Connect) o con cuentas invitadas. ${tail}`;
+  }
+  if (e.includes("filetype") || e.includes("file_type") || e.includes("invalid_file")) {
+    return `Slack rechazó el tipo de archivo. En Slack Connect hay extensiones bloqueadas; en canales internos puede ser política de la org. ${tail}`;
+  }
+  if (e.includes("cannot_add") && e.includes("file")) {
+    return `Slack no permite añadir archivos en este contexto (permisos del canal o mensaje). ${tail}`;
+  }
 
   return e0.includes("http") || e0.length > 160
     ? `${e0} — ${SLACK_HELP_RESTRICTED_FILE_TYPES_URL}`

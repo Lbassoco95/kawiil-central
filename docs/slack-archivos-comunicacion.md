@@ -25,3 +25,17 @@
 - [Gestionar subidas en Slack Connect (administración)](https://slack.com/help/articles/1500005777562-Manage-file-uploads-canvas-sharing-and-list-sharing-for-Slack-Connect)
 
 Código de referencia: `supabase/functions/slack-api/index.ts` (subida: `getUploadURLExternal` + `completeUploadExternal`, con *fallback* a `files.upload`).
+
+## Comunicación en tiempo casi real (Kawiil ↔ Slack)
+
+Kawiil **no** usa el socket en tiempo real de Slack. Los mensajes que envías desde Comunicación sí se publican en Slack al instante; lo que **otros** escriben en Slack aparece en Kawiil al:
+
+- Volver a enfocar la ventana del navegador,
+- Esperar el refresco automático (~90 s con la pestaña visible), o
+- Tras acciones locales (enviar mensaje, reacción, etc.), que invalidan el historial.
+
+Si necesitas ver cambios al segundo, usa el cliente de Slack en paralelo o recarga el canal en Kawiil.
+
+## Permisos OAuth imprescindibles para adjuntos
+
+En **api.slack.com → tu app → OAuth & Permissions → User Token Scopes** deben figurar al menos **`files:write`** y **`files:read`**. Tras cambiar scopes, en Comunicación usa **«Actualizar permisos Slack»** y vuelve a autorizar.
