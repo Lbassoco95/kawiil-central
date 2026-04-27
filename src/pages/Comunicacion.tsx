@@ -52,6 +52,7 @@ import { SlackActivityPanel } from "@/components/slack/SlackActivityPanel";
 import { SlackLaterPanel } from "@/components/slack/SlackLaterPanel";
 import { SlackChannelInlineSummary } from "@/components/slack/SlackChannelInlineSummary";
 import { SlackQuickReplyBar } from "@/components/slack/SlackQuickReplyBar";
+import { SlackChatFileDropZone } from "@/components/slack/SlackChatFileDropZone";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,12 @@ function appendChannelMessageToSlackHistory(
 }
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/** Primera página: slack-api puede encadenar join/open + varios `history` (~25s c/u). */
+const SLACK_HISTORY_FIRST_INVOKE_MS = 88_000;
+const SLACK_HISTORY_FIRST_HARD_MS = 95_000;
+const SLACK_HISTORY_NEXT_INVOKE_MS = 55_000;
+const SLACK_HISTORY_NEXT_HARD_MS = 62_000;
 const MPIM_MEMBERS_BATCH = 40;
 /** Límite de MPIM para prefetch de miembros (evita decenas de batches en workspaces grandes). */
 const MAX_MPIMS_MEMBER_PREFETCH = 48;
@@ -539,6 +546,11 @@ export default function Comunicacion() {
         : anchorTs
           ? { ...base, latest: anchorTs }
           : { ...base };
+      const isFirstPage = pageParam == null;
+      const invokeMs = isFirstPage ? SLACK_HISTORY_FIRST_INVOKE_MS : SLACK_HISTORY_NEXT_INVOKE_MS;
+      const hardMs = isFirstPage ? SLACK_HISTORY_FIRST_HARD_MS : SLACK_HISTORY_NEXT_HARD_MS;
+      const retryInvokeMs = isFirstPage ? 72_000 : 35_000;
+      const retryHardMs = isFirstPage ? 78_000 : 40_000;
       let data: {
         ok: boolean;
         messages?: SlackMessage[];
@@ -552,8 +564,8 @@ export default function Comunicacion() {
             messages?: SlackMessage[];
             error?: string;
             response_metadata?: { next_cursor?: string };
-          }>(payload, { signal, timeoutMs: 55_000 }),
-          62_000,
+          }>(payload, { signal, timeoutMs: invokeMs }),
+          hardMs,
           "La carga del historial tardó demasiado. Vuelve a abrir el canal.",
         );
       } catch (e) {
@@ -566,8 +578,8 @@ export default function Comunicacion() {
               messages?: SlackMessage[];
               error?: string;
               response_metadata?: { next_cursor?: string };
-            }>(payload, { timeoutMs: 35_000 }),
-            40_000,
+            }>(payload, { timeoutMs: retryInvokeMs }),
+            retryHardMs,
             "La recarga del historial tardó demasiado. Vuelve a abrir el canal.",
           );
         } else {
@@ -1703,7 +1715,14 @@ export default function Comunicacion() {
       )}
       {selectedChannel ? (
         <div className="flex flex-1 min-h-0 min-w-0">
-          <div className="flex flex-1 min-w-0 min-h-0 flex-col">
+          <SlackChatFileDropZone
+            enabled={!!selectedChannel && !uploadMutation.isPending}
+            busy={uploadMutation.isPending}
+            onFiles={(files) =>
+              uploadMutation.mutate({ files, initial_comment: draft.trim() || undefined })
+            }
+            className="flex flex-1 min-w-0 min-h-0 flex-col"
+          >
             <SlackChannelHeader
               title={headerTitle}
               channelId={selectedChannel}
@@ -1898,7 +1917,7 @@ export default function Comunicacion() {
               ). Más detalle en el repositorio:{" "}
               <code className="rounded bg-muted px-1">docs/slack-archivos-comunicacion.md</code>
             </p>
-          </div>
+          </SlackChatFileDropZone>
           <SlackThreadPanel
             open={!!threadRootTs}
             onOpenChange={(open) => {

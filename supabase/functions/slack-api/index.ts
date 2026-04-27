@@ -74,6 +74,14 @@ const MAX_UPLOAD_BYTES = 52 * 1024 * 1024;
 const MAX_PRIVATE_FILE_FETCH_BYTES = 20 * 1024 * 1024;
 const SLACK_HTTP_TIMEOUT_MS = 25_000;
 
+/**
+ * Negritas estilo Markdown (**texto**) → mrkdwn de Slack (*texto*).
+ * Slack no interpreta **; sin esto el cliente muestra los asteriscos literales.
+ */
+function markdownBoldToSlackMrkdwn(text: string): string {
+  return text.replace(/\*\*((?:[^*]|\*(?!\*))+?)\*\*/g, "*$1*");
+}
+
 /** Presupuesto total por invocación `conversations.history` (varias llamadas encadenadas a Slack). Debe quedar por debajo del timeout del cliente (~55–62 s). */
 const SLACK_HISTORY_HANDLER_BUDGET_MS = 48_000;
 
@@ -201,11 +209,13 @@ async function slackFilesUploadWithFallback(
   initialComment?: string,
   threadTs?: string,
 ): Promise<Record<string, unknown>> {
-  const ext = await slackFilesUploadExternal(token, channel, filename, bytes, initialComment, threadTs);
+  const comment =
+    initialComment?.trim() ? markdownBoldToSlackMrkdwn(initialComment.trim()) : undefined;
+  const ext = await slackFilesUploadExternal(token, channel, filename, bytes, comment, threadTs);
   if (ext.ok === true) return ext as Record<string, unknown>;
   const err = String((ext as { error?: string }).error || "");
   if (err.includes("missing_scope")) return ext as Record<string, unknown>;
-  const classic = await slackFilesUploadClassic(token, channel, filename, bytes, initialComment, threadTs);
+  const classic = await slackFilesUploadClassic(token, channel, filename, bytes, comment, threadTs);
   return annotateSlackResponse(classic);
 }
 
@@ -809,7 +819,7 @@ Deno.serve(async (req) => {
       }
       const data = await slackCall(conn.access_token, "chat.postMessage", {
         channel,
-        text: text.trim(),
+        text: markdownBoldToSlackMrkdwn(text.trim()),
         thread_ts: json.thread_ts as string | undefined,
       });
       return jsonOk(data);
@@ -825,7 +835,7 @@ Deno.serve(async (req) => {
       }
       const data = await slackCall(conn.access_token, "chat.scheduleMessage", {
         channel,
-        text: text.trim(),
+        text: markdownBoldToSlackMrkdwn(text.trim()),
         post_at: postAt,
         thread_ts: json.thread_ts as string | undefined,
       });
@@ -842,7 +852,7 @@ Deno.serve(async (req) => {
       const data = await slackCall(conn.access_token, "chat.update", {
         channel,
         ts: ts.trim(),
-        text: text.trim(),
+        text: markdownBoldToSlackMrkdwn(text.trim()),
       });
       return jsonOk(annotateSlackResponse(data as Record<string, unknown>));
     }
