@@ -163,13 +163,18 @@ function DropboxLiveBrowser() {
 
   const selectPersonalFolder = async (entry: DropboxEntry) => {
     if (user?.id) {
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from("profiles")
         .update({ dropbox_personal_folder: entry.path } as any)
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .select("user_id");
 
       if (error) {
         toast.error("No se pudo guardar tu carpeta personal");
+        return;
+      }
+      if (!updatedRows?.length) {
+        toast.error("No se encontró tu perfil. No se pudo guardar la carpeta.");
         return;
       }
     }
@@ -192,18 +197,30 @@ function DropboxLiveBrowser() {
       const { data, error } = await supabase.functions.invoke("dropbox-browse", {
         body: { path, action: "list" },
       });
+      const bodyErr =
+        data && typeof data === "object" && "error" in data
+          ? String((data as { error?: string }).error ?? "")
+          : "";
+      // Solo reabrimos el selector si Dropbox confirma path/not_found. Un fallo genérico
+      // (p. ej. "non-2xx" de invoke) no debe enseñar otra vez la lista: eso provocaba un bucle.
+      const isDropboxPathMissing = (msg: string) => msg.includes("path/not_found");
       if (error) {
-        const errorMsg = data?.error || error.message || "";
-        if (errorMsg.includes("path/not_found") || errorMsg.includes("not_found") || error.message?.includes("non-2xx")) {
+        if (bodyErr && isDropboxPathMissing(bodyErr)) {
           toast.info("No se encontró la carpeta. Selecciona tu carpeta personal de la lista.");
           goToRoot();
           loadRootFoldersForPicker();
           return;
         }
-        throw error;
+        toast.error(
+          bodyErr
+            ? "Error al navegar Dropbox: " + bodyErr
+            : "Error al conectar con Dropbox. Intenta de nuevo.",
+        );
+        goToRoot();
+        return;
       }
       if (data?.error) {
-        if (data.error.includes("path/not_found") || data.error.includes("not_found")) {
+        if (isDropboxPathMissing(String(data.error))) {
           toast.info("No se encontró la carpeta. Selecciona tu carpeta personal de la lista.");
           goToRoot();
           loadRootFoldersForPicker();
