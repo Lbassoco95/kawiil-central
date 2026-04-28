@@ -3,7 +3,7 @@ import { useChat } from "@/hooks/useChat";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Sparkles, Send, Loader2, X, Minus, Plus, FileText } from "lucide-react";
+import { Sparkles, Send, Loader2, X, Minus, Plus, FileText, History, BrainCircuit, MessageSquare } from "lucide-react";
 import { ChatAttachmentPicker, ChatAttachmentChips } from "@/components/ai/ChatAttachmentPicker";
 import { ChatProcessingPanel } from "@/components/ai/ChatProcessingPanel";
 import { AiAssistantWelcome } from "@/components/ai/AiAssistantWelcome";
@@ -18,10 +18,13 @@ import {
 } from "@/components/shared/DuplicateFileResolutionDialog";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { formatMX } from "@/lib/dateUtils";
 
 export function FloatingAIChat() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [dupChatOpen, setDupChatOpen] = useState(false);
@@ -64,6 +67,10 @@ export function FloatingAIChat() {
     pdfIndexingStatus,
     sendMessage,
     startNewChat,
+    conversations,
+    loadingConversations,
+    activeConversationId,
+    loadConversation,
   } = useChat();
 
   const isAssistantPage = location.pathname === "/asistente";
@@ -100,7 +107,7 @@ export function FloatingAIChat() {
     setInput(e.target.value);
     const ta = e.target;
     ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+    ta.style.height = Math.min(ta.scrollHeight, 96) + "px";
   };
 
   // FAB button
@@ -173,6 +180,15 @@ export function FloatingAIChat() {
         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={startNewChat} title="Nueva conversación">
           <Plus className="h-3.5 w-3.5" />
         </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0"
+          onClick={() => setHistoryOpen(true)}
+          title="Historial de conversaciones"
+        >
+          <History className="h-3.5 w-3.5" />
+        </Button>
         <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setMinimized(true)} title="Minimizar">
           <Minus className="h-3.5 w-3.5" />
         </Button>
@@ -191,8 +207,8 @@ export function FloatingAIChat() {
             }}
           />
         ) : (
-          <div className="px-3 py-3">
-            <div className="space-y-3">
+          <div className="px-3 py-2.5">
+            <div className="space-y-2">
             {messages.map((msg, i) => {
               const showProgressBeforeAssistant =
                 isStreaming &&
@@ -202,11 +218,12 @@ export function FloatingAIChat() {
               return (
                 <Fragment key={msg.id || `fm-${i}`}>
                   {showProgressBeforeAssistant && (
-                    <div className="flex gap-2 justify-start">
-                      <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                        <Loader2 className="h-3 w-3 text-primary animate-spin" />
-                      </div>
-                      <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0 text-[11px]" />
+                    <div className="flex justify-start">
+                      <ChatProcessingPanel
+                        steps={streamProgressSteps}
+                        variant="compact"
+                        className="flex-1 min-w-0"
+                      />
                     </div>
                   )}
                   <div
@@ -219,9 +236,9 @@ export function FloatingAIChat() {
                     )}
                     <div
                       className={cn(
-                        "rounded-xl px-3 py-2 max-w-[85%] text-[13px]",
+                        "rounded-xl px-2.5 py-1.5 max-w-[78%]",
                         msg.role === "user"
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-primary text-primary-foreground text-[13px]"
                           : msg.isError
                             ? "bg-destructive/10 border border-destructive/25"
                             : "bg-secondary/40"
@@ -230,7 +247,7 @@ export function FloatingAIChat() {
                       {msg.role === "assistant" ? (
                         <div
                           className={cn(
-                            "prose prose-sm max-w-none [&_p]:my-0.5 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_code]:text-xs [&_code]:bg-secondary/60 [&_code]:px-1 [&_code]:rounded text-[13px]",
+                            "prose prose-sm max-w-none [&_p]:my-0.5 [&_ul]:my-0.5 [&_ol]:my-0.5 [&_h1]:text-xs [&_h2]:text-xs [&_h3]:text-[11px] [&_code]:text-[11px] [&_code]:bg-secondary/60 [&_code]:px-1 [&_code]:rounded text-[12px] leading-snug",
                             msg.isError
                               ? "text-destructive prose-headings:text-destructive"
                               : "text-foreground"
@@ -281,11 +298,12 @@ export function FloatingAIChat() {
             {isStreaming &&
               messages[messages.length - 1]?.role === "user" &&
               (streamProgressSteps.length > 0 ? (
-                <div className="flex gap-2 justify-start">
-                  <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                    <Loader2 className="h-3 w-3 text-primary animate-spin" />
-                  </div>
-                  <ChatProcessingPanel steps={streamProgressSteps} className="flex-1 min-w-0" />
+                <div className="flex justify-start">
+                  <ChatProcessingPanel
+                    steps={streamProgressSteps}
+                    variant="compact"
+                    className="flex-1 min-w-0"
+                  />
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -337,7 +355,7 @@ export function FloatingAIChat() {
       )}
 
       {/* Input */}
-      <div className="border-t border-border/40 px-3 py-2.5 bg-secondary/10 flex flex-col gap-2">
+      <div className="border-t border-border/40 px-3 py-2 bg-secondary/10 flex flex-col gap-1.5">
         <ChatAttachmentChips
           files={pendingFiles}
           disabled={isStreaming}
@@ -358,8 +376,8 @@ export function FloatingAIChat() {
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             placeholder="Mensaje o archivos…"
-            className="resize-none min-h-[64px] max-h-[120px] text-[13px] bg-background border-border/50 rounded-xl py-2 flex-1 min-w-0"
-            rows={2}
+            className="resize-none min-h-[44px] max-h-[96px] text-[13px] bg-background border-border/50 rounded-xl py-2 flex-1 min-w-0"
+            rows={1}
             disabled={isStreaming}
           />
           <Button
@@ -377,6 +395,57 @@ export function FloatingAIChat() {
         </div>
       </div>
     </FileDropzone>
+    <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-sm">
+        <SheetHeader className="border-b border-border/40 px-4 py-3 text-left">
+          <SheetTitle className="text-base font-semibold">Historial</SheetTitle>
+          <p className="text-xs text-muted-foreground font-normal">
+            Retoma un hilo guardado o continúa en el asistente completo.
+          </p>
+        </SheetHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+          {loadingConversations ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">Cargando conversaciones…</p>
+          ) : conversations.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">Aún no hay conversaciones guardadas.</p>
+          ) : (
+            <ul className="space-y-1">
+              {conversations.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "w-full rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                      activeConversationId === c.id
+                        ? "bg-primary/10 text-foreground"
+                        : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                    )}
+                    onClick={() => {
+                      void loadConversation(c.id);
+                      setHistoryOpen(false);
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      {c.ai_project_id ? (
+                        <BrainCircuit className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" title="Chat de proyecto IA" />
+                      ) : (
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] text-muted-foreground tabular-nums">
+                          {formatMX(c.updated_at, "d MMM yyyy")}
+                        </p>
+                        <p className="line-clamp-2 text-[13px] font-medium leading-snug">{c.title}</p>
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
     <DuplicateFileResolutionDialog
       open={dupChatOpen}
       fileName={dupChatName}

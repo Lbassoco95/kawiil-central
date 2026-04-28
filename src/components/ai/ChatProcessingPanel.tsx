@@ -42,12 +42,16 @@ export function ChatProcessingPanel({
   steps,
   active = true,
   className,
+  variant = "default",
 }: {
   steps: ChatProgressStep[];
   active?: boolean;
   className?: string;
+  /** `compact`: menos padding y alturas, para el widget flotante. */
+  variant?: "default" | "compact";
 }) {
   const [headOpen, setHeadOpen] = useState(false);
+  const compact = variant === "compact";
 
   if (steps.length === 0) return null;
 
@@ -55,22 +59,32 @@ export function ChatProcessingPanel({
   const head = collapse ? steps.slice(0, -TAIL_VISIBLE) : [];
   const tail = collapse ? steps.slice(-TAIL_VISIBLE) : steps;
 
+  const listMaxHead = compact ? "max-h-24" : "max-h-32";
+  const listMaxMain = compact ? "max-h-32" : "max-h-44";
+  const stepText = compact ? "text-[10px]" : "text-[11px]";
+
   return (
     <div
       className={cn(
-        "rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 max-w-[85%]",
+        "border border-primary/20 bg-primary/5 max-w-[85%]",
+        compact ? "rounded-xl px-3 py-2" : "rounded-2xl px-4 py-3",
         className,
       )}
     >
-      <p className="text-[11px] font-medium text-foreground mb-2 flex items-center gap-2">
+      <p
+        className={cn(
+          "font-medium text-foreground flex items-center gap-2",
+          compact ? "text-[10px] mb-1.5" : "text-[11px] mb-2",
+        )}
+      >
         {active ? (
           <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+            <Loader2 className={cn("animate-spin text-primary shrink-0", compact ? "h-3 w-3" : "h-3.5 w-3.5")} />
             Procesando tu solicitud
           </>
         ) : (
           <>
-            <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+            <Check className={cn("text-primary shrink-0", compact ? "h-3 w-3" : "h-3.5 w-3.5")} />
             Actividad completada
           </>
         )}
@@ -80,7 +94,10 @@ export function ChatProcessingPanel({
         <div className="space-y-1">
           <Collapsible open={headOpen} onOpenChange={setHeadOpen}>
             <CollapsibleTrigger
-              className="flex w-full items-center justify-between gap-2 rounded-md py-1.5 text-left text-[10px] text-muted-foreground hover:text-foreground/90"
+              className={cn(
+                "flex w-full items-center justify-between gap-2 rounded-md py-1.5 text-left text-muted-foreground hover:text-foreground/90",
+                compact ? "text-[9px]" : "text-[10px]",
+              )}
               type="button"
             >
               <span>+{head.length} paso(s) anterior(es)</span>
@@ -89,7 +106,13 @@ export function ChatProcessingPanel({
               />
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <ol className="mb-1 max-h-32 space-y-1.5 overflow-y-auto pl-0 text-[11px] text-muted-foreground list-none border-l border-border/50 ml-1 pl-2">
+              <ol
+                className={cn(
+                  "mb-1 space-y-1 overflow-y-auto pl-0 text-muted-foreground list-none border-l border-border/50 ml-1 pl-2",
+                  listMaxHead,
+                  stepText,
+                )}
+              >
                 {head.map((s, i) => (
                   <StepLine
                     key={`h-${i}-${s.phase}`}
@@ -102,7 +125,13 @@ export function ChatProcessingPanel({
             </CollapsibleContent>
           </Collapsible>
 
-          <ol className="max-h-44 space-y-1.5 overflow-y-auto text-[11px] text-muted-foreground list-none">
+          <ol
+            className={cn(
+              "space-y-1 overflow-y-auto text-muted-foreground list-none",
+              listMaxMain,
+              stepText,
+            )}
+          >
             {tail.map((s, i) => {
               const globalLast = i === tail.length - 1;
               return (
@@ -117,7 +146,13 @@ export function ChatProcessingPanel({
           </ol>
         </div>
       ) : (
-        <ol className="max-h-44 space-y-1.5 overflow-y-auto text-[11px] text-muted-foreground list-none">
+        <ol
+          className={cn(
+            "space-y-1 overflow-y-auto text-muted-foreground list-none",
+            listMaxMain,
+            stepText,
+          )}
+        >
           {steps.map((s, i) => {
             const isLast = i === steps.length - 1;
             return (

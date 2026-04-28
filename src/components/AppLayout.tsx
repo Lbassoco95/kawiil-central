@@ -3,6 +3,7 @@ import { NewTaskModalContext } from "@/contexts/NewTaskModalContext";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingAIChat } from "@/components/FloatingAIChat";
+import { ChatProvider } from "@/hooks/useChat";
 import { AppTopbar } from "@/components/layout/AppTopbar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { GlobalCommandPalette } from "@/components/search/GlobalCommandPalette";
@@ -53,6 +54,7 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
 
   return (
     <NewTaskModalContext.Provider value={newTaskModalValue}>
+    <ChatProvider>
     <div
       className={cn(
         "flex w-full bg-background relative",
@@ -85,6 +87,7 @@ export function AppLayout({ children, contentMaxWidth = "default" }: AppLayoutPr
     </div>
     <TaskFormDialog open={newTaskOpen} onOpenChange={setNewTaskOpen} />
     <GlobalCommandPalette />
+    </ChatProvider>
     </NewTaskModalContext.Provider>
   );
 }
