@@ -19,8 +19,25 @@ const Login = () => {
     return n.includes("invalid login credentials") || n.includes("invalid email or password");
   };
 
+  const isNetworkAuthErrorMessage = (message: string) => {
+    const n = message.toLowerCase();
+    return (
+      n.includes("failed to fetch") ||
+      n.includes("networkerror") ||
+      n.includes("network error") ||
+      n.includes("load failed") ||
+      n.includes("network request failed") ||
+      n.includes("err_network") ||
+      n === "failed to fetch"
+    );
+  };
+
   const mapAuthErrorMessage = (message: string) => {
     const normalized = message.toLowerCase();
+
+    if (isNetworkAuthErrorMessage(message)) {
+      return "No pudimos contactar al servidor de autenticación. Revisa tu conexión, prueba otra red o una ventana de incógnito sin extensiones (bloqueadores suelen bloquear *.supabase.co). Si usas VPN o firewall corporativo, permite tráfico a tu proyecto Supabase.";
+    }
 
     if (isInvalidCredentialsMessage(message)) {
       return "Correo o contraseña incorrectos. Revisa mayúsculas y espacios. Si no recuerdas tu contraseña, pide al administrador el correo para restablecerla.";
@@ -59,7 +76,9 @@ const Login = () => {
       toast({
         title: isInvalidCredentialsMessage(error.message)
           ? "No pudimos validar tu acceso"
-          : "Error al iniciar sesión",
+          : isNetworkAuthErrorMessage(error.message)
+            ? "Problema de conexión"
+            : "Error al iniciar sesión",
         description: mapAuthErrorMessage(error.message),
         variant: "destructive",
       });
