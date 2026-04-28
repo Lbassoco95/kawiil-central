@@ -86,7 +86,7 @@ export function MeetingMinutesDialog({
   const queryClient = useQueryClient();
   const { data: orgUsers = [] } = useOrgUsers();
   const meetingUploadLimits = withLimits(documentsLimits, {
-    accept: ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx",
+    accept: ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx,.xml",
     maxFiles: STANDARD_BATCH_MAX_FILES,
   });
 

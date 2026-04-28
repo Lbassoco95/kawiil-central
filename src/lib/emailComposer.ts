@@ -46,7 +46,12 @@ const ALLOWED_EXTENSIONS = new Set([
   "mov",
   "mp3",
   "wav",
+  "xml",
 ]);
+
+/** Atributo `accept` para FileDropzone en redactar/responder correo (alineado con ALLOWED_EXTENSIONS). */
+export const EMAIL_ATTACHMENT_ACCEPT =
+  ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar,.7z,.msg,.eml,.xml";
 
 function extensionOf(name: string): string {
   const i = name.lastIndexOf(".");
@@ -79,6 +84,7 @@ const EXT_TO_MIME: Record<string, string> = {
   mov: "video/quicktime",
   mp3: "audio/mpeg",
   wav: "audio/wav",
+  xml: "application/xml",
 };
 
 function resolveContentType(file: File): string {

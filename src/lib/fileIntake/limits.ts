@@ -59,8 +59,8 @@ export const documentsLimits: FileIntakeLimits = {
   maxFiles: STANDARD_BATCH_MAX_FILES,
   maxBytesPerFile: 50 * MB,
   maxBatchBytes: 50 * MB * STANDARD_BATCH_MAX_FILES,
-  /** Office completo (incl. .ppt/.pptx) + XML/JSON usados en facturación y datos. */
-  accept: `${ACCEPTED_DOCUMENT_EXTENSIONS},.xml,.json`,
+  /** Office + XML en ACCEPTED_DOCUMENT_EXTENSIONS + JSON (facturación/datos). */
+  accept: `${ACCEPTED_DOCUMENT_EXTENSIONS},.json`,
   zipMode: "auto",
   clientUnzipMaxBytes: 25 * MB,
   maxZipEntriesForClientExpand: 150,
