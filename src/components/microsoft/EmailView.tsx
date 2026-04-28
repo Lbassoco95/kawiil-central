@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useId,
   useMemo,
   type ComponentType,
   type Dispatch,
@@ -639,18 +640,23 @@ function EmailFolderTreeItem({
   dragOverFolderId,
   folderRow,
 }: EmailFolderTreeItemProps) {
-  if (!folder?.id || !folderVisibleIds.has(folder.id)) return null;
+  const orphanStableId = useId();
+  const folderIdSafe = typeof folder?.id === "string" ? folder.id : "";
+  const visible = !!(folderIdSafe && folderVisibleIds.has(folderIdSafe));
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: folderIdSafe || `email-folder-ph:${orphanStableId}`,
+    disabled: !visible || !folderIdSafe,
+    data: { parentKey: parentListKey, type: "email-folder-sidebar" },
+  });
+
+  if (!visible || !folderIdSafe || !folder) return null;
 
   const allKids = orderedFolderChildrenMap.get(folder.id) ?? [];
   const kids = allKids.filter((k: any) => folderVisibleIds.has(k.id));
   const hasChildren = kids.length > 0;
   const expanded = expandedFolderIds.has(folder.id);
   const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
-
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: folder.id,
-    data: { parentKey: parentListKey, type: "email-folder-sidebar" },
-  });
   const sortableStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
