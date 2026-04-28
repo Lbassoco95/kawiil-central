@@ -68,6 +68,8 @@ export function useCreateDocument() {
       document_type?: string;
       tags?: string[];
       metadata?: Json;
+      /** Evita toast (subidas múltiples; el caller muestra un resumen). */
+      quiet?: boolean;
     }) => {
       const { data: profile } = await supabase
         .from("profiles")
@@ -113,11 +115,14 @@ export function useCreateDocument() {
         .single();
 
       if (error) throw error;
-      return data;
+      return { data, quiet: input.quiet };
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
-      toast.success("Documento registrado exitosamente");
+      const r = res as { quiet?: boolean } | undefined;
+      if (r && !r.quiet) {
+        toast.success("Documento registrado exitosamente");
+      }
     },
     onError: (err: Error) => {
       toast.error("Error al registrar documento: " + err.message);

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { Switch } from "@/components/ui/switch";
+import { EMAIL_ATTACHMENT_ACCEPT } from "@/lib/emailComposer";
 import { emailLimits, withLimits } from "@/lib/fileIntake/limits";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
@@ -692,8 +693,7 @@ export function ReplyForwardDialog({
                       files={replyFiles}
                       onChange={onReplyFilesChange}
                       limits={withLimits(emailLimits, {
-                        accept:
-                          ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar,.7z,.msg,.eml",
+                        accept: EMAIL_ATTACHMENT_ACCEPT,
                         zipMode: keepZips ? "keep" : "auto",
                       })}
                       variant="area"

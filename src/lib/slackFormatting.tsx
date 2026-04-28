@@ -499,12 +499,17 @@ function formatPlainRichChunk(chunk: string, ctx: FormatContext, keyBase: string
   let rest = chunk;
   let k = 0;
   while (rest.length > 0) {
+    /** Markdown común (**x**); Slack nativo usa *x*. */
+    const tryDblStar = /^\*\*((?:[^*]|\*(?!\*))+?)\*\*/.exec(rest);
     const tryStar = /^\*([^*]+)\*/.exec(rest);
     const tryUnder = /^_([^_]+)_/.exec(rest);
     const tryStrike = /^~([^~]+)~/.exec(rest);
     let len = 0;
     let node: ReactNode | null = null;
-    if (tryStar && tryStar.index === 0) {
+    if (tryDblStar && tryDblStar.index === 0 && tryDblStar[1].length > 0) {
+      len = tryDblStar[0].length;
+      node = <strong key={`${keyBase}-${k++}`}>{tryDblStar[1]}</strong>;
+    } else if (tryStar && tryStar.index === 0) {
       len = tryStar[0].length;
       node = <strong key={`${keyBase}-${k++}`}>{tryStar[1]}</strong>;
     } else if (tryUnder && tryUnder.index === 0) {
@@ -523,7 +528,7 @@ function formatPlainRichChunk(chunk: string, ctx: FormatContext, keyBase: string
       rest = rest.slice(len);
       continue;
     }
-    const next = rest.search(/[*_~]/);
+    const next = rest.search(/(?:\*\*|[_*~])/);
     // Si el siguiente formateo está justo en índice 0 pero no es un par válido (p. ej. "*"
     // suelto sin cierre), debemos avanzar al menos 1 carácter para evitar un bucle infinito
     // que sature la memoria del navegador.

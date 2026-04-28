@@ -31,7 +31,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { pipelineQueryKeys, useEmailTemplates } from "@/hooks/usePipeline";
 import { Mail } from "lucide-react";
 import { RichTextEditor } from "@/components/microsoft/RichTextEditor";
-import { filesToComposerAttachments, type ComposerAttachment } from "@/lib/emailComposer";
+import {
+  EMAIL_ATTACHMENT_ACCEPT,
+  filesToComposerAttachments,
+  type ComposerAttachment,
+} from "@/lib/emailComposer";
 
 const emailSchema = z
   .object({
@@ -437,7 +441,7 @@ export function SendEmailModal({ open, onClose, leadId, leadName, leadEmail, rep
               files={pendingFiles}
               onChange={setPendingFiles}
               limits={withLimits(emailLimits, {
-                accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar,.7z,.msg,.eml",
+                accept: EMAIL_ATTACHMENT_ACCEPT,
                 zipMode: keepZips ? "keep" : "auto",
               })}
               variant="area"

@@ -17,6 +17,7 @@ import { formatMX, mexicoWeekRangeISOContaining, toDateStringMX, nowMX } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { FunctionsHttpError } from "@supabase/functions-js";
 import {
   Plus, Search, FileText, Link, ExternalLink, Trash2,
   Eye, Folder, FolderOpen, ChevronLeft, Image,
@@ -63,6 +64,29 @@ function formatFileSize(bytes: number | null): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** `invoke` suele ocultar el detalle tras "non-2xx"; leemos body real (ej. Dropbox token revoked). */
+async function invokeErrorDetail(error: unknown): Promise<string> {
+  if (error instanceof FunctionsHttpError && error.context instanceof Response) {
+    try {
+      const body = await error.context.clone().json();
+      if (body && typeof body === "object") {
+        const b = body as { error?: string; message?: string };
+        const e = typeof b.error === "string" ? b.error.trim() : "";
+        const m = typeof b.message === "string" ? b.message.trim() : "";
+        if (e || m) return (e || m).slice(0, 520);
+      }
+    } catch {
+      try {
+        const t = await error.context.clone().text();
+        if (t.trim()) return t.trim().slice(0, 400);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return "";
 }
 
 type BreadcrumbItem = { label: string; key: string };
@@ -154,8 +178,25 @@ function DropboxLiveBrowser() {
           .filter((e) => e.type === "folder" && e.name !== KAWIIL_TEAM_ROOT_NAME)
           .sort((a, b) => a.name.localeCompare(b.name))
       );
-    } catch (e: any) {
-      toast.error("Error al cargar carpetas: " + (e.message || "Error desconocido"));
+    } catch (e: unknown) {
+      let msg =
+        e &&
+        typeof e === "object" &&
+        typeof (e as { message?: unknown }).message === "string"
+          ? String((e as { message?: string }).message).trim()
+          : "";
+      if (
+        !msg ||
+        msg === "Edge Function returned a non-2xx status code" ||
+        msg.startsWith("non-2xx")
+      ) {
+        msg = (await invokeErrorDetail(e)).trim();
+      }
+      toast.error(
+        msg.length > 0
+          ? `Error al cargar carpetas: ${msg.slice(0, 400)}`
+          : "Error al cargar carpetas. Intenta de nuevo.",
+      );
     } finally {
       setPickerLoading(false);
     }
@@ -211,9 +252,11 @@ function DropboxLiveBrowser() {
           loadRootFoldersForPicker();
           return;
         }
+        let detailInline = bodyErr.trim();
+        if (!detailInline) detailInline = (await invokeErrorDetail(error)).trim();
         toast.error(
-          bodyErr
-            ? "Error al navegar Dropbox: " + bodyErr
+          detailInline
+            ? `Error al usar Dropbox: ${detailInline.slice(0, 400)}`
             : "Error al conectar con Dropbox. Intenta de nuevo.",
         );
         goToRoot();
@@ -1098,9 +1141,13 @@ const Documentos = () => {
     return [
       {
         label: "Dropbox",
-        value: "Conectado",
-        sub: "biblioteca sincronizada",
-        tone: "success" as const,
+        value: dropbox != null ? String(dropbox) : "—",
+        sub:
+          dropbox !== null && dropbox > 0
+            ? "documentos con enlace Dropbox en el catálogo"
+            : "lista en vivo abajo puede fallar; si aparece toast, revisa Integraciones",
+        tone:
+          dropbox !== null && dropbox > 0 ? ("success" as const) : ("default" as const),
       },
       total != null && {
         label: "Total archivos",
@@ -1135,7 +1182,7 @@ const Documentos = () => {
         <PageHeader
           variant="hero"
           title="Documentos"
-          description="Explorador unificado — Dropbox conectado + archivos subidos en Kawiil. Busca, previsualiza y comparte con IA contextual."
+          description="Explorador unificado — archivos enlazados desde Dropbox (API en vivo) y subidos en Kawiil. Busca, previsualiza y comparte con IA contextual."
           breadcrumb={["Kawiil OS", "Trabajo", "Documentos"]}
           iconAccent="linear-gradient(135deg, hsl(210 95% 55%), hsl(195 90% 50%))"
           icon={<FileText />}

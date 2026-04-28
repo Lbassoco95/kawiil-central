@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, FileText, Loader2, Link2, Plus, Eye, PenTool, FileSpreadsheet, Presentation, FileType, ExternalLink, Trash2, FolderOpen, Archive } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
-import { documentsLimits, withLimits } from "@/lib/fileIntake/limits";
+import { documentsLimits, withLimits, STANDARD_BATCH_MAX_FILES } from "@/lib/fileIntake/limits";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,6 +53,7 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   const [savingLink, setSavingLink] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<any>(null);
   const [dropboxUploadFile, setDropboxUploadFile] = useState<File | null>(null);
+  const [dropboxUploadQueue, setDropboxUploadQueue] = useState<File[]>([]);
   const [showDropboxUpload, setShowDropboxUpload] = useState(false);
   const [signDoc, setSignDoc] = useState<{ name: string; url: string } | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<string | null>(null);
@@ -273,12 +274,12 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
   };
 
   const handleDropboxFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setDropboxUploadFile(file);
-      setShowDropboxUpload(true);
-    }
+    const list = Array.from(e.target.files ?? []).slice(0, STANDARD_BATCH_MAX_FILES);
     if (dropboxFileRef.current) dropboxFileRef.current.value = "";
+    if (!list.length) return;
+    setDropboxUploadQueue(list.slice(1));
+    setDropboxUploadFile(list[0]);
+    setShowDropboxUpload(true);
   };
 
   const handleDropboxUploaded = async (result: { name: string; path: string; url: string }) => {
@@ -303,7 +304,15 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
     } catch (err: any) {
       toast.error("Error al registrar documento: " + err.message);
     }
-    setDropboxUploadFile(null);
+    setDropboxUploadQueue((q) => {
+      if (q.length) {
+        setDropboxUploadFile(q[0]);
+        return q.slice(1);
+      }
+      setShowDropboxUpload(false);
+      setDropboxUploadFile(null);
+      return [];
+    });
   };
 
   const handleDropboxPickerSelect = async (file: { name: string; url: string }) => {
@@ -337,7 +346,14 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
         <label className="text-xs font-medium text-muted-foreground">Archivos</label>
         <div className="flex items-center gap-1">
           {/* Upload to Dropbox - primary action */}
-          <input ref={dropboxFileRef} type="file" className="hidden" accept={ACCEPTED_DOCUMENT_EXTENSIONS} onChange={handleDropboxFileSelect} />
+          <input
+            ref={dropboxFileRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept={ACCEPTED_DOCUMENT_EXTENSIONS}
+            onChange={handleDropboxFileSelect}
+          />
           <Button
             variant="outline"
             size="sm"
@@ -510,7 +526,11 @@ export function StepFileManager({ documentIds, onDocumentAdded, projectId, clien
 
       <DropboxUploadDialog
         open={showDropboxUpload}
-        onClose={() => { setShowDropboxUpload(false); setDropboxUploadFile(null); }}
+        onClose={() => {
+          setShowDropboxUpload(false);
+          setDropboxUploadFile(null);
+          setDropboxUploadQueue([]);
+        }}
         file={dropboxUploadFile}
         initialPath={clientDropboxPath || KAWIIL_TEAM_ROOT}
         onUploaded={handleDropboxUploaded}

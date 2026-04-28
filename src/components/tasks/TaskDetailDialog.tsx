@@ -1493,6 +1493,7 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
           const currentLinks = (task.dropbox_links as any[]) ?? [];
           updateTask.mutate({ id: taskId!, dropbox_links: [...currentLinks, { url: result.url, name: result.name, added_at: new Date().toISOString() }] });
           setScannedFile(null);
+          setShowDropboxUpload(false);
         }}
       />
       <DropboxFilePicker open={showCommentDropbox} onClose={() => setShowCommentDropbox(false)} onSelect={(file) => setCommentAttachments(prev => [...prev, { type: "dropbox", name: file.name, url: file.url }])} />

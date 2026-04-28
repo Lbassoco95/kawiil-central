@@ -1,4 +1,13 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  createContext,
+  useContext,
+  createElement,
+  type ReactNode,
+} from "react";
 import type { ChatProgressStep } from "@/components/ai/ChatProcessingPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -114,6 +123,9 @@ export interface SendMessageOptions {
 }
 
 const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
+
+/** Última conversación activa por usuario (F5 / retomar en widget). */
+const LAST_CONV_KEY_PREFIX = "kawiil.chat.lastConversation:";
 
 /** Tras un resultado de agente muy largo, se dispara en segundo plano `extract-ai-memories` (memorias estructuradas). */
 const AGENT_RESULT_MEMORY_EXTRACT_MIN_CHARS = 6000;
@@ -365,7 +377,7 @@ async function runChatPdfIndexingInBackground(
   }
 }
 
-export function useChat() {
+function useChatState() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1312,7 +1324,14 @@ export function useChat() {
     setPdfIndexingStatus(null);
     setAgentSession(null);
     agentSessionRef.current = null;
-  }, []);
+    if (user) {
+      try {
+        sessionStorage.removeItem(`${LAST_CONV_KEY_PREFIX}${user.id}`);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [user]);
 
   const setAiProject = useCallback((projectId: string | null) => {
     setActiveAiProjectId(projectId);
@@ -1321,7 +1340,49 @@ export function useChat() {
     setPdfIndexingStatus(null);
     setAgentSession(null);
     agentSessionRef.current = null;
-  }, []);
+    if (user) {
+      try {
+        sessionStorage.removeItem(`${LAST_CONV_KEY_PREFIX}${user.id}`);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !activeConversationId) return;
+    try {
+      sessionStorage.setItem(`${LAST_CONV_KEY_PREFIX}${user.id}`, activeConversationId);
+    } catch {
+      /* ignore */
+    }
+  }, [user, activeConversationId]);
+
+  const rehydrateRef = useRef(false);
+  useEffect(() => {
+    rehydrateRef.current = false;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user || rehydrateRef.current) return;
+    if (messages.length > 0 || activeConversationId) {
+      rehydrateRef.current = true;
+      return;
+    }
+    let saved: string | null = null;
+    try {
+      saved = sessionStorage.getItem(`${LAST_CONV_KEY_PREFIX}${user.id}`);
+    } catch {
+      rehydrateRef.current = true;
+      return;
+    }
+    if (!saved) {
+      rehydrateRef.current = true;
+      return;
+    }
+    rehydrateRef.current = true;
+    void loadConversation(saved);
+  }, [user, messages.length, activeConversationId, loadConversation]);
 
   return {
     messages,
@@ -1344,4 +1405,21 @@ export function useChat() {
     streamProgressSteps,
     pdfIndexingStatus,
   };
+}
+
+export type ChatContextValue = ReturnType<typeof useChatState>;
+
+const ChatContext = createContext<ChatContextValue | null>(null);
+
+export function ChatProvider({ children }: { children: ReactNode }) {
+  const value = useChatState();
+  return createElement(ChatContext.Provider, { value }, children);
+}
+
+export function useChat(): ChatContextValue {
+  const ctx = useContext(ChatContext);
+  if (!ctx) {
+    throw new Error("useChat debe usarse dentro de ChatProvider");
+  }
+  return ctx;
 }

@@ -1,10 +1,10 @@
 /**
  * Tipos de archivo aceptados para subir documentos / minutas.
  * Incluye formatos que se pueden leer para análisis y propuesta de tareas:
- * PDF, Word, texto plano (TXT, CSV, MD), Office (Excel, PowerPoint), imágenes.
+ * PDF, Word, texto plano (TXT, CSV, MD), Office (Excel, PowerPoint), XML, imágenes.
  */
 export const ACCEPTED_DOCUMENT_EXTENSIONS =
-  ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx,.ppt,.pptx,.zip,image/*";
+  ".pdf,.doc,.docx,.txt,.md,.csv,.xls,.xlsx,.ppt,.pptx,.zip,.xml,image/*";
 
 /** MIME types habituales para los mismos formatos (para validación opcional) */
 export const ACCEPTED_DOCUMENT_MIME_TYPES = [
@@ -18,6 +18,8 @@ export const ACCEPTED_DOCUMENT_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.ms-powerpoint",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/xml",
+  "text/xml",
   "image/jpeg",
   "image/png",
   "image/gif",

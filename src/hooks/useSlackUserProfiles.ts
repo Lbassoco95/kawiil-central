@@ -23,10 +23,13 @@ export function useSlackUserProfiles(userIds: (string | undefined)[]) {
         const data = await invokeSlackApi<{
           ok?: boolean;
           users?: Record<string, SlackUserProfile>;
-        }>({
-          action: "users.info.batch",
-          user_ids: capped,
-        });
+        }>(
+          {
+            action: "users.info.batch",
+            user_ids: capped,
+          },
+          { timeoutMs: 50_000 },
+        );
         if (!data.ok) return {};
         return data.users || {};
       } catch {

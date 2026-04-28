@@ -36,9 +36,10 @@ import {
 } from "lucide-react";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { FileDropzone } from "@/components/shared/FileDropzone";
-import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
+import { batchDocumentFormLimits, withLimits, STANDARD_BATCH_MAX_FILES } from "@/lib/fileIntake/limits";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
+import { toast } from "sonner";
 
 export default function Hub() {
   const { isAdminOrManager } = useUserRole();
@@ -50,7 +51,7 @@ export default function Hub() {
   const [comunicadoDialogOpen, setComunicadoDialogOpen] = useState(false);
   const [procedureTitle, setProcedureTitle] = useState("");
   const [procedureDescription, setProcedureDescription] = useState("");
-  const [procedureFile, setProcedureFile] = useState<File | null>(null);
+  const [procedureFiles, setProcedureFiles] = useState<File[]>([]);
   const [comunicadoTitle, setComunicadoTitle] = useState("");
   const [comunicadoBody, setComunicadoBody] = useState("");
   const [comunicadoPinned, setComunicadoPinned] = useState(false);
@@ -84,12 +85,31 @@ export default function Hub() {
     },
   ];
 
-  const handleUploadProcedure = () => {
-    if (!procedureTitle.trim() || !procedureFile) return;
-    createProcedure.mutate(
-      { title: procedureTitle.trim(), description: procedureDescription.trim() || undefined, file: procedureFile },
-      { onSuccess: () => { setProcedureDialogOpen(false); setProcedureTitle(""); setProcedureDescription(""); setProcedureFile(null); } }
-    );
+  const handleUploadProcedure = async () => {
+    if (!procedureTitle.trim() || procedureFiles.length === 0) return;
+    const list = procedureFiles.slice(0, STANDARD_BATCH_MAX_FILES);
+    const n = list.length;
+    try {
+      for (let i = 0; i < n; i++) {
+        const file = list[i];
+        const title = n === 1 ? procedureTitle.trim() : `${procedureTitle.trim()} — ${file.name}`;
+        await createProcedure.mutateAsync({
+          title,
+          description: procedureDescription.trim() || undefined,
+          file,
+          quiet: i < n - 1,
+        });
+      }
+      if (n > 1) {
+        toast.success(`${n} procedimientos subidos`);
+      }
+      setProcedureDialogOpen(false);
+      setProcedureTitle("");
+      setProcedureDescription("");
+      setProcedureFiles([]);
+    } catch {
+      // El hook ya muestra el error
+    }
   };
 
   const handlePublishComunicado = () => {
@@ -432,16 +452,16 @@ export default function Hub() {
               <Textarea value={procedureDescription} onChange={(e) => setProcedureDescription(e.target.value)} placeholder="Breve descripción" rows={2} className="text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Archivo *</Label>
+              <Label className="text-xs">Archivos *</Label>
               <FileDropzone
-                files={procedureFile ? [procedureFile] : []}
-                onChange={(files) => setProcedureFile(files[0] ?? null)}
-                limits={withLimits(singleFileLimits, {
+                files={procedureFiles}
+                onChange={setProcedureFiles}
+                limits={withLimits(batchDocumentFormLimits, {
                   accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*",
                 })}
                 variant="area"
-                hint="Arrastra el archivo o haz click"
-                subhint="PDF, Office, texto o imagen"
+                hint="Arrastra archivos o haz click"
+                subhint={`Hasta ${STANDARD_BATCH_MAX_FILES} archivos; PDF, Office, texto o imagen`}
                 showSize
               />
             </div>
@@ -452,8 +472,8 @@ export default function Hub() {
               size="sm"
               className="text-white hover:opacity-95"
               style={{ background: KAWIIL_AI_GRADIENT }}
-              onClick={handleUploadProcedure}
-              disabled={createProcedure.isPending || !procedureTitle.trim() || !procedureFile}
+              onClick={() => void handleUploadProcedure()}
+              disabled={createProcedure.isPending || !procedureTitle.trim() || procedureFiles.length === 0}
             >
               {createProcedure.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               Subir

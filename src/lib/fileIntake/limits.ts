@@ -40,9 +40,12 @@ export interface FileIntakeLimits {
 
 const MB = 1024 * 1024;
 
+/** Tope de archivos por una sola selección de adjuntos o documento genérico (producto). */
+export const STANDARD_BATCH_MAX_FILES = 10;
+
 /** Preset usado por el chat IA (alineado con el modelo y Storage). */
 export const chatLimits: FileIntakeLimits = {
-  maxFiles: 20,
+  maxFiles: STANDARD_BATCH_MAX_FILES,
   maxBytesPerFile: 20 * MB,
   maxBatchBytes: 100 * MB,
   zipMode: "expand",
@@ -53,11 +56,11 @@ export const chatLimits: FileIntakeLimits = {
 
 /** Preset para subida de documentos en proyectos / KnowledgePanel. */
 export const documentsLimits: FileIntakeLimits = {
-  maxFiles: 50,
+  maxFiles: STANDARD_BATCH_MAX_FILES,
   maxBytesPerFile: 50 * MB,
-  maxBatchBytes: 500 * MB,
-  /** Office completo (incl. .ppt/.pptx) + XML/JSON usados en facturación y datos. */
-  accept: `${ACCEPTED_DOCUMENT_EXTENSIONS},.xml,.json`,
+  maxBatchBytes: 50 * MB * STANDARD_BATCH_MAX_FILES,
+  /** Office + XML en ACCEPTED_DOCUMENT_EXTENSIONS + JSON (facturación/datos). */
+  accept: `${ACCEPTED_DOCUMENT_EXTENSIONS},.json`,
   zipMode: "auto",
   clientUnzipMaxBytes: 25 * MB,
   maxZipEntriesForClientExpand: 150,
@@ -77,7 +80,7 @@ export const emailLimits: FileIntakeLimits = {
 
 /** Preset para comprobantes de gastos (XML, PDF, imagenes). */
 export const expensesLimits: FileIntakeLimits = {
-  maxFiles: 20,
+  maxFiles: STANDARD_BATCH_MAX_FILES,
   maxBytesPerFile: 15 * MB,
   maxBatchBytes: 80 * MB,
   accept: ".pdf,.xml,.png,.jpg,.jpeg,.zip",
@@ -89,7 +92,7 @@ export const expensesLimits: FileIntakeLimits = {
 
 /** Preset generico (tareas, comentarios, hub, etc.). */
 export const genericLimits: FileIntakeLimits = {
-  maxFiles: 30,
+  maxFiles: STANDARD_BATCH_MAX_FILES,
   maxBytesPerFile: 30 * MB,
   maxBatchBytes: 150 * MB,
   zipMode: "expand",
@@ -98,11 +101,35 @@ export const genericLimits: FileIntakeLimits = {
   deferLargeZipToServer: true,
 };
 
-/** Preset minimo para casos donde solo se permite un archivo (Hub procedimiento). */
+/**
+ * Subida a Slack (Comunicación): un solo ZIP como un archivo, mismo tope 10; alineado con 50 MB/archivo.
+ */
+export const slackUploadLimits: FileIntakeLimits = {
+  maxFiles: STANDARD_BATCH_MAX_FILES,
+  maxBytesPerFile: 50 * MB,
+  maxBatchBytes: 50 * MB * STANDARD_BATCH_MAX_FILES,
+  zipMode: "keep",
+  clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: false,
+};
+
+/** Preset minimo para casos donde solo se permite un archivo (p. ej. excepciones técnicas). */
 export const singleFileLimits: FileIntakeLimits = {
   maxFiles: 1,
   maxBytesPerFile: 50 * MB,
   maxBatchBytes: 50 * MB,
+  zipMode: "keep",
+  clientUnzipMaxBytes: 25 * MB,
+  maxZipEntriesForClientExpand: 150,
+  deferLargeZipToServer: false,
+};
+
+/** Mismo criterio que un solo subida documental, pero lote de hasta 10 (Hub, procedimientos). */
+export const batchDocumentFormLimits: FileIntakeLimits = {
+  maxFiles: STANDARD_BATCH_MAX_FILES,
+  maxBytesPerFile: 50 * MB,
+  maxBatchBytes: 50 * MB * STANDARD_BATCH_MAX_FILES,
   zipMode: "keep",
   clientUnzipMaxBytes: 25 * MB,
   maxZipEntriesForClientExpand: 150,

@@ -1596,7 +1596,7 @@ const AsistenteIA = () => {
           if (!o) setArtifactDialogArtifact(null);
         }}
       >
-        <DialogContent className="w-[min(96vw,1400px)] max-w-[min(96vw,1400px)] max-h-[92vh] h-[min(92vh,900px)] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-lg">
+        <DialogContent className="w-[min(98vw,1680px)] sm:w-[min(98vw,1680px)] max-w-[min(98vw,1680px)] sm:max-w-[min(98vw,1680px)] max-h-[92vh] h-[min(92vh,900px)] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-lg">
           <DialogHeader className="sr-only">
             <DialogTitle>Artefacto</DialogTitle>
           </DialogHeader>

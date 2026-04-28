@@ -17,12 +17,12 @@ import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 import { slackUserDisplayName } from "./slackGrouping";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useFileIntake } from "@/hooks/useFileIntake";
+import { slackUploadLimits } from "@/lib/fileIntake/limits";
 
 const EMOJI_PICKER_KEYS = Object.keys(SLACK_EMOJI).slice(0, 48);
 
 const MENTION_LIST_CAP = 120;
-
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 /** Slack reproduce bien AAC/M4A; WebM/Opus a veces se sube pero no suena en algunos clientes. Preferir MP4 cuando MediaRecorder lo permita. */
 const VOICE_RECORD_MIME_PRIORITY = [
@@ -75,7 +75,7 @@ type Props = {
   /** `messageText` es el borrador actual del compositor (incl. hilo). Puede devolver una promesa. */
   onSchedule?: (postAtUnixSeconds: number, messageText: string) => void | Promise<void>;
   scheduling?: boolean;
-  onUploadFile?: (file: File, initialComment?: string) => void;
+  onUploadFiles?: (files: File[], initialComment?: string) => void | Promise<void>;
   uploading?: boolean;
   showRestoreDraft?: boolean;
   onRestoreDraft?: () => void;
@@ -100,7 +100,7 @@ export function SlackComposer({
   compact,
   onSchedule,
   scheduling,
-  onUploadFile,
+  onUploadFiles,
   uploading,
   showRestoreDraft,
   onRestoreDraft,
@@ -124,6 +124,23 @@ export function SlackComposer({
   const streamRef = useRef<MediaStream | null>(null);
   /** MIME real de la grabación (el Blob debe coincidir; antes se forzaba webm y Safari/MP4 quedaba corrupto para Slack). */
   const recMimeRef = useRef<string>("");
+
+  const [slackStaged, setSlackStaged] = useState<File[]>([]);
+  const onSlackIntakeChange = useCallback(
+    (next: File[]) => {
+      if (next.length === 0 || !onUploadFiles) return;
+      const cap = value.trim() || undefined;
+      setSlackStaged([]);
+      void Promise.resolve(onUploadFiles(next, cap));
+    },
+    [onUploadFiles, value],
+  );
+  const intake = useFileIntake({
+    files: slackStaged,
+    onChange: onSlackIntakeChange,
+    limits: slackUploadLimits,
+    accept: "*/*",
+  });
 
   useEffect(() => {
     const el = ta.current;
@@ -251,18 +268,6 @@ export function SlackComposer({
     submit();
   };
 
-  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f || !onUploadFile) return;
-    if (f.size > MAX_FILE_BYTES) {
-      toast.error("El archivo supera 50 MB");
-      return;
-    }
-    const cap = value.trim() || undefined;
-    onUploadFile(f, cap);
-  };
-
   const stopRecording = useCallback(() => {
     mediaRecRef.current?.stop();
     mediaRecRef.current = null;
@@ -271,7 +276,7 @@ export function SlackComposer({
   }, []);
 
   const startRecording = async () => {
-    if (!onUploadFile || disabled || sending || uploading) return;
+    if (!onUploadFiles || disabled || sending || uploading) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -309,7 +314,7 @@ export function SlackComposer({
 
   const sendRecording = () => {
     const parts = recChunksRef.current;
-    if (!onUploadFile || parts.length === 0) {
+    if (!onUploadFiles || parts.length === 0) {
       cancelRecording();
       return;
     }
@@ -322,7 +327,7 @@ export function SlackComposer({
     recMimeRef.current = "";
     setRecState("idle");
     const cap = value.trim() ? value.trim() : "Nota de voz";
-    onUploadFile(file, cap);
+    onUploadFiles([file], cap);
   };
 
   const applySchedule = () => {
@@ -358,7 +363,7 @@ export function SlackComposer({
     ? `Escribe un mensaje en ${channelLabel.includes("#") || channelLabel.length < 2 ? channelLabel : `«${channelLabel}»`}…`
     : "Escribe un mensaje…";
 
-  const busy = disabled || sending || scheduling || uploading;
+  const busy = disabled || sending || scheduling || uploading || intake.isProcessing;
 
   const iconBtnClass = compact ? "h-8 w-8 shrink-0 rounded-md" : "h-9 w-9 shrink-0 rounded-lg";
   const iconClass = compact ? "h-3.5 w-3.5" : "h-4 w-4";
@@ -415,8 +420,13 @@ export function SlackComposer({
         name="slack_adjunto"
         type="file"
         className="hidden"
-        onChange={onPickFile}
+        multiple
         accept="*/*"
+        disabled={disabled || sending || scheduling || uploading}
+        onChange={async (e) => {
+          await intake.addFiles(e.target.files);
+          e.target.value = "";
+        }}
       />
       {aiUndo != null && (
         <div
@@ -522,7 +532,7 @@ export function SlackComposer({
             </div>
           </PopoverContent>
         </Popover>
-        {onUploadFile && compact && recState === "idle" && (
+        {onUploadFiles && compact && recState === "idle" && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -533,7 +543,7 @@ export function SlackComposer({
                 disabled={busy}
                 title="Adjuntos y voz"
               >
-                {uploading ? <Loader2 className={`${iconClass} animate-spin`} /> : <Paperclip className={iconClass} />}
+                {uploading || intake.isProcessing ? <Loader2 className={`${iconClass} animate-spin`} /> : <Paperclip className={iconClass} />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
@@ -543,7 +553,7 @@ export function SlackComposer({
                   window.setTimeout(() => fileInputRef.current?.click(), 0);
                 }}
               >
-                Adjuntar archivo…
+                Adjuntar archivos (máx. 10)…
               </DropdownMenuItem>
               <DropdownMenuItem disabled={busy} onSelect={() => void startRecording()}>
                 Nota de voz…
@@ -551,20 +561,20 @@ export function SlackComposer({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {onUploadFile && !compact && (
+        {onUploadFiles && !compact && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
             className={iconBtnClass}
             disabled={busy}
-            title="Adjuntar archivo (máx. 50 MB)"
+            title="Adjuntar archivos (máx. 10, 50 MB c/u)"
             onClick={() => fileInputRef.current?.click()}
           >
-            {uploading ? <Loader2 className={`${iconClass} animate-spin`} /> : <Paperclip className={iconClass} />}
+            {uploading || intake.isProcessing ? <Loader2 className={`${iconClass} animate-spin`} /> : <Paperclip className={iconClass} />}
           </Button>
         )}
-        {onUploadFile && !compact && (
+        {onUploadFiles && !compact && (
           <>
             {recState === "recording" ? (
               <Button
@@ -601,7 +611,7 @@ export function SlackComposer({
             )}
           </>
         )}
-        {onUploadFile && compact && recState === "recording" && (
+        {onUploadFiles && compact && recState === "recording" && (
           <Button
             type="button"
             variant="destructive"
@@ -613,7 +623,7 @@ export function SlackComposer({
             <Square className={iconClass} />
           </Button>
         )}
-        {onUploadFile && compact && recState === "stopped" && (
+        {onUploadFiles && compact && recState === "stopped" && (
           <>
             <Button type="button" variant="secondary" size="sm" className="shrink-0 h-8 text-xs px-2" onClick={cancelRecording}>
               Cancelar

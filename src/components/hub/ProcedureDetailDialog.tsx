@@ -18,7 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { FileDropzone } from "@/components/shared/FileDropzone";
-import { singleFileLimits, withLimits } from "@/lib/fileIntake/limits";
+import { batchDocumentFormLimits, withLimits, STANDARD_BATCH_MAX_FILES } from "@/lib/fileIntake/limits";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -58,7 +59,7 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
   const [tab, setTab] = useState<"preview" | "versions" | "comments">("preview");
   const [commentText, setCommentText] = useState("");
   const [newVersionDialogOpen, setNewVersionDialogOpen] = useState(false);
-  const [newVersionFile, setNewVersionFile] = useState<File | null>(null);
+  const [newVersionFiles, setNewVersionFiles] = useState<File[]>([]);
   const [newVersionNotes, setNewVersionNotes] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -106,23 +107,33 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
     );
   };
 
-  const handleUploadNewVersion = () => {
-    if (!newVersionFile || !procedure) return;
-    uploadVersion.mutate(
-      {
-        procedureId: procedure.id,
-        file: newVersionFile,
-        changeNotes: newVersionNotes.trim() || undefined,
-        currentVersion: procedure.current_version || versions.length || 1,
-      },
-      {
-        onSuccess: () => {
-          setNewVersionDialogOpen(false);
-          setNewVersionFile(null);
-          setNewVersionNotes("");
-        },
+  const handleUploadNewVersion = async () => {
+    if (newVersionFiles.length === 0 || !procedure) return;
+    const list = newVersionFiles.slice(0, STANDARD_BATCH_MAX_FILES);
+    let currentV = procedure.current_version || 1;
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        const res = await uploadVersion.mutateAsync({
+          procedureId: procedure.id,
+          file: f,
+          changeNotes: newVersionNotes.trim() || undefined,
+          currentVersion: currentV,
+          quiet: i < list.length - 1,
+        });
+        if (res && "version" in res) {
+          currentV = (res as { version: number }).version;
+        }
       }
-    );
+      if (list.length > 1) {
+        toast.success(`Se subieron ${list.length} versiones (ahora v${currentV})`);
+      }
+      setNewVersionDialogOpen(false);
+      setNewVersionFiles([]);
+      setNewVersionNotes("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al subir versión");
+    }
   };
 
   if (!procedure) return null;
@@ -320,16 +331,16 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Archivo *</Label>
+              <Label>Archivos *</Label>
               <FileDropzone
-                files={newVersionFile ? [newVersionFile] : []}
-                onChange={(files) => setNewVersionFile(files[0] ?? null)}
-                limits={withLimits(singleFileLimits, {
+                files={newVersionFiles}
+                onChange={setNewVersionFiles}
+                limits={withLimits(batchDocumentFormLimits, {
                   accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,image/*",
                 })}
                 variant="area"
-                hint="Arrastra el archivo o haz click"
-                subhint="PDF, Office, texto o imagen"
+                hint="Arrastra archivos o haz click"
+                subhint={`Hasta ${STANDARD_BATCH_MAX_FILES} archivos; PDF, Office, texto o imagen`}
                 showSize
               />
             </div>
@@ -345,7 +356,10 @@ export function ProcedureDetailDialog({ procedure, open, onOpenChange }: Procedu
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewVersionDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleUploadNewVersion} disabled={uploadVersion.isPending || !newVersionFile}>
+            <Button
+              onClick={() => void handleUploadNewVersion()}
+              disabled={uploadVersion.isPending || newVersionFiles.length === 0}
+            >
               {uploadVersion.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Subir v{(procedure?.current_version || 1) + 1}
             </Button>

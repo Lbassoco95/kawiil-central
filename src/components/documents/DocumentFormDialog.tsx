@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Loader2, Cloud, HardDrive } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
 import { FileDropzone } from "@/components/shared/FileDropzone";
-import { documentsLimits, withLimits } from "@/lib/fileIntake/limits";
+import { documentsLimits, STANDARD_BATCH_MAX_FILES, withLimits } from "@/lib/fileIntake/limits";
 import { getZipIntakeMarker } from "@/lib/fileIntake/zipMarkers";
 import { postProcessUploadedDocument } from "@/lib/fileIntake/zipUploadPipeline";
 
@@ -25,7 +25,7 @@ interface Props {
 
 export function DocumentFormDialog({ open, onOpenChange }: Props) {
   const [name, setName] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [documentType, setDocumentType] = useState("");
@@ -35,78 +35,104 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
   const { data: clients } = useClients();
   const { data: projects } = useProjects();
 
-  const dropzoneFiles = file ? [file] : [];
   const handleDropzoneChange = (next: File[]) => {
-    const selected = next[0] ?? null;
-    setFile(selected);
-    if (selected && !name) setName(selected.name);
+    setFiles(next);
+    if (next[0] && !name) setName(next[0].name);
   };
   const MB = 1024 * 1024;
   const dropzoneLimits = withLimits(documentsLimits, {
     accept: ACCEPTED_DOCUMENT_EXTENSIONS,
-    maxFiles: 1,
-    maxBatchBytes: 52 * MB,
+    maxFiles: STANDARD_BATCH_MAX_FILES,
+    maxBatchBytes: 52 * MB * STANDARD_BATCH_MAX_FILES,
     maxZipEntriesForClientExpand: 0,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !name.trim()) return;
+    if (files.length === 0 || !name.trim()) return;
     setSubmitting(true);
+    const list = files.slice(0, STANDARD_BATCH_MAX_FILES);
+    let anyDropboxFailed = false;
+    const n = list.length;
+    let completed = 0;
 
-    let dropboxUrl = "";
-    let dropboxFailed = false;
-
-    // 1) Try uploading to Dropbox first
     try {
-      const selectedClient = clients?.find((c) => c.id === clientId);
-      const basePath = selectedClient?.dropbox_folder_path || kawiilTeamPath("DOCUMENTOS");
-      const uploadPath = `${basePath}/${file.name}`;
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i];
+        const docName =
+          n === 1 ? name.trim() : `${name.trim()} — ${file.name}`;
 
-      const result = await uploadFileToDropbox(file, uploadPath);
-      dropboxUrl = result.url;
-      toast.success("Archivo subido a Dropbox", { duration: 2000 });
-    } catch (err: any) {
-      dropboxFailed = true;
-      console.warn("Dropbox upload failed, saving locally:", err.message);
-      toast.warning("No se pudo subir a Dropbox. Se guardará localmente.", { duration: 4000 });
-    }
+        let dropboxUrl = "";
+        let dropboxFailed = false;
+        try {
+          const selectedClient = clients?.find((c) => c.id === clientId);
+          const basePath = selectedClient?.dropbox_folder_path || kawiilTeamPath("DOCUMENTOS");
+          const uniqueName = `${Date.now()}_${i}_${file.name.replace(/[\\/]+/g, "_")}`;
+          const uploadPath = `${basePath}/${uniqueName}`;
 
-    // 2) Always save in the app (local storage + DB record)
-    const zm = file ? getZipIntakeMarker(file) : undefined;
-    const zipMeta: Json | undefined =
-      zm?.kind === "server_deferred" ? { zip_container: true } : undefined;
-
-    createDocument.mutate(
-      {
-        name: name.trim(),
-        source: dropboxUrl ? "dropbox" : "supabase",
-        file: file,
-        external_path: dropboxUrl || undefined,
-        client_id: clientId || undefined,
-        project_id: projectId || undefined,
-        document_type: documentType || undefined,
-        metadata: zipMeta,
-      },
-      {
-        onSuccess: async (data) => {
-          if (file && data.source === "supabase") {
-            await postProcessUploadedDocument(data.id, file);
+          const result = await uploadFileToDropbox(file, uploadPath);
+          dropboxUrl = result.url;
+          if (n === 1) {
+            toast.success("Archivo subido a Dropbox", { duration: 2000 });
           }
-          onOpenChange(false);
-          resetForm();
-          if (!dropboxFailed) {
-            toast.success("Documento guardado en Dropbox y en la aplicación");
+        } catch (err: any) {
+          dropboxFailed = true;
+          anyDropboxFailed = true;
+          console.warn("Dropbox upload failed, saving locally:", err.message);
+          if (n === 1) {
+            toast.warning("No se pudo subir a Dropbox. Se guardará localmente.", { duration: 4000 });
           }
-        },
-        onSettled: () => setSubmitting(false),
+        }
+
+        const zm = file ? getZipIntakeMarker(file) : undefined;
+        const zipMeta: Json | undefined =
+          zm?.kind === "server_deferred" ? { zip_container: true } : undefined;
+
+        const res = await createDocument.mutateAsync({
+          name: docName,
+          source: dropboxUrl ? "dropbox" : "supabase",
+          file,
+          external_path: dropboxUrl || undefined,
+          client_id: clientId || undefined,
+          project_id: projectId || undefined,
+          document_type: documentType || undefined,
+          metadata: zipMeta,
+          quiet: true,
+        });
+        const data = (res as { data: { id: string; source: string } }).data;
+        if (file && data.source === "supabase") {
+          await postProcessUploadedDocument(data.id, file);
+        }
+        completed += 1;
       }
-    );
+
+      onOpenChange(false);
+      resetForm();
+      if (n > 1) {
+        if (!anyDropboxFailed) {
+          toast.success(
+            `${completed} documentos guardados en Dropbox y en la aplicación`,
+          );
+        } else {
+          toast.success(`${completed} documento(s) guardados (algunos sin Dropbox)`);
+        }
+      } else {
+        if (!anyDropboxFailed) {
+          toast.success("Documento guardado en Dropbox y en la aplicación");
+        } else {
+          toast.success("Documento registrado (respaldo local; Dropbox no disponible)");
+        }
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Error al subir");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const resetForm = () => {
     setName("");
-    setFile(null);
+    setFiles([]);
     setClientId("");
     setProjectId("");
     setDocumentType("");
@@ -144,13 +170,13 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
               PDF, Word (.doc, .docx), texto (.txt, .csv, .md), Excel, PowerPoint o imágenes
             </p>
             <FileDropzone
-              files={dropzoneFiles}
+              files={files}
               onChange={handleDropzoneChange}
               limits={dropzoneLimits}
               variant="area"
               showSize
-              hint="Arrastra el archivo aqui o haz click"
-              subhint="Un archivo a la vez"
+              hint="Arrastra archivos aqui o haz click"
+              subhint={`Hasta ${STANDARD_BATCH_MAX_FILES} archivos a la vez`}
             />
           </div>
 
@@ -193,7 +219,7 @@ export function DocumentFormDialog({ open, onOpenChange }: Props) {
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={submitting || !file || !name.trim()}>
+            <Button type="submit" disabled={submitting || files.length === 0 || !name.trim()}>
               {submitting ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Subiendo...</>
               ) : (

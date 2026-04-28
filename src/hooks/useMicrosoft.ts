@@ -798,12 +798,35 @@ export function useArchiveEmail() {
   });
 }
 
+export type MailFoldersMeta = {
+  truncated?: boolean;
+  partialChildErrors?: number;
+  usedRootOnlyFallback?: boolean;
+  rootOnlyFallbackReason?: string;
+};
+
+export type MailFoldersQueryData = {
+  folders: unknown[];
+  meta: MailFoldersMeta | undefined;
+};
+
+function parseMailFoldersResponse(data: unknown): MailFoldersQueryData {
+  if (Array.isArray(data)) {
+    return { folders: data, meta: undefined };
+  }
+  if (data && typeof data === "object" && "folders" in data && Array.isArray((data as { folders: unknown }).folders)) {
+    const o = data as { folders: unknown[]; mailFoldersMeta?: MailFoldersMeta };
+    return { folders: o.folders, meta: o.mailFoldersMeta };
+  }
+  return { folders: [], meta: undefined };
+}
+
 export function useMailFolders() {
   const { user } = useAuth();
 
   return useQuery({
     queryKey: ["mail-folders"],
-    queryFn: async () => {
+    queryFn: async (): Promise<MailFoldersQueryData> => {
       debugMicrosoftRuntimeLog(
         "pre-fix",
         "H2_MAIL_FOLDERS_GRAPH_NOT_FOUND",
@@ -828,7 +851,9 @@ export function useMailFolders() {
           errBodySnippet: errBody.slice(0, 260),
         },
       );
-      if (isNotConnectedError(data, error)) return [];
+      if (isNotConnectedError(data, error)) {
+        return { folders: [], meta: undefined };
+      }
       if (payloadIndicatesItemNotFound(data, error, errBody)) {
         debugMicrosoftRuntimeLog(
           "post-fix",
@@ -837,10 +862,10 @@ export function useMailFolders() {
           "ITEM_NOT_FOUND en mail-folders tratado como lista vacía",
           {},
         );
-        return [];
+        return { folders: [], meta: undefined };
       }
       if (error) throw error;
-      return Array.isArray(data) ? data : [];
+      return parseMailFoldersResponse(data);
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,

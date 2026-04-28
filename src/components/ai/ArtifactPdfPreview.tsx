@@ -67,10 +67,12 @@ export function ArtifactPdfPreview({ bucket, path, fitContainer = true }: Artifa
   }
 
   return (
-    <div className={`${fitContainer ? "h-full" : "h-[720px]"} w-full bg-muted/20`}>
+    <div
+      className={`${fitContainer ? "h-full min-h-[min(70vh,800px)]" : "h-[720px] min-h-[min(70vh,800px)]"} w-full bg-muted/20 flex flex-col`}
+    >
       <iframe
-        src={`${url}#toolbar=1&navpanes=0&view=FitH`}
-        className="w-full h-full"
+        src={`${url}#toolbar=1&navpanes=0&view=FitV`}
+        className="w-full flex-1 min-h-0 h-full"
         title="Preview del documento PDF"
       />
       <div className="sr-only">

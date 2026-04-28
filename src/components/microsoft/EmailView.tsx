@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useId,
   useMemo,
   type ComponentType,
   type Dispatch,
@@ -76,7 +77,7 @@ import {
   Sparkles, Languages, ListTodo, Inbox, SendHorizonal,
   FileText, Trash2, AlertCircle, FolderOpen, ChevronDown, ChevronRight,
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
-  Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, RefreshCw,
+  Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, ListOrdered, RefreshCw,
   Eye, Download, CalendarClock, Copy, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   GripVertical,
 } from "lucide-react";
@@ -577,6 +578,8 @@ function triggerBlobDownload(blobUrl: string, filename: string) {
 
 const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 const LS_EMAIL_FOLDERS_EXPANDED_IDS = "kawiil-email-folders-expanded-ids";
+/** Una sola vez por navegador: expande Bandeja de entrada si tiene subcarpetas (paridad con Outlook). */
+const LS_EMAIL_FOLDERS_INBOX_AUTO_EXPAND_DONE = "kawiil-email-folders-inbox-auto-expand-v1";
 
 function readExpandedFolderIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -637,18 +640,23 @@ function EmailFolderTreeItem({
   dragOverFolderId,
   folderRow,
 }: EmailFolderTreeItemProps) {
-  if (!folder?.id || !folderVisibleIds.has(folder.id)) return null;
+  const orphanStableId = useId();
+  const folderIdSafe = typeof folder?.id === "string" ? folder.id : "";
+  const visible = !!(folderIdSafe && folderVisibleIds.has(folderIdSafe));
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: folderIdSafe || `email-folder-ph:${orphanStableId}`,
+    disabled: !visible || !folderIdSafe,
+    data: { parentKey: parentListKey, type: "email-folder-sidebar" },
+  });
+
+  if (!visible || !folderIdSafe || !folder) return null;
 
   const allKids = orderedFolderChildrenMap.get(folder.id) ?? [];
   const kids = allKids.filter((k: any) => folderVisibleIds.has(k.id));
   const hasChildren = kids.length > 0;
   const expanded = expandedFolderIds.has(folder.id);
   const { Icon, label, isActive, folderBadge, dragHandlers, onSelect } = folderRow(folder);
-
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: folder.id,
-    data: { parentKey: parentListKey, type: "email-folder-sidebar" },
-  });
   const sortableStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -840,6 +848,21 @@ export function EmailView() {
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
+  const resetAction = useCallback(() => {
+    setEmailAction(null);
+    setDraftHtml("");
+    setDraftId(null);
+    setForwardTo("");
+    setForwardCc("");
+    setForwardBcc("");
+    setReplyTo("");
+    setReplyCc("");
+    setReplyBcc("");
+    setReplyFiles([]);
+    setRequestDeliveryReceipt(false);
+    setRequestReadReceipt(false);
+  }, []);
+
   const { data: outlookCategories = [] } = useOutlookCategories();
   const categoryColorMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -879,7 +902,8 @@ export function EmailView() {
     setFolderOrderByParent(readEmailFolderOrder(user.id));
   }, [user?.id]);
 
-  const { data: folders = [] } = useMailFolders();
+  const { data: mailFoldersData } = useMailFolders();
+  const folders = (mailFoldersData?.folders ?? []) as any[];
   const draftsFolderId = useMemo(() => {
     const f = (folders as { id?: string; displayName?: string; wellKnownName?: string; wellKnownFolderName?: string }[]).find((x) => {
       const wk = String(x.wellKnownFolderName || x.wellKnownName || "").toLowerCase();
@@ -917,7 +941,11 @@ export function EmailView() {
     error: detailQueryError,
     refetch: refetchEmailDetail,
   } = useEmailDetail(selectedEmailId);
-  const { data: threadEmails = [] } = useEmailConversation(emailDetail?.conversationId || null);
+  const {
+    data: threadEmails = [],
+    isLoading: threadConvLoading,
+    isFetching: threadConvFetching,
+  } = useEmailConversation(emailDetail?.conversationId || null);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
   const markRead = useMarkEmailRead();
@@ -1031,6 +1059,63 @@ export function EmailView() {
     }
     return out;
   }, [mergedFolderOrderByParent, folderChildrenMap, folderById]);
+
+  useEffect(() => {
+    const m = mailFoldersData?.meta;
+    if (!m) return;
+    if (m.usedRootOnlyFallback) {
+      toast.warning(
+        "No se pudo cargar el árbol completo de carpetas; solo se muestran las de la raíz. Reintenta en unos segundos o revisa la conexión con Microsoft.",
+        { id: "mail-folders-root-fallback", duration: 10_000 },
+      );
+      return;
+    }
+    if (m.truncated) {
+      toast.warning(
+        "La lista de carpetas puede estar incompleta por límites del servidor. Si faltan muchas, contacta a soporte.",
+        { id: "mail-folders-truncated", duration: 8_000 },
+      );
+    }
+    if (m.partialChildErrors && m.partialChildErrors > 0) {
+      toast.info(
+        `No se pudieron cargar algunas subcarpetas (${m.partialChildErrors}). El resto debería mostrarse bien.`,
+        { id: "mail-folders-partial", duration: 7_000 },
+      );
+    }
+  }, [
+    mailFoldersData?.meta?.usedRootOnlyFallback,
+    mailFoldersData?.meta?.truncated,
+    mailFoldersData?.meta?.partialChildErrors,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !folderById.size) return;
+    if (foldersCollapsed) return;
+    try {
+      if (localStorage.getItem(LS_EMAIL_FOLDERS_INBOX_AUTO_EXPAND_DONE) === "1") return;
+    } catch {
+      return;
+    }
+    const inbox = [...folderById.values()].find((f: any) => {
+      const wk = String(f.wellKnownFolderName || "").toLowerCase();
+      if (wk === "inbox") return true;
+      const k = normFolderKey(String(f.displayName || ""));
+      return k.includes("inbox") || k.includes("bandejadeentrada");
+    });
+    if (!inbox?.id) return;
+    if ((folderChildrenMap.get(inbox.id) ?? []).length === 0) return;
+    setExpandedFolderIds((prev) => {
+      if (prev.has(inbox.id)) return prev;
+      const next = new Set(prev);
+      next.add(inbox.id);
+      return next;
+    });
+    try {
+      localStorage.setItem(LS_EMAIL_FOLDERS_INBOX_AUTO_EXPAND_DONE, "1");
+    } catch {
+      /* ignore */
+    }
+  }, [folderById, folderChildrenMap, foldersCollapsed]);
 
   const folderDndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -1149,7 +1234,7 @@ export function EmailView() {
     resetAction();
     setQuickAIPrompt(null);
     if (!email.isRead) markRead.mutate(email.id);
-  }, [markRead]);
+  }, [markRead, resetAction]);
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -1454,21 +1539,6 @@ export function EmailView() {
     }
   };
 
-  const resetAction = () => {
-    setEmailAction(null);
-    setDraftHtml("");
-    setDraftId(null);
-    setForwardTo("");
-    setForwardCc("");
-    setForwardBcc("");
-    setReplyTo("");
-    setReplyCc("");
-    setReplyBcc("");
-    setReplyFiles([]);
-    setRequestDeliveryReceipt(false);
-    setRequestReadReceipt(false);
-  };
-
   const handleArchive = useCallback((emailId: string) => {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
     const next = allEmails[idx + 1] || allEmails[idx - 1];
@@ -1477,7 +1547,7 @@ export function EmailView() {
       resetAction();
     }
     archiveEmail.mutate(emailId);
-  }, [archiveEmail, allEmails, selectedEmailId]);
+  }, [archiveEmail, allEmails, selectedEmailId, resetAction]);
 
   const handleDelete = useCallback((emailId: string) => {
     const idx = allEmails.findIndex((e: any) => e.id === emailId);
@@ -1487,7 +1557,7 @@ export function EmailView() {
       resetAction();
     }
     deleteEmail.mutate(emailId);
-  }, [deleteEmail, allEmails, selectedEmailId]);
+  }, [deleteEmail, allEmails, selectedEmailId, resetAction]);
 
   const closeDetailAiPanel = useCallback(() => {
     setDetailAiPanel(null);
@@ -1665,6 +1735,17 @@ export function EmailView() {
       return ta - tb;
     });
   }, [threadEmails, selectedEmailId]);
+
+  /** Reposicionar historial arriba: al cambiar de mensaje, cerrar "expandir todo" para no heredar estado. */
+  const [threadExpandAll, setThreadExpandAll] = useState(false);
+  useEffect(() => {
+    setThreadExpandAll(false);
+  }, [selectedEmailId]);
+
+  const threadHistoryLoading = Boolean(
+    emailDetail && typeof (emailDetail as { conversationId?: string }).conversationId === "string" && (threadConvLoading || (threadConvFetching && threadEmails.length === 0)),
+  );
+  const hasPriorMessages = otherThreadEmails.length > 0;
 
   const threadContextForAi = useMemo(() => {
     if (!selectedEmailId) return "";
@@ -3117,6 +3198,76 @@ export function EmailView() {
                     />
                   </div>
                 )}
+
+                {/* Historial del hilo (arriba, orden antiguo → reciente) para contexto */}
+                {threadHistoryLoading && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-4">
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <ListOrdered className="h-3.5 w-3.5" />
+                      Cargando historial de la conversación…
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+                      <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+                    </div>
+                  </div>
+                )}
+
+                {!threadHistoryLoading && hasPriorMessages && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border border-border/60 bg-gradient-to-b from-muted/30 to-background/30 p-4 sm:p-5 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <ListOrdered className="h-4 w-4 text-primary" />
+                          Historial de la conversación
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                          {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} en este
+                          hilo, del más antiguo al más reciente. Toca cada uno para leerlo completo o abre
+                          todo el contexto.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => setThreadExpandAll((v) => !v)}
+                        >
+                          {threadExpandAll ? "Contraer todo" : "Expandir todo"}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-0.5">
+                      {otherThreadEmails.map((threadEmail: any) => (
+                        <ThreadEmailItem
+                          key={threadEmail.id}
+                          email={threadEmail}
+                          onPreviewAttachment={setAttachmentPreview}
+                          expandAll={threadExpandAll}
+                          onExitExpandAll={() => setThreadExpandAll(false)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!threadHistoryLoading &&
+                  !hasPriorMessages &&
+                  typeof (emailDetail as { conversationId?: string })?.conversationId === "string" &&
+                  (emailDetail as { conversationId: string }).conversationId.trim() && (
+                    <p className="max-w-[min(100%,680px)] mx-auto w-full text-xs text-muted-foreground px-0.5">
+                      Solo un mensaje en este hilo por ahora, o el buzón aún no devolvió el resto. Si
+                      acabas de enviar una respuesta, el historial puede completarse en unos segundos.
+                    </p>
+                  )}
+
+                {(hasPriorMessages || threadHistoryLoading) && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Mensaje que estás leyendo</p>
+                  </div>
+                )}
                 <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border-2 border-primary/15 bg-card/95 shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08] overflow-hidden">
                   <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
                     {emailDetail.body?.contentType === "html" ? (
@@ -3153,23 +3304,6 @@ export function EmailView() {
                             onPreview={setAttachmentPreview}
                           />
                         ))}
-                    </div>
-                  </div>
-                )}
-
-                {otherThreadEmails.length > 0 && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full border-t border-border/50 pt-5">
-                    <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">
-                      {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} anterior{otherThreadEmails.length > 1 ? "es" : ""}
-                    </p>
-                    <div className="space-y-1.5">
-                      {otherThreadEmails.map((threadEmail: any) => (
-                        <ThreadEmailItem
-                          key={threadEmail.id}
-                          email={threadEmail}
-                          onPreviewAttachment={setAttachmentPreview}
-                        />
-                      ))}
                     </div>
                   </div>
                 )}
@@ -3692,28 +3826,37 @@ function EmailAttachmentTile({
 function ThreadEmailItem({
   email,
   onPreviewAttachment,
+  expandAll = false,
+  onExitExpandAll,
 }: {
   email: any;
   onPreviewAttachment: (p: AttachmentPreviewState) => void;
+  expandAll?: boolean;
+  onExitExpandAll?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const isOpen = expandAll || open;
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next && expandAll) onExitExpandAll?.();
+  };
   const senderName = email.from?.emailAddress?.name || email.from?.emailAddress?.address;
   const senderEmail = email.from?.emailAddress?.address || "";
-  const { data: threadAttachments = [] } = useEmailAttachments(open ? email.id : undefined);
+  const { data: threadAttachments = [] } = useEmailAttachments(isOpen ? email.id : undefined);
   const { html: resolvedThreadHtml, loading: threadBodyLoading } = useResolvedEmailHtml(
-    open ? email.id : undefined,
+    isOpen ? email.id : undefined,
     email.body?.contentType === "html" ? email.body.content : undefined,
     threadAttachments,
   );
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
       <CollapsibleTrigger asChild>
         <button className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-accent/50 rounded-lg transition-colors text-left">
           <div className={cn("h-7 w-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0", getAvatarColor(senderEmail))}>
             {getInitials(senderName, senderEmail)}
           </div>
-          {open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+          {isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
           <span className="font-medium text-foreground truncate">{senderName}</span>
           <span className="text-muted-foreground truncate flex-1">— {email.bodyPreview?.substring(0, 60)}</span>
           <span className="text-xs text-muted-foreground font-normal whitespace-nowrap shrink-0">

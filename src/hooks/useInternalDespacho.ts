@@ -61,7 +61,7 @@ export function useCreateInternalProcedure() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (input: { title: string; description?: string; file: File }) => {
+    mutationFn: async (input: { title: string; description?: string; file: File; quiet?: boolean }) => {
       const { data: profile } = await supabase
         .from("profiles")
         .select("organization_id")
@@ -110,12 +110,12 @@ export function useCreateInternalProcedure() {
         details: { title: data.title },
       });
 
-      return data;
+      return { data, quiet: input.quiet };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["internal-procedures"] });
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-hub-log"] });
-      toast.success("Procedimiento subido");
+      if (!result?.quiet) toast.success("Procedimiento subido");
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -126,7 +126,13 @@ export function useUploadNewVersion() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (input: { procedureId: string; file: File; changeNotes?: string; currentVersion: number }) => {
+    mutationFn: async (input: {
+      procedureId: string;
+      file: File;
+      changeNotes?: string;
+      currentVersion: number;
+      quiet?: boolean;
+    }) => {
       const newVersion = input.currentVersion + 1;
       const safeName = sanitizeStorageFileName(input.file.name);
       const filePath = `${INTERNAL_PROCEDURES_PATH}/${Date.now()}_v${newVersion}_${safeName}`;
@@ -172,13 +178,15 @@ export function useUploadNewVersion() {
         });
       }
 
-      return newVersion;
+      return { version: newVersion, quiet: input.quiet };
     },
-    onSuccess: (version) => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["internal-procedures"] });
       queryClient.invalidateQueries({ queryKey: ["procedure-versions"] });
       queryClient.invalidateQueries({ queryKey: ["personal-rendimiento-hub-log"] });
-      toast.success(`Versión ${version} subida`);
+      if (res && !res.quiet) {
+        toast.success(`Versión ${res.version} subida`);
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });

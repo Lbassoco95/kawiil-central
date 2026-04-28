@@ -17,12 +17,18 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import {
   markSlackConversationRead,
   invokeSlackApi,
+  withHardTimeout,
   invokeSlackFileUpload,
   formatSlackHistoryLoadError,
   isSlackPermissionDeniedMessage,
+  formatSlackFileUploadError,
+  extractSlackInvokeError,
+  formatSlackChatWriteError,
   SLACK_CHAT_API_PERMISSION_HINT,
   SLACK_REACTIONS_PERMISSION_HINT,
   SLACK_FILE_UPLOAD_PERMISSION_HINT,
+  SLACK_HELP_RESTRICTED_FILE_TYPES_URL,
+  SLACK_HELP_MANAGE_CONNECT_FILE_UPLOADS_URL,
   SLACK_PERMISSION_TOAST_MS,
   type SlackConversation,
   type SlackMessage,
@@ -46,6 +52,7 @@ import { SlackActivityPanel } from "@/components/slack/SlackActivityPanel";
 import { SlackLaterPanel } from "@/components/slack/SlackLaterPanel";
 import { SlackChannelInlineSummary } from "@/components/slack/SlackChannelInlineSummary";
 import { SlackQuickReplyBar } from "@/components/slack/SlackQuickReplyBar";
+import { SlackChatFileDropZone } from "@/components/slack/SlackChatFileDropZone";
 import { SlackNewDmDialog } from "@/components/slack/SlackNewDmDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 import { Button } from "@/components/ui/button";
@@ -69,22 +76,6 @@ type HistoryPage = {
   messages: SlackMessage[];
   nextCursor?: string;
 };
-
-function withHardTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const tid = setTimeout(() => reject(new Error(message)), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(tid);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(tid);
-        reject(error);
-      },
-    );
-  });
-}
 
 function bumpParentReplyInSlackHistory(
   old: InfiniteData<HistoryPage> | undefined,
@@ -124,6 +115,12 @@ function appendChannelMessageToSlackHistory(
 }
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/** Primera página: slack-api puede encadenar join/open + varios `history` (~25s c/u). */
+const SLACK_HISTORY_FIRST_INVOKE_MS = 110_000;
+const SLACK_HISTORY_FIRST_HARD_MS = 118_000;
+const SLACK_HISTORY_NEXT_INVOKE_MS = 55_000;
+const SLACK_HISTORY_NEXT_HARD_MS = 62_000;
 const MPIM_MEMBERS_BATCH = 40;
 /** Límite de MPIM para prefetch de miembros (evita decenas de batches en workspaces grandes). */
 const MAX_MPIMS_MEMBER_PREFETCH = 48;
@@ -549,6 +546,11 @@ export default function Comunicacion() {
         : anchorTs
           ? { ...base, latest: anchorTs }
           : { ...base };
+      const isFirstPage = pageParam == null;
+      const invokeMs = isFirstPage ? SLACK_HISTORY_FIRST_INVOKE_MS : SLACK_HISTORY_NEXT_INVOKE_MS;
+      const hardMs = isFirstPage ? SLACK_HISTORY_FIRST_HARD_MS : SLACK_HISTORY_NEXT_HARD_MS;
+      const retryInvokeMs = isFirstPage ? 90_000 : 35_000;
+      const retryHardMs = isFirstPage ? 96_000 : 40_000;
       let data: {
         ok: boolean;
         messages?: SlackMessage[];
@@ -562,8 +564,8 @@ export default function Comunicacion() {
             messages?: SlackMessage[];
             error?: string;
             response_metadata?: { next_cursor?: string };
-          }>(payload, { signal, timeoutMs: 55_000 }),
-          62_000,
+          }>(payload, { signal, timeoutMs: invokeMs }),
+          hardMs,
           "La carga del historial tardó demasiado. Vuelve a abrir el canal.",
         );
       } catch (e) {
@@ -576,8 +578,8 @@ export default function Comunicacion() {
               messages?: SlackMessage[];
               error?: string;
               response_metadata?: { next_cursor?: string };
-            }>(payload, { timeoutMs: 35_000 }),
-            40_000,
+            }>(payload, { timeoutMs: retryInvokeMs }),
+            retryHardMs,
             "La recarga del historial tardó demasiado. Vuelve a abrir el canal.",
           );
         } else {
@@ -597,9 +599,22 @@ export default function Comunicacion() {
       if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
       return failureCount < 2;
     },
-    // Sin poller: con useInfiniteQuery cada tick refetchea TODAS las páginas ya cargadas
-    // (N llamadas a conversations.history) y dispara 429. Actualizar con reacción/invalidar/envío o botón.
-    refetchInterval: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    /**
+     * Sincronización ligera con Slack: un refetch periódico solo con la pestaña visible.
+     * Intervalo alto para reducir 429; el foco de ventana también dispara refetch.
+     */
+    refetchInterval: (query) => {
+      if (typeof document === "undefined") return false;
+      if (document.visibilityState !== "visible") return false;
+      if (query.state.fetchStatus === "fetching") return false;
+      /** Cada tick refetch vuelve a pedir todas las páginas cargadas; con mucho historial desactivamos el poller. */
+      const pageCount = query.state.data?.pages?.length ?? 0;
+      if (pageCount > 4) return false;
+      return 90_000;
+    },
+    refetchIntervalInBackground: false,
   });
 
   const messages = useMemo(() => {
@@ -628,6 +643,18 @@ export default function Comunicacion() {
     selectedChannel,
     isConnected,
   ]);
+
+  const [historyLoadSlow, setHistoryLoadSlow] = useState(false);
+  useEffect(() => {
+    const fetching =
+      !!selectedChannel && isConnected && historyInfinite.isFetching && !historyInfinite.data;
+    if (!fetching) {
+      setHistoryLoadSlow(false);
+      return;
+    }
+    const t = setTimeout(() => setHistoryLoadSlow(true), 24_000);
+    return () => clearTimeout(t);
+  }, [selectedChannel, isConnected, historyInfinite.isFetching, historyInfinite.data]);
 
   const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
   slackLatestMessageTsRef.current = lastMessageTs;
@@ -1093,11 +1120,23 @@ export default function Comunicacion() {
     toast.error(msg);
   };
 
-  const onSlackChatMutationError = (e: Error) =>
-    toastSlackPermissionDenied(e, SLACK_CHAT_API_PERMISSION_HINT);
+  const onSlackChatMutationError = (e: Error) => {
+    const raw = e.message || "";
+    if (isSlackPermissionDeniedMessage(raw)) {
+      toastSlackPermissionDenied(e, SLACK_CHAT_API_PERMISSION_HINT);
+      return;
+    }
+    toast.error(formatSlackChatWriteError(raw));
+  };
 
-  const onSlackFileUploadError = (e: Error) =>
-    toastSlackPermissionDenied(e, SLACK_FILE_UPLOAD_PERMISSION_HINT);
+  const onSlackFileUploadError = (e: Error) => {
+    const msg = e.message || "";
+    if (isSlackPermissionDeniedMessage(msg)) {
+      toastSlackPermissionDenied(e, SLACK_FILE_UPLOAD_PERMISSION_HINT);
+      return;
+    }
+    toast.error(formatSlackFileUploadError(msg), { duration: 16_000 });
+  };
 
   const reactionMutation = useMutation({
     mutationFn: async (vars: {
@@ -1172,7 +1211,9 @@ export default function Comunicacion() {
         text: payload.text,
         thread_ts: payload.thread_ts,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo enviar");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo enviar");
+      }
       return data;
     },
     onSuccess: (posted, vars) => {
@@ -1230,7 +1271,9 @@ export default function Comunicacion() {
         ts: vars.ts,
         text: vars.text,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo editar el mensaje");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo editar el mensaje");
+      }
     },
     onSuccess: () => {
       toast.success("Mensaje actualizado");
@@ -1246,7 +1289,9 @@ export default function Comunicacion() {
         channel: selectedChannel!,
         ts,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo eliminar el mensaje");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo eliminar el mensaje");
+      }
     },
     onSuccess: () => {
       toast.success("Mensaje eliminado");
@@ -1266,7 +1311,9 @@ export default function Comunicacion() {
         post_at: vars.postAt,
         thread_ts: vars.thread_ts,
       });
-      if (!data.ok) throw new Error(data.error || "No se pudo programar el mensaje");
+      if (!data || (data as { ok?: boolean }).ok !== true) {
+        throw new Error(extractSlackInvokeError(data) || "No se pudo programar el mensaje");
+      }
     },
     onSuccess: (_d, vars) => {
       toast.success("Mensaje programado en Slack");
@@ -1280,20 +1327,28 @@ export default function Comunicacion() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: async (vars: { file: File; initial_comment?: string; thread_ts?: string }) => {
-      if (vars.file.size > MAX_UPLOAD_BYTES) throw new Error("El archivo supera 50 MB");
-      const form = new FormData();
-      form.append("action", "files.upload");
-      form.append("channel", selectedChannel!);
-      form.append("filename", vars.file.name);
-      form.append("file", vars.file);
-      if (vars.initial_comment?.trim()) form.append("initial_comment", vars.initial_comment.trim());
-      if (vars.thread_ts?.trim()) form.append("thread_ts", vars.thread_ts.trim());
-      const data = (await invokeSlackFileUpload(form)) as { ok?: boolean; error?: string };
-      if (!data.ok) throw new Error(String(data.error || "No se pudo subir el archivo"));
+    mutationFn: async (vars: { files: File[]; initial_comment?: string; thread_ts?: string }) => {
+      const list = vars.files.filter(Boolean).slice(0, 10);
+      if (list.length === 0) return;
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        if (f.size > MAX_UPLOAD_BYTES) throw new Error(`«${f.name}» supera 50 MB`);
+        const form = new FormData();
+        form.append("action", "files.upload");
+        form.append("channel", selectedChannel!);
+        form.append("filename", f.name);
+        form.append("file", f);
+        if (i === 0 && vars.initial_comment?.trim()) {
+          form.append("initial_comment", vars.initial_comment.trim());
+        }
+        if (vars.thread_ts?.trim()) form.append("thread_ts", vars.thread_ts.trim());
+        const data = (await invokeSlackFileUpload(form)) as { ok?: boolean; error?: string };
+        if (!data.ok) throw new Error(String(data.error || "No se pudo subir el archivo"));
+      }
     },
     onSuccess: (_d, vars) => {
-      toast.success("Archivo enviado a Slack");
+      const n = vars.files.length;
+      toast.success(n === 1 ? "Archivo enviado a Slack" : `${n} archivos enviados a Slack`);
       qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
       const t = vars.thread_ts?.trim();
       if (t) {
@@ -1673,7 +1728,14 @@ export default function Comunicacion() {
       )}
       {selectedChannel ? (
         <div className="flex flex-1 min-h-0 min-w-0">
-          <div className="flex flex-1 min-w-0 min-h-0 flex-col">
+          <SlackChatFileDropZone
+            enabled={!!selectedChannel && !uploadMutation.isPending}
+            busy={uploadMutation.isPending}
+            onFiles={(files) =>
+              uploadMutation.mutate({ files, initial_comment: draft.trim() || undefined })
+            }
+            className="flex flex-1 min-w-0 min-h-0 flex-col"
+          >
             <SlackChannelHeader
               title={headerTitle}
               channelId={selectedChannel}
@@ -1737,6 +1799,8 @@ export default function Comunicacion() {
               userMap={userMap}
               highlightTs={tsFromUrl}
               isLoading={historyInfinite.isLoading && !historyInfinite.data}
+              loadSlowHint={historyLoadSlow}
+              onRetryLoad={() => void historyInfinite.refetch()}
               error={historyPanelError}
               bottomRef={bottomRef}
               hasMore={historyInfinite.hasNextPage}
@@ -1803,8 +1867,8 @@ export default function Comunicacion() {
               userMap={userMap}
               onSchedule={(postAt, text) => scheduleMutation.mutateAsync({ postAt, text })}
               scheduling={scheduleMutation.isPending}
-              onUploadFile={(file, initial_comment) =>
-                uploadMutation.mutate({ file, initial_comment })
+              onUploadFiles={(files, initial_comment) =>
+                uploadMutation.mutate({ files, initial_comment })
               }
               uploading={uploadMutation.isPending}
               showRestoreDraft={showRestoreDraft}
@@ -1843,7 +1907,30 @@ export default function Comunicacion() {
                 return (data.improved || "").trim();
               }}
             />
-          </div>
+            <p className="shrink-0 border-t border-border/60 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
+              Slack no publica un listado de todos los formatos permitidos. Los documentos habituales (.docx, .pdf, .pptx)
+              suelen aceptarse; en{" "}
+              <a
+                className="text-primary underline underline-offset-2 hover:text-primary/90"
+                href={SLACK_HELP_RESTRICTED_FILE_TYPES_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Slack Connect
+              </a>{" "}
+              hay extensiones explícitamente bloqueadas. Si una subida falla, revisa política de org o subidas en Connect (
+              <a
+                className="text-primary underline underline-offset-2 hover:text-primary/90"
+                href={SLACK_HELP_MANAGE_CONNECT_FILE_UPLOADS_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                guía de administración
+              </a>
+              ). Más detalle en el repositorio:{" "}
+              <code className="rounded bg-muted px-1">docs/slack-archivos-comunicacion.md</code>
+            </p>
+          </SlackChatFileDropZone>
           <SlackThreadPanel
             open={!!threadRootTs}
             onOpenChange={(open) => {
@@ -1889,10 +1976,10 @@ export default function Comunicacion() {
             slackMessageActionPending={
               slackMessageEditMutation.isPending || slackMessageDeleteMutation.isPending
             }
-            onUploadThreadFile={
+            onUploadThreadFiles={
               threadRootTs
-                ? (file, initial_comment) =>
-                    uploadMutation.mutate({ file, initial_comment, thread_ts: threadRootTs })
+                ? (files, initial_comment) =>
+                    uploadMutation.mutate({ files, initial_comment, thread_ts: threadRootTs })
                 : undefined
             }
             uploadingThreadFile={uploadMutation.isPending}

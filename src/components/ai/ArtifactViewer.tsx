@@ -97,7 +97,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
   const isLegacyMarkdown = !isKawiilDoc;
   const hasPreviewPanel = Boolean(pdfOutput || xlsxOutput);
 
-  const resolvedPrimaryFormat = (artifact.primary_format || primaryOutput?.format || "pdf") as KawiilOutputFormat;
+  const resolvedPrimaryFormat = (artifact.primary_format || primaryOutput?.format || "docx") as KawiilOutputFormat;
 
   const { tabOrder, defaultTab } = useMemo(() => {
     const hasP = !!pdfOutput;
@@ -230,7 +230,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             ) : null}
             {isPending ? (
               <Badge variant="secondary" className="text-[10px] mb-1 ml-1 border-amber-200 bg-amber-50 text-amber-800 gap-1">
-                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Generando PDF/DOCX…
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Generando documento…
               </Badge>
             ) : null}
             {isFailed ? (
@@ -348,7 +348,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                   onClick={() => void handleGenerateFormats(ALL_FORMATS, "all")}
                   className="gap-2 text-xs border-t mt-1 pt-1"
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Regenerar todos (PDF+DOCX+XLSX+PPTX)
+                  <Sparkles className="h-3.5 w-3.5" /> Regenerar todos (incluye PDF, Word, Excel, PPT)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -371,12 +371,12 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-[min(80vh,900px)] overflow-hidden flex flex-col">
         {hasPreviewPanel ? (
           <Tabs
             key={`${artifact.id}-${resolvedPrimaryFormat}`}
             defaultValue={defaultTab}
-            className="h-full min-h-0 flex flex-1 flex-col"
+            className="h-full min-h-[min(80vh,900px)] flex flex-1 flex-col"
           >
             <div className="px-3 pt-2 border-b border-border/30 shrink-0">
               <TabsList className="h-7">
@@ -409,9 +409,9 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             {xlsxOutput ? (
               <TabsContent
                 value="spreadsheet"
-                className="flex-1 m-0 p-0 min-h-0 flex flex-col data-[state=active]:flex-1"
+                className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1"
               >
-                <div className="flex min-h-0 flex-1 min-h-[50vh] min-[900px]:min-h-0 flex-col">
+                <div className="flex min-h-0 flex-1 min-h-[min(80vh,900px)] min-[900px]:min-h-0 flex-col">
                   <ArtifactSpreadsheetPreview
                     bucket={xlsxOutput.storage_bucket}
                     storagePath={xlsxOutput.storage_path}
@@ -420,14 +420,14 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 </div>
               </TabsContent>
             ) : null}
-            <TabsContent value="text" className="flex-1 m-0 overflow-y-auto p-4 min-h-0">
+            <TabsContent value="text" className="flex-1 m-0 overflow-y-auto p-4 min-h-0 min-h-[min(80vh,900px)]">
               <div className="prose prose-sm max-w-none [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
                 <ReactMarkdown>{artifact.content}</ReactMarkdown>
               </div>
             </TabsContent>
             {pdfOutput ? (
-              <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 flex flex-col data-[state=active]:flex-1">
-                <div className="flex-1 min-h-[50vh] min-[900px]:min-h-0 flex flex-col">
+              <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1">
+                <div className="flex-1 min-h-[min(80vh,900px)] min-[900px]:min-h-0 flex flex-col">
                   <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
                 </div>
               </TabsContent>
@@ -438,7 +438,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
           // (no flex en sí mismo), así que aquí usamos `h-full overflow-y-auto`
           // para poder hacer scroll de markdown largos. Sin `h-full` el div
           // colapsa al alto del contenido y el viewer recortaba el documento.
-          <div className="h-full overflow-y-auto p-4">
+          <div className="h-full min-h-[min(80vh,900px)] overflow-y-auto p-4">
             {editing ? (
               <Textarea
                 value={editContent}
@@ -456,3 +456,4 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
     </div>
   );
 }
+

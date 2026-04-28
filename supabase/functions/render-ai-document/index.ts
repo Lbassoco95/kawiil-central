@@ -35,7 +35,7 @@ function parseRequest(body: unknown): RenderAiDocumentRequest {
   }
   const formats = Array.isArray(req.requested_formats) && req.requested_formats.length
     ? req.requested_formats.filter((f): f is KawiilOutputFormat => (KAWIIL_OUTPUT_FORMATS as readonly string[]).includes(f))
-    : ["pdf" as KawiilOutputFormat];
+    : ["docx" as KawiilOutputFormat];
   if (!formats.length) throw new Error("requested_formats debe incluir al menos un formato válido.");
   if (!req.content || typeof req.content !== "object") throw new Error("content es obligatorio.");
 

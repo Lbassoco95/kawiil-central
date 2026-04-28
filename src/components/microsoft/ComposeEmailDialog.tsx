@@ -29,6 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
+  EMAIL_ATTACHMENT_ACCEPT,
   filesToComposerAttachments,
   parseRecipients,
   validateRecipientGroups,
@@ -877,7 +878,7 @@ export function ComposeEmailDialog({
                   files={pendingFiles}
                   onChange={setPendingFiles}
                   limits={withLimits(emailLimits, {
-                    accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.zip,.rar,.7z,.msg,.eml",
+                    accept: EMAIL_ATTACHMENT_ACCEPT,
                     zipMode: keepZips ? "keep" : "auto",
                   })}
                   variant="area"
