@@ -84,7 +84,7 @@ const FALLBACK_SUGGESTIONS = [
 const ARTIFACT_RE = /\[artifact:([a-f0-9-]{36})\|([^\]]+)\|([^\]]+)\]/gi;
 const PROJECT_LINK_RE = /\[project:([a-f0-9-]{36})\|([^\]|]+)(?:\|([^\]]*))?\]/gi;
 
-const AsistenteIA = () => {
+function AsistenteIAContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const {
@@ -907,7 +907,7 @@ const AsistenteIA = () => {
   };
 
   return (
-    <AppLayout>
+    <>
       <div className="flex h-[calc(100vh-4rem)] min-h-0 -mt-2 items-stretch">
         {/* Left sidebar */}
         {showSidebar && (
@@ -1727,8 +1727,16 @@ const AsistenteIA = () => {
         projectContextDefaults={activeProject ?? null}
         onStartFreshTask={handleDelegateStartFreshTask}
       />
+    </>
+  );
+}
+
+function AsistenteIA() {
+  return (
+    <AppLayout>
+      <AsistenteIAContent />
     </AppLayout>
   );
-};
+}
 
 export default AsistenteIA;
