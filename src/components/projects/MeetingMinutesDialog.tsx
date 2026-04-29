@@ -45,7 +45,7 @@ import {
   Layers,
   X,
 } from "lucide-react";
-import { appendProjectPhases, type SyncPhase } from "@/lib/projectPhaseSync";
+import { appendProjectPhases, ensureCompliancePhasesOnProject, type SyncPhase } from "@/lib/projectPhaseSync";
 
 interface ProposedTask {
   title: string;
@@ -158,6 +158,20 @@ export function MeetingMinutesDialog({
       .filter((p) => p.key && p.name);
   }, [projectId]);
 
+  /** Igual que el tab Cumplimiento: asegura claves canónicas en `projects.phases` antes de analizar o crear tareas. */
+  const seedComplianceProjectPhasesIfNeeded = useCallback(async () => {
+    if (!projectId || area !== "cumplimiento") return;
+    try {
+      const changed = await ensureCompliancePhasesOnProject(projectId);
+      if (changed) {
+        queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+        queryClient.invalidateQueries({ queryKey: ["compliance-dashboard-project", projectId] });
+      }
+    } catch {
+      /* no bloquear minuta si falla el sembrado */
+    }
+  }, [projectId, area, queryClient]);
+
   const processMeetingFile = async (
     file: File,
     ctx: { append: boolean; pdfUseFullPipeline: boolean },
@@ -230,6 +244,7 @@ export function MeetingMinutesDialog({
       toast.info(`Texto extraído (${Math.round(extractedText.length / 1000)}k caracteres). Analizando con IA…`);
 
       try {
+        await seedComplianceProjectPhasesIfNeeded();
         const projectRows = await fetchExistingPhasesForProject();
         const { data, error } = await supabase.functions.invoke("analyze-meeting", {
           body: {
@@ -344,6 +359,7 @@ export function MeetingMinutesDialog({
     }
     setAnalyzing(true);
     try {
+      await seedComplianceProjectPhasesIfNeeded();
       const projectRows = await fetchExistingPhasesForProject();
       const { data, error } = await supabase.functions.invoke("analyze-meeting", {
         body: {
@@ -449,6 +465,8 @@ export function MeetingMinutesDialog({
     }
     setCreating(true);
     try {
+      await seedComplianceProjectPhasesIfNeeded();
+
       const { data: orgId } = await supabase.rpc("get_user_org_id", {
         _user_id: user!.id,
       });
@@ -475,6 +493,9 @@ export function MeetingMinutesDialog({
         if (projError) throw projError;
         targetProjectId = newProject.id;
         toast.success(`Proyecto "${newProjectName.trim()}" creado`);
+        if ((area as any) === "cumplimiento" && targetProjectId) {
+          await ensureCompliancePhasesOnProject(targetProjectId);
+        }
       } else if (!createNew && projectId) {
         const { data: projRow, error: loadErr } = await supabase
           .from("projects")

@@ -7,12 +7,14 @@ export type SlackUserProfile = {
   avatar_url: string | null;
 };
 
-/** Resuelve nombres y avatares de usuarios Slack (batch vía Edge). */
-const SLACK_USER_PROFILES_MAX_IDS = 150;
+/** Máximo por petición `users.info.batch` en la Edge (slack-api). */
+const SLACK_USER_PROFILES_BATCH = 200;
+/** Tope de ids por vista para no disparar demasiadas llamadas; 3 batches típicos. */
+const SLACK_USER_PROFILES_MAX_TOTAL = 600;
 
 export function useSlackUserProfiles(userIds: (string | undefined)[]) {
   const unique = [...new Set(userIds.filter((x): x is string => !!x && x.length > 0))].sort();
-  const capped = unique.slice(0, SLACK_USER_PROFILES_MAX_IDS);
+  const capped = unique.slice(0, SLACK_USER_PROFILES_MAX_TOTAL);
   const key = capped.join(",");
 
   return useQuery({
@@ -20,18 +22,24 @@ export function useSlackUserProfiles(userIds: (string | undefined)[]) {
     queryFn: async () => {
       if (capped.length === 0) return {} as Record<string, SlackUserProfile>;
       try {
-        const data = await invokeSlackApi<{
-          ok?: boolean;
-          users?: Record<string, SlackUserProfile>;
-        }>(
-          {
-            action: "users.info.batch",
-            user_ids: capped,
-          },
-          { timeoutMs: 50_000 },
-        );
-        if (!data.ok) return {};
-        return data.users || {};
+        const merged: Record<string, SlackUserProfile> = {};
+        for (let i = 0; i < capped.length; i += SLACK_USER_PROFILES_BATCH) {
+          const chunk = capped.slice(i, i + SLACK_USER_PROFILES_BATCH);
+          const data = await invokeSlackApi<{
+            ok?: boolean;
+            users?: Record<string, SlackUserProfile>;
+          }>(
+            {
+              action: "users.info.batch",
+              user_ids: chunk,
+            },
+            { timeoutMs: 55_000 },
+          );
+          if (data.ok && data.users) {
+            Object.assign(merged, data.users);
+          }
+        }
+        return merged;
       } catch {
         return {};
       }

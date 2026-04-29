@@ -294,6 +294,11 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
 ): Promise<T> {
   const timeoutMs = opts?.timeoutMs ?? 0;
   const upstreamAbort = opts?.signal;
+  const slackActionForTiming = String(body.action ?? "");
+  const timeSlackInvoke =
+    import.meta.env.DEV &&
+    (slackActionForTiming === "conversations.history" || slackActionForTiming === "conversations.list");
+  const invokeStarted = timeSlackInvoke ? performance.now() : 0;
 
   for (let attempt = 0; attempt <= MAX_SLACK_INVOKE_RATE_RETRIES; attempt++) {
     const timeoutController = new AbortController();
@@ -359,6 +364,11 @@ export async function invokeSlackApi<T = Record<string, unknown>>(
       const wait = retryAfterMsFromSlackPayload(data) ?? 2000 * (attempt + 1);
       await sleepMsSlackApi(wait);
       continue;
+    }
+    if (timeSlackInvoke) {
+      console.debug(
+        `[kawiil-slack] ${slackActionForTiming} invoke_ms=${Math.round(performance.now() - invokeStarted)}`,
+      );
     }
     return data as T;
   }

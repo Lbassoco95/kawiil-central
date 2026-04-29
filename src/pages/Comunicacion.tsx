@@ -33,7 +33,7 @@ import {
   type SlackConversation,
   type SlackMessage,
 } from "@/lib/slackApi";
-import { fetchAllSlackConversations } from "@/lib/slackWorkspaceFetch";
+import { fetchAllSlackConversations, loadCachedSlackConversations } from "@/lib/slackWorkspaceFetch";
 import { saveSlackReadCursor } from "@/lib/slackReadCursor";
 import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
@@ -123,7 +123,9 @@ const SLACK_HISTORY_NEXT_INVOKE_MS = 55_000;
 const SLACK_HISTORY_NEXT_HARD_MS = 62_000;
 const MPIM_MEMBERS_BATCH = 40;
 /** Límite de MPIM para prefetch de miembros (evita decenas de batches en workspaces grandes). */
-const MAX_MPIMS_MEMBER_PREFETCH = 48;
+const MAX_MPIMS_MEMBER_PREFETCH = 32;
+/** Páginas de `conversations.members` por canal: suficiente para menciones/DM sin competir con el historial. */
+const CHANNEL_MEMBERS_MAX_PAGES = 12;
 const PUSH_BANNER_DISMISS_KEY = "kawiil-slack-push-banner-dismissed";
 const SLACK_NOTIF_TYPES_ACTIVE = new Set(["slack_message", "slack_mention"]);
 
@@ -191,6 +193,10 @@ export default function Comunicacion() {
   const slackMarkChannelReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Último `ts` del historial visible; se actualiza cada render tras `messages` (evita TDZ con deps de efectos). */
   const slackLatestMessageTsRef = useRef<string | undefined>(undefined);
+  /** Retrasa `conversations.members` del canal activo para no competir con la primera `history`. */
+  const [slackSecondaryFetchOk, setSlackSecondaryFetchOk] = useState(false);
+  /** Retrasa prefetch MPIM tras tener la lista del workspace. */
+  const [slackMpimPrefetchOk, setSlackMpimPrefetchOk] = useState(false);
 
   const switchChannel = useCallback(
     (id: string, updateUrl: boolean) => {
@@ -479,9 +485,11 @@ export default function Comunicacion() {
 
   const conversationsQuery = useQuery({
     queryKey: ["slack-conversations", connection?.id],
-    queryFn: () => fetchAllSlackConversations(),
-    enabled: isConnected,
+    queryFn: () => fetchAllSlackConversations({ cacheConnectionId: connection!.id }),
+    enabled: isConnected && !!connection?.id,
     staleTime: 60_000,
+    placeholderData: () =>
+      connection?.id ? loadCachedSlackConversations(connection.id) : undefined,
   });
 
   const conversations = conversationsQuery.data || [];
@@ -599,11 +607,13 @@ export default function Comunicacion() {
       if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
       return failureCount < 2;
     },
-    refetchOnWindowFocus: true,
+    staleTime: 45_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     /**
      * Sincronización ligera con Slack: un refetch periódico solo con la pestaña visible.
-     * Intervalo alto para reducir 429; el foco de ventana también dispara refetch.
+     * Intervalo alto para reducir 429; con mucho historial desactivamos el poller.
      */
     refetchInterval: (query) => {
       if (typeof document === "undefined") return false;
@@ -670,13 +680,27 @@ export default function Comunicacion() {
   });
   const displayUnreadByChannel = useMemo(() => {
     const snapshot = slackUnreadSnapshotQuery.data ?? EMPTY_SLACK_UNREAD_SNAPSHOT;
+    const openChannelHistoryReady =
+      !!selectedChannel &&
+      historyInfinite.isSuccess &&
+      historyInfinite.data != null;
     const out: Record<string, number> = {};
     const keys = new Set([...Object.keys(slackUnreadByChannel), ...Object.keys(snapshot)]);
     for (const k of keys) {
-      out[k] = Math.max(slackUnreadByChannel[k] ?? 0, snapshot[k] ?? 0);
+      if (openChannelHistoryReady && k === selectedChannel) {
+        out[k] = slackUnreadByChannel[k] ?? 0;
+      } else {
+        out[k] = Math.max(slackUnreadByChannel[k] ?? 0, snapshot[k] ?? 0);
+      }
     }
     return out;
-  }, [slackUnreadByChannel, slackUnreadSnapshotQuery.data]);
+  }, [
+    slackUnreadByChannel,
+    slackUnreadSnapshotQuery.data,
+    selectedChannel,
+    historyInfinite.isSuccess,
+    historyInfinite.data,
+  ]);
 
   const { data: sidebarGroupsRaw = [] } = useQuery({
     queryKey: ["slack-sidebar-groups", user?.id],
@@ -898,6 +922,22 @@ export default function Comunicacion() {
     return out;
   }, [conversations, commPrefsByChannel, selectedChannel, customGroupsVm]);
 
+  const mpimIdsKey = useMemo(() => [...mpimIds].sort().join(","), [mpimIds]);
+
+  useEffect(() => {
+    setSlackSecondaryFetchOk(false);
+    if (!selectedChannel || !isConnected) return;
+    const t = window.setTimeout(() => setSlackSecondaryFetchOk(true), 450);
+    return () => clearTimeout(t);
+  }, [selectedChannel, isConnected]);
+
+  useEffect(() => {
+    setSlackMpimPrefetchOk(false);
+    if (!isConnected || !conversationsQuery.isSuccess || mpimIds.length === 0) return;
+    const t = window.setTimeout(() => setSlackMpimPrefetchOk(true), 900);
+    return () => clearTimeout(t);
+  }, [isConnected, conversationsQuery.isSuccess, mpimIdsKey, mpimIds.length]);
+
   const { data: mpimMembersByChannel = {} } = useQuery({
     queryKey: ["slack-mpim-members", [...mpimIds].sort().join(",")],
     queryFn: async () => {
@@ -916,7 +956,7 @@ export default function Comunicacion() {
       }
       return merged;
     },
-    enabled: isConnected && mpimIds.length > 0,
+    enabled: isConnected && mpimIds.length > 0 && conversationsQuery.isSuccess && slackMpimPrefetchOk,
     staleTime: 300_000,
   });
 
@@ -950,6 +990,7 @@ export default function Comunicacion() {
           }
           await Promise.all([
             qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] }),
+            qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", uid] }),
             qc.invalidateQueries({ queryKey: ["user-notifications", uid] }),
             qc.invalidateQueries({ queryKey: ["unread-notifications-count", uid] }),
           ]);
@@ -985,9 +1026,10 @@ export default function Comunicacion() {
             id?: string;
             entity_type?: string;
             entity_id?: string;
+            entity_ref?: string | null;
             type?: string;
           };
-          if (row.entity_type !== "slack" || !row.entity_id?.startsWith(`${selectedChannel}|`)) return;
+          if (row.entity_type !== "slack" || !row.entity_ref?.startsWith(`${selectedChannel}|`)) return;
           if (!row.type || !SLACK_NOTIF_TYPES_ACTIVE.has(row.type)) return;
           if (slackOpenChannelNotifDebounceRef.current) {
             clearTimeout(slackOpenChannelNotifDebounceRef.current);
@@ -1007,6 +1049,7 @@ export default function Comunicacion() {
                   }, 350);
                 }
                 qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+                qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
                 qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
                 qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
               } catch {
@@ -1037,8 +1080,7 @@ export default function Comunicacion() {
     queryFn: async () => {
       const acc: string[] = [];
       let cursor: string | undefined;
-      const MAX_PAGES = 40;
-      for (let page = 0; page < MAX_PAGES; page++) {
+      for (let page = 0; page < CHANNEL_MEMBERS_MAX_PAGES; page++) {
         const d = await invokeSlackApi<{
           ok: boolean;
           members?: string[];
@@ -1063,7 +1105,7 @@ export default function Comunicacion() {
       }
       return [...new Set(acc)];
     },
-    enabled: isConnected && !!selectedChannel,
+    enabled: isConnected && !!selectedChannel && slackSecondaryFetchOk,
     staleTime: 120_000,
   });
 

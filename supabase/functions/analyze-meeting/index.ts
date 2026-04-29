@@ -8,6 +8,22 @@ const corsHeaders = {
 
 type PhaseRow = { key: string; name: string };
 
+/**
+ * Alineado con `src/lib/compliancePhaseCatalog.ts` (COMPLIANCE_CATEGORY_ORDER + LABELS).
+ * Usado en el prompt cuando area === cumplimiento.
+ */
+const CUMPLIMIENTO_STANDARD_KEYS: PhaseRow[] = [
+  { key: "reportes_uif", name: "Reportes al SAT/UIF" },
+  { key: "reportes_cnbv", name: "Reportes a CNBV" },
+  { key: "capacitacion", name: "Capacitación y cultura de cumplimiento" },
+  { key: "kyc", name: "Gestión de expedientes y KYC" },
+  { key: "politicas", name: "Políticas y manuales" },
+  { key: "auditoria", name: "Auditoría interna" },
+  { key: "avisos_sat", name: "Avisos al SAT (SAT-AV)" },
+  { key: "conservacion", name: "Conservación de información" },
+  { key: "otros", name: "Otros" },
+];
+
 function slugifyPhaseKey(name: string, used: Set<string>): string {
   const base = name
     .toLowerCase()
@@ -26,8 +42,76 @@ function slugifyPhaseKey(name: string, used: Set<string>): string {
   return k;
 }
 
+const BRACKET_TITLE = /^\[([^\]]+)\]\s*(.*)$/;
+
+/** Si la IA pone phase_key en la tarea pero olvida listar la fase en "phases", la añadimos. */
+function mergeOrphanPhaseKeysFromRawTasks(
+  rawTasks: unknown[],
+  usedKeys: Set<string>,
+  nameToKey: Map<string, string>,
+  knownKeySet: Set<string>,
+  outPhases: PhaseRow[],
+) {
+  for (const t of rawTasks) {
+    if (!t || typeof t !== "object") continue;
+    const row = t as Record<string, unknown>;
+    const pk = typeof row.phase_key === "string" ? row.phase_key.trim() : "";
+    if (!pk || knownKeySet.has(pk)) continue;
+    const labelFromPhase =
+      typeof row.phase === "string" && row.phase.trim()
+        ? row.phase.trim()
+        : pk.replace(/_/g, " ");
+    usedKeys.add(pk);
+    outPhases.push({ key: pk, name: labelFromPhase });
+    knownKeySet.add(pk);
+    nameToKey.set(labelFromPhase.toLowerCase(), pk);
+  }
+}
+
+/** Prefijo [Nombre fase] en el título → fase en outPhases y phase_key; título sin prefijo. */
+function inferPhasesFromBracketTitles(
+  tasks: Record<string, unknown>[],
+  usedKeys: Set<string>,
+  nameToKey: Map<string, string>,
+  knownKeySet: Set<string>,
+  outPhases: PhaseRow[],
+) {
+  for (const row of tasks) {
+    const cur = row.phase_key;
+    if (typeof cur === "string" && cur.trim()) continue;
+
+    const title = typeof row.title === "string" ? row.title : "";
+    const m = title.match(BRACKET_TITLE);
+    if (!m) continue;
+
+    const label = m[1].trim();
+    const rest = (m[2] ?? "").trim();
+    if (!label) continue;
+
+    const lk = label.toLowerCase();
+    let phaseKey = nameToKey.get(lk) ?? null;
+    if (!phaseKey) {
+      const match = outPhases.find((p) => p.name.trim().toLowerCase() === lk);
+      if (match) {
+        phaseKey = match.key;
+        nameToKey.set(lk, phaseKey);
+        knownKeySet.add(phaseKey);
+      }
+    }
+    if (!phaseKey) {
+      phaseKey = slugifyPhaseKey(label, usedKeys);
+      outPhases.push({ key: phaseKey, name: label });
+      nameToKey.set(lk, phaseKey);
+      knownKeySet.add(phaseKey);
+    }
+    row.phase_key = phaseKey;
+    row.title = rest || label;
+  }
+}
+
 /**
  * Unifica fases a [{ key, name }], tareas con phase_key; compatible con respuestas antiguas (phases: string[]).
+ * Infiere fases desde phase_key huérfano y desde títulos [Etiqueta] descripción.
  */
 function normalizeMeetingAnalysis(
   parsed: Record<string, unknown>,
@@ -54,7 +138,6 @@ function normalizeMeetingAnalysis(
         const name = item.trim();
         const lk = name.toLowerCase();
         if (nameToKey.has(lk)) {
-          // Fase ya cubierta por el proyecto; no añadir a la lista a fusionar
           continue;
         }
         const key = slugifyPhaseKey(name, usedKeys);
@@ -78,6 +161,8 @@ function normalizeMeetingAnalysis(
   }
 
   const rawTasks = Array.isArray(parsed.tasks) ? parsed.tasks : [];
+  mergeOrphanPhaseKeysFromRawTasks(rawTasks, usedKeys, nameToKey, knownKeySet, outPhases);
+
   const tasks: Record<string, unknown>[] = [];
 
   for (const t of rawTasks) {
@@ -99,11 +184,11 @@ function normalizeMeetingAnalysis(
       }
     }
     if (phaseKey) row.phase_key = phaseKey;
-    else {
-      row.phase_key = null;
-    }
+    else row.phase_key = null;
     tasks.push(row);
   }
+
+  inferPhasesFromBracketTitles(tasks, usedKeys, nameToKey, knownKeySet, outPhases);
 
   const mode = parsed.import_mode_suggestion;
   const import_mode_suggestion =
@@ -313,14 +398,18 @@ ${content}`;
 
     const normalized = normalizeMeetingAnalysis(parsed, existingPhases);
 
-    const allPhaseKeys = new Set<string>([...existingPhases.map((p) => p.key), ...normalized.phases.map((p) => p.key)]);
+    const allPhaseKeys = new Set<string>([
+      ...existingPhases.map((p) => p.key),
+      ...normalized.phases.map((p) => p.key),
+    ]);
 
     const tasks = normalized.tasks.map((t) => {
-      let phase_key: string | null = null;
-      if (typeof t.phase_key === "string" && t.phase_key.trim() && allPhaseKeys.has(t.phase_key.trim())) {
-        phase_key = t.phase_key.trim();
-      }
       const tr = t as Record<string, unknown>;
+      let phase_key: string | null = null;
+      if (typeof tr.phase_key === "string" && tr.phase_key.trim()) {
+        const pk = tr.phase_key.trim();
+        if (allPhaseKeys.has(pk)) phase_key = pk;
+      }
       return {
         title: typeof tr.title === "string" ? tr.title : String(tr.title ?? "").trim() || "Tarea",
         description: tr.description,

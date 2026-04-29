@@ -52,6 +52,7 @@ import {
   useOutlookCategories,
   INBOX_UNREAD_QUERY_KEY,
   SCHEDULED_MAIL_JOBS_QUERY_KEY,
+  mailFoldersRootFallbackUserMessage,
 } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -107,6 +108,7 @@ import {
 } from "@/lib/emailFolderOrder";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import DOMPurify from "dompurify";
+import { sanitizeEmailBodyForIframe } from "@/lib/sanitizeEmailBodyForIframe";
 import {
   formatDistanceToNow,
   parseISO,
@@ -580,6 +582,8 @@ const LS_EMAIL_FOLDERS_COLLAPSED = "kawiil-email-folders-collapsed";
 const LS_EMAIL_FOLDERS_EXPANDED_IDS = "kawiil-email-folders-expanded-ids";
 /** Una sola vez por navegador: expande Bandeja de entrada si tiene subcarpetas (paridad con Outlook). */
 const LS_EMAIL_FOLDERS_INBOX_AUTO_EXPAND_DONE = "kawiil-email-folders-inbox-auto-expand-v1";
+/** Una vez por sesión de navegador: aviso fallback carpetas solo raíz (evita spam de toasts). */
+const SESSION_LS_MAIL_FOLDERS_ROOT_FALLBACK_WARN = "kawiil-email-toast-mail-folders-root-fallback-done";
 
 function readExpandedFolderIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -964,6 +968,11 @@ export function EmailView() {
     attachments,
   );
 
+  const iframeSafeEmailHtml = useMemo(
+    () => sanitizeEmailBodyForIframe(resolvedEmailHtml || ""),
+    [resolvedEmailHtml],
+  );
+
   const allEmails = useMemo(() => {
     if (!emailsQuery.data?.pages) return [];
     return emailsQuery.data.pages.flatMap((p) => p.emails);
@@ -1064,10 +1073,20 @@ export function EmailView() {
     const m = mailFoldersData?.meta;
     if (!m) return;
     if (m.usedRootOnlyFallback) {
-      toast.warning(
-        "No se pudo cargar el árbol completo de carpetas; solo se muestran las de la raíz. Reintenta en unos segundos o revisa la conexión con Microsoft.",
-        { id: "mail-folders-root-fallback", duration: 10_000 },
-      );
+      if (typeof window !== "undefined") {
+        try {
+          if (sessionStorage.getItem(SESSION_LS_MAIL_FOLDERS_ROOT_FALLBACK_WARN) === "1") {
+            return;
+          }
+          sessionStorage.setItem(SESSION_LS_MAIL_FOLDERS_ROOT_FALLBACK_WARN, "1");
+        } catch {
+          /* sin sessionStorage: mostrar toast igualmente */
+        }
+      }
+      toast.warning(mailFoldersRootFallbackUserMessage(m.rootOnlyFallbackReason), {
+        id: "mail-folders-root-fallback",
+        duration: 11_000,
+      });
       return;
     }
     if (m.truncated) {
@@ -1084,6 +1103,7 @@ export function EmailView() {
     }
   }, [
     mailFoldersData?.meta?.usedRootOnlyFallback,
+    mailFoldersData?.meta?.rootOnlyFallbackReason,
     mailFoldersData?.meta?.truncated,
     mailFoldersData?.meta?.partialChildErrors,
   ]);
@@ -3272,7 +3292,7 @@ export function EmailView() {
                   <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
                     {emailDetail.body?.contentType === "html" ? (
                       <AutoResizeIframe
-                        html={resolvedEmailHtml}
+                        html={iframeSafeEmailHtml}
                         title="Email content"
                         loading={bodyCidLoading}
                       />
@@ -3848,6 +3868,10 @@ function ThreadEmailItem({
     email.body?.contentType === "html" ? email.body.content : undefined,
     threadAttachments,
   );
+  const iframeSafeThreadHtml = useMemo(
+    () => sanitizeEmailBodyForIframe(resolvedThreadHtml || ""),
+    [resolvedThreadHtml],
+  );
 
   return (
     <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
@@ -3869,7 +3893,7 @@ function ThreadEmailItem({
           <div className="border border-border/50 rounded-lg overflow-hidden">
             {email.body?.contentType === "html" ? (
               <AutoResizeIframe
-                html={resolvedThreadHtml}
+                html={iframeSafeThreadHtml}
                 title="Thread email"
                 minH={100}
                 loading={threadBodyLoading}
@@ -3982,10 +4006,10 @@ function AutoResizeIframe({
       <iframe
         ref={iframeRef}
         srcDoc={srcDoc}
-        sandbox="allow-same-origin"
+        sandbox="allow-same-origin allow-popups"
+        title={title}
         className="w-full border-0 bg-transparent rounded-md"
         style={{ height: `${height}px` }}
-        title={title}
         onLoad={resizeIframe}
       />
     </div>

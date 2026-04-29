@@ -3,8 +3,53 @@ import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
 const CONV_PAGE_LIMIT = 1000;
 const MAX_CONV_PAGES = 60;
 
+const SLACK_CONV_CACHE_PREFIX = "kawiil-slack-conv:";
+const SLACK_CONV_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type CachedConversationsPayload = { updatedAt: number; conversations: SlackConversation[] };
+
+/** Cache de sesión para mostrar el sidebar al instante mientras React Query revalida. */
+export function loadCachedSlackConversations(
+  connectionId: string | null | undefined,
+): SlackConversation[] | undefined {
+  if (typeof sessionStorage === "undefined" || !connectionId) return undefined;
+  try {
+    const raw = sessionStorage.getItem(SLACK_CONV_CACHE_PREFIX + connectionId);
+    if (!raw) return undefined;
+    const p = JSON.parse(raw) as CachedConversationsPayload;
+    if (!p?.updatedAt || !Array.isArray(p.conversations)) return undefined;
+    if (Date.now() - p.updatedAt > SLACK_CONV_CACHE_TTL_MS) return undefined;
+    return p.conversations;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveCachedSlackConversations(
+  connectionId: string,
+  conversations: SlackConversation[],
+): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    const payload: CachedConversationsPayload = {
+      updatedAt: Date.now(),
+      conversations,
+    };
+    sessionStorage.setItem(SLACK_CONV_CACHE_PREFIX + connectionId, JSON.stringify(payload));
+  } catch {
+    /* quota / modo privado */
+  }
+}
+
+export type FetchAllSlackConversationsOpts = {
+  /** Si se indica, persiste el resultado en sessionStorage para `loadCachedSlackConversations`. */
+  cacheConnectionId?: string;
+};
+
 /** Recorre `conversations.list` con cursor hasta agotar resultados (evita perder MPIM / canales fuera de la primera página). */
-export async function fetchAllSlackConversations(): Promise<SlackConversation[]> {
+export async function fetchAllSlackConversations(
+  opts?: FetchAllSlackConversationsOpts,
+): Promise<SlackConversation[]> {
   const out: SlackConversation[] = [];
   const seen = new Set<string>();
   let cursor: string | undefined;
@@ -31,6 +76,9 @@ export async function fetchAllSlackConversations(): Promise<SlackConversation[]>
     const next = data.response_metadata?.next_cursor?.trim();
     if (!next) break;
     cursor = next;
+  }
+  if (opts?.cacheConnectionId) {
+    saveCachedSlackConversations(opts.cacheConnectionId, out);
   }
   return out;
 }

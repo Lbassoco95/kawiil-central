@@ -4,7 +4,25 @@ import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Calculator, CheckSquare, Scale, Building2, FileSpreadsheet, ClipboardList, Shield, Plus, PenTool, Loader2, MessageSquare, Sparkles, Trash2, AlertTriangle, CircleAlert } from "lucide-react";
+import {
+  ArrowLeft,
+  Calculator,
+  CheckSquare,
+  Scale,
+  Building2,
+  FileSpreadsheet,
+  ClipboardList,
+  Shield,
+  Plus,
+  PenTool,
+  Loader2,
+  MessageSquare,
+  Sparkles,
+  Trash2,
+  AlertTriangle,
+  CircleAlert,
+  ListTree,
+} from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
 import { LawsuitDashboard } from "@/components/projects/LawsuitDashboard";
@@ -37,6 +55,7 @@ import { PhaseManager, type Phase } from "@/components/projects/PhaseManager";
 import { ProjectDelayPredictorCard } from "@/components/projects/ProjectDelayPredictorCard";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
+import { reconcileBracketPhasesForProject } from "@/lib/reconcileTaskPhasesFromTitles";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 
@@ -60,7 +79,7 @@ const ProyectoDetalle = () => {
   const [signRequests, setSignRequests] = useState<any[]>([]);
   const [loadingSign, setLoadingSign] = useState(false);
   const [showMinutesDialog, setShowMinutesDialog] = useState(false);
-  const { canDeleteTasks } = useUserRole();
+  const { canDeleteTasks, canManageTasks } = useUserRole();
   const deleteTask = useDeleteTask();
   const updateTask = useUpdateTask();
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -68,6 +87,7 @@ const ProyectoDetalle = () => {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [reconcilingBracketPhases, setReconcilingBracketPhases] = useState(false);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
@@ -216,6 +236,27 @@ const ProyectoDetalle = () => {
     setSelectionMode(false);
     setSelectedTaskIds(new Set());
   }, []);
+
+  const handleReconcileBracketPhases = useCallback(async () => {
+    if (!id) return;
+    setReconcilingBracketPhases(true);
+    try {
+      const { updated } = await reconcileBracketPhasesForProject(id);
+      toast.success(
+        updated > 0
+          ? `${updated} tarea${updated !== 1 ? "s" : ""} enlazada${updated !== 1 ? "s" : ""} a fases desde el prefijo […]`
+          : "Ninguna tarea sin fase coincidía con el patrón o con los nombres de fase del proyecto.",
+      );
+      queryClient.invalidateQueries({ queryKey: ["project-tasks", id] });
+      queryClient.invalidateQueries({ queryKey: ["project", id] });
+      queryClient.invalidateQueries({ queryKey: ["compliance-tasks", id] });
+      queryClient.invalidateQueries({ queryKey: ["compliance-dashboard-project", id] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo reconciliar las fases");
+    } finally {
+      setReconcilingBracketPhases(false);
+    }
+  }, [id, queryClient]);
 
   const { data: profiles = [] } = useProfiles();
   const profileMap = useMemo(() => new Map(profiles.map(p => [p.user_id, p.full_name])), [profiles]);
@@ -382,15 +423,35 @@ const ProyectoDetalle = () => {
                 <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">{project.description}</p>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={() => setShowMinutesDialog(true)}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Subir minuta</span>
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              {canManageTasks && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5"
+                  disabled={reconcilingBracketPhases}
+                  title="Asigna fase a tareas con título [Nombre] que coincidan con las fases del proyecto (datos previos a la corrección de minutas)"
+                  onClick={() => void handleReconcileBracketPhases()}
+                >
+                  {reconcilingBracketPhases ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ListTree className="h-3.5 w-3.5" />
+                  )}
+                  <span className="hidden lg:inline">Reconciliar fases</span>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowMinutesDialog(true)}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Subir minuta</span>
+              </Button>
+            </div>
           </div>
           <TeamVisibilityBanner
             responsibleHeading="Responsable del proyecto"

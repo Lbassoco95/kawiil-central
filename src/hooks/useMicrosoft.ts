@@ -805,6 +805,31 @@ export type MailFoldersMeta = {
   rootOnlyFallbackReason?: string;
 };
 
+/** Mensaje corto para el usuario según error de Graph al listar carpetas (fallback solo raíz desde Edge). */
+export function mailFoldersRootFallbackUserMessage(reason: string | undefined): string {
+  const r = String(reason ?? "");
+  const lower = r.toLowerCase();
+  if (
+    r.includes("MICROSOFT_PERMISSION_REQUIRED") ||
+    /\[403\]/.test(r) ||
+    lower.includes("erroraccessdenied")
+  ) {
+    return "No se cargó el árbol completo de carpetas por permisos de Microsoft. Conecta de nuevo tu cuenta Microsoft 365 en la app (o revisa consentimientos con el administrador) y vuelve a abrir Correo.";
+  }
+  if (
+    /\[429\]/.test(r) ||
+    lower.includes("applicationthrottled") ||
+    lower.includes("mailboxconcurrency") ||
+    lower.includes('"code":"throttled"')
+  ) {
+    return "Microsoft limitó temporalmente las peticiones al buzón. Espera uno o dos minutos y recarga Correo.";
+  }
+  if (/\[(503|504|502)\]/.test(r)) {
+    return "El servicio de correo respondió con error o tardó demasiado. Reintenta en unos segundos.";
+  }
+  return "No se pudo cargar el árbol completo de carpetas; solo se muestran las de la raíz. Reintenta en unos segundos o revisa la conexión con Microsoft.";
+}
+
 export type MailFoldersQueryData = {
   folders: unknown[];
   meta: MailFoldersMeta | undefined;
@@ -865,7 +890,14 @@ export function useMailFolders() {
         return { folders: [], meta: undefined };
       }
       if (error) throw error;
-      return parseMailFoldersResponse(data);
+      const parsed = parseMailFoldersResponse(data);
+      if (import.meta.env.DEV && parsed.meta?.usedRootOnlyFallback && parsed.meta.rootOnlyFallbackReason) {
+        console.warn(
+          "[useMailFolders] rootOnlyFallbackReason (dev — comparar con logs Edge microsoft-api mail-folders):",
+          String(parsed.meta.rootOnlyFallbackReason).slice(0, 800),
+        );
+      }
+      return parsed;
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,

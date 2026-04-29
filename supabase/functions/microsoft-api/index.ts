@@ -165,7 +165,16 @@ async function graphRequest(accessToken: string, path: string, init?: RequestIni
   const res = await graphMailFetchWithRetry(accessToken, path, init);
   if (res.status === 204) return { success: true };
   const text = await res.text();
-  return text ? JSON.parse(text) : { success: true };
+  if (!text) return { success: true };
+  try {
+    return JSON.parse(text);
+  } catch (parseErr) {
+    const snippet = text.slice(0, 280);
+    const pe = parseErr instanceof Error ? parseErr.message : String(parseErr);
+    throw new Error(
+      `Microsoft Graph respuesta no JSON (${path.slice(0, 180)}…): ${pe}; body=${snippet}`,
+    );
+  }
 }
 
 /** Comparación robusta de nombres de carpeta (middots unicode, espacios). */
@@ -186,7 +195,8 @@ const MAIL_FOLDER_ROOT_LIST_QUERY =
 /** Hijos: mismo flag que la raíz; sin él Graph puede omitir subcarpetas que el usuario sí ve en Outlook. */
 const MAIL_FOLDER_CHILD_LIST_QUERY =
   `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
-/** Algunos tenants devuelven 400 al combinar $select + includeHiddenFolders en `childFolders`; se reintenta sin el flag. */
+/** Algunos tenants devuelven 400 al combinar $select + includeHiddenFolders en raíz o en `childFolders`; se reintenta sin el flag. */
+const MAIL_FOLDER_ROOT_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100`;
 const MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100`;
 
 /** Listado plano solo nivel raíz (fallback si el recursivo falla o devuelve vacío por error Graph). */
@@ -311,27 +321,64 @@ async function listAllMailFoldersRecursive(accessToken: string): Promise<{
       await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY}`, false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (/\[400\]/.test(msg)) {
-        try {
-          await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN}`, false);
-        } catch (e2) {
-          partialChildErrors += 1;
+      try {
+        await paginateInto(`${childBase}${MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN}`, false);
+        if (!/\[400\]/.test(msg)) {
           console.warn(
-            "[microsoft-api] listAllMailFoldersRecursive: childFolders 400+plain falló, se omite subárbol",
-            { parentId, err: e2 instanceof Error ? e2.message : String(e2) },
+            "[microsoft-api] listAllMailFoldersRecursive: childFolders primera petición falló, plain funcionó",
+            { parentId, firstErr: msg.slice(0, 380) },
           );
         }
-      } else {
+      } catch (e2) {
         partialChildErrors += 1;
         console.warn(
-          "[microsoft-api] listAllMailFoldersRecursive: childFolders falló, se continúa con otras carpetas",
-          { parentId, err: msg.slice(0, 400) },
+          "[microsoft-api] listAllMailFoldersRecursive: childFolders con/sin hidden fallaron, se omite subárbol",
+          {
+            parentId,
+            first: msg.slice(0, 380),
+            second: e2 instanceof Error ? e2.message.slice(0, 380) : String(e2),
+          },
         );
       }
     }
   };
 
-  await paginateInto(`/me/mailFolders${MAIL_FOLDER_ROOT_LIST_QUERY}`, true);
+  const rootPaths = [
+    { path: `/me/mailFolders${MAIL_FOLDER_ROOT_LIST_QUERY}`, label: "root_with_includeHiddenFolders" },
+    { path: `/me/mailFolders${MAIL_FOLDER_ROOT_LIST_QUERY_PLAIN}`, label: "root_plain_select" },
+    { path: `/me/mailFolders?$top=100`, label: "root_minimal" },
+  ];
+  let rootListed = false;
+  for (let ri = 0; ri < rootPaths.length; ri++) {
+    const { path: rootPath, label } = rootPaths[ri];
+    try {
+      await paginateInto(rootPath, true);
+      rootListed = true;
+      if (ri > 0) {
+        console.warn("[microsoft-api] listAllMailFoldersRecursive: raíz con estrategia alternativa", {
+          strategy: label,
+        });
+      }
+      break;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isLast = ri === rootPaths.length - 1;
+      if (isLast) {
+        console.error("[microsoft-api] listAllMailFoldersRecursive: todas las estrategias de raíz fallaron", {
+          lastStrategy: label,
+          err: msg.slice(0, 800),
+        });
+        throw e;
+      }
+      console.warn("[microsoft-api] listAllMailFoldersRecursive: estrategia de raíz falló, siguiente", {
+        failedStrategy: label,
+        err: msg.slice(0, 400),
+      });
+    }
+  }
+  if (!rootListed) {
+    throw new Error("listAllMailFoldersRecursive: raíz no listada (estado inconsistente)");
+  }
 
   while (
     childQueue.length > 0 &&

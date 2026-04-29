@@ -8,12 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SlackMessageList } from "@/components/slack/SlackMessageList";
 import { SlackComposer } from "@/components/slack/SlackComposer";
+import { SlackChatFileDropZone } from "@/components/slack/SlackChatFileDropZone";
 import type { SlackDeepLinkPartsCompat } from "@/lib/slackDeepLink";
 import {
   invokeSlackApi,
+  invokeSlackFileUpload,
   formatSlackHistoryLoadError,
+  formatSlackFileUploadError,
   isSlackPermissionDeniedMessage,
   SLACK_CHAT_API_PERMISSION_HINT,
+  SLACK_FILE_UPLOAD_PERMISSION_HINT,
   SLACK_PERMISSION_TOAST_MS,
   SLACK_REACTIONS_PERMISSION_HINT,
   type SlackConversation,
@@ -29,6 +33,7 @@ import { toast } from "sonner";
 const HISTORY_LIMIT = 90;
 const THREAD_LIMIT = 90;
 const WINDOW_SEC = 48 * 3600;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 function slackWindowOldestTs(): string {
   return (Date.now() / 1000 - WINDOW_SEC).toFixed(6);
@@ -197,6 +202,53 @@ export function SlackQuickReplyPanel({
     }
   }, [qc, channelId, threadRootTs]);
 
+  const composerSendMode = (): "channel" | "thread" => {
+    if (hasThread && listTab === "thread") return "thread";
+    return "channel";
+  };
+
+  const resolveQuickReplyUploadThreadTs = (): string | undefined => {
+    if (!parsed || !hasThread) return undefined;
+    return composerSendMode() === "thread" ? parsed.mainTs : undefined;
+  };
+
+  const onSlackFileUploadError = (e: Error) => {
+    const msg = e.message || "";
+    if (isSlackPermissionDeniedMessage(msg)) {
+      toast.error(SLACK_FILE_UPLOAD_PERMISSION_HINT, { duration: SLACK_PERMISSION_TOAST_MS });
+      return;
+    }
+    toast.error(formatSlackFileUploadError(msg), { duration: 16_000 });
+  };
+
+  const uploadMutation = useMutation({
+    mutationFn: async (vars: { files: File[]; initial_comment?: string; thread_ts?: string }) => {
+      const list = vars.files.filter(Boolean).slice(0, 10);
+      if (list.length === 0) return;
+      for (let i = 0; i < list.length; i++) {
+        const f = list[i];
+        if (f.size > MAX_UPLOAD_BYTES) throw new Error(`«${f.name}» supera 50 MB`);
+        const form = new FormData();
+        form.append("action", "files.upload");
+        form.append("channel", channelId);
+        form.append("filename", f.name);
+        form.append("file", f);
+        if (i === 0 && vars.initial_comment?.trim()) {
+          form.append("initial_comment", vars.initial_comment.trim());
+        }
+        if (vars.thread_ts?.trim()) form.append("thread_ts", vars.thread_ts.trim());
+        const data = (await invokeSlackFileUpload(form)) as { ok?: boolean; error?: string };
+        if (!data.ok) throw new Error(String(data.error || "No se pudo subir el archivo"));
+      }
+    },
+    onSuccess: (_d, vars) => {
+      const n = vars.files.length;
+      toast.success(n === 1 ? "Archivo enviado a Slack" : `${n} archivos enviados a Slack`);
+      invalidateQuickAndMain();
+    },
+    onError: onSlackFileUploadError,
+  });
+
   const sendMutation = useMutation({
     mutationFn: async (payload: { text: string; thread_ts?: string }) => {
       const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
@@ -298,11 +350,6 @@ export function SlackQuickReplyPanel({
     if (!text || !parsed) return;
     const thread_ts = mode === "thread" ? parsed.mainTs : undefined;
     sendMutation.mutate({ text, thread_ts });
-  };
-
-  const composerSendMode = (): "channel" | "thread" => {
-    if (hasThread && listTab === "thread") return "thread";
-    return "channel";
   };
 
   const goFullComunicacion = () => {
@@ -410,90 +457,128 @@ export function SlackQuickReplyPanel({
           )}
 
           {isConnected && (
-            <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
-              {hasThread ? (
-                <Tabs
-                  value={listTab}
-                  onValueChange={(v) => setListTab(v as ListTab)}
-                  className="flex flex-1 min-h-0 flex-col gap-0"
-                >
-                  <TabsList className="mx-3 mt-2 h-9 shrink-0 w-fit self-start">
-                    <TabsTrigger value="channel" className="text-xs px-3">
-                      Canal
-                    </TabsTrigger>
-                    <TabsTrigger value="thread" className="text-xs px-3">
-                      Hilo
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent
-                    value="channel"
-                    className={cn("mt-2 flex-1 min-h-0 flex flex-col overflow-hidden data-[state=inactive]:hidden")}
+            <SlackChatFileDropZone
+              enabled={!!channelId && !uploadMutation.isPending}
+              busy={uploadMutation.isPending}
+              onFiles={(files) =>
+                uploadMutation.mutate({
+                  files,
+                  initial_comment: draft.trim() || undefined,
+                  thread_ts: resolveQuickReplyUploadThreadTs(),
+                })
+              }
+              className="flex flex-1 min-h-0 flex-col overflow-hidden"
+            >
+              <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+                {hasThread ? (
+                  <Tabs
+                    value={listTab}
+                    onValueChange={(v) => setListTab(v as ListTab)}
+                    className="flex flex-1 min-h-0 flex-col gap-0"
                   >
-                    {renderChannelList()}
-                  </TabsContent>
-                  <TabsContent
-                    value="thread"
-                    className={cn("mt-2 flex-1 min-h-0 flex flex-col overflow-hidden data-[state=inactive]:hidden")}
-                  >
-                    {renderThreadList()}
-                  </TabsContent>
-                </Tabs>
-              ) : (
-                <div className="flex flex-1 min-h-0 flex-col pt-2">{renderChannelList()}</div>
-              )}
+                    <TabsList className="mx-3 mt-2 h-9 shrink-0 w-fit self-start">
+                      <TabsTrigger value="channel" className="text-xs px-3">
+                        Canal
+                      </TabsTrigger>
+                      <TabsTrigger value="thread" className="text-xs px-3">
+                        Hilo
+                      </TabsTrigger>
+                    </TabsList>
+                    <TabsContent
+                      value="channel"
+                      className={cn(
+                        "mt-2 flex-1 min-h-0 flex flex-col overflow-hidden data-[state=inactive]:hidden",
+                      )}
+                    >
+                      {renderChannelList()}
+                    </TabsContent>
+                    <TabsContent
+                      value="thread"
+                      className={cn(
+                        "mt-2 flex-1 min-h-0 flex flex-col overflow-hidden data-[state=inactive]:hidden",
+                      )}
+                    >
+                      {renderThreadList()}
+                    </TabsContent>
+                  </Tabs>
+                ) : (
+                  <div className="flex flex-1 min-h-0 flex-col pt-2">{renderChannelList()}</div>
+                )}
 
-              <div className="shrink-0 border-t border-border/80 bg-muted/25 p-3 space-y-2">
-                <SlackComposer
-                  value={draft}
-                  onChange={setDraft}
-                  onSend={() => handleSend(composerSendMode())}
-                  disabled={!channelId}
-                  sending={sendMutation.isPending}
-                  channelLabel={headerLabel}
-                  mentionUserIds={[]}
-                  userMap={userMap}
-                  compact
-                />
-                <div className="flex flex-wrap gap-2">
+                <div className="shrink-0 border-t border-border/80 bg-muted/25 p-3 space-y-2">
+                  <SlackComposer
+                    value={draft}
+                    onChange={setDraft}
+                    onSend={() => handleSend(composerSendMode())}
+                    disabled={!channelId}
+                    sending={sendMutation.isPending || uploadMutation.isPending}
+                    channelLabel={headerLabel}
+                    mentionUserIds={[]}
+                    userMap={userMap}
+                    compact
+                    onUploadFiles={(files, initial_comment) =>
+                      uploadMutation.mutate({
+                        files,
+                        initial_comment,
+                        thread_ts: resolveQuickReplyUploadThreadTs(),
+                      })
+                    }
+                    uploading={uploadMutation.isPending}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1 min-w-[7rem]"
+                      disabled={
+                        sendMutation.isPending ||
+                        uploadMutation.isPending ||
+                        !draft.trim()
+                      }
+                      onClick={() => handleSend("channel")}
+                    >
+                      {sendMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "En canal"
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="flex-1 min-w-[7rem]"
+                      disabled={
+                        sendMutation.isPending ||
+                        uploadMutation.isPending ||
+                        !draft.trim()
+                      }
+                      onClick={() => handleSend("thread")}
+                    >
+                      {sendMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "En hilo"
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    ⌘/Ctrl+Enter envía según la pestaña activa (Canal o Hilo); los botones fuerzan el destino.
+                    También puedes pegar capturas, usar el clip o arrastrar fotos sobre este panel.
+                  </p>
                   <Button
                     type="button"
+                    variant="outline"
                     size="sm"
-                    className="flex-1 min-w-[7rem]"
-                    disabled={sendMutation.isPending || !draft.trim()}
-                    onClick={() => handleSend("channel")}
+                    className="w-full gap-1.5"
+                    onClick={goFullComunicacion}
                   >
-                    {sendMutation.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      "En canal"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="flex-1 min-w-[7rem]"
-                    disabled={sendMutation.isPending || !draft.trim()}
-                    onClick={() => handleSend("thread")}
-                  >
-                    En hilo
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Abrir en Comunicación
                   </Button>
                 </div>
-                <p className="text-[10px] text-muted-foreground">
-                  ⌘/Ctrl+Enter envía según la pestaña activa (Canal o Hilo); los botones fuerzan el destino.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-1.5"
-                  onClick={goFullComunicacion}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Abrir en Comunicación
-                </Button>
               </div>
-            </div>
+            </SlackChatFileDropZone>
           )}
         </div>
       </SheetContent>

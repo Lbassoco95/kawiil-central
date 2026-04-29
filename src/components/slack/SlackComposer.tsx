@@ -1,4 +1,13 @@
-import { FormEvent, KeyboardEvent, useRef, useEffect, useState, useMemo, useCallback } from "react";
+import {
+  FormEvent,
+  KeyboardEvent,
+  ClipboardEvent as ReactClipboardEvent,
+  useRef,
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -58,6 +67,34 @@ function defaultScheduleLocalValue(): string {
   d.setSeconds(0, 0);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Archivos imagen pegados desde capturas u otros orígenes (incl. items sin entrada en `files`). */
+function extractClipboardImageFiles(native: ClipboardEvent): File[] {
+  const out: File[] = [];
+  const dt = native.clipboardData;
+  if (!dt) return out;
+
+  const list = dt.files;
+  if (list && list.length > 0) {
+    for (let i = 0; i < list.length; i++) {
+      const f = list.item(i);
+      if (f && f.type.startsWith("image/")) out.push(f);
+    }
+    if (out.length > 0) return out;
+  }
+
+  const items = dt.items;
+  if (items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const f = item.getAsFile();
+        if (f) out.push(f);
+      }
+    }
+  }
+  return out;
 }
 
 type AiImproveMode = "improve" | "shorter" | "formal" | "friendly";
@@ -245,6 +282,26 @@ export function SlackComposer({
     setMentionOpen(false);
   };
 
+  const handlePasteImages = useCallback(
+    async (e: ReactClipboardEvent<HTMLTextAreaElement>) => {
+      if (!onUploadFiles || disabled || sending || scheduling || uploading || intake.isProcessing) return;
+      if (recState !== "idle") return;
+      const files = extractClipboardImageFiles(e.nativeEvent);
+      if (files.length === 0) return;
+      e.preventDefault();
+      await intake.addFiles(files);
+    },
+    [
+      onUploadFiles,
+      disabled,
+      sending,
+      scheduling,
+      uploading,
+      intake,
+      recState,
+    ],
+  );
+
   const pickMention = (id: string) => {
     const el = ta.current;
     if (!el) return;
@@ -421,7 +478,7 @@ export function SlackComposer({
         type="file"
         className="hidden"
         multiple
-        accept="*/*"
+        accept="image/*,.heic,.heif,.avif"
         disabled={disabled || sending || scheduling || uploading}
         onChange={async (e) => {
           await intake.addFiles(e.target.files);
@@ -709,6 +766,7 @@ export function SlackComposer({
           value={value}
           onChange={(e) => onChangeTextarea(e.target.value)}
           onKeyDown={onKeyDown}
+          onPaste={handlePasteImages}
           placeholder={`${placeholder} (Enter envía, Shift+Enter nueva línea)`}
           disabled={busy}
           rows={1}
@@ -808,6 +866,18 @@ export function SlackComposer({
         </Button>
         </div>
       </div>
+      {onUploadFiles && (
+        <p
+          className={cn(
+            "text-[10px] text-muted-foreground mt-1.5 px-0.5",
+            compact ? "" : "max-w-4xl mx-auto",
+          )}
+        >
+          {compact
+            ? "Puedes pegar capturas (⌘V / Ctrl+V) o usar el clip para fotos."
+            : "Puedes pegar capturas aquí (⌘V / Ctrl+V) o adjuntar imágenes con el clip."}
+        </p>
+      )}
     </form>
   );
 }

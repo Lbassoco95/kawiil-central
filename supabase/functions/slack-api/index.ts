@@ -279,6 +279,32 @@ async function slackCall(token: string, method: SlackMethod, params: Record<stri
   return { ok: false, error: "ratelimited" };
 }
 
+/** Llamadas Slack paralelas acotadas (evita N secuencial en `conversations.members.batch`). */
+const SLACK_MEMBERS_BATCH_CONCURRENCY = 5;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const n = items.length;
+  if (n === 0) return [];
+  const c = Math.max(1, Math.min(concurrency, n));
+  const results = new Array<R>(n);
+  let next = 0;
+
+  async function worker() {
+    for (;;) {
+      const i = next++;
+      if (i >= n) break;
+      results[i] = await fn(items[i]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: c }, () => worker()));
+  return results;
+}
+
 function slackHistoryBudgetLeftMs(startedAt: number): number {
   return SLACK_HISTORY_HANDLER_BUDGET_MS - (Date.now() - startedAt);
 }
@@ -662,6 +688,7 @@ Deno.serve(async (req) => {
       if (cursor) histParams.cursor = cursor;
       if (latest) histParams.latest = latest;
       if (oldest) histParams.oldest = oldest;
+      let recoverySteps = 0;
       let data = await slackCall(conn.access_token, "conversations.history", histParams);
       // Canales públicos: a veces aparecen en lista pero el user token no está joined.
       if (
@@ -669,6 +696,7 @@ Deno.serve(async (req) => {
         slackHistoryCanAttemptRecovery(historyBudgetStart)
       ) {
         const joined = await slackCall(conn.access_token, "conversations.join", { channel });
+        if (joined?.ok) recoverySteps += 1;
         if (joined?.ok && slackHistoryBudgetLeftMs(historyBudgetStart) > 3_000) {
           data = await slackCall(conn.access_token, "conversations.history", histParams);
         }
@@ -678,6 +706,7 @@ Deno.serve(async (req) => {
           slackHistoryCanAttemptRecovery(historyBudgetStart)
         ) {
           const reopened = await slackCall(conn.access_token, "conversations.open", { channel });
+          if (reopened?.ok) recoverySteps += 1;
           if (reopened?.ok && slackHistoryBudgetLeftMs(historyBudgetStart) > 3_000) {
             data = await slackCall(conn.access_token, "conversations.history", histParams);
           }
@@ -689,10 +718,15 @@ Deno.serve(async (req) => {
         slackHistoryCanAttemptRecovery(historyBudgetStart)
       ) {
         const reopened = await slackCall(conn.access_token, "conversations.open", { channel });
+        if (reopened?.ok) recoverySteps += 1;
         if (reopened?.ok && slackHistoryBudgetLeftMs(historyBudgetStart) > 3_000) {
           data = await slackCall(conn.access_token, "conversations.history", histParams);
         }
       }
+      const historyMs = Date.now() - historyBudgetStart;
+      console.log(
+        `[slack-api] conversations.history channel=${channel} ok=${data?.ok === true} ms=${historyMs} recovery_steps=${recoverySteps}`,
+      );
       return jsonOk(data);
     }
 
@@ -716,17 +750,14 @@ Deno.serve(async (req) => {
       }
       const ids = [...new Set(raw.map((x) => String(x)).filter(Boolean))].slice(0, 40);
       const members_by_channel: Record<string, string[]> = {};
-      for (const ch of ids) {
+      await mapWithConcurrency(ids, SLACK_MEMBERS_BATCH_CONCURRENCY, async (ch) => {
         const data = await slackCall(conn.access_token, "conversations.members", {
           channel: ch,
           limit: 100,
         });
-        if (data.ok && Array.isArray(data.members)) {
-          members_by_channel[ch] = data.members as string[];
-        } else {
-          members_by_channel[ch] = [];
-        }
-      }
+        members_by_channel[ch] =
+          data.ok && Array.isArray(data.members) ? (data.members as string[]) : [];
+      });
       return jsonOk({ ok: true, members_by_channel });
     }
 
@@ -1012,7 +1043,7 @@ Deno.serve(async (req) => {
       const unique = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 200);
       const users: Record<string, { display_name: string | null; real_name: string | null; avatar_url: string | null }> = {};
 
-      const chunk = 4;
+      const chunk = 6;
       for (let i = 0; i < unique.length; i += chunk) {
         const part = unique.slice(i, i + chunk);
         await Promise.all(
