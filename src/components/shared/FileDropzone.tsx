@@ -424,7 +424,8 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
     );
   }
 
-  // Variant: overlay -- render children + drop overlay encima cuando arrastras.
+  // Variant: overlay -- hijos + capa de arrastre. Con enableFolderPicker los inputs ocultos siguen arriba;
+  // no pongas botón flotante aquí: solapa el compositor. Usa ChatAttachmentPicker (variant button) u otro control en la fila del input.
   if (variant === "overlay") {
     return (
       <div
@@ -437,26 +438,6 @@ export const FileDropzone = forwardRef<FileDropzoneHandle, FileDropzoneProps>(fu
       >
         {inputEl}
         {children}
-        {useDualFolderMode && (
-          <div className="absolute bottom-2 right-2 z-[45] pointer-events-auto">
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="h-8 text-xs gap-1 shadow-md"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openFolderPickerClick();
-              }}
-              disabled={interactiveDisabled || reachedMaxFiles}
-              title="Subir todos los archivos de una carpeta"
-            >
-              <FolderUp className="h-3.5 w-3.5" />
-              Carpeta
-            </Button>
-          </div>
-        )}
         {(isDragging || isBusy) && (
           <div
             className={cn(
