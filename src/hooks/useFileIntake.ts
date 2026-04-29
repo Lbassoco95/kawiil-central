@@ -33,6 +33,10 @@ function dedupeKey(f: File): string {
   return `${f.name}::${f.size}::${f.lastModified}`;
 }
 
+/** Cuando el SO no informa MIME (p. ej. algunas fotos / portapapeles) pero la extensión es claramente imagen. */
+const IMAGE_FILENAME_EXT =
+  /\.(jpe?g|png|gif|webp|bmp|svg|heic|heif|avif|tif|tiff|ico)$/i;
+
 function matchesAccept(file: File, accept?: string): boolean {
   if (!accept) return true;
   const tokens = accept
@@ -43,8 +47,21 @@ function matchesAccept(file: File, accept?: string): boolean {
   const name = file.name.toLowerCase();
   const type = (file.type ?? "").toLowerCase();
   for (const tok of tokens) {
+    /* HTML accept star-slash-star no debe interpretarse como type.startsWith("*"). */
+    if (tok === "*" || tok === "*/*") return true;
     if (tok.startsWith(".") && name.endsWith(tok)) return true;
-    if (tok.endsWith("/*") && type.startsWith(tok.slice(0, -1))) return true;
+    if (tok.endsWith("/*")) {
+      const prefix = tok.slice(0, -1);
+      if (type.startsWith(prefix)) return true;
+      if (
+        prefix === "image/" &&
+        (!type || type === "application/octet-stream") &&
+        IMAGE_FILENAME_EXT.test(file.name)
+      ) {
+        return true;
+      }
+      continue;
+    }
     if (tok.includes("/") && type === tok) return true;
   }
   return false;

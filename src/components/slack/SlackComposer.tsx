@@ -69,6 +69,17 @@ function defaultScheduleLocalValue(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Clipboard a veces devuelve tipo vacío o octet-stream con nombre .png / .heic. */
+function looksLikeClipboardImageFile(file: File, itemTypeHint?: string): boolean {
+  const fromHint = itemTypeHint?.trim();
+  const mime = (fromHint || file.type || "").toLowerCase();
+  if (mime.startsWith("image/")) return true;
+  if (!mime || mime === "application/octet-stream") {
+    return /\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|tif|tiff)$/i.test(file.name);
+  }
+  return false;
+}
+
 /** Archivos imagen pegados desde capturas u otros orígenes (incl. items sin entrada en `files`). */
 function extractClipboardImageFiles(native: ClipboardEvent): File[] {
   const out: File[] = [];
@@ -79,7 +90,7 @@ function extractClipboardImageFiles(native: ClipboardEvent): File[] {
   if (list && list.length > 0) {
     for (let i = 0; i < list.length; i++) {
       const f = list.item(i);
-      if (f && f.type.startsWith("image/")) out.push(f);
+      if (f && looksLikeClipboardImageFile(f)) out.push(f);
     }
     if (out.length > 0) return out;
   }
@@ -88,10 +99,9 @@ function extractClipboardImageFiles(native: ClipboardEvent): File[] {
   if (items) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      if (item.kind === "file" && item.type.startsWith("image/")) {
-        const f = item.getAsFile();
-        if (f) out.push(f);
-      }
+      if (item.kind !== "file") continue;
+      const f = item.getAsFile();
+      if (f && looksLikeClipboardImageFile(f, item.type)) out.push(f);
     }
   }
   return out;
@@ -176,7 +186,6 @@ export function SlackComposer({
     files: slackStaged,
     onChange: onSlackIntakeChange,
     limits: slackUploadLimits,
-    accept: "*/*",
   });
 
   useEffect(() => {
@@ -478,7 +487,7 @@ export function SlackComposer({
         type="file"
         className="hidden"
         multiple
-        accept="image/*,.heic,.heif,.avif"
+        accept="*/*"
         disabled={disabled || sending || scheduling || uploading}
         onChange={async (e) => {
           await intake.addFiles(e.target.files);
@@ -874,8 +883,8 @@ export function SlackComposer({
           )}
         >
           {compact
-            ? "Puedes pegar capturas (⌘V / Ctrl+V) o usar el clip para fotos."
-            : "Puedes pegar capturas aquí (⌘V / Ctrl+V) o adjuntar imágenes con el clip."}
+            ? "Puedes pegar capturas (⌘V / Ctrl+V). El clip admite cualquier archivo (PDF, Office, CSV, XML…); hasta 10 y 50 MB c/u."
+            : "Puedes pegar capturas aquí (⌘V / Ctrl+V). El clip admite cualquier archivo (PDF, Office, CSV, XML…); hasta 10 archivos y 50 MB cada uno."}
         </p>
       )}
     </form>

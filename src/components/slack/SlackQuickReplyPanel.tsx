@@ -564,7 +564,7 @@ export function SlackQuickReplyPanel({
                   </div>
                   <p className="text-[10px] text-muted-foreground">
                     ⌘/Ctrl+Enter envía según la pestaña activa (Canal o Hilo); los botones fuerzan el destino.
-                    También puedes pegar capturas, usar el clip o arrastrar fotos sobre este panel.
+                    También puedes pegar capturas, usar el clip o arrastrar archivos sobre este panel (los mismos límites que en Comunicación).
                   </p>
                   <Button
                     type="button"

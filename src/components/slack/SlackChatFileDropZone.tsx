@@ -36,7 +36,6 @@ export function SlackChatFileDropZone({ children, enabled, busy = false, onFiles
     files: staged,
     onChange: onIntakeChange,
     limits: slackUploadLimits,
-    accept: "*/*",
   });
 
   const interactiveDisabled = !enabled || busy || intake.isProcessing;
