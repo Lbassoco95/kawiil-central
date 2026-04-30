@@ -1,6 +1,12 @@
 /**
  * Branding Kawiil para renderers PDF/DOCX/XLSX.
  *
+ * ## Membretado por organización (fase incremental)
+ * La tabla `organizations.settings` (JSON) puede incluir:
+ * `{ "ai_document_branding": { "org_name"?: string, "logo_url"?: string, "primary_color"?: string } }`
+ * Esos valores se fusionan en `render-ai-document` vía `resolveBranding` cuando `ai-chat`
+ * los envía en el payload (nombre de org siempre que exista fila).
+ *
  * La paleta y la tipografía siguen los tokens del design-system
  * (azul Kawiil v2.4). Cualquier cambio visual centralizado debe
  * reflejarse aquí para mantener consistencia en todos los templates.

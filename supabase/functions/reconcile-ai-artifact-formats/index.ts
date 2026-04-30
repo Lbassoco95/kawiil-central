@@ -6,8 +6,7 @@
 //
 //   1. Lee su `content` markdown.
 //   2. Lo convierte al shape `generico` (markdownToGenericContent).
-//   3. Invoca `render-ai-document` pidiendo DOCX (+ heurísticos) y PDF solo si el
-//      cliente lo incluye en `formats` (p. ej. "Generar PDF" o "Regenerar todos").
+//   3. Invoca `render-ai-document` pidiendo DOCX + PDF por defecto (+ heurísticos XLSX/PPTX).
 //   4. Sube los bytes al bucket `documents` en `ai-artifacts/<org>/<user>/…`.
 //   5. Fusiona los nuevos `output_formats` con los ya existentes (no duplica)
 //      y actualiza `primary_format`, `storage_*`, `render_status = 'ready'`.
@@ -128,13 +127,12 @@ Deno.serve(async (req) => {
 
     const generic = markdownToGenericContent(markdown, title);
 
-    // Qué formatos generar: sin `formats` en el body → Word + heurísticos (xlsx/pptx) sin PDF.
-    // Con `formats` explícitos (p. ej. solo "pdf" o los cuatro) → esos + heurísticos de apoyo
-    // (p. ej. tablas largas) sin añadir PDF de oficio.
+    // Sin `formats` en el body → Word + PDF de lectura + heurísticos (xlsx/pptx).
+    // Con `formats` explícitos → esos formatos + heurísticos de apoyo (p. ej. tablas largas).
     const heuristicExtras = detectExtraFormats(markdown, generic);
     let mergedFormats: Set<KawiilOutputFormat>;
     if (requestedFormats.length === 0) {
-      mergedFormats = new Set<KawiilOutputFormat>(["docx", ...heuristicExtras]);
+      mergedFormats = new Set<KawiilOutputFormat>(["docx", "pdf", ...heuristicExtras]);
     } else {
       mergedFormats = new Set<KawiilOutputFormat>([...requestedFormats]);
       for (const h of heuristicExtras) mergedFormats.add(h);

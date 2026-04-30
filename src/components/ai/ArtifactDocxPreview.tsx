@@ -63,7 +63,7 @@ export function ArtifactDocxPreview({ bucket, storagePath, fitContainer = true }
   return (
     <div className={`${fitContainer ? "h-full min-h-[min(70vh,800px)]" : ""} w-full overflow-y-auto bg-muted/20`}>
       <div
-        className="mx-auto max-w-[816px] bg-background shadow-sm border rounded-md px-8 py-10 my-4 prose prose-sm max-w-none [&_p]:my-2 [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&_table]:text-xs [&_td]:border [&_th]:border"
+        className="artifact-docx-html mx-auto max-w-[210mm] bg-background shadow-sm border rounded-md px-[18mm] py-12 my-4 text-[13px] leading-relaxed text-foreground [&_p]:my-2 [&_p]:text-justify [&_li]:text-justify [&_td]:align-top [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_table]:w-full [&_table]:text-xs [&_td]:border [&_th]:border"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

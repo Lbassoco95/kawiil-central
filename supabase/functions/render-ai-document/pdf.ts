@@ -86,6 +86,7 @@ const DEFAULT_STYLES: Record<string, Record<string, unknown>> = {
     color: KAWIIL_BRAND.textMain,
     lineHeight: 1.4,
     margin: [0, 0, 0, 6],
+    alignment: "justify",
   },
   bodyBullet: {
     fontSize: 10.5,
@@ -112,6 +113,7 @@ const DEFAULT_STYLES: Record<string, Record<string, unknown>> = {
     fontSize: 10.5,
     color: KAWIIL_BRAND.textMain,
     lineHeight: 1.35,
+    alignment: "justify",
   },
   calloutTitle: {
     fontSize: 11,

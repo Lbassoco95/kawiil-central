@@ -53,7 +53,11 @@ function textRun(text: string, opts: { bold?: boolean; color?: string; italics?:
 
 function paragraph(text: string | TextRun[], opts: { bold?: boolean; size?: number; color?: string } = {}) {
   const children = Array.isArray(text) ? text : [textRun(text, opts)];
-  return new Paragraph({ children, spacing: { before: 60, after: 120 } });
+  return new Paragraph({
+    children,
+    spacing: { before: 60, after: 120 },
+    alignment: AlignmentType.JUSTIFIED,
+  });
 }
 
 function heading(text: string, level: 1 | 2 | 3 = 1) {
@@ -176,6 +180,7 @@ function renderSection(s: KawiilSection, level: 1 | 2 = 2): (Paragraph | Table)[
       ],
       spacing: { before: 120, after: 120 },
       indent: { left: 360 },
+      alignment: AlignmentType.JUSTIFIED,
       border: { left: { style: BorderStyle.SINGLE, size: 18, color: BRAND_PRIMARY_HEX, space: 8 } },
     }));
   }

@@ -124,11 +124,13 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
     };
 
     if (fmt === "xlsx" && hasX) {
-      pushAvailable("spreadsheet", "docx", "pptx", "pdf", "text");
+      pushAvailable("spreadsheet", "pdf", "docx", "pptx", "text");
     } else if (fmt === "pdf" && hasP) {
       pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
     } else if (fmt === "docx" && hasD) {
-      pushAvailable("docx", "pdf", "spreadsheet", "pptx", "text");
+      // PDF primero cuando existe: más cercano al entregable impreso/enviado que Mammoth.
+      if (hasP) pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
+      else pushAvailable("docx", "pdf", "spreadsheet", "pptx", "text");
     } else if (fmt === "pptx" && hasS) {
       pushAvailable("pptx", "pdf", "docx", "spreadsheet", "text");
     } else {
@@ -137,10 +139,9 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
 
     let def: ViewerTabId = "text";
     if (fmt === "xlsx" && hasX) def = "spreadsheet";
-    else if (fmt === "pdf" && hasP) def = "pdf";
-    else if (fmt === "docx" && hasD) def = "docx";
     else if (fmt === "pptx" && hasS) def = "pptx";
-    else if (hasP) def = "pdf";
+    else if (hasP && fmt !== "pptx") def = "pdf";
+    else if (fmt === "docx" && hasD) def = "docx";
     else if (hasD) def = "docx";
     else if (hasX) def = "spreadsheet";
     else if (hasS) def = "pptx";
@@ -417,7 +418,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                   if (value === "pdf" && pdfOutput) {
                     return (
                       <TabsTrigger key="pdf" value="pdf" className="text-[11px] h-5 px-2 gap-1">
-                        <FileText className="h-3 w-3" /> Vista previa PDF (lectura)
+                        <FileText className="h-3 w-3" /> PDF (lectura / entrega)
                       </TabsTrigger>
                     );
                   }

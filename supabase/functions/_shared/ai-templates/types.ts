@@ -142,7 +142,7 @@ export interface RenderAiDocumentRequest {
   reason?: string;
   /** Preview corta en markdown (opcional) para fallback textual del artifact. */
   preview_markdown?: string;
-  /** Header params para el PDF (org, logo_url). */
+  /** Header params (org, logo, color). También puede pobrase desde organizations.settings.ai_document_branding vía ai-chat. */
   branding?: {
     org_name?: string;
     logo_url?: string;
