@@ -549,5 +549,6 @@ export async function renderKawiilDocx(input: {
     default:
       doc = buildGenericDoc(title, data as GenericDocumentData, branding);
   }
-  return await Packer.toUint8Array(doc);
+  const packed = await Packer.toBuffer(doc);
+  return packed instanceof Uint8Array ? packed : new Uint8Array(packed);
 }
