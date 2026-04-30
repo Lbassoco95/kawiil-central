@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +25,7 @@ import {
   Loader2,
   Check,
   ChevronsUpDown,
+  ChevronDown,
   AlertCircle,
   Paperclip,
 } from "lucide-react";
@@ -56,6 +59,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 /**
  * Adjuntos del composer; compatible con `ChatAttachmentMeta` y campos opcionales extra.
@@ -232,6 +240,20 @@ export function DelegateToAgentDialog({
   onStartFreshTask,
   onDelegated,
 }: DelegateToAgentDialogProps) {
+  const { user } = useAuth();
+  const { data: adminOrManager } = useQuery({
+    queryKey: ["is-admin-or-manager delegate", user?.id],
+    enabled: Boolean(isOpen && user?.id),
+    queryFn: async (): Promise<boolean> => {
+      const { data, error } = await supabase.rpc("is_admin_or_manager", {
+        _user_id: user!.id,
+      });
+      if (error) throw error;
+      return Boolean(data);
+    },
+  });
+  const showAdvancedDelegate = adminOrManager === true;
+
   const { data: clients = [], isLoading: clientsLoading } = useClients();
   const clientList = (clients ?? []) as Client[];
 
@@ -269,13 +291,19 @@ export function DelegateToAgentDialog({
     [projectDocuments],
   );
 
+  const effectiveKnowledgeSelection = useMemo<"all" | string[]>(() => {
+    if (!showAdvancedDelegate) return "all";
+    return knowledgeDocSelection;
+  }, [showAdvancedDelegate, knowledgeDocSelection]);
+
   const knowledge = useMemo(() => {
     if (!projectDocuments?.length) return null;
     return buildProjectKnowledgeForAgentDispatch(projectDocuments, {
-      includedDocumentIds: knowledgeDocSelection === "all" ? null : knowledgeDocSelection,
+      includedDocumentIds:
+        effectiveKnowledgeSelection === "all" ? null : effectiveKnowledgeSelection,
       maxTotalBytes: effectiveMaxKnowledgeBytes,
     });
-  }, [projectDocuments, knowledgeDocSelection, effectiveMaxKnowledgeBytes]);
+  }, [projectDocuments, effectiveKnowledgeSelection, effectiveMaxKnowledgeBytes]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -356,8 +384,8 @@ export function DelegateToAgentDialog({
     !agentList.error &&
     !clientsLoading &&
     (allKnowledgeDocIds.length === 0 ||
-      knowledgeDocSelection === "all" ||
-      (Array.isArray(knowledgeDocSelection) && knowledgeDocSelection.length > 0));
+      effectiveKnowledgeSelection === "all" ||
+      (Array.isArray(effectiveKnowledgeSelection) && effectiveKnowledgeSelection.length > 0));
 
   const handleToggleKnowledgeDoc = (docId: string, checked: boolean) => {
     setKnowledgeDocSelection((prev) => {
@@ -518,9 +546,11 @@ export function DelegateToAgentDialog({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="refs_budget">Equilibrar por tamaño (recomendado)</SelectItem>
+            <SelectItem value="refs_budget">Equilibrar por tamaño (predeterminado en BD)</SelectItem>
             <SelectItem value="full_refs">Cuerpos completos (si la VM aplica el modo)</SelectItem>
-            <SelectItem value="rag_first">Priorizar búsqueda (RAG) en el proyecto</SelectItem>
+            <SelectItem value="rag_first">
+              Priorizar índice RAG · recomendado con expedientes grandes ya indexados
+            </SelectItem>
           </SelectContent>
         </Select>
         {isRagFirst && (
@@ -813,8 +843,28 @@ export function DelegateToAgentDialog({
             </>
           )}
 
-          {contextTuningBlock}
-          {knowledgeSelectionBlock}
+          {!showAdvancedDelegate && allKnowledgeDocIds.length > 0 && (
+            <p className="text-[11px] text-muted-foreground rounded-md bg-muted/25 border border-border/40 px-2.5 py-2 leading-snug">
+              Se usará todo el conocimiento vinculado a este proyecto. Los admin del despacho pueden abrir opciones avanzadas
+              para limitar archivos o ajustar cómo llega el contexto a los agentes.
+            </p>
+          )}
+
+          {showAdvancedDelegate && (
+            <Collapsible className="group rounded-md border border-border/40 bg-muted/15">
+              <CollapsibleTrigger className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[11px] font-medium text-foreground hover:bg-muted/40 rounded-md transition-colors">
+                <ChevronDown
+                  className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"
+                  aria-hidden
+                />
+                Opciones avanzadas (equipo técnico)
+              </CollapsibleTrigger>
+              <CollapsibleContent className="border-t border-border/30 px-2.5 pb-3 pt-2 space-y-4">
+                {contextTuningBlock}
+                {knowledgeSelectionBlock}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
           {attachments && attachments.length > 0 && (
             <div className="space-y-1.5">

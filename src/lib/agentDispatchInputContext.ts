@@ -67,6 +67,10 @@ export type AgentDispatchInputContext = {
   knowledge_dropbox_documents?: { document_id: string; name: string; external_path: string }[];
 };
 
+/**
+ * Expedientes grandes bien indexados: el equipo suele preferir `'rag_first'` en `ai_projects.agent_context_mode`
+ * (la VM usa `document_chunks` y limita refs de Storage; ver `dispatch-to-agent`).
+ */
 export const DEFAULT_AGENT_CONTEXT_MODE: AgentContextMode = "refs_budget";
 export const DEFAULT_AGENT_CONVERSATION_EXCERPT_MODE: AgentConversationExcerptMode = "last_n";
 export const DEFAULT_AGENT_CONVERSATION_EXCERPT_MAX_MESSAGES = 30;

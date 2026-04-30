@@ -125,6 +125,43 @@ export interface SendMessageOptions {
 
 const CHAT_URL = `${ACTIVE_SUPABASE_URL}/functions/v1/ai-chat`;
 
+/** Tope aproximado (~20–25k tokens) para incluir informes largos del agente en el historial hacia ai-chat. */
+const AI_CHAT_AGENT_SYNTHESIS_MAX_CHARS = 90_000;
+
+/**
+ * Convierte el hilo local (incl. mensajes con `agent_task_ref`) al formato esperado por `ai-chat`.
+ * Antes esos mensajes se filtraban por completo y el asistente Kawiil no veía informes sincronizados en `content`.
+ */
+function messagesForAiChatRequest(messages: ChatMessage[]): Array<{ role: string; content: string }> {
+  const out: Array<{ role: string; content: string }> = [];
+  for (const m of messages) {
+    if (m.agent_task_ref) {
+      const trimmed = (m.content ?? "").trim();
+      if (!trimmed) continue;
+      const agentLabel = (
+        m.agent_task_ref.agent_display_name?.trim() ||
+        m.agent_task_ref.agent_name?.trim() ||
+        "agente"
+      );
+      const titlePart = m.agent_task_ref.title?.trim()
+        ? ` · ${m.agent_task_ref.title.trim()}`
+        : "";
+      let body = trimmed;
+      if (body.length > AI_CHAT_AGENT_SYNTHESIS_MAX_CHARS) {
+        body =
+          `${body.slice(0, AI_CHAT_AGENT_SYNTHESIS_MAX_CHARS)}\n\n[…Informe truncado para el contexto del asistente; el texto completo sigue visible en el hilo.]`;
+      }
+      out.push({
+        role: "assistant",
+        content: `[Informe previo — ${agentLabel}${titlePart}]\n\n${body}`,
+      });
+      continue;
+    }
+    out.push({ role: m.role, content: m.content ?? "" });
+  }
+  return out;
+}
+
 /** Última conversación activa por usuario (F5 / retomar en widget). */
 const LAST_CONV_KEY_PREFIX = "kawiil.chat.lastConversation:";
 
@@ -1023,9 +1060,7 @@ function useChatState() {
         const token = accessToken;
 
         const chatBody = JSON.stringify({
-          messages: allMessages
-            .filter((m) => !m.agent_task_ref)
-            .map((m) => ({ role: m.role, content: m.content })),
+          messages: messagesForAiChatRequest(allMessages),
           conversationId: convId,
           ai_project_id: aiProjectIdAtSend || undefined,
           attachmentRefs: refsForAiChat.length ? refsForAiChat : undefined,
