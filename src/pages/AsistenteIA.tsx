@@ -960,7 +960,8 @@ function AsistenteIAContent() {
     );
   };
 
-  const ChatMainColumn = () => (
+  /** JSX directo (no componente interno): un `const Fn = () => …` aquí cambiaría la identidad del tipo en cada render y desmontaría el textarea (pérdida de foco al escribir). */
+  const chatMainColumn = (
           <>
           <div
             className="shrink-0 border-b border-sky-200/60 px-2.5 py-1.5 sm:px-3 sm:py-2 dark:border-sky-800/40"
@@ -1598,7 +1599,7 @@ function AsistenteIAContent() {
                 enableFolderPicker
                 className="flex h-full min-h-0 min-w-0 flex-1 flex-col border-l border-border/40"
               >
-                <ChatMainColumn />
+                {chatMainColumn}
               </FileDropzone>
             </ResizablePanel>
             {artifactSplitVisible ? (
@@ -1662,7 +1663,7 @@ function AsistenteIAContent() {
             enableFolderPicker
             className="flex h-full min-h-0 min-w-0 flex-1 flex-col border-l border-border/40"
           >
-            <ChatMainColumn />
+            {chatMainColumn}
           </FileDropzone>
         )}
 
