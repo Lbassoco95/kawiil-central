@@ -270,7 +270,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                   <p className="text-[10px] text-foreground/80">
                     Entrega principal en Word: usa <span className="font-medium">Descargar</span> para el .docx original.
                     La pestaña <span className="font-medium">Vista previa Word</span> muestra una conversión aproximada en el navegador;{" "}
-                    <span className="font-medium">Texto</span> conserva el markdown fuente.
+                    <span className="font-medium">Resumen (Markdown)</span> conserva el texto fuente para copiar.
                   </p>
                 ) : null}
                 {resolvedPrimaryFormat === "pptx" && outputs.length > 0 ? (
@@ -285,7 +285,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     La entrega estructurada es el Excel: usa <span className="font-medium">Descargar</span> y elige
                     XLSX. <span className="font-medium">Vista previa Excel</span> muestra la primera hoja (tabular,
                     podría truncarse); el PDF, si existe, es solo copia de presentación/lectura. En{" "}
-                    <span className="font-medium">Texto</span> verás un resumen en markdown.
+                    <span className="font-medium">Resumen (Markdown)</span> verás el texto fuente.
                   </p>
                 ) : null}
               </div>
@@ -438,7 +438,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                   if (value === "text") {
                     return (
                       <TabsTrigger key="text" value="text" className="text-[11px] h-5 px-2 gap-1">
-                        <FileTextIcon className="h-3 w-3" /> Texto
+                        <FileTextIcon className="h-3 w-3" /> Resumen (Markdown)
                       </TabsTrigger>
                     );
                   }

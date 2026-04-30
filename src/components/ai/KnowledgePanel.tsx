@@ -72,6 +72,7 @@ export function KnowledgePanel({
     return (
       <div className="h-full min-h-0 flex flex-col w-[min(88vw,1600px)] max-w-[min(96vw,1600px)] min-w-[320px] shrink-0 border-l border-border/40 bg-background">
         <ArtifactViewer
+          key={activeArtifact.id}
           artifact={activeArtifact}
           onBack={() => onViewArtifact(null)}
           onUpdate={onUpdateArtifact}
