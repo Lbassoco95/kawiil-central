@@ -21,6 +21,8 @@ interface ArtifactOfficeOnlinePreviewProps {
   simplifiedFallback: ReactNode;
   /** Si true, el bloque ocupa el alto disponible del panel. */
   fitContainer?: boolean;
+  /** Marco amplio para scroll + zoom en el visor del Asistente (Word/Excel/PPT). */
+  panZoomEmbed?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ export function ArtifactOfficeOnlinePreview({
   suiteLabel,
   simplifiedFallback,
   fitContainer = true,
+  panZoomEmbed = false,
 }: ArtifactOfficeOnlinePreviewProps) {
   const [loading, setLoading] = useState(true);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
@@ -73,7 +76,7 @@ export function ArtifactOfficeOnlinePreview({
     return (
       <div
         className={`flex flex-col items-center justify-center gap-2 text-muted-foreground ${
-          fitContainer ? "h-full min-h-[280px]" : "min-h-[280px]"
+          panZoomEmbed ? "min-h-[880px] w-full min-w-[1080px]" : fitContainer ? "h-full min-h-[280px]" : "min-h-[280px]"
         }`}
       >
         <Loader2 className="h-5 w-5 animate-spin" />
@@ -86,8 +89,12 @@ export function ArtifactOfficeOnlinePreview({
     return <>{simplifiedFallback}</>;
   }
 
+  const frameClass = panZoomEmbed
+    ? "relative flex h-full min-h-[880px] w-full min-w-[1080px] flex-col"
+    : `relative flex flex-col ${fitContainer ? "min-h-0 flex-1 h-full" : ""}`;
+
   return (
-    <div className={`relative flex flex-col ${fitContainer ? "min-h-0 flex-1 h-full" : ""}`}>
+    <div className={frameClass}>
       <div className="pointer-events-none absolute right-2 top-2 z-10 flex justify-end">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -112,7 +119,7 @@ export function ArtifactOfficeOnlinePreview({
       <iframe
         title={`Vista previa ${suiteLabel}`}
         src={embedUrl}
-        className={`w-full border-0 bg-background ${fitContainer ? "min-h-0 flex-1 h-full" : "min-h-[480px]"}`}
+        className={`w-full border-0 bg-background ${panZoomEmbed ? "min-h-[880px] flex-1" : fitContainer ? "min-h-0 flex-1 h-full" : "min-h-[480px]"}`}
         referrerPolicy="strict-origin-when-cross-origin"
       />
     </div>

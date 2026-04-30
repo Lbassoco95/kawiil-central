@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArtifactPdfPreview } from "./ArtifactPdfPreview";
+import { ArtifactPreviewZoomShell } from "./ArtifactPreviewZoomShell";
 import { ArtifactSpreadsheetPreview } from "./ArtifactSpreadsheetPreview";
 import { ArtifactDocxPreview } from "./ArtifactDocxPreview";
 import { ArtifactOfficeOnlinePreview } from "./ArtifactOfficeOnlinePreview";
@@ -476,18 +477,19 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             </div>
             {docxOutput ? (
               <TabsContent value="docx" className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1">
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ArtifactPreviewZoomShell resetKey={artifact.id}>
                   <ArtifactOfficeOnlinePreview
                     bucket={docxOutput.storage_bucket}
                     storagePath={docxOutput.storage_path}
                     suiteLabel="Word"
+                    panZoomEmbed
                     simplifiedFallback={
-                      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                      <div className="flex min-h-0 flex-col overflow-auto">
                         <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
                       </div>
                     }
                   />
-                </div>
+                </ArtifactPreviewZoomShell>
               </TabsContent>
             ) : null}
             {pptxOutput ? (
@@ -495,13 +497,14 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 value="pptx"
                 className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1"
               >
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ArtifactPreviewZoomShell resetKey={artifact.id}>
                   <ArtifactOfficeOnlinePreview
                     bucket={pptxOutput.storage_bucket}
                     storagePath={pptxOutput.storage_path}
                     suiteLabel="PowerPoint"
+                    panZoomEmbed
                     simplifiedFallback={
-                      <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center max-w-md mx-auto">
+                      <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
                         <Presentation className="h-12 w-12 text-muted-foreground/50" />
                         <p className="text-sm text-foreground">No hay vista simplificada en la app.</p>
                         <p className="text-xs text-muted-foreground">
@@ -510,7 +513,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                       </div>
                     }
                   />
-                </div>
+                </ArtifactPreviewZoomShell>
               </TabsContent>
             ) : null}
             {xlsxOutput ? (
@@ -518,11 +521,12 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 value="spreadsheet"
                 className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1"
               >
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <ArtifactPreviewZoomShell resetKey={artifact.id}>
                   <ArtifactOfficeOnlinePreview
                     bucket={xlsxOutput.storage_bucket}
                     storagePath={xlsxOutput.storage_path}
                     suiteLabel="Excel"
+                    panZoomEmbed
                     simplifiedFallback={
                       <ArtifactSpreadsheetPreview
                         bucket={xlsxOutput.storage_bucket}
@@ -531,7 +535,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                       />
                     }
                   />
-                </div>
+                </ArtifactPreviewZoomShell>
               </TabsContent>
             ) : null}
             <TabsContent value="text" className="m-0 flex min-h-0 flex-1 flex-col overflow-y-auto p-4 data-[state=active]:flex-1">
@@ -541,9 +545,9 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             </TabsContent>
             {pdfOutput ? (
               <TabsContent value="pdf" className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1">
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
-                </div>
+                <ArtifactPreviewZoomShell resetKey={artifact.id}>
+                  <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} panZoomEmbed />
+                </ArtifactPreviewZoomShell>
               </TabsContent>
             ) : null}
           </Tabs>

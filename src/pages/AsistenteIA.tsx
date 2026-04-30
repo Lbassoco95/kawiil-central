@@ -1581,10 +1581,10 @@ function AsistenteIAContent() {
 
         {/* Main chat area */}
         {!isMobile ? (
-          <ResizablePanelGroup direction="horizontal" className="flex min-h-0 min-w-0 flex-1" autoSaveId="asistente-artifact-split-v2">
+          <ResizablePanelGroup direction="horizontal" className="flex min-h-0 min-w-0 flex-1" autoSaveId="asistente-artifact-split-v3">
             <ResizablePanel
-              defaultSize={artifactSplitVisible ? 56 : 100}
-              minSize={artifactSplitVisible ? 38 : 100}
+              defaultSize={artifactSplitVisible ? 46 : 100}
+              minSize={artifactSplitVisible ? 32 : 100}
               className="flex min-h-0 min-w-0 flex-col"
             >
               <FileDropzone
@@ -1605,7 +1605,7 @@ function AsistenteIAContent() {
             {artifactSplitVisible ? (
               <>
                 <ResizableHandle withHandle className="bg-border/70 w-2.5 shrink-0" />
-                <ResizablePanel defaultSize={44} minSize={30} maxSize={72} className="flex min-h-0 min-w-0 flex-col border-l border-border/40 bg-background shadow-sm dark:bg-background">
+                <ResizablePanel defaultSize={54} minSize={36} maxSize={78} className="flex min-h-0 min-w-0 flex-col border-l border-border/40 bg-background shadow-sm dark:bg-background">
                   <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/40 bg-muted/30 px-3 py-2">
                     <p
                       className="min-w-0 truncate text-xs font-medium"

@@ -7,6 +7,8 @@ interface ArtifactPdfPreviewProps {
   path: string;
   /** Si true, el preview se ajusta al contenedor completo. */
   fitContainer?: boolean;
+  /** Marco amplio + sin FitV para combinar con zoom y barras de desplazamiento del visor. */
+  panZoomEmbed?: boolean;
 }
 
 function buildAbsoluteSignedUrl(signedUrl: string) {
@@ -21,7 +23,7 @@ function buildAbsoluteSignedUrl(signedUrl: string) {
  * (el navegador usa su visor nativo de PDF). Sigue el mismo patrón
  * que `DocumentPreviewDialog` para consistencia visual.
  */
-export function ArtifactPdfPreview({ bucket, path, fitContainer = true }: ArtifactPdfPreviewProps) {
+export function ArtifactPdfPreview({ bucket, path, fitContainer = true, panZoomEmbed = false }: ArtifactPdfPreviewProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,11 @@ export function ArtifactPdfPreview({ bucket, path, fitContainer = true }: Artifa
 
   if (loading) {
     return (
-      <div className={`flex flex-col items-center justify-center gap-2 text-muted-foreground ${fitContainer ? "h-full" : "min-h-[280px]"}`}>
+      <div
+        className={`flex flex-col items-center justify-center gap-2 text-muted-foreground ${
+          panZoomEmbed ? "min-h-[880px] w-full min-w-[1080px]" : fitContainer ? "h-full" : "min-h-[280px]"
+        }`}
+      >
         <Loader2 className="h-5 w-5 animate-spin" />
         <p className="text-xs">Cargando preview del PDF…</p>
       </div>
@@ -59,20 +65,32 @@ export function ArtifactPdfPreview({ bucket, path, fitContainer = true }: Artifa
   }
   if (error || !url) {
     return (
-      <div className={`flex flex-col items-center justify-center gap-2 text-destructive ${fitContainer ? "h-full" : "min-h-[280px]"}`}>
+      <div
+        className={`flex flex-col items-center justify-center gap-2 text-destructive ${
+          panZoomEmbed ? "min-h-[880px] w-full min-w-[1080px]" : fitContainer ? "h-full" : "min-h-[280px]"
+        }`}
+      >
         <AlertCircle className="h-5 w-5" />
         <p className="text-xs max-w-[280px] text-center">{error || "No se pudo cargar el PDF."}</p>
       </div>
     );
   }
 
+  const pdfHash = panZoomEmbed ? "toolbar=1&navpanes=0" : "toolbar=1&navpanes=0&view=FitV";
+
   return (
     <div
-      className={`${fitContainer ? "h-full min-h-[min(70vh,800px)]" : "h-[720px] min-h-[min(70vh,800px)]"} w-full bg-muted/20 flex flex-col`}
+      className={`w-full flex flex-col bg-muted/20 ${
+        panZoomEmbed
+          ? "h-full min-h-[880px] min-w-[1080px]"
+          : fitContainer
+            ? "h-full min-h-[min(70vh,800px)]"
+            : "h-[720px] min-h-[min(70vh,800px)]"
+      }`}
     >
       <iframe
-        src={`${url}#toolbar=1&navpanes=0&view=FitV`}
-        className="w-full flex-1 min-h-0 h-full"
+        src={`${url}#${pdfHash}`}
+        className={`w-full flex-1 bg-background ${panZoomEmbed ? "min-h-[840px]" : "min-h-0 h-full"}`}
         title="Preview del documento PDF"
       />
       <div className="sr-only">
