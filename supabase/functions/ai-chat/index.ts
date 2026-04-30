@@ -3206,13 +3206,37 @@ function userLastMessageRequestedFileDeliverable(text: string): boolean {
 }
 
 /**
- * Heurística: el texto del asistente sugiere que ya entregó un archivo (no sustituye al marcador [artifact:…]).
+ * Heurística: el texto del asistente sugiere que **ya entregó** un archivo descargable.
+ * Debe ser estricta: patrones amplios (`descarg`, `archivo`, `.docx` sueltos) disparaban el
+ * reintento automático a create_ai_document cuando el modelo solo pedía datos o explicaba
+ * el siguiente paso → nota (sistema) confusa y foco perdido para el usuario.
  */
 function assistantTextClaimsFileDelivered(text: string): boolean {
   if (!text || text.length < 12) return false;
-  return /gener(é|e|ó)|aqu[ií]\s+tiene|te\s+he\s+genera|papel\s+de\s+trabajo|descarg|\.xlsx|\.docx|archivo|listo\s+para|ya\s+qued[oó]|quedó\s+el/i.test(
-    text,
-  );
+  const t = text.trim();
+
+  const strongPastOrImperative =
+    /\b(gener(é|ó)|generamos|cre(e|é|amos|ó))\b[\s\S]{0,220}\b(documento|archivo|excel|word|pdf|oficio|minuta|informe|propuesta|carta)/i.test(t) ||
+    /\b(prepar(e|é|ó)|preparamos)\b[\s\S]{0,140}\b(documento|archivo|excel|entrega)/i.test(t) ||
+    /\b(adjunt(e|é|ó)|adjuntamos|envi(e|é|ó)|enviamos)\b[\s\S]{0,100}\b(el\s+)?(documento|archivo|pdf|word|excel)/i.test(t) ||
+    /\b(el\s+)?(documento|archivo)\s+(est[aá]|qued[oó])\s+(listo|generado)/i.test(t) ||
+    /\b(aqu[ií]|ac[aá])\s+tienes\b/i.test(t) ||
+    /\bte\s+(lo\s+)?(adjunto|env[ií]o|comparto)\b/i.test(t) ||
+    /\bya\s+puedes\s+descarg/i.test(t) ||
+    /\bpuedes\s+descarg(arlo|ar\s+el|ar\s+ya|arlo\s+aqu[ií])\b/i.test(t) ||
+    /\bpapel\s+de\s+trabajo\b[\s\S]{0,120}\b(listo|generad|adjunt|aqu[ií])/i.test(t) ||
+    /\b[\w\-]{2,90}\.(docx|xlsx|pptx)\b/i.test(t);
+
+  if (!strongPastOrImperative) return false;
+
+  const lastBlock = (t.split(/\n\n+/).pop() ?? t).trim();
+  if (/\?\s*$/.test(lastBlock)) {
+    const lastClaimsDelivery =
+      /\b(gener(é|ó)|generamos|adjunt(e|é|ó)|aqu[ií]\s+tienes|ya\s+puedes\s+descarg|\.(docx|xlsx|pptx)\b)/i.test(lastBlock);
+    if (!lastClaimsDelivery) return false;
+  }
+
+  return true;
 }
 
 async function handleCreateAiDocument(
@@ -4413,17 +4437,29 @@ async function handleClaudeChat(
             name: string;
             input: unknown;
           }>;
+          const failuresBeforeRepair = documentPipelineFailures.length;
+          let repairProducedArtifact = false;
           for (const tu of rToolUses) {
             if (tu.name === "create_ai_document" || tu.name === "create_office_document") {
               sseWriter.writeProgress("tool", "Generando documento (reintento automático)…");
-              const rResult = await handleCreateAiDocument(
-                (tu.input || {}) as Record<string, unknown>,
-                userId,
-                orgId,
-                aiProjectId,
-                authHeader,
-                lastUserPlainText,
-              );
+              let rResult: string;
+              try {
+                rResult = await handleCreateAiDocument(
+                  (tu.input || {}) as Record<string, unknown>,
+                  userId,
+                  orgId,
+                  aiProjectId,
+                  authHeader,
+                  lastUserPlainText,
+                );
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                documentPipelineFailures.push({
+                  error: msg.slice(0, 500),
+                  code: "artifact_repair_throw",
+                });
+                continue;
+              }
               try {
                 const parsed = JSON.parse(rResult) as {
                   artifact_id?: string;
@@ -4435,6 +4471,7 @@ async function handleClaudeChat(
                   primary_format?: string;
                 };
                 if (parsed.artifact_id) {
+                  repairProducedArtifact = true;
                   createdArtifacts.push({
                     id: parsed.artifact_id,
                     title: String(parsed.title || ""),
@@ -4449,13 +4486,38 @@ async function handleClaudeChat(
                   });
                 }
               } catch {
-                /* ignore */
+                documentPipelineFailures.push({
+                  error: "Respuesta inválida de create_ai_document en el reintento automático.",
+                  code: "artifact_repair_bad_json",
+                });
               }
+            }
+          }
+          if (!repairProducedArtifact) {
+            const hadCreateDoc = rToolUses.some(
+              (tu) => tu.name === "create_ai_document" || tu.name === "create_office_document",
+            );
+            if (!hadCreateDoc) {
+              documentPipelineFailures.push({
+                error:
+                  "El reintento automático no obtuvo invocación a create_ai_document desde el modelo.",
+                code: "artifact_repair_no_tool_use",
+              });
+            } else if (documentPipelineFailures.length === failuresBeforeRepair) {
+              documentPipelineFailures.push({
+                error:
+                  "create_ai_document se ejecutó en el reintento pero no devolvió artifact_id.",
+                code: "artifact_repair_empty_result",
+              });
             }
           }
         } else {
           const errT = await repairResp.text();
           console.warn("artifact_repair: anthropic not ok", repairResp.status, errT.slice(0, 300));
+          documentPipelineFailures.push({
+            error: `Reintento automático del modelo falló (${repairResp.status}). ${errT.replace(/\s+/g, " ").trim().slice(0, 220)}`,
+            code: "artifact_repair_anthropic_http",
+          });
         }
         console.log(
           JSON.stringify({
