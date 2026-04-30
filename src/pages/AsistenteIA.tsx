@@ -89,7 +89,7 @@ function AsistenteIAContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const {
-    messages, isStreaming, streamProgressSteps, pdfIndexingStatus, conversations, activeConversationId, activeAiProjectId,
+    messages, isStreaming, streamingConversationIds, streamProgressSteps, pdfIndexingStatus, conversations, activeConversationId, activeAiProjectId,
     agentSession, returnToKawiilAssistant,
     sendMessage, loadConversation, addAgentTaskMessage, patchMessageContent, startNewChat,
     deleteConversation,
@@ -1576,6 +1576,7 @@ function AsistenteIAContent() {
             }}
             currentUserId={user?.id}
             onOpenMembers={activeAiProjectId ? () => setMembersDialogOpen(true) : undefined}
+            streamingConversationIds={streamingConversationIds}
           />
         )}
 

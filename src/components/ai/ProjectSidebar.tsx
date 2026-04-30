@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,7 +9,7 @@ import {
 import {
   Plus, Trash2, MessageSquare, FolderOpen, Folder, FolderPlus,
   MoreHorizontal, Pencil, FolderInput, ChevronDown, ChevronRight,
-  BrainCircuit, ArrowLeft, Settings2, Users, LogOut,
+  BrainCircuit, ArrowLeft, Settings2, Users, LogOut, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
@@ -38,6 +38,8 @@ interface ProjectSidebarProps {
   onUpdateInstructions: (id: string, instructions: string) => void;
   currentUserId?: string | null;
   onOpenMembers?: () => void;
+  /** Conversaciones con respuesta de IA en curso (panel paralelo). */
+  streamingConversationIds?: readonly string[];
 }
 
 export function ProjectSidebar({
@@ -46,6 +48,7 @@ export function ProjectSidebar({
   onDeleteConversation, onRenameConversation, onMoveConversation,
   onCreateProject, onArchiveProject, onLeaveProject, onUpdateInstructions,
   currentUserId, onOpenMembers,
+  streamingConversationIds = [],
 }: ProjectSidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["__none__"]));
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -56,6 +59,8 @@ export function ProjectSidebar({
   const [editingInstructions, setEditingInstructions] = useState(false);
   const [editInstructions, setEditInstructions] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
+
+  const streamingSet = useMemo(() => new Set(streamingConversationIds), [streamingConversationIds]);
 
   const groupedConversations = (() => {
     const groups: Record<string, ChatConversation[]> = {};
@@ -95,7 +100,9 @@ export function ProjectSidebar({
       )}
       onClick={() => onLoadConversation(c.id)}
     >
-      {c.ai_project_id ? (
+      {streamingSet.has(c.id) ? (
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" aria-hidden />
+      ) : c.ai_project_id ? (
         <span title="Chat de proyecto IA" className="inline-flex">
           <BrainCircuit className="h-3 w-3 shrink-0 text-primary" />
         </span>

@@ -3,6 +3,7 @@ import {
   useCallback,
   useRef,
   useEffect,
+  useMemo,
   createContext,
   useContext,
   createElement,
@@ -381,9 +382,15 @@ function useChatState() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingConversationIds, setStreamingConversationIds] = useState<string[]>([]);
+  const streamingIdsRef = useRef(new Set<string>());
+  const draftMessagesByConvRef = useRef(new Map<string, ChatMessage[]>());
+  const activeConversationIdRef = useRef<string | null>(null);
+  const loadConversationRef = useRef<(id: string) => Promise<void>>(async () => {});
+
   const [streamProgressSteps, setStreamProgressSteps] = useState<ChatProgressStep[]>([]);
   const progressStepsRef = useRef<ChatProgressStep[]>([]);
+  const progressStepsByConvRef = useRef(new Map<string, ChatProgressStep[]>());
   const [pdfIndexingStatus, setPdfIndexingStatus] = useState<PdfIndexingStatus | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeAiProjectId, setActiveAiProjectId] = useState<string | null>(null);
@@ -392,6 +399,57 @@ function useChatState() {
   useEffect(() => {
     agentSessionRef.current = agentSession;
   }, [agentSession]);
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  const isStreaming = useMemo(
+    () => Boolean(activeConversationId && streamingConversationIds.includes(activeConversationId)),
+    [activeConversationId, streamingConversationIds],
+  );
+
+  const syncStreamingIds = useCallback(() => {
+    setStreamingConversationIds(Array.from(streamingIdsRef.current));
+  }, []);
+
+  const addStreamingConversationId = useCallback(
+    (id: string) => {
+      streamingIdsRef.current.add(id);
+      syncStreamingIds();
+    },
+    [syncStreamingIds],
+  );
+
+  const removeStreamingConversationId = useCallback(
+    (id: string) => {
+      streamingIdsRef.current.delete(id);
+      draftMessagesByConvRef.current.delete(id);
+      progressStepsByConvRef.current.delete(id);
+      syncStreamingIds();
+    },
+    [syncStreamingIds],
+  );
+
+  /** Actualiza borrador por conversación y solo pinta `messages` si esa conversación está visible. */
+  const applyMessagesForConversation = useCallback((conversationId: string, next: ChatMessage[]) => {
+    draftMessagesByConvRef.current.set(conversationId, next);
+    if (activeConversationIdRef.current === conversationId) {
+      setMessages(next);
+    }
+  }, []);
+
+  /** Igual que apply pero partiendo del borrador actual (p.ej. deltas del SSE). */
+  const patchDraftMessagesForConversation = useCallback(
+    (conversationId: string, updater: (draft: ChatMessage[]) => ChatMessage[]) => {
+      const prev = draftMessagesByConvRef.current.get(conversationId) ?? [];
+      const next = updater(prev);
+      draftMessagesByConvRef.current.set(conversationId, next);
+      if (activeConversationIdRef.current === conversationId) {
+        setMessages(next);
+      }
+    },
+    [],
+  );
 
   const { data: conversations, isLoading: loadingConversations } = useQuery({
     queryKey: ["chat-conversations", user?.id],
@@ -425,7 +483,14 @@ function useChatState() {
       attachments: Array.isArray(r.attachments) && r.attachments.length ? r.attachments : undefined,
       agent_task_ref: (r as any).agent_task_ref ?? null,
     }));
-    setMessages(msgRows);
+    let nextMsgs = msgRows;
+    if (streamingIdsRef.current.has(conversationId)) {
+      const draft = draftMessagesByConvRef.current.get(conversationId);
+      if (draft && draft.length > 0) {
+        nextMsgs = draft;
+      }
+    }
+    setMessages(nextMsgs);
     setActiveConversationId(conversationId);
     setPdfIndexingStatus(null);
 
@@ -466,6 +531,15 @@ function useChatState() {
     const effective = fromDb ?? fromMsgs;
     setAgentSession(effective);
     agentSessionRef.current = effective;
+
+    if (streamingIdsRef.current.has(conversationId)) {
+      const steps = progressStepsByConvRef.current.get(conversationId) ?? [];
+      progressStepsRef.current = steps;
+      setStreamProgressSteps([...steps]);
+    } else {
+      progressStepsRef.current = [];
+      setStreamProgressSteps([]);
+    }
   }, []);
 
   const createConversation = useCallback(
@@ -712,25 +786,7 @@ function useChatState() {
     async (input: string, opts?: SendMessageOptions) => {
       const files = (opts?.files ?? []).slice(0, MAX_CHAT_ATTACHMENT_FILES);
       const text = input.trim() || (files.length ? "(Archivos adjuntos)" : "");
-      if ((!text && !files.length) || isStreaming) return;
-
-      progressStepsRef.current = [];
-      const pushProgress = (phase: string, message: string, mode: PushProgressMode = "append") => {
-        if (mode === "replace_same_phase") {
-          const arr = [...progressStepsRef.current];
-          for (let i = arr.length - 1; i >= 0; i--) {
-            if (arr[i].phase === phase) {
-              arr[i] = { phase, message };
-              progressStepsRef.current = arr;
-              setStreamProgressSteps([...arr]);
-              return;
-            }
-          }
-        }
-        const step: ChatProgressStep = { phase, message };
-        progressStepsRef.current = [...progressStepsRef.current, step];
-        setStreamProgressSteps([...progressStepsRef.current]);
-      };
+      if (!text && !files.length) return;
 
       let convId = activeConversationId;
       if (!convId) {
@@ -738,6 +794,35 @@ function useChatState() {
         convId = await createConversation(title);
         setActiveConversationId(convId);
       }
+      if (streamingIdsRef.current.has(convId)) {
+        toast.message("Ya hay una respuesta en curso en este chat.");
+        return;
+      }
+      const aiProjectIdAtSend = activeAiProjectId;
+
+      progressStepsByConvRef.current.set(convId, []);
+      const pushProgress = (phase: string, message: string, mode: PushProgressMode = "append") => {
+        let steps = [...(progressStepsByConvRef.current.get(convId) ?? [])];
+        const flushStepsUi = () => {
+          progressStepsByConvRef.current.set(convId, steps);
+          if (activeConversationIdRef.current === convId) {
+            progressStepsRef.current = steps;
+            setStreamProgressSteps([...steps]);
+          }
+        };
+        if (mode === "replace_same_phase") {
+          for (let i = steps.length - 1; i >= 0; i--) {
+            if (steps[i].phase === phase) {
+              steps[i] = { phase, message };
+              flushStepsUi();
+              return;
+            }
+          }
+        }
+        const step: ChatProgressStep = { phase, message };
+        steps = [...steps, step];
+        flushStepsUi();
+      };
 
       const orgRes = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
       if (orgRes.error) {
@@ -804,8 +889,11 @@ function useChatState() {
 
       if (!text.trim() && files.length && savedMeta.length === 0) {
         toast.error("No se pudo subir ningún archivo");
-        setStreamProgressSteps([]);
-        progressStepsRef.current = [];
+        progressStepsByConvRef.current.delete(convId);
+        if (activeConversationIdRef.current === convId) {
+          setStreamProgressSteps([]);
+          progressStepsRef.current = [];
+        }
         return;
       }
 
@@ -819,8 +907,8 @@ function useChatState() {
         attachments: savedMeta.length ? savedMeta : undefined,
       };
       const allMessages = [...messages, userMsg];
-      setMessages(allMessages);
-      setIsStreaming(true);
+      applyMessagesForConversation(convId, allMessages);
+      addStreamingConversationId(convId);
 
       pushProgress("prep", "Guardando el mensaje en tu conversación…", "replace_same_phase");
 
@@ -830,10 +918,12 @@ function useChatState() {
       } catch (persistErr: any) {
         console.error(persistErr);
         toast.error(persistErr?.message || "No se pudo guardar el mensaje");
-        setIsStreaming(false);
-        setStreamProgressSteps([]);
-        progressStepsRef.current = [];
-        setMessages((prev) => prev.slice(0, -1));
+        removeStreamingConversationId(convId);
+        applyMessagesForConversation(convId, messages);
+        if (activeConversationIdRef.current === convId) {
+          setStreamProgressSteps([]);
+          progressStepsRef.current = [];
+        }
         return;
       }
 
@@ -914,6 +1004,8 @@ function useChatState() {
         chatAbortController.abort();
       }, AI_CHAT_CLIENT_TIMEOUT_MS);
 
+      let assistantSavedOk = false;
+
       try {
         let { data: { session: initialSession } } = await supabase.auth.getSession();
         let accessToken = initialSession?.access_token;
@@ -935,7 +1027,7 @@ function useChatState() {
             .filter((m) => !m.agent_task_ref)
             .map((m) => ({ role: m.role, content: m.content })),
           conversationId: convId,
-          ai_project_id: activeAiProjectId || undefined,
+          ai_project_id: aiProjectIdAtSend || undefined,
           attachmentRefs: refsForAiChat.length ? refsForAiChat : undefined,
         });
 
@@ -1076,14 +1168,14 @@ function useChatState() {
           const plain = typeof (j as any).content === "string" ? (j as any).content : "";
           if (plain) {
             assistantContent = plain;
-            const log = progressStepsRef.current.map((s) => s.message);
-            setMessages((prev) => [
+            const log = (progressStepsByConvRef.current.get(convId) ?? []).map((s) => s.message);
+            patchDraftMessagesForConversation(convId, (prev) => [
               ...prev,
               { role: "assistant", content: plain, activityLog: log.length ? log : undefined },
             ]);
             const aid = await saveMessage(convId, "assistant", assistantContent, null);
             if (aid) {
-              setMessages((prev) => {
+              patchDraftMessagesForConversation(convId, (prev) => {
                 const last = prev[prev.length - 1];
                 if (last?.role === "assistant" && !last.isError) {
                   return prev.map((m, i) => (i === prev.length - 1 ? { ...m, id: aid } : m));
@@ -1096,9 +1188,10 @@ function useChatState() {
               .catch(() => {});
             qc.invalidateQueries({ queryKey: ["chat-conversations"] });
             if (hasArtifactMarker(assistantContent)) {
-              qc.invalidateQueries({ queryKey: ["ai-artifacts", activeAiProjectId ?? null] });
+              qc.invalidateQueries({ queryKey: ["ai-artifacts", aiProjectIdAtSend ?? null] });
               void reconcilePendingArtifacts(extractArtifactIds(assistantContent));
             }
+            assistantSavedOk = true;
           } else {
             throw new Error("El servidor respondió sin contenido de texto.");
           }
@@ -1140,11 +1233,11 @@ function useChatState() {
           const content = (parsed as any).choices?.[0]?.delta?.content as string | undefined;
           if (content) {
             assistantContent += content;
-            setMessages((prev) => {
+            patchDraftMessagesForConversation(convId, (prev) => {
               const last = prev[prev.length - 1];
               if (last?.role === "assistant") {
                 return prev.map((m, i) =>
-                  i === prev.length - 1 ? { ...m, content: assistantContent, isError: false } : m
+                  i === prev.length - 1 ? { ...m, content: assistantContent, isError: false } : m,
                 );
               }
               return [...prev, { role: "assistant", content: assistantContent }];
@@ -1197,11 +1290,11 @@ function useChatState() {
             }
           }
           if (assistantContent) {
-            setMessages((prev) => {
+            patchDraftMessagesForConversation(convId, (prev) => {
               const last = prev[prev.length - 1];
               if (last?.role === "assistant") {
                 return prev.map((m, i) =>
-                  i === prev.length - 1 ? { ...m, content: assistantContent } : m
+                  i === prev.length - 1 ? { ...m, content: assistantContent } : m,
                 );
               }
               return [...prev, { role: "assistant", content: assistantContent }];
@@ -1211,19 +1304,19 @@ function useChatState() {
 
         const trimmed = assistantContent.trim();
         if (trimmed) {
-          const log = progressStepsRef.current.map((s) => s.message);
-          setMessages((prev) => {
+          const log = (progressStepsByConvRef.current.get(convId) ?? []).map((s) => s.message);
+          patchDraftMessagesForConversation(convId, (prev) => {
             const last = prev[prev.length - 1];
             if (last?.role === "assistant" && log.length) {
               return prev.map((m, i) =>
-                i === prev.length - 1 ? { ...m, activityLog: log } : m
+                i === prev.length - 1 ? { ...m, activityLog: log } : m,
               );
             }
             return prev;
           });
           const aid = await saveMessage(convId, "assistant", assistantContent, null);
           if (aid) {
-            setMessages((prev) => {
+            patchDraftMessagesForConversation(convId, (prev) => {
               const last = prev[prev.length - 1];
               if (last?.role === "assistant" && !last.isError) {
                 return prev.map((m, i) => (i === prev.length - 1 ? { ...m, id: aid } : m));
@@ -1236,14 +1329,15 @@ function useChatState() {
             .catch(() => {});
           qc.invalidateQueries({ queryKey: ["chat-conversations"] });
           if (hasArtifactMarker(assistantContent)) {
-            qc.invalidateQueries({ queryKey: ["ai-artifacts", activeAiProjectId ?? null] });
+            qc.invalidateQueries({ queryKey: ["ai-artifacts", aiProjectIdAtSend ?? null] });
             void reconcilePendingArtifacts(extractArtifactIds(assistantContent));
           }
+          assistantSavedOk = true;
         } else {
           const errText =
             "**No se recibió respuesta del modelo.** Suele ocurrir si los adjuntos son demasiado pesados para el proveedor de IA, si hubo un corte de red o un fallo temporal. Prueba con menos archivos, archivos más livianos o reintenta en unos minutos.";
           pushProgress("error", "Sin texto en la respuesta del servidor");
-          setMessages((prev) => [
+          patchDraftMessagesForConversation(convId, (prev) => [
             ...prev,
             { role: "assistant", content: errText, isError: true },
           ]);
@@ -1261,7 +1355,7 @@ function useChatState() {
         toast.error(msg);
         const overloadHint =
           /saturado|overloaded|529|claude_overloaded/i.test(msg) || msg === MSG_CLAUDE_OVERLOADED;
-        setMessages((prev) => [
+        patchDraftMessagesForConversation(convId, (prev) => [
           ...prev,
           {
             role: "assistant",
@@ -1275,9 +1369,22 @@ function useChatState() {
         ]);
       } finally {
         clearTimeout(chatAbortTimer);
-        setIsStreaming(false);
-        setStreamProgressSteps([]);
-        progressStepsRef.current = [];
+        removeStreamingConversationId(convId);
+        if (activeConversationIdRef.current === convId) {
+          setStreamProgressSteps([]);
+          progressStepsRef.current = [];
+        }
+        if (assistantSavedOk && activeConversationIdRef.current !== convId) {
+          const list = qc.getQueryData<ChatConversation[]>(["chat-conversations", user?.id]);
+          const rawTitle = list?.find((c) => c.id === convId)?.title ?? "Conversación";
+          const shortTitle = rawTitle.length > 52 ? `${rawTitle.slice(0, 50)}…` : rawTitle;
+          toast.success(`Respuesta lista en «${shortTitle}»`, {
+            action: {
+              label: "Abrir",
+              onClick: () => void loadConversationRef.current(convId),
+            },
+          });
+        }
       }
 
       const shouldIndexPdfs =
@@ -1290,7 +1397,6 @@ function useChatState() {
     },
     [
       messages,
-      isStreaming,
       pdfIndexingStatus,
       activeConversationId,
       activeAiProjectId,
@@ -1298,8 +1404,16 @@ function useChatState() {
       saveMessage,
       qc,
       user,
+      applyMessagesForConversation,
+      patchDraftMessagesForConversation,
+      addStreamingConversationId,
+      removeStreamingConversationId,
     ]
   );
+
+  useEffect(() => {
+    loadConversationRef.current = loadConversation;
+  }, [loadConversation]);
 
   const returnToKawiilAssistant = useCallback(() => {
     if (!activeConversationId) return;
@@ -1324,6 +1438,8 @@ function useChatState() {
     setPdfIndexingStatus(null);
     setAgentSession(null);
     agentSessionRef.current = null;
+    progressStepsRef.current = [];
+    setStreamProgressSteps([]);
     if (user) {
       try {
         sessionStorage.removeItem(`${LAST_CONV_KEY_PREFIX}${user.id}`);
@@ -1340,6 +1456,8 @@ function useChatState() {
     setPdfIndexingStatus(null);
     setAgentSession(null);
     agentSessionRef.current = null;
+    progressStepsRef.current = [];
+    setStreamProgressSteps([]);
     if (user) {
       try {
         sessionStorage.removeItem(`${LAST_CONV_KEY_PREFIX}${user.id}`);
@@ -1387,6 +1505,7 @@ function useChatState() {
   return {
     messages,
     isStreaming,
+    streamingConversationIds,
     conversations: conversations ?? [],
     loadingConversations,
     activeConversationId,
