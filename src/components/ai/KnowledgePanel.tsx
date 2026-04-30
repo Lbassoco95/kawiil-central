@@ -70,7 +70,7 @@ export function KnowledgePanel({
 
   if (activeArtifact) {
     return (
-      <div className="h-full min-h-0 flex flex-col w-[min(88vw,1600px)] max-w-[min(96vw,1600px)] min-w-[320px] shrink-0 border-l border-border/40 bg-background">
+      <div className="flex min-h-0 min-w-0 flex-1 shrink-0 flex-col border-l border-border/40 bg-background h-full max-h-full w-[min(88vw,1600px)] max-w-[min(96vw,1600px)] min-w-[320px]">
         <ArtifactViewer
           key={activeArtifact.id}
           artifact={activeArtifact}

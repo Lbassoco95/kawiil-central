@@ -31,7 +31,7 @@ export function ArtifactPreviewZoomShell({ children, resetKey }: ArtifactPreview
   const scale = zoomPct / 100;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-[1_1_0] flex-col basis-0">
       <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/40 bg-muted/50 px-2 py-1">
         <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Zoom</span>
         <Button
@@ -72,18 +72,17 @@ export function ArtifactPreviewZoomShell({ children, resetKey }: ArtifactPreview
           100%
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+      <div className="flex min-h-0 min-w-0 flex-[1_1_0] basis-0 overflow-auto overscroll-contain">
         <div
-          className="origin-top-left"
+          className="inline-block origin-top-left align-top"
           style={{
             transform: `scale(${scale})`,
             width: `${100 / scale}%`,
-            height: `${100 / scale}%`,
           }}
         >
           <div
             className="box-border w-full bg-background"
-            style={{ minWidth: 1080, minHeight: 880 }}
+            style={{ minWidth: 1080, minHeight: "max(880px, min(72vh, 1100px))" }}
           >
             {children}
           </div>

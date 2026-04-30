@@ -1581,7 +1581,7 @@ function AsistenteIAContent() {
 
         {/* Main chat area */}
         {!isMobile ? (
-          <ResizablePanelGroup direction="horizontal" className="flex min-h-0 min-w-0 flex-1" autoSaveId="asistente-artifact-split-v3">
+          <ResizablePanelGroup direction="horizontal" className="flex h-full min-h-0 min-w-0 flex-1" autoSaveId="asistente-artifact-split-v3">
             <ResizablePanel
               defaultSize={artifactSplitVisible ? 46 : 100}
               minSize={artifactSplitVisible ? 32 : 100}
@@ -1605,7 +1605,7 @@ function AsistenteIAContent() {
             {artifactSplitVisible ? (
               <>
                 <ResizableHandle withHandle className="bg-border/70 w-2.5 shrink-0" />
-                <ResizablePanel defaultSize={54} minSize={36} maxSize={78} className="flex min-h-0 min-w-0 flex-col border-l border-border/40 bg-background shadow-sm dark:bg-background">
+                <ResizablePanel defaultSize={54} minSize={36} maxSize={78} className="flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-border/40 bg-background shadow-sm dark:bg-background">
                   <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/40 bg-muted/30 px-3 py-2">
                     <p
                       className="min-w-0 truncate text-xs font-medium"
@@ -1626,7 +1626,7 @@ function AsistenteIAContent() {
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <div className="flex min-h-0 min-w-0 flex-[1_1_0] basis-0 flex-col overflow-hidden">
                     {artifactDialogLoading && !artifactDialogArtifact ? (
                       <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="h-6 w-6 animate-spin" />
@@ -1742,7 +1742,7 @@ function AsistenteIAContent() {
                 <span className="text-sm">Cargando…</span>
               </div>
             ) : artifactDialogArtifact ? (
-              <div className="flex-1 min-h-0 flex flex-col h-full max-h-[inherit]">
+              <div className="flex min-h-0 min-w-0 flex-[1_1_0] basis-0 flex-col overflow-hidden">
                 <ArtifactViewer
                   key={artifactDialogArtifact.id}
                   artifact={artifactDialogArtifact}

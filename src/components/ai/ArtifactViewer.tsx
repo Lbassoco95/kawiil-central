@@ -363,7 +363,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
   );
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="shrink-0 border-b border-border/30 px-3 py-2">
         <div className="flex items-center gap-2 min-w-0">
           <button type="button" className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0" onClick={onBack}>
@@ -397,13 +397,13 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden basis-0">
         {hasPreviewPanel ? (
           <Tabs
             key={`${artifact.id}-${resolvedPrimaryFormat}`}
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as ViewerTabId)}
-            className="flex h-full min-h-0 flex-1 flex-col"
+            className="flex min-h-0 min-w-0 flex-[1_1_0] flex-col basis-0 [&>[role=tabpanel]]:mt-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-[1_1_0] [&>[role=tabpanel]]:basis-0 [&>[role=tabpanel]]:flex [&>[role=tabpanel]]:flex-col"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2 border-b border-border/30 px-3 py-2 shrink-0 bg-muted/20">
               <TabsList className="h-8 flex-wrap bg-background/80">
@@ -476,7 +476,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
               </div>
             </div>
             {docxOutput ? (
-              <TabsContent value="docx" className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1">
+              <TabsContent value="docx" className="m-0 mt-0 flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden basis-0 p-0">
                 <ArtifactPreviewZoomShell resetKey={artifact.id}>
                   <ArtifactOfficeOnlinePreview
                     bucket={docxOutput.storage_bucket}
@@ -495,7 +495,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             {pptxOutput ? (
               <TabsContent
                 value="pptx"
-                className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1"
+                className="m-0 mt-0 flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden basis-0 p-0"
               >
                 <ArtifactPreviewZoomShell resetKey={artifact.id}>
                   <ArtifactOfficeOnlinePreview
@@ -519,7 +519,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             {xlsxOutput ? (
               <TabsContent
                 value="spreadsheet"
-                className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1"
+                className="m-0 mt-0 flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden basis-0 p-0"
               >
                 <ArtifactPreviewZoomShell resetKey={artifact.id}>
                   <ArtifactOfficeOnlinePreview
@@ -538,13 +538,13 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 </ArtifactPreviewZoomShell>
               </TabsContent>
             ) : null}
-            <TabsContent value="text" className="m-0 flex min-h-0 flex-1 flex-col overflow-y-auto p-4 data-[state=active]:flex-1">
+            <TabsContent value="text" className="m-0 mt-0 flex min-h-0 min-w-0 flex-[1_1_0] flex-col basis-0 overflow-y-auto p-4">
               <div className="prose prose-sm max-w-none [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
                 <ReactMarkdown>{artifact.content}</ReactMarkdown>
               </div>
             </TabsContent>
             {pdfOutput ? (
-              <TabsContent value="pdf" className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1">
+              <TabsContent value="pdf" className="m-0 mt-0 flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden basis-0 p-0">
                 <ArtifactPreviewZoomShell resetKey={artifact.id}>
                   <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} panZoomEmbed />
                 </ArtifactPreviewZoomShell>
@@ -552,7 +552,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             ) : null}
           </Tabs>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-[1_1_0] flex-col overflow-hidden basis-0">
             <div className="flex shrink-0 justify-end gap-1 border-b border-border/30 bg-muted/20 px-3 py-2">
               <Button
                 type="button"
