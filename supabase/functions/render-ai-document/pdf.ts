@@ -13,6 +13,12 @@ import {
   type ProposalData,
   resolveBranding,
 } from "../_shared/ai-templates/index.ts";
+import {
+  capHeadingLevel,
+  flattenMarkdownBodyChunk,
+  parseMarkdownHeadingLine,
+  splitInlineMarkdownSegments,
+} from "../_shared/markdown-inline.ts";
 import { deepSanitizeForPdf, formatCurrency, sanitizeForPdfText } from "./common.ts";
 
 /**
@@ -192,6 +198,59 @@ function footerFn(brand: { orgName: string }) {
   });
 }
 
+/** Texto con estilo pdfmake + negritas/cursivas Markdown. */
+function pdfStyledInline(text: string, style: string): DocDef {
+  const segs = splitInlineMarkdownSegments(text);
+  if (segs.length === 1 && !segs[0].bold && !segs[0].italics) {
+    return { text: segs[0].text, style };
+  }
+  return {
+    text: segs.map((s) => ({
+      text: s.text,
+      ...(s.bold ? { bold: true } : {}),
+      ...(s.italics ? { italics: true } : {}),
+    })),
+    style,
+  };
+}
+
+function pdfHeadingFromMarkdown(title: string, level: 1 | 2 | 3): DocDef {
+  const trimmed = title.replace(/\r\n/g, "\n").trim();
+  const singleLine = !trimmed.includes("\n");
+  const parsed = singleLine ? parseMarkdownHeadingLine(trimmed) : null;
+  const displayTitle = parsed ? parsed.title : trimmed;
+  const effLevel = parsed ? capHeadingLevel(parsed.level) : level;
+  const style = effLevel === 1 ? "h1" : effLevel === 2 ? "h2" : "h3";
+  const segs = splitInlineMarkdownSegments(displayTitle);
+  if (segs.length === 1 && !segs[0].bold && !segs[0].italics) {
+    return { text: segs[0].text, style };
+  }
+  return {
+    text: segs.map((s) => ({
+      text: s.text,
+      bold: true,
+      ...(s.italics ? { italics: true } : {}),
+    })),
+    style,
+  };
+}
+
+function pdfChunksFromMarkdownChunk(chunk: string): DocDef[] {
+  const trimmed = chunk.replace(/\r\n/g, "\n").trim();
+  if (!trimmed) return [];
+  const blocks = flattenMarkdownBodyChunk(trimmed);
+  if (!blocks.length) return [pdfStyledInline(trimmed, "bodyText")];
+  const out: DocDef[] = [];
+  for (const b of blocks) {
+    if (b.kind === "heading") {
+      out.push(pdfHeadingFromMarkdown(b.title, capHeadingLevel(b.level)));
+    } else {
+      out.push(pdfStyledInline(b.text, "bodyText"));
+    }
+  }
+  return out;
+}
+
 function coverMetadataTable(meta?: {
   code?: string;
   emisor?: string;
@@ -241,13 +300,16 @@ function coverMetadataTable(meta?: {
 }
 
 function paragraphs(items: string[] | undefined): DocDef[] {
-  return (items || []).map((p) => ({ text: p, style: "bodyText" }));
+  return (items || []).flatMap((p) => pdfChunksFromMarkdownChunk(p));
 }
 
 function bullets(items: string[] | undefined): DocDef | null {
   if (!items?.length) return null;
   return {
-    ul: items.map((b) => ({ text: b, style: "bodyBullet", margin: [0, 2, 0, 2] })),
+    ul: items.map((b) => ({
+      ...pdfStyledInline(b, "bodyBullet"),
+      margin: [0, 2, 0, 2],
+    })),
     margin: [0, 4, 0, 10],
   };
 }
@@ -260,26 +322,25 @@ function tableBlock(t: KawiilTable): DocDef {
   if (hasHeader) {
     body.push(
       t.headers.map((h) => ({
-        text: h,
-        style: "tableHeader",
+        ...pdfStyledInline(String(h), "tableHeader"),
         margin: [6, 6, 6, 6],
       })),
     );
   }
 
-  (t.rows || []).forEach((row, idx) => {
-    const rowCells: DocDef[] = [];
-    for (let c = 0; c < cols; c++) {
-      const val = row[c] ?? "";
-      rowCells.push({
-        text: String(val),
-        style: "tableCell",
-        margin: [6, 5, 6, 5],
-        fillColor: idx % 2 === 1 ? KAWIIL_BRAND.tableRowAlt : undefined,
-      });
-    }
-    body.push(rowCells);
-  });
+    (t.rows || []).forEach((row, idx) => {
+      const rowCells: DocDef[] = [];
+      for (let c = 0; c < cols; c++) {
+        const val = row[c] ?? "";
+        const cellInner = pdfStyledInline(String(val), "tableCell");
+        rowCells.push({
+          ...cellInner,
+          margin: [6, 5, 6, 5],
+          fillColor: idx % 2 === 1 ? KAWIIL_BRAND.tableRowAlt : undefined,
+        });
+      }
+      body.push(rowCells);
+    });
 
   const widths = Array.from({ length: cols }, () => "*");
   const blockParts: DocDef[] = [
@@ -314,8 +375,8 @@ function callout(c: KawiilSection["callout"]): DocDef | null {
       body: [[
         {
           stack: [
-            c.title ? { text: c.title, style: "calloutTitle" } : null,
-            { text: c.body, style: "callout" },
+            c.title ? pdfStyledInline(c.title, "calloutTitle") : null,
+            pdfStyledInline(c.body, "callout"),
           ].filter(Boolean),
           fillColor: palette.bg,
           margin: [12, 10, 12, 10],
@@ -333,7 +394,7 @@ function callout(c: KawiilSection["callout"]): DocDef | null {
 
 function renderSection(s: KawiilSection, level: "h1" | "h2" = "h2"): DocDef[] {
   const out: DocDef[] = [];
-  if (s.heading) out.push({ text: s.heading, style: level });
+  if (s.heading) out.push(pdfHeadingFromMarkdown(s.heading, level === "h1" ? 1 : 2));
   out.push(...paragraphs(s.paragraphs));
   const b = bullets(s.bullets);
   if (b) out.push(b);
@@ -367,7 +428,7 @@ function buildExecutiveReport(
 
   if (data.summary) {
     body.push({ text: "Resumen ejecutivo", style: "h1" });
-    body.push({ text: data.summary, style: "bodyText" });
+    body.push(...pdfChunksFromMarkdownChunk(data.summary));
   }
 
   for (const section of data.sections || []) {
@@ -377,7 +438,10 @@ function buildExecutiveReport(
   if (data.recommendations?.length) {
     body.push({ text: "Recomendaciones", style: "h1" });
     body.push({
-      ol: data.recommendations.map((r) => ({ text: r, style: "bodyBullet", margin: [0, 3, 0, 3] })),
+      ol: data.recommendations.map((r) => ({
+        ...pdfStyledInline(r, "bodyBullet"),
+        margin: [0, 3, 0, 3],
+      })),
       margin: [0, 4, 0, 10],
     });
   }
@@ -440,7 +504,9 @@ function buildMeetingMinutes(
   if (data.agenda?.length) {
     body.push({ text: "Agenda", style: "h2" });
     body.push({
-      ol: data.agenda.map((a) => ({ text: a, style: "bodyBullet" })),
+      ol: data.agenda.map((a) => ({
+        ...pdfStyledInline(a, "bodyBullet"),
+      })),
       margin: [0, 4, 0, 8],
     });
   }
@@ -448,15 +514,17 @@ function buildMeetingMinutes(
   if (data.topics?.length) {
     body.push({ text: "Temas discutidos", style: "h1" });
     for (const t of data.topics) {
-      body.push({ text: t.title, style: "h3" });
-      if (t.discussion) body.push({ text: t.discussion, style: "bodyText" });
+      body.push(pdfHeadingFromMarkdown(t.title, 3));
+      if (t.discussion) body.push(...pdfChunksFromMarkdownChunk(t.discussion));
     }
   }
 
   if (data.agreements?.length) {
     body.push({ text: "Acuerdos", style: "h2" });
     body.push({
-      ol: data.agreements.map((a) => ({ text: a, style: "bodyBullet" })),
+      ol: data.agreements.map((a) => ({
+        ...pdfStyledInline(a, "bodyBullet"),
+      })),
       margin: [0, 4, 0, 8],
     });
   }
@@ -505,7 +573,7 @@ function buildProposal(
 
   if (data.summary) {
     body.push({ text: "Resumen", style: "h2" });
-    body.push({ text: data.summary, style: "bodyText" });
+    body.push(...pdfChunksFromMarkdownChunk(data.summary));
   }
 
   if (data.scope?.length) {
@@ -560,7 +628,9 @@ function buildProposal(
   if (data.terms?.length) {
     body.push({ text: "Términos y condiciones", style: "h2" });
     body.push({
-      ol: data.terms.map((t) => ({ text: t, style: "bodyBullet" })),
+      ol: data.terms.map((t) => ({
+        ...pdfStyledInline(t, "bodyBullet"),
+      })),
       margin: [0, 4, 0, 8],
     });
   }
@@ -674,7 +744,9 @@ function buildInvoice(
   if (data.legal_notes?.length) {
     body.push({ text: "Notas legales", style: "h3" });
     body.push({
-      ul: data.legal_notes.map((n) => ({ text: n, style: "bodyBullet" })),
+      ul: data.legal_notes.map((n) => ({
+        ...pdfStyledInline(n, "bodyBullet"),
+      })),
       margin: [0, 4, 0, 8],
     });
   }
@@ -703,7 +775,7 @@ function buildFinancialReport(
 
   if (data.summary) {
     body.push({ text: "Resumen del periodo", style: "h1" });
-    body.push({ text: data.summary, style: "bodyText" });
+    body.push(...pdfChunksFromMarkdownChunk(data.summary));
   }
 
   if (data.kpis?.length) {
@@ -733,7 +805,9 @@ function buildFinancialReport(
   if (data.notes?.length) {
     body.push({ text: "Notas", style: "h2" });
     body.push({
-      ol: data.notes.map((n) => ({ text: n, style: "bodyBullet" })),
+      ol: data.notes.map((n) => ({
+        ...pdfStyledInline(n, "bodyBullet"),
+      })),
       margin: [0, 4, 0, 8],
     });
   }
@@ -759,7 +833,7 @@ function buildGenericDoc(
   body.push(...coverTitle(title, "Documento"));
   const metaTable = coverMetadataTable(data.metadata);
   if (metaTable) body.push(metaTable);
-  if (data.summary) body.push({ text: data.summary, style: "bodyText" });
+  if (data.summary) body.push(...pdfChunksFromMarkdownChunk(data.summary));
   for (const s of data.sections) body.push(...renderSection(s, "h1"));
 
   return {

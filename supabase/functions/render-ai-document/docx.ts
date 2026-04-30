@@ -28,6 +28,12 @@ import {
   type ProposalData,
   resolveBranding,
 } from "../_shared/ai-templates/index.ts";
+import {
+  capHeadingLevel,
+  flattenMarkdownBodyChunk,
+  parseMarkdownHeadingLine,
+  splitInlineMarkdownSegments,
+} from "../_shared/markdown-inline.ts";
 import { formatCurrency } from "./common.ts";
 
 /**
@@ -60,6 +66,58 @@ function paragraph(text: string | TextRun[], opts: { bold?: boolean; size?: numb
   });
 }
 
+/** Párrafo justificado con **negrita** / *cursiva* interpretadas (texto del modelo). */
+function paragraphFromMarkdown(body: string): Paragraph {
+  const runs = splitInlineMarkdownSegments(body).map((s) =>
+    textRun(s.text, { bold: s.bold, italics: s.italics })
+  );
+  return new Paragraph({
+    children: runs.length ? runs : [textRun(body)],
+    spacing: { before: 60, after: 120 },
+    alignment: AlignmentType.JUSTIFIED,
+  });
+}
+
+/** Encabezado con posible Markdown inline en el título. */
+function headingFromMarkdown(title: string, level: 1 | 2 | 3) {
+  const headingLevel = level === 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3;
+  const size = level === 1 ? 32 : level === 2 ? 26 : 22;
+  const color = level === 1 ? BRAND_HEX : BRAND_PRIMARY_HEX;
+  const runs = splitInlineMarkdownSegments(title).map((s) =>
+    textRun(s.text, { bold: true, italics: s.italics, color, size })
+  );
+  return new Paragraph({
+    heading: headingLevel,
+    children: runs.length ? runs : [textRun(title, { bold: true, color, size })],
+    spacing: { before: 240, after: 120 },
+  });
+}
+
+/** Varias líneas / ## encabezados en un solo campo del modelo → párrafos DOCX. */
+function appendMarkdownBodyChunks(out: Paragraph[], chunk: string) {
+  const trimmed = chunk.replace(/\r\n/g, "\n").trim();
+  if (!trimmed) return;
+  const blocks = flattenMarkdownBodyChunk(trimmed);
+  if (!blocks.length) {
+    out.push(paragraphFromMarkdown(trimmed));
+    return;
+  }
+  for (const block of blocks) {
+    if (block.kind === "heading") {
+      out.push(headingFromMarkdown(block.title, capHeadingLevel(block.level)));
+    } else {
+      out.push(paragraphFromMarkdown(block.text));
+    }
+  }
+}
+
+/** Inserta párrafos DOCX interpretando Markdown en un array mixto de hijos del documento. */
+function appendMarkdownToMixed(children: (Paragraph | Table)[], text: string) {
+  const acc: Paragraph[] = [];
+  appendMarkdownBodyChunks(acc, text);
+  children.push(...acc);
+}
+
 function heading(text: string, level: 1 | 2 | 3 = 1) {
   const headingLevel = level === 1 ? HeadingLevel.HEADING_1 : level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3;
   const size = level === 1 ? 32 : level === 2 ? 26 : 22;
@@ -71,11 +129,21 @@ function heading(text: string, level: 1 | 2 | 3 = 1) {
 }
 
 function bulletItem(text: string) {
-  return new Paragraph({ children: [textRun(text)], bullet: { level: 0 }, spacing: { after: 40 } });
+  const runs = splitInlineMarkdownSegments(text).map((s) => textRun(s.text, { bold: s.bold, italics: s.italics }));
+  return new Paragraph({
+    children: runs.length ? runs : [textRun(text)],
+    bullet: { level: 0 },
+    spacing: { after: 40 },
+  });
 }
 
 function numberedItem(text: string, idx: number) {
-  return new Paragraph({ children: [textRun(`${idx + 1}. ${text}`)], spacing: { after: 40 }, indent: { left: 360 } });
+  const runs = splitInlineMarkdownSegments(text).map((s) => textRun(s.text, { bold: s.bold, italics: s.italics }));
+  return new Paragraph({
+    children: [textRun(`${idx + 1}. `), ...(runs.length ? runs : [textRun(text)])],
+    spacing: { after: 40 },
+    indent: { left: 360 },
+  });
 }
 
 function buildTable(t: KawiilTable): Table {
@@ -88,7 +156,9 @@ function buildTable(t: KawiilTable): Table {
       children: t.headers.map((h) => new TableCell({
         shading: { type: ShadingType.CLEAR, fill: TABLE_HEADER_HEX, color: "auto" },
         children: [new Paragraph({
-          children: [textRun(h, { bold: true, color: "FFFFFF" })],
+          children: splitInlineMarkdownSegments(String(h)).map((s) =>
+            textRun(s.text, { bold: true, color: "FFFFFF", italics: s.italics })
+          ),
           spacing: { before: 60, after: 60 },
         })],
       })),
@@ -100,9 +170,15 @@ function buildTable(t: KawiilTable): Table {
     const cells: TableCell[] = [];
     for (let c = 0; c < cols; c++) {
       const val = row[c] ?? "";
+      const cellRuns = splitInlineMarkdownSegments(String(val)).map((s) =>
+        textRun(s.text, { bold: s.bold, italics: s.italics })
+      );
       cells.push(new TableCell({
         shading: fill ? { type: ShadingType.CLEAR, fill, color: "auto" } : undefined,
-        children: [new Paragraph({ children: [textRun(String(val))], spacing: { before: 40, after: 40 } })],
+        children: [new Paragraph({
+          children: cellRuns.length ? cellRuns : [textRun(String(val))],
+          spacing: { before: 40, after: 40 },
+        })],
       }));
     }
     rows.push(new TableRow({ children: cells }));
@@ -158,7 +234,11 @@ function metadataTable(meta?: {
           children: [new Paragraph({ children: [textRun(label, { bold: true, color: "FFFFFF" })] })],
         }),
         new TableCell({
-          children: [new Paragraph({ children: [textRun(value)] })],
+          children: [new Paragraph({
+            children: splitInlineMarkdownSegments(value).map((s) =>
+              textRun(s.text, { bold: s.bold, italics: s.italics })
+            ),
+          })],
         }),
       ],
     })),
@@ -167,16 +247,34 @@ function metadataTable(meta?: {
 
 function renderSection(s: KawiilSection, level: 1 | 2 = 2): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [];
-  if (s.heading) out.push(heading(s.heading, level));
-  for (const p of s.paragraphs || []) out.push(paragraph(p));
+  if (s.heading) {
+    const trimmed = s.heading.replace(/\r\n/g, "\n").trim();
+    const singleLine = !trimmed.includes("\n");
+    const parsed = singleLine ? parseMarkdownHeadingLine(trimmed) : null;
+    const displayTitle = parsed ? parsed.title : trimmed;
+    const effLevel: 1 | 2 | 3 = parsed ? capHeadingLevel(parsed.level) : (level === 1 ? 1 : 2);
+    out.push(headingFromMarkdown(displayTitle, effLevel));
+  }
+  const paraChunks: Paragraph[] = [];
+  for (const p of s.paragraphs || []) appendMarkdownBodyChunks(paraChunks, p);
+  out.push(...paraChunks);
   for (const b of s.bullets || []) out.push(bulletItem(b));
   for (const t of s.tables || []) out.push(buildTable(t));
   if (s.callout) {
-    const title = s.callout.title ? `${s.callout.title}: ` : "";
+    const titleRuns = s.callout.title
+      ? splitInlineMarkdownSegments(s.callout.title).map((seg) =>
+        textRun(seg.text, { bold: true, italics: seg.italics, color: BRAND_HEX })
+      )
+      : [];
+    const titleSep = s.callout.title ? textRun(": ", { bold: true, color: BRAND_HEX }) : null;
+    const bodyRuns = splitInlineMarkdownSegments(s.callout.body).map((seg) =>
+      textRun(seg.text, { bold: seg.bold, italics: seg.italics })
+    );
     out.push(new Paragraph({
       children: [
-        textRun(title, { bold: true, color: BRAND_HEX }),
-        textRun(s.callout.body),
+        ...titleRuns,
+        ...(titleSep ? [titleSep] : []),
+        ...bodyRuns,
       ],
       spacing: { before: 120, after: 120 },
       indent: { left: 360 },
@@ -236,7 +334,7 @@ function buildExecutiveReport(title: string, data: ExecutiveReportData, brand: R
 
   if (data.summary) {
     children.push(heading("Resumen ejecutivo", 1));
-    children.push(paragraph(data.summary));
+    appendMarkdownToMixed(children, data.summary);
   }
   for (const s of data.sections) children.push(...renderSection(s, 1));
   if (data.recommendations?.length) {
@@ -288,7 +386,7 @@ function buildMeetingMinutes(title: string, data: MeetingMinutesData, brand: Ret
     children.push(heading("Temas discutidos", 1));
     for (const t of data.topics) {
       children.push(heading(t.title, 3));
-      if (t.discussion) children.push(paragraph(t.discussion));
+      if (t.discussion) appendMarkdownToMixed(children, t.discussion);
     }
   }
   if (data.agreements?.length) {
@@ -303,7 +401,16 @@ function buildMeetingMinutes(title: string, data: MeetingMinutesData, brand: Ret
     }));
   }
   if (data.next_meeting) {
-    children.push(paragraph([textRun("Próxima reunión: ", { bold: true, color: BRAND_HEX }), textRun(data.next_meeting)]));
+    children.push(new Paragraph({
+      children: [
+        textRun("Próxima reunión: ", { bold: true, color: BRAND_HEX }),
+        ...splitInlineMarkdownSegments(data.next_meeting).map((s) =>
+          textRun(s.text, { bold: s.bold, italics: s.italics })
+        ),
+      ],
+      spacing: { before: 60, after: 120 },
+      alignment: AlignmentType.JUSTIFIED,
+    }));
   }
 
   return new Document({
@@ -363,7 +470,7 @@ function buildProposal(title: string, data: ProposalData, brand: ReturnType<type
   }
   if (data.summary) {
     children.push(heading("Resumen", 2));
-    children.push(paragraph(data.summary));
+    appendMarkdownToMixed(children, data.summary);
   }
   if (data.scope?.length) {
     children.push(heading("Alcance", 1));
@@ -387,7 +494,16 @@ function buildProposal(title: string, data: ProposalData, brand: ReturnType<type
     data.terms.forEach((t, i) => children.push(numberedItem(t, i)));
   }
   if (data.validity) {
-    children.push(paragraph([textRun("Vigencia: ", { bold: true, color: BRAND_HEX }), textRun(data.validity)]));
+    children.push(new Paragraph({
+      children: [
+        textRun("Vigencia: ", { bold: true, color: BRAND_HEX }),
+        ...splitInlineMarkdownSegments(data.validity).map((s) =>
+          textRun(s.text, { bold: s.bold, italics: s.italics })
+        ),
+      ],
+      spacing: { before: 60, after: 120 },
+      alignment: AlignmentType.JUSTIFIED,
+    }));
   }
 
   return new Document({
@@ -474,7 +590,7 @@ function buildFinancialReport(title: string, data: FinancialReportData, brand: R
 
   if (data.summary) {
     children.push(heading("Resumen del periodo", 1));
-    children.push(paragraph(data.summary));
+    appendMarkdownToMixed(children, data.summary);
   }
   if (data.kpis?.length) {
     children.push(heading("Indicadores clave", 2));
@@ -512,7 +628,7 @@ function buildFinancialReport(title: string, data: FinancialReportData, brand: R
 function buildGenericDoc(title: string, data: GenericDocumentData, brand: ReturnType<typeof resolveBranding>): Document {
   const children: (Paragraph | Table)[] = [];
   children.push(...coverBlock(title, "Documento", data.metadata));
-  if (data.summary) children.push(paragraph(data.summary));
+  if (data.summary) appendMarkdownToMixed(children, data.summary);
   for (const s of data.sections) children.push(...renderSection(s, 1));
 
   return new Document({

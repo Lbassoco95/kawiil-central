@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Loader2, ExternalLink, Rows3 } from "lucide-react";
+import { Loader2, ExternalLink, Rows3, Download } from "lucide-react";
 import { buildAbsoluteSignedStorageUrl, buildMicrosoftOfficeEmbedUrl } from "@/lib/officeOnlineEmbed";
 
 const SIGNED_URL_TTL_SEC = 3600;
@@ -15,6 +15,9 @@ interface ArtifactOfficeOnlinePreviewProps {
   simplifiedFallback: ReactNode;
   /** Si true, el bloque ocupa el alto disponible del panel. */
   fitContainer?: boolean;
+  /** Misma acción que Descargar en el menú del visor (p. ej. .docx para Word de escritorio). */
+  onDownloadForEdit?: () => void;
+  downloadForEditLabel?: string;
 }
 
 /**
@@ -27,6 +30,8 @@ export function ArtifactOfficeOnlinePreview({
   suiteLabel,
   simplifiedFallback,
   fitContainer = true,
+  onDownloadForEdit,
+  downloadForEditLabel = "Descargar para editar",
 }: ArtifactOfficeOnlinePreviewProps) {
   const [loading, setLoading] = useState(true);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
@@ -103,6 +108,18 @@ export function ArtifactOfficeOnlinePreview({
           <Rows3 className="h-3 w-3 shrink-0" />
           Vista simplificada en la app
         </Button>
+        {onDownloadForEdit ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-7 text-[11px] gap-1"
+            onClick={onDownloadForEdit}
+          >
+            <Download className="h-3 w-3 shrink-0" />
+            {downloadForEditLabel}
+          </Button>
+        ) : null}
       </div>
       <iframe
         title={`Vista previa ${suiteLabel}`}
@@ -111,8 +128,10 @@ export function ArtifactOfficeOnlinePreview({
         referrerPolicy="strict-origin-when-cross-origin"
       />
       <p className="shrink-0 px-2 py-1 text-[10px] text-muted-foreground">
-        Vista previa con Microsoft Office Online (solo lectura). Si no carga, usa «Vista simplificada» o{" "}
-        <span className="font-medium text-foreground">Descargar</span>.
+        Office Online solo permite leer el archivo en el navegador. Para editar,{" "}
+        <span className="font-medium text-foreground">descárgalo</span> y ábrelo en {suiteLabel} de escritorio (o usa el botón de
+        arriba). Si no carga el visor, prueba «Vista simplificada» o{" "}
+        <span className="font-medium text-foreground">Descargar</span> en la barra del documento.
       </p>
     </div>
   );

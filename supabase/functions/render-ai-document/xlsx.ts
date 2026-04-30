@@ -10,6 +10,7 @@ import {
   type ProposalData,
   resolveBranding,
 } from "../_shared/ai-templates/index.ts";
+import { markdownToPlainDisplay } from "../_shared/markdown-inline.ts";
 import { formatCurrency } from "./common.ts";
 
 /**
@@ -24,6 +25,13 @@ const BORDER_ARGB = `FF${KAWIIL_BRAND.borderSoft.replace("#", "")}`;
 
 // deno-lint-ignore no-explicit-any
 type AnyWs = any;
+
+/** Valor de celda: números/booleanos intactos; strings del modelo sin Markdown literal. */
+function xlsxCellValue(v: unknown): string | number | boolean {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number" || typeof v === "boolean") return v;
+  return markdownToPlainDisplay(String(v));
+}
 
 function styleHeaderRow(ws: AnyWs, rowIdx: number, cols: number) {
   const row = ws.getRow(rowIdx);
@@ -67,7 +75,7 @@ function addKawiilTable(ws: AnyWs, startRow: number, table: KawiilTable): number
   if (table.headers?.length) {
     const headerRow = ws.getRow(row);
     table.headers.forEach((h, i) => {
-      headerRow.getCell(i + 1).value = h;
+      headerRow.getCell(i + 1).value = xlsxCellValue(h);
     });
     styleHeaderRow(ws, row, cols);
     row++;
@@ -77,7 +85,7 @@ function addKawiilTable(ws: AnyWs, startRow: number, table: KawiilTable): number
     const dataRow = ws.getRow(row);
     for (let c = 0; c < cols; c++) {
       const val = r[c] ?? "";
-      dataRow.getCell(c + 1).value = val;
+      dataRow.getCell(c + 1).value = xlsxCellValue(val);
     }
     styleDataRow(ws, row, cols, rIdx % 2 === 1);
     row++;
@@ -101,12 +109,12 @@ function addKawiilTable(ws: AnyWs, startRow: number, table: KawiilTable): number
 function titleCell(ws: AnyWs, title: string, subtitle: string) {
   ws.mergeCells(1, 1, 1, 6);
   const titleRow = ws.getRow(1);
-  titleRow.getCell(1).value = title;
+  titleRow.getCell(1).value = markdownToPlainDisplay(title);
   titleRow.getCell(1).font = { bold: true, size: 16, color: { argb: `FF${KAWIIL_BRAND.accent.replace("#", "")}` } };
   titleRow.height = 26;
   ws.mergeCells(2, 1, 2, 6);
   const subRow = ws.getRow(2);
-  subRow.getCell(1).value = subtitle;
+  subRow.getCell(1).value = markdownToPlainDisplay(subtitle);
   subRow.getCell(1).font = { italic: true, size: 10, color: { argb: `FF${KAWIIL_BRAND.textMuted.replace("#", "")}` } };
 }
 
@@ -182,7 +190,8 @@ function buildFinancialReportXlsx(wb: AnyWs, title: string, data: FinancialRepor
     });
   }
   (data.tables || []).forEach((t, idx) => {
-    const sheet = wb.addWorksheet(t.caption?.slice(0, 30) || `Tabla ${idx + 1}`);
+    const name = uniqueWorksheetName(wb, t.caption || `Tabla ${idx + 1}`, idx);
+    const sheet = wb.addWorksheet(name);
     titleCell(sheet, t.caption || title, "Reporte financiero · Kawiil");
     addKawiilTable(sheet, 4, t);
   });
@@ -192,7 +201,9 @@ function buildFinancialReportXlsx(wb: AnyWs, title: string, data: FinancialRepor
 }
 
 function uniqueWorksheetName(wb: AnyWs, base: string, idx: number): string {
-  const clean = base.replace(/[\[\]\\\/\?:*]/g, " ").replace(/\s+/g, " ").trim().slice(0, 28) || `Hoja${idx + 1}`;
+  const plainBase = markdownToPlainDisplay(base).split("\n")[0]?.trim() || "";
+  const clean = plainBase.replace(/[\[\]\\\/\?:*]/g, " ").replace(/\s+/g, " ").trim().slice(0, 28) ||
+    `Hoja${idx + 1}`;
   const used = new Set(
     (wb.worksheets as Array<{ name: string }>).map((w) => w.name),
   );
@@ -260,8 +271,8 @@ function buildGenericXlsx(
     styleHeaderRow(ws, row, 2);
     row++;
     for (const nr of narrativeRows) {
-      ws.getRow(row).getCell(1).value = nr.heading;
-      ws.getRow(row).getCell(2).value = nr.text;
+      ws.getRow(row).getCell(1).value = markdownToPlainDisplay(nr.heading);
+      ws.getRow(row).getCell(2).value = markdownToPlainDisplay(nr.text);
       const c2 = ws.getRow(row).getCell(2);
       c2.alignment = { wrapText: true, vertical: "top" as const };
       const lineCount = Math.max(1, String(nr.text).split("\n").length);

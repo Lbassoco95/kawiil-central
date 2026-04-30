@@ -270,24 +270,26 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 </p>
                 {resolvedPrimaryFormat === "docx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
-                    Word se ve en la pestaña <span className="font-medium">Vista previa Word</span> con{" "}
-                    <span className="font-medium">Microsoft Office Online</span> (como el archivo descargado). Si no carga,
-                    usa «Vista simplificada» o <span className="font-medium">Descargar</span>.{" "}
+                    La pestaña <span className="font-medium">Vista previa Word</span> usa{" "}
+                    <span className="font-medium">Office Online</span>: solo lectura en el navegador (como el archivo descargado). Para
+                    editar, usa <span className="font-medium">Descargar para editar</span> en esa vista o el menú{" "}
+                    <span className="font-medium">Descargar</span> y abre el .docx en Word.{" "}
                     <span className="font-medium">Resumen (Markdown)</span> conserva el texto fuente.
                   </p>
                 ) : null}
                 {resolvedPrimaryFormat === "pptx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
-                    PowerPoint se previsualiza con <span className="font-medium">Office Online</span> en su pestaña.
-                    Opcional: <span className="font-medium">Generar</span> PDF para lectura rápida o{" "}
-                    <span className="font-medium">Descargar</span> el .pptx.
+                    PowerPoint en Office Online es solo lectura en el navegador. Para editar diapositivas, usa{" "}
+                    <span className="font-medium">Descargar para editar</span> en la vista previa o el menú{" "}
+                    <span className="font-medium">Descargar</span>. Opcional:{" "}
+                    <span className="font-medium">Generar</span> PDF para lectura rápida.
                   </p>
                 ) : null}
                 {resolvedPrimaryFormat === "xlsx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
-                    Excel en <span className="font-medium">Vista previa Excel</span> usa{" "}
-                    <span className="font-medium">Office Online</span> para el libro completo; «Vista simplificada» muestra
-                    solo la primera hoja en tabla. <span className="font-medium">Descargar</span> conserva el .xlsx original.
+                    Excel en Office Online es solo lectura en el navegador. Para editar el libro, usa{" "}
+                    <span className="font-medium">Descargar para editar</span> en la vista previa o{" "}
+                    <span className="font-medium">Descargar</span>. «Vista simplificada» muestra solo la primera hoja en tabla.
                   </p>
                 ) : null}
               </div>
@@ -455,8 +457,24 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     bucket={docxOutput.storage_bucket}
                     storagePath={docxOutput.storage_path}
                     suiteLabel="Word"
+                    onDownloadForEdit={() => void handleDownloadFormat(docxOutput)}
+                    downloadForEditLabel="Descargar para editar (.docx)"
                     simplifiedFallback={
-                      <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
+                      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+                        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border/40 bg-muted/20 px-2 py-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-[11px] gap-1"
+                            onClick={() => void handleDownloadFormat(docxOutput)}
+                          >
+                            <Download className="h-3 w-3 shrink-0" />
+                            Descargar para editar (.docx)
+                          </Button>
+                        </div>
+                        <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
+                      </div>
                     }
                   />
                 </div>
@@ -472,6 +490,8 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     bucket={pptxOutput.storage_bucket}
                     storagePath={pptxOutput.storage_path}
                     suiteLabel="PowerPoint"
+                    onDownloadForEdit={() => void handleDownloadFormat(pptxOutput)}
+                    downloadForEditLabel="Descargar para editar (.pptx)"
                     simplifiedFallback={
                       <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center max-w-md mx-auto">
                         <Presentation className="h-12 w-12 text-muted-foreground/50" />
@@ -504,12 +524,28 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     bucket={xlsxOutput.storage_bucket}
                     storagePath={xlsxOutput.storage_path}
                     suiteLabel="Excel"
+                    onDownloadForEdit={() => void handleDownloadFormat(xlsxOutput)}
+                    downloadForEditLabel="Descargar para editar (.xlsx)"
                     simplifiedFallback={
-                      <ArtifactSpreadsheetPreview
-                        bucket={xlsxOutput.storage_bucket}
-                        storagePath={xlsxOutput.storage_path}
-                        fileName={xlsxOutput.file_name}
-                      />
+                      <div className="flex min-h-0 flex-1 flex-col">
+                        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border/40 bg-muted/20 px-2 py-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="h-7 text-[11px] gap-1"
+                            onClick={() => void handleDownloadFormat(xlsxOutput)}
+                          >
+                            <Download className="h-3 w-3 shrink-0" />
+                            Descargar para editar (.xlsx)
+                          </Button>
+                        </div>
+                        <ArtifactSpreadsheetPreview
+                          bucket={xlsxOutput.storage_bucket}
+                          storagePath={xlsxOutput.storage_path}
+                          fileName={xlsxOutput.file_name}
+                        />
+                      </div>
                     }
                   />
                 </div>

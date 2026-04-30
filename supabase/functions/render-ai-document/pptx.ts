@@ -9,6 +9,7 @@ import {
   type ProposalData,
   resolveBranding,
 } from "../_shared/ai-templates/index.ts";
+import { markdownToPlainDisplay } from "../_shared/markdown-inline.ts";
 
 /**
  * PPTX con master slide Kawiil (franja superior azul, footer con nombre org).
@@ -59,7 +60,7 @@ function addMaster(pptx: any, brand: { orgName: string }) {
 // deno-lint-ignore no-explicit-any
 function addTitleSlide(pptx: any, title: string, subtitle: string) {
   const slide = pptx.addSlide({ masterName: "KAWIIL_MASTER" });
-  slide.addText(title, {
+  slide.addText(markdownToPlainDisplay(title), {
     x: 0.7,
     y: 2.5,
     w: 12,
@@ -68,7 +69,7 @@ function addTitleSlide(pptx: any, title: string, subtitle: string) {
     bold: true,
     color: KAWIIL_BRAND.accent.replace("#", ""),
   });
-  slide.addText(subtitle, {
+  slide.addText(markdownToPlainDisplay(subtitle), {
     x: 0.7,
     y: 3.8,
     w: 12,
@@ -82,7 +83,7 @@ function addTitleSlide(pptx: any, title: string, subtitle: string) {
 // deno-lint-ignore no-explicit-any
 function addSectionSlide(pptx: any, title: string, bullets: string[] = [], notes?: string) {
   const slide = pptx.addSlide({ masterName: "KAWIIL_MASTER" });
-  slide.addText(title, {
+  slide.addText(markdownToPlainDisplay(title), {
     x: 0.5,
     y: 0.55,
     w: 12.3,
@@ -93,18 +94,21 @@ function addSectionSlide(pptx: any, title: string, bullets: string[] = [], notes
   });
   if (bullets.length) {
     slide.addText(
-      bullets.map((b) => ({ text: b, options: { bullet: { indent: 18 }, color: KAWIIL_BRAND.textMain.replace("#", ""), fontSize: 16 } })),
+      bullets.map((b) => ({
+        text: markdownToPlainDisplay(b),
+        options: { bullet: { indent: 18 }, color: KAWIIL_BRAND.textMain.replace("#", ""), fontSize: 16 },
+      })),
       { x: 0.7, y: 1.4, w: 11.8, h: 5.2 },
     );
   }
-  if (notes) slide.addNotes?.(notes);
+  if (notes) slide.addNotes?.(markdownToPlainDisplay(notes));
   return slide;
 }
 
 // deno-lint-ignore no-explicit-any
 function addTableSlide(pptx: any, title: string, headers: string[], rows: string[][]) {
   const slide = pptx.addSlide({ masterName: "KAWIIL_MASTER" });
-  slide.addText(title, {
+  slide.addText(markdownToPlainDisplay(title), {
     x: 0.5,
     y: 0.55,
     w: 12.3,
@@ -116,13 +120,13 @@ function addTableSlide(pptx: any, title: string, headers: string[], rows: string
   const tableRows: Array<Array<{ text: string; options?: Record<string, unknown> }>> = [];
   if (headers.length) {
     tableRows.push(headers.map((h) => ({
-      text: h,
+      text: markdownToPlainDisplay(h),
       options: { bold: true, color: "FFFFFF", fill: { color: KAWIIL_BRAND.tableHeaderBg.replace("#", "") }, fontSize: 12 },
     })));
   }
   rows.forEach((row, idx) => {
     tableRows.push(row.map((c) => ({
-      text: String(c ?? ""),
+      text: markdownToPlainDisplay(String(c ?? "")),
       options: {
         fontSize: 11,
         color: KAWIIL_BRAND.textMain.replace("#", ""),
@@ -143,42 +147,63 @@ function addTableSlide(pptx: any, title: string, headers: string[], rows: string
 // deno-lint-ignore no-explicit-any
 function buildExec(pptx: any, title: string, data: ExecutiveReportData) {
   addTitleSlide(pptx, title, "Informe ejecutivo");
-  if (data.summary) addSectionSlide(pptx, "Resumen ejecutivo", [data.summary.slice(0, 400)]);
+  if (data.summary) {
+    const plain = markdownToPlainDisplay(data.summary);
+    addSectionSlide(pptx, "Resumen ejecutivo", [plain.slice(0, 400)]);
+  }
   for (const s of data.sections) {
     const bullets: string[] = [];
-    if (s.paragraphs?.length) bullets.push(...s.paragraphs.map((p) => p.slice(0, 220)));
-    if (s.bullets?.length) bullets.push(...s.bullets);
-    addSectionSlide(pptx, s.heading || "Sección", bullets.slice(0, 8));
+    if (s.paragraphs?.length) {
+      bullets.push(...s.paragraphs.map((p) => markdownToPlainDisplay(p).slice(0, 220)));
+    }
+    if (s.bullets?.length) bullets.push(...s.bullets.map((b) => markdownToPlainDisplay(b)));
+    addSectionSlide(pptx, markdownToPlainDisplay(s.heading || "Sección"), bullets.slice(0, 8));
     for (const t of s.tables || []) addTableSlide(pptx, t.caption || (s.heading || "Tabla"), t.headers, t.rows);
   }
-  if (data.recommendations?.length) addSectionSlide(pptx, "Recomendaciones", data.recommendations);
+  if (data.recommendations?.length) {
+    addSectionSlide(pptx, "Recomendaciones", data.recommendations.map((r) => markdownToPlainDisplay(r)));
+  }
 }
 
 // deno-lint-ignore no-explicit-any
 function buildMinutes(pptx: any, title: string, data: MeetingMinutesData) {
   addTitleSlide(pptx, title, "Minuta de reunión");
-  if (data.attendees?.length) addSectionSlide(pptx, "Participantes", data.attendees.map((a) => a.role ? `${a.name} — ${a.role}` : a.name));
-  if (data.agenda?.length) addSectionSlide(pptx, "Agenda", data.agenda);
-  for (const t of data.topics || []) addSectionSlide(pptx, t.title, t.discussion ? [t.discussion.slice(0, 400)] : []);
-  if (data.agreements?.length) addSectionSlide(pptx, "Acuerdos", data.agreements);
+  if (data.attendees?.length) {
+    addSectionSlide(pptx, "Participantes", data.attendees.map((a) =>
+      markdownToPlainDisplay(a.role ? `${a.name} — ${a.role}` : a.name)
+    ));
+  }
+  if (data.agenda?.length) addSectionSlide(pptx, "Agenda", data.agenda.map((x) => markdownToPlainDisplay(x)));
+  for (const t of data.topics || []) {
+    const lines = t.discussion ? [markdownToPlainDisplay(t.discussion).slice(0, 400)] : [];
+    addSectionSlide(pptx, markdownToPlainDisplay(t.title), lines);
+  }
+  if (data.agreements?.length) addSectionSlide(pptx, "Acuerdos", data.agreements.map((x) => markdownToPlainDisplay(x)));
   if (data.action_items?.length) {
-    addTableSlide(pptx, "Plan de acción", ["Tarea", "Responsable", "Fecha"], data.action_items.map((a) => [a.task, a.owner || "—", a.due_date || "—"]));
+    addTableSlide(pptx, "Plan de acción", ["Tarea", "Responsable", "Fecha"], data.action_items.map((a) => [
+      markdownToPlainDisplay(a.task),
+      markdownToPlainDisplay(a.owner || "—"),
+      markdownToPlainDisplay(a.due_date || "—"),
+    ]));
   }
 }
 
 // deno-lint-ignore no-explicit-any
 function buildProposal(pptx: any, title: string, data: ProposalData) {
   addTitleSlide(pptx, title, "Propuesta comercial");
-  if (data.summary) addSectionSlide(pptx, "Resumen", [data.summary.slice(0, 400)]);
+  if (data.summary) {
+    const plain = markdownToPlainDisplay(data.summary);
+    addSectionSlide(pptx, "Resumen", [plain.slice(0, 400)]);
+  }
   if (data.scope?.length) {
     for (const s of data.scope) {
-      const bullets = [...(s.paragraphs || []), ...(s.bullets || [])].slice(0, 8);
-      addSectionSlide(pptx, s.heading || "Alcance", bullets);
+      const bullets = [...(s.paragraphs || []).map((p) => markdownToPlainDisplay(p)), ...(s.bullets || []).map((b) => markdownToPlainDisplay(b))].slice(0, 8);
+      addSectionSlide(pptx, markdownToPlainDisplay(s.heading || "Alcance"), bullets);
     }
   }
   const currency = data.currency || "MXN";
   addTableSlide(pptx, "Conceptos", ["Descripción", "Cant.", "P. Unit.", "Importe"], data.line_items.map((li) => [
-    li.description,
+    markdownToPlainDisplay(li.description),
     li.quantity !== undefined ? String(li.quantity) : "—",
     li.unit_price !== undefined ? `$${li.unit_price.toLocaleString()} ${currency}` : "—",
     li.amount !== undefined ? `$${li.amount.toLocaleString()} ${currency}` : "—",
@@ -187,21 +212,28 @@ function buildProposal(pptx: any, title: string, data: ProposalData) {
 
 // deno-lint-ignore no-explicit-any
 function buildFinancial(pptx: any, title: string, data: FinancialReportData) {
-  addTitleSlide(pptx, title, data.period ? `Reporte financiero · ${data.period}` : "Reporte financiero");
+  addTitleSlide(pptx, title, data.period ? markdownToPlainDisplay(`Reporte financiero · ${data.period}`) : "Reporte financiero");
   if (data.kpis?.length) {
-    addTableSlide(pptx, "Indicadores clave", ["Indicador", "Valor", "Δ"], data.kpis.map((k) => [k.label, k.value, k.delta || ""]));
+    addTableSlide(pptx, "Indicadores clave", ["Indicador", "Valor", "Δ"], data.kpis.map((k) => [
+      markdownToPlainDisplay(k.label),
+      markdownToPlainDisplay(k.value),
+      markdownToPlainDisplay(k.delta || ""),
+    ]));
   }
   for (const t of data.tables || []) addTableSlide(pptx, t.caption || "Resultados", t.headers, t.rows);
-  if (data.notes?.length) addSectionSlide(pptx, "Notas", data.notes);
+  if (data.notes?.length) addSectionSlide(pptx, "Notas", data.notes.map((n) => markdownToPlainDisplay(n)));
 }
 
 // deno-lint-ignore no-explicit-any
 function buildGeneric(pptx: any, title: string, data: GenericDocumentData) {
   addTitleSlide(pptx, title, "Documento");
-  if (data.summary) addSectionSlide(pptx, "Resumen", [data.summary.slice(0, 400)]);
+  if (data.summary) {
+    const plain = markdownToPlainDisplay(data.summary);
+    addSectionSlide(pptx, "Resumen", [plain.slice(0, 400)]);
+  }
   for (const s of data.sections) {
-    const bullets = [...(s.paragraphs || []), ...(s.bullets || [])].slice(0, 8);
-    addSectionSlide(pptx, s.heading || "Sección", bullets);
+    const bullets = [...(s.paragraphs || []).map((p) => markdownToPlainDisplay(p)), ...(s.bullets || []).map((b) => markdownToPlainDisplay(b))].slice(0, 8);
+    addSectionSlide(pptx, markdownToPlainDisplay(s.heading || "Sección"), bullets);
   }
 }
 
