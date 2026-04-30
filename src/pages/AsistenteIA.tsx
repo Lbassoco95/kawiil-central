@@ -27,10 +27,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   Send, Sparkles, Loader2, PanelLeftClose, PanelLeft, PanelRightClose, PanelRight,
-  BrainCircuit, Settings2, FileText, UserPlus, Copy, MessageSquare, ListChecks,
+  BrainCircuit, Settings2, FileText, UserPlus, Copy, MessageSquare, ListChecks, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { matchesMobileViewport, useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeSlackApi } from "@/lib/slackApi";
@@ -67,6 +67,7 @@ import { mimeTypeForFile } from "@/lib/mimeFromFilename";
 import { useResolveDuplicateFilenames } from "@/hooks/useResolveDuplicateFilenames";
 import type { AgentTaskDeliverableLink } from "@/lib/agentTaskResult";
 import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 /** Si `storage.upload` no responde, el botón "Delegar" quedaría en spinner indefinidamente. */
 const DELEGATE_UPLOAD_TIMEOUT_MS = 150_000;
@@ -171,6 +172,8 @@ function AsistenteIAContent() {
   const [linkFilesToProject, setLinkFilesToProject] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [artifactDialogOpen, setArtifactDialogOpen] = useState(false);
+  /** Escritorio: panel derecho tipo Claude (chat + documento). Móvil: sigue usando Dialog. */
+  const [artifactPreviewOpen, setArtifactPreviewOpen] = useState(false);
   const [artifactDialogArtifact, setArtifactDialogArtifact] = useState<AiArtifact | null>(null);
   const [artifactDialogLoading, setArtifactDialogLoading] = useState(false);
   const [isDelegateModalOpen, setIsDelegateModalOpen] = useState(false);
@@ -710,6 +713,36 @@ function AsistenteIAContent() {
     if (id) setShowKnowledge(true);
   }, []);
 
+  /** Panel lateral escritorio: chat + documento (sin modal). */
+  const closeArtifactPreview = useCallback(() => {
+    setArtifactPreviewOpen(false);
+    setArtifactDialogOpen(false);
+    setArtifactDialogArtifact(null);
+    setArtifactDialogLoading(false);
+  }, []);
+
+  /** Al cambiar ancho (rotación / DevTools), sincronizar modal vs panel sin perder el artefacto. */
+  useEffect(() => {
+    const active = artifactDialogArtifact !== null || artifactDialogLoading;
+    if (!active) return;
+
+    if (!isMobile && artifactDialogOpen) {
+      setArtifactPreviewOpen(true);
+      setArtifactDialogOpen(false);
+      return;
+    }
+    if (isMobile && artifactPreviewOpen && !artifactDialogOpen) {
+      setArtifactDialogOpen(true);
+      setArtifactPreviewOpen(false);
+    }
+  }, [
+    isMobile,
+    artifactDialogOpen,
+    artifactPreviewOpen,
+    artifactDialogArtifact,
+    artifactDialogLoading,
+  ]);
+
   /**
    * Tarjeta "Ver" en el hilo del chat: siempre abre visor (incluso sin proyecto IA o artefacto fuera de la lista filtrada).
    *
@@ -725,7 +758,6 @@ function AsistenteIAContent() {
     async (id: string) => {
       const idShort = id.slice(0, 8);
       const local = artifacts.find((a) => a.id === id);
-      // Diagnóstico visible en consola del navegador para cruzar con logs del backend.
       console.log("[openArtifactFromChat] request", {
         id,
         idShort,
@@ -733,14 +765,40 @@ function AsistenteIAContent() {
         foundInLocalList: !!local,
         localListSize: artifacts.length,
       });
+
+      const prepareOpenUi = () => {
+        setShowKnowledge(false);
+        setActiveArtifactId(null);
+      };
+
+      /** Misma media query que `useIsMobile`; lectura síncrona al clic para no abrir modal en escritorio. */
+      const compactArtifactUi = matchesMobileViewport();
+
       if (local) {
+        prepareOpenUi();
         setArtifactDialogArtifact(local);
-        setArtifactDialogOpen(true);
+        setArtifactDialogLoading(false);
+        if (compactArtifactUi) {
+          setArtifactDialogOpen(true);
+          setArtifactPreviewOpen(false);
+        } else {
+          setArtifactPreviewOpen(true);
+          setArtifactDialogOpen(false);
+        }
         return;
       }
+
+      prepareOpenUi();
       setArtifactDialogLoading(true);
-      setArtifactDialogOpen(true);
       setArtifactDialogArtifact(null);
+      if (compactArtifactUi) {
+        setArtifactDialogOpen(true);
+        setArtifactPreviewOpen(false);
+      } else {
+        setArtifactPreviewOpen(true);
+        setArtifactDialogOpen(false);
+      }
+
       try {
         const { data, error } = await (supabase as any)
           .from("ai_artifacts")
@@ -748,7 +806,6 @@ function AsistenteIAContent() {
           .eq("id", id)
           .maybeSingle();
         if (error) {
-          // Log completo del error de PostgREST para diagnosticar RLS / constraints.
           console.error("[openArtifactFromChat] postgrest error", {
             id,
             code: (error as { code?: string }).code,
@@ -764,8 +821,6 @@ function AsistenteIAContent() {
           return;
         }
 
-        // No se encontró directamente: consultamos al probe para saber si la fila
-        // existe en la organización (RLS puede estarla recortando por user_id).
         console.warn("[openArtifactFromChat] direct select devolvió null; consultando artifact-probe", { id });
         const probeResp = await (supabase.functions as { invoke: (fn: string, opts: { body: unknown }) => Promise<{ data: unknown; error: unknown }> })
           .invoke("artifact-probe", { body: { id } });
@@ -781,7 +836,6 @@ function AsistenteIAContent() {
         console.log("[openArtifactFromChat] probe response", { id, probeData, probeError });
 
         if (probeData?.artifact) {
-          // El artefacto existe en mi org; lo abrimos aunque RLS por user_id haya bloqueado el select.
           setArtifactDialogArtifact(probeData.artifact);
           return;
         }
@@ -796,17 +850,17 @@ function AsistenteIAContent() {
                 ? "fue eliminado"
                 : "no existe";
         toast.error(`No se encontró el artefacto ${idShort}: ${reasonLabel}.`);
-        setArtifactDialogOpen(false);
+        closeArtifactPreview();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Error al cargar el artefacto";
         console.error("[openArtifactFromChat] unexpected error", { id, error: e });
         toast.error(`${msg} (id ${idShort})`);
-        setArtifactDialogOpen(false);
+        closeArtifactPreview();
       } finally {
         setArtifactDialogLoading(false);
       }
     },
-    [artifacts, activeAiProjectId],
+    [artifacts, activeAiProjectId, closeArtifactPreview],
   );
 
   const renderMessageContent = (
@@ -906,59 +960,8 @@ function AsistenteIAContent() {
     );
   };
 
-  return (
-    <>
-      <div className="flex h-[calc(100vh-4rem)] min-h-0 -mt-2 items-stretch">
-        {/* Left sidebar */}
-        {showSidebar && (
-          <ProjectSidebar
-            activeProject={activeProject ?? null}
-            aiProjects={aiProjects}
-            activeAiProjectId={activeAiProjectId}
-            activeConversationId={activeConversationId}
-            filteredConversations={filteredConversations}
-            onSelectProject={setAiProject}
-            onNewChat={startNewChat}
-            onLoadConversation={loadConversation}
-            onDeleteConversation={deleteConversation}
-            onRenameConversation={renameConversation}
-            onMoveConversation={(id, folder) => {
-              updateConversationFolder(id, folder);
-              toast.success(folder ? `Movido a "${folder}"` : "Movido a conversaciones generales");
-            }}
-            onCreateProject={() => setShowCreateProject(true)}
-            onArchiveProject={(id) => archiveAiProject.mutate(id)}
-            onLeaveProject={(id) => {
-              leaveAiProject.mutate(id, {
-                onSuccess: () => {
-                  toast.success("Saliste del proyecto compartido");
-                  if (activeAiProjectId === id) setAiProject(null);
-                },
-                onError: (e: Error) => toast.error(e.message),
-              });
-            }}
-            onUpdateInstructions={(id, instr) => {
-              updateAiProject.mutate({ id, instructions: instr });
-              toast.success("Instrucciones actualizadas");
-            }}
-            currentUserId={user?.id}
-            onOpenMembers={activeAiProjectId ? () => setMembersDialogOpen(true) : undefined}
-          />
-        )}
-
-        {/* Main chat area */}
-        <FileDropzone
-          files={pendingFiles}
-          onChange={handlePendingFilesChange}
-          limits={chatLimits}
-          disabled={isStreaming}
-          variant="overlay"
-          showChips={false}
-          enablePaste={false}
-          hint="Suelta archivos para adjuntar al chat"
-          enableFolderPicker
-          className="flex-1 flex flex-col min-w-0 min-h-0 h-full border-l border-border/40"
-        >
+  const ChatMainColumn = () => (
+          <>
           <div
             className="shrink-0 border-b border-sky-200/60 px-2.5 py-1.5 sm:px-3 sm:py-2 dark:border-sky-800/40"
             style={{ background: KAWIIL_AI_HEADER_BG }}
@@ -1529,7 +1532,139 @@ function AsistenteIAContent() {
               </details>
             </div>
           </div>
-        </FileDropzone>
+          </>
+  );
+
+  const artifactSplitVisible =
+    artifactPreviewOpen && !isMobile && (artifactDialogArtifact !== null || artifactDialogLoading);
+
+  return (
+    <>
+      <div className="flex h-[calc(100vh-4rem)] min-h-0 -mt-2 items-stretch">
+        {/* Left sidebar */}
+        {showSidebar && (
+          <ProjectSidebar
+            activeProject={activeProject ?? null}
+            aiProjects={aiProjects}
+            activeAiProjectId={activeAiProjectId}
+            activeConversationId={activeConversationId}
+            filteredConversations={filteredConversations}
+            onSelectProject={setAiProject}
+            onNewChat={startNewChat}
+            onLoadConversation={loadConversation}
+            onDeleteConversation={deleteConversation}
+            onRenameConversation={renameConversation}
+            onMoveConversation={(id, folder) => {
+              updateConversationFolder(id, folder);
+              toast.success(folder ? `Movido a "${folder}"` : "Movido a conversaciones generales");
+            }}
+            onCreateProject={() => setShowCreateProject(true)}
+            onArchiveProject={(id) => archiveAiProject.mutate(id)}
+            onLeaveProject={(id) => {
+              leaveAiProject.mutate(id, {
+                onSuccess: () => {
+                  toast.success("Saliste del proyecto compartido");
+                  if (activeAiProjectId === id) setAiProject(null);
+                },
+                onError: (e: Error) => toast.error(e.message),
+              });
+            }}
+            onUpdateInstructions={(id, instr) => {
+              updateAiProject.mutate({ id, instructions: instr });
+              toast.success("Instrucciones actualizadas");
+            }}
+            currentUserId={user?.id}
+            onOpenMembers={activeAiProjectId ? () => setMembersDialogOpen(true) : undefined}
+          />
+        )}
+
+        {/* Main chat area */}
+        {!isMobile ? (
+          <ResizablePanelGroup direction="horizontal" className="flex min-h-0 min-w-0 flex-1" autoSaveId="asistente-artifact-split">
+            <ResizablePanel
+              defaultSize={artifactSplitVisible ? 62 : 100}
+              minSize={artifactSplitVisible ? 35 : 100}
+              className="flex min-h-0 min-w-0 flex-col"
+            >
+              <FileDropzone
+                files={pendingFiles}
+                onChange={handlePendingFilesChange}
+                limits={chatLimits}
+                disabled={isStreaming}
+                variant="overlay"
+                showChips={false}
+                enablePaste={false}
+                hint="Suelta archivos para adjuntar al chat"
+                enableFolderPicker
+                className="flex h-full min-h-0 min-w-0 flex-1 flex-col border-l border-border/40"
+              >
+                <ChatMainColumn />
+              </FileDropzone>
+            </ResizablePanel>
+            {artifactSplitVisible ? (
+              <>
+                <ResizableHandle withHandle className="bg-border/70 w-2.5 shrink-0" />
+                <ResizablePanel defaultSize={38} minSize={24} maxSize={72} className="flex min-h-0 min-w-0 flex-col border-l border-border/40 bg-background shadow-sm dark:bg-background">
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/40 bg-muted/30 px-3 py-2">
+                    <p
+                      className="min-w-0 truncate text-xs font-medium"
+                      title={artifactDialogArtifact?.title ?? undefined}
+                    >
+                      {artifactDialogLoading && !artifactDialogArtifact
+                        ? "Cargando documento…"
+                        : artifactDialogArtifact?.title ?? "Documento"}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0 p-0"
+                      onClick={closeArtifactPreview}
+                      aria-label="Cerrar vista previa"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    {artifactDialogLoading && !artifactDialogArtifact ? (
+                      <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span className="text-sm">Cargando…</span>
+                      </div>
+                    ) : artifactDialogArtifact ? (
+                      <ArtifactViewer
+                        key={artifactDialogArtifact.id}
+                        artifact={artifactDialogArtifact}
+                        onBack={closeArtifactPreview}
+                        onUpdate={(id: string, content: string) => {
+                          updateArtifact.mutate({ id, content });
+                          setArtifactDialogArtifact((prev) =>
+                            prev && prev.id === id ? { ...prev, content } : prev,
+                          );
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                </ResizablePanel>
+              </>
+            ) : null}
+          </ResizablePanelGroup>
+        ) : (
+          <FileDropzone
+            files={pendingFiles}
+            onChange={handlePendingFilesChange}
+            limits={chatLimits}
+            disabled={isStreaming}
+            variant="overlay"
+            showChips={false}
+            enablePaste={false}
+            hint="Suelta archivos para adjuntar al chat"
+            enableFolderPicker
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col border-l border-border/40"
+          >
+            <ChatMainColumn />
+          </FileDropzone>
+        )}
 
         {/* Right knowledge panel */}
         {showKnowledge && activeProject && (
@@ -1589,42 +1724,40 @@ function AsistenteIAContent() {
         }}
       />
 
-      <Dialog
-        open={artifactDialogOpen}
-        onOpenChange={(o) => {
-          setArtifactDialogOpen(o);
-          if (!o) setArtifactDialogArtifact(null);
-        }}
-      >
-        <DialogContent className="w-[min(98vw,1680px)] sm:w-[min(98vw,1680px)] max-w-[min(98vw,1680px)] sm:max-w-[min(98vw,1680px)] max-h-[92vh] h-[min(92vh,900px)] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-lg">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Artefacto</DialogTitle>
-          </DialogHeader>
-          {artifactDialogLoading ? (
-            <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <span className="text-sm">Cargando…</span>
-            </div>
-          ) : artifactDialogArtifact ? (
-            <div className="flex-1 min-h-0 flex flex-col h-full max-h-[inherit]">
-              <ArtifactViewer
-                key={artifactDialogArtifact.id}
-                artifact={artifactDialogArtifact}
-                onBack={() => {
-                  setArtifactDialogOpen(false);
-                  setArtifactDialogArtifact(null);
-                }}
-                onUpdate={(id, content) => {
-                  updateArtifact.mutate({ id, content });
-                  setArtifactDialogArtifact((prev) =>
-                    prev && prev.id === id ? { ...prev, content } : prev,
-                  );
-                }}
-              />
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {isMobile ? (
+        <Dialog
+          open={artifactDialogOpen}
+          onOpenChange={(o) => {
+            if (!o) closeArtifactPreview();
+          }}
+        >
+          <DialogContent className="w-[min(98vw,1680px)] sm:w-[min(98vw,1680px)] max-w-[min(98vw,1680px)] sm:max-w-[min(98vw,1680px)] max-h-[92vh] h-[min(92vh,900px)] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-lg">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Artefacto</DialogTitle>
+            </DialogHeader>
+            {artifactDialogLoading ? (
+              <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="text-sm">Cargando…</span>
+              </div>
+            ) : artifactDialogArtifact ? (
+              <div className="flex-1 min-h-0 flex flex-col h-full max-h-[inherit]">
+                <ArtifactViewer
+                  key={artifactDialogArtifact.id}
+                  artifact={artifactDialogArtifact}
+                  onBack={closeArtifactPreview}
+                  onUpdate={(id, content) => {
+                    updateArtifact.mutate({ id, content });
+                    setArtifactDialogArtifact((prev) =>
+                      prev && prev.id === id ? { ...prev, content } : prev,
+                    );
+                  }}
+                />
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      ) : null}
 
       <Dialog open={showCreateProject} onOpenChange={setShowCreateProject}>
         <DialogContent className="sm:max-w-md overflow-hidden p-0">
