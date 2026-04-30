@@ -210,8 +210,8 @@ export function markdownToGenericContent(markdown: string, _title: string): Gene
  * del markdown + su representación genérica.
  *
  * - XLSX: hay ≥1 tabla con ≥3 columnas y ≥5 filas de datos.
- * - PPTX: el documento se estructura como slides (headings "Slide N:" /
- *   "Diapositiva N:" o ≥3 separadores `---`).
+ * - PPTX: solo ante señales explícitas de diapositivas (no usar `---`: es habitual
+ *   en markdown como separador de sección y disparaba falsos positivos).
  */
 export function detectExtraFormats(
   markdown: string,
@@ -226,9 +226,8 @@ export function detectExtraFormats(
 
   const raw = markdown || "";
   const slideHeadings = /\b(?:slide|diapositiva)\s*\d+/i.test(raw);
-  const hrCount = (raw.match(/^\s*---\s*$/gm) || []).length;
   const slideHeadingCount = (raw.match(/^#{1,6}\s+(?:slide|diapositiva)\b/gim) || []).length;
-  if (slideHeadings || hrCount >= 3 || slideHeadingCount >= 3) extra.add("pptx");
+  if (slideHeadings || slideHeadingCount >= 3) extra.add("pptx");
 
   return Array.from(extra);
 }

@@ -32,6 +32,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArtifactPdfPreview } from "./ArtifactPdfPreview";
 import { ArtifactSpreadsheetPreview } from "./ArtifactSpreadsheetPreview";
+import { ArtifactDocxPreview } from "./ArtifactDocxPreview";
 import { FORMAT_LABEL, getTemplateMeta } from "@/lib/ai-templates";
 import { KAWIIL_AI_SOFT_BG, KAWIIL_AI_TEXT_GRADIENT_CLASS } from "@/lib/kawiilAi";
 
@@ -55,6 +56,8 @@ function formatIcon(format: KawiilOutputFormat) {
 }
 
 const ALL_FORMATS: KawiilOutputFormat[] = ["pdf", "docx", "xlsx", "pptx"];
+
+type ViewerTabId = "docx" | "pptx" | "pdf" | "spreadsheet" | "text";
 
 export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerProps) {
   const [editing, setEditing] = useState(false);
@@ -93,43 +96,59 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
 
   const pdfOutput = useMemo(() => outputs.find((o) => o.format === "pdf") || null, [outputs]);
   const xlsxOutput = useMemo(() => outputs.find((o) => o.format === "xlsx") || null, [outputs]);
+  const docxOutput = useMemo(() => outputs.find((o) => o.format === "docx") || null, [outputs]);
+  const pptxOutput = useMemo(() => outputs.find((o) => o.format === "pptx") || null, [outputs]);
   const isKawiilDoc = outputs.length > 0;
   const isLegacyMarkdown = !isKawiilDoc;
-  const hasPreviewPanel = Boolean(pdfOutput || xlsxOutput);
+  const hasPreviewPanel = Boolean(pdfOutput || xlsxOutput || docxOutput || pptxOutput);
 
   const resolvedPrimaryFormat = (artifact.primary_format || primaryOutput?.format || "docx") as KawiilOutputFormat;
 
   const { tabOrder, defaultTab } = useMemo(() => {
     const hasP = !!pdfOutput;
     const hasX = !!xlsxOutput;
+    const hasD = !!docxOutput;
+    const hasS = !!pptxOutput;
     const fmt = resolvedPrimaryFormat;
-    let order: ("spreadsheet" | "text" | "pdf")[] = ["text"];
+
+    const pieces: ViewerTabId[] = [];
+    const pushAvailable = (...ids: ViewerTabId[]) => {
+      for (const id of ids) {
+        if (pieces.includes(id)) continue;
+        if (id === "pdf" && !hasP) continue;
+        if (id === "spreadsheet" && !hasX) continue;
+        if (id === "docx" && !hasD) continue;
+        if (id === "pptx" && !hasS) continue;
+        pieces.push(id);
+      }
+    };
+
     if (fmt === "xlsx" && hasX) {
-      order = ["spreadsheet", "text"];
-      if (hasP) order.push("pdf");
+      pushAvailable("spreadsheet", "docx", "pptx", "pdf", "text");
     } else if (fmt === "pdf" && hasP) {
-      order = ["pdf", "text"];
-      if (hasX) order.push("spreadsheet");
-    } else if (fmt === "docx") {
-      order = ["text"];
-      if (hasP) order.push("pdf");
-      if (hasX) order.push("spreadsheet");
+      pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
+    } else if (fmt === "docx" && hasD) {
+      pushAvailable("docx", "pdf", "spreadsheet", "pptx", "text");
+    } else if (fmt === "pptx" && hasS) {
+      pushAvailable("pptx", "pdf", "docx", "spreadsheet", "text");
     } else {
-      order = ["text"];
-      if (hasP) order.push("pdf");
-      if (hasX) order.push("spreadsheet");
+      pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
     }
-    let def: "spreadsheet" | "text" | "pdf" = "text";
+
+    let def: ViewerTabId = "text";
     if (fmt === "xlsx" && hasX) def = "spreadsheet";
     else if (fmt === "pdf" && hasP) def = "pdf";
-    else if (fmt === "docx" || fmt === "pptx") def = "text";
-    else {
-      if (hasP) def = "pdf";
-      else if (hasX) def = "spreadsheet";
-    }
-    if (!order.includes(def)) def = order[0] ?? "text";
-    return { tabOrder: order, defaultTab: def };
-  }, [resolvedPrimaryFormat, pdfOutput, xlsxOutput]);
+    else if (fmt === "docx" && hasD) def = "docx";
+    else if (fmt === "pptx" && hasS) def = "pptx";
+    else if (hasP) def = "pdf";
+    else if (hasD) def = "docx";
+    else if (hasX) def = "spreadsheet";
+    else if (hasS) def = "pptx";
+
+    const tabOrder = pieces.length ? pieces : ["text"];
+    const defaultTab = tabOrder.includes(def) ? def : (tabOrder[0] ?? "text");
+    return { tabOrder, defaultTab };
+  }, [resolvedPrimaryFormat, pdfOutput, xlsxOutput, docxOutput, pptxOutput]);
 
   const availableFormats = useMemo(() => new Set(outputs.map((o) => o.format)), [outputs]);
   const missingFormats = useMemo(
@@ -249,9 +268,16 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 </p>
                 {resolvedPrimaryFormat === "docx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
-                    Entrega principal en Word: usa <span className="font-medium">Descargar</span> y elige DOCX; el
-                    PDF es copia de presentación/lectura. En <span className="font-medium">Texto</span> verás un
-                    resumen en markdown.
+                    Entrega principal en Word: usa <span className="font-medium">Descargar</span> para el .docx original.
+                    La pestaña <span className="font-medium">Vista previa Word</span> muestra una conversión aproximada en el navegador;{" "}
+                    <span className="font-medium">Texto</span> conserva el markdown fuente.
+                  </p>
+                ) : null}
+                {resolvedPrimaryFormat === "pptx" && outputs.length > 0 ? (
+                  <p className="text-[10px] text-foreground/80">
+                    PowerPoint no tiene vista previa integrada en el navegador: descarga el .pptx o usa{" "}
+                    <span className="font-medium">Generar</span> para añadir PDF de lectura y verlo en{" "}
+                    <span className="font-medium">Vista previa PDF</span>.
                   </p>
                 ) : null}
                 {resolvedPrimaryFormat === "xlsx" && outputs.length > 0 ? (
@@ -395,6 +421,20 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                       </TabsTrigger>
                     );
                   }
+                  if (value === "docx" && docxOutput) {
+                    return (
+                      <TabsTrigger key="docx" value="docx" className="text-[11px] h-5 px-2 gap-1">
+                        <FileType2 className="h-3 w-3" /> Vista previa Word (lectura)
+                      </TabsTrigger>
+                    );
+                  }
+                  if (value === "pptx" && pptxOutput) {
+                    return (
+                      <TabsTrigger key="pptx" value="pptx" className="text-[11px] h-5 px-2 gap-1">
+                        <Presentation className="h-3 w-3" /> PowerPoint
+                      </TabsTrigger>
+                    );
+                  }
                   if (value === "text") {
                     return (
                       <TabsTrigger key="text" value="text" className="text-[11px] h-5 px-2 gap-1">
@@ -406,6 +446,30 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 })}
               </TabsList>
             </div>
+            {docxOutput ? (
+              <TabsContent value="docx" className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1 overflow-hidden">
+                <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+                  <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
+                </div>
+              </TabsContent>
+            ) : null}
+            {pptxOutput ? (
+              <TabsContent value="pptx" className="flex-1 m-0 overflow-y-auto p-4 min-h-[min(80vh,900px)]">
+                <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center max-w-md mx-auto">
+                  <Presentation className="h-12 w-12 text-muted-foreground/50" />
+                  <p className="text-sm text-foreground">
+                    El navegador no puede mostrar diapositivas en vista previa.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Descarga el archivo .pptx o usa el botón <span className="font-medium text-foreground">Generar</span> para
+                    crear un PDF de lectura y previsualizarlo en la pestaña «Vista previa PDF».
+                  </p>
+                  <Button size="sm" variant="default" className="gap-1 bg-sky-600 hover:bg-sky-700" onClick={() => void handleDownloadFormat(pptxOutput)}>
+                    <Download className="h-3.5 w-3.5" /> Descargar PowerPoint
+                  </Button>
+                </div>
+              </TabsContent>
+            ) : null}
             {xlsxOutput ? (
               <TabsContent
                 value="spreadsheet"

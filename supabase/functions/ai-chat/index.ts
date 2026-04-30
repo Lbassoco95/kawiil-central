@@ -3093,8 +3093,7 @@ function markdownToGenericContent(markdown: string, _title: string): GenericCont
  *
  * - XLSX: hay ≥1 tabla con ≥3 columnas y ≥5 filas de datos (señal fuerte de
  *   que el usuario querrá manipularla en Excel).
- * - PPTX: el documento se estructura como slides (headings "Slide N:", "Diapositiva N:",
- *   o ≥3 separadores horizontales `---` que particionan el doc).
+ * - PPTX: solo ante señales explícitas de diapositivas (no usar `---` como en `_shared/markdown-to-generic`).
  */
 function detectExtraFormats(markdown: string, generic: GenericContent): KawiilOutputFormat[] {
   const extra = new Set<KawiilOutputFormat>();
@@ -3106,9 +3105,8 @@ function detectExtraFormats(markdown: string, generic: GenericContent): KawiilOu
 
   const raw = markdown || "";
   const slideHeadings = /\b(?:slide|diapositiva)\s*\d+/i.test(raw);
-  const hrCount = (raw.match(/^\s*---\s*$/gm) || []).length;
   const slideHeadingCount = (raw.match(/^#{1,6}\s+(?:slide|diapositiva)\b/gim) || []).length;
-  if (slideHeadings || hrCount >= 3 || slideHeadingCount >= 3) extra.add("pptx");
+  if (slideHeadings || slideHeadingCount >= 3) extra.add("pptx");
 
   return Array.from(extra);
 }
@@ -3164,6 +3162,18 @@ function userRequestedExcelLike(text: string): boolean {
   if (/hoja\s+de\s+c[aá]lculo/i.test(t)) return true;
   if (/\bspreadsheet\b/i.test(t)) return true;
   if (/\bexcel\b/i.test(t)) return true;
+  return false;
+}
+
+/** El usuario pidió explícitamente PowerPoint / diapositivas / PPTX. */
+function userRequestedPowerPointLike(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/\bpptx\b|\.pptx/i.test(t)) return true;
+  if (/\b(en|de|para)\s+(powerpoint|ppt)\b/i.test(t)) return true;
+  if (/\bpowerpoint\b/i.test(t)) return true;
+  if (/\bdiapositivas?\b/i.test(t)) return true;
+  if (/\bpresentaci[oó]n\b/i.test(t) && /\b(pptx|ppt|powerpoint|diapositiva)/i.test(t)) return true;
   return false;
 }
 
@@ -3328,6 +3338,16 @@ async function handleCreateAiDocument(
     } else if (userRequestedPdfLike(lastUserPlainText) && !requestedFormats.includes("pdf")) {
       requestedFormats.push("pdf");
     }
+  }
+
+  // Cartas/oficios en Word: no generar PPTX colateral si el usuario no pidió diapositivas.
+  if (
+    lastUserPlainText &&
+    userRequestedWordLike(lastUserPlainText) &&
+    !userRequestedPowerPointLike(lastUserPlainText)
+  ) {
+    requestedFormats = requestedFormats.filter((f) => f !== "pptx");
+    if (!requestedFormats.length) requestedFormats = ["docx"];
   }
 
   const renderPayload = {

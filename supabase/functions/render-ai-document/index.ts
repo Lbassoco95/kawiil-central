@@ -149,12 +149,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Si el primario pedido falló pero hay otros formatos disponibles, usamos el
-    // primero que sí se rindió (útil para que el UI no muestre "primario: PDF"
-    // cuando el PDF falló pero tenemos DOCX).
-    const primary: KawiilOutputFormat = formats.some((f) => f.format === requestedPrimary)
+    // Primario: si el pedido explícito se renderizó, se respeta; si falló, el primario
+    // pasa al siguiente formato en `requested_formats` que sí exista entre los éxitos
+    // (orden del usuario/modelo), no al orden casual del array `formats`.
+    const successfulSet = new Set(formats.map((f) => f.format));
+    const primary: KawiilOutputFormat = successfulSet.has(requestedPrimary)
       ? requestedPrimary
-      : formats[0].format;
+      : (requestedFormatsList.find((f) => successfulSet.has(f)) ?? formats[0].format);
 
     const previewSummary = typeof (payload.content as { summary?: string }).summary === "string"
       ? (payload.content as { summary?: string }).summary
