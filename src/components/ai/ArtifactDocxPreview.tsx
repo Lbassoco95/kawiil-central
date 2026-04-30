@@ -11,7 +11,8 @@ interface ArtifactDocxPreviewProps {
 }
 
 /**
- * Vista previa HTML del archivo DOCX (mismo enfoque que adjuntos Word en EmailView).
+ * Vista simplificada local del DOCX (Mammoth → HTML).
+ * La vista principal en artefactos usa Office Online; este componente es el fallback.
  */
 export function ArtifactDocxPreview({ bucket, storagePath, fitContainer = true }: ArtifactDocxPreviewProps) {
   const [html, setHtml] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export function ArtifactDocxPreview({ bucket, storagePath, fitContainer = true }
     return (
       <div className={`flex flex-col items-center justify-center gap-2 text-muted-foreground ${fitContainer ? "h-full min-h-[280px]" : "min-h-[280px]"}`}>
         <Loader2 className="h-5 w-5 animate-spin" />
-        <p className="text-xs">Cargando vista previa Word…</p>
+        <p className="text-xs">Cargando vista simplificada Word…</p>
       </div>
     );
   }

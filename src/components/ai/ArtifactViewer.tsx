@@ -33,6 +33,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArtifactPdfPreview } from "./ArtifactPdfPreview";
 import { ArtifactSpreadsheetPreview } from "./ArtifactSpreadsheetPreview";
 import { ArtifactDocxPreview } from "./ArtifactDocxPreview";
+import { ArtifactOfficeOnlinePreview } from "./ArtifactOfficeOnlinePreview";
 import { FORMAT_LABEL, getTemplateMeta } from "@/lib/ai-templates";
 import { KAWIIL_AI_SOFT_BG, KAWIIL_AI_TEXT_GRADIENT_CLASS } from "@/lib/kawiilAi";
 
@@ -128,7 +129,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
     } else if (fmt === "pdf" && hasP) {
       pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
     } else if (fmt === "docx" && hasD) {
-      // PDF primero cuando existe: más cercano al entregable impreso/enviado que Mammoth.
+      // PDF primero cuando existe: más cercano al entregable impreso/enviado que solo Word en navegador.
       if (hasP) pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
       else pushAvailable("docx", "pdf", "spreadsheet", "pptx", "text");
     } else if (fmt === "pptx" && hasS) {
@@ -269,24 +270,24 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 </p>
                 {resolvedPrimaryFormat === "docx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
-                    Entrega principal en Word: usa <span className="font-medium">Descargar</span> para el .docx original.
-                    La pestaña <span className="font-medium">Vista previa Word</span> muestra una conversión aproximada en el navegador;{" "}
-                    <span className="font-medium">Resumen (Markdown)</span> conserva el texto fuente para copiar.
+                    Word se ve en la pestaña <span className="font-medium">Vista previa Word</span> con{" "}
+                    <span className="font-medium">Microsoft Office Online</span> (como el archivo descargado). Si no carga,
+                    usa «Vista simplificada» o <span className="font-medium">Descargar</span>.{" "}
+                    <span className="font-medium">Resumen (Markdown)</span> conserva el texto fuente.
                   </p>
                 ) : null}
                 {resolvedPrimaryFormat === "pptx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
-                    PowerPoint no tiene vista previa integrada en el navegador: descarga el .pptx o usa{" "}
-                    <span className="font-medium">Generar</span> para añadir PDF de lectura y verlo en{" "}
-                    <span className="font-medium">Vista previa PDF</span>.
+                    PowerPoint se previsualiza con <span className="font-medium">Office Online</span> en su pestaña.
+                    Opcional: <span className="font-medium">Generar</span> PDF para lectura rápida o{" "}
+                    <span className="font-medium">Descargar</span> el .pptx.
                   </p>
                 ) : null}
                 {resolvedPrimaryFormat === "xlsx" && outputs.length > 0 ? (
                   <p className="text-[10px] text-foreground/80">
-                    La entrega estructurada es el Excel: usa <span className="font-medium">Descargar</span> y elige
-                    XLSX. <span className="font-medium">Vista previa Excel</span> muestra la primera hoja (tabular,
-                    podría truncarse); el PDF, si existe, es solo copia de presentación/lectura. En{" "}
-                    <span className="font-medium">Resumen (Markdown)</span> verás el texto fuente.
+                    Excel en <span className="font-medium">Vista previa Excel</span> usa{" "}
+                    <span className="font-medium">Office Online</span> para el libro completo; «Vista simplificada» muestra
+                    solo la primera hoja en tabla. <span className="font-medium">Descargar</span> conserva el .xlsx original.
                   </p>
                 ) : null}
               </div>
@@ -432,7 +433,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                   if (value === "pptx" && pptxOutput) {
                     return (
                       <TabsTrigger key="pptx" value="pptx" className="text-[11px] h-5 px-2 gap-1">
-                        <Presentation className="h-3 w-3" /> PowerPoint
+                        <Presentation className="h-3 w-3" /> Vista previa PowerPoint (lectura)
                       </TabsTrigger>
                     );
                   }
@@ -450,24 +451,46 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             {docxOutput ? (
               <TabsContent value="docx" className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1 overflow-hidden">
                 <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-                  <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
+                  <ArtifactOfficeOnlinePreview
+                    bucket={docxOutput.storage_bucket}
+                    storagePath={docxOutput.storage_path}
+                    suiteLabel="Word"
+                    simplifiedFallback={
+                      <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
+                    }
+                  />
                 </div>
               </TabsContent>
             ) : null}
             {pptxOutput ? (
-              <TabsContent value="pptx" className="flex-1 m-0 overflow-y-auto p-4 min-h-[min(80vh,900px)]">
-                <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center max-w-md mx-auto">
-                  <Presentation className="h-12 w-12 text-muted-foreground/50" />
-                  <p className="text-sm text-foreground">
-                    El navegador no puede mostrar diapositivas en vista previa.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Descarga el archivo .pptx o usa el botón <span className="font-medium text-foreground">Generar</span> para
-                    crear un PDF de lectura y previsualizarlo en la pestaña «Vista previa PDF».
-                  </p>
-                  <Button size="sm" variant="default" className="gap-1 bg-sky-600 hover:bg-sky-700" onClick={() => void handleDownloadFormat(pptxOutput)}>
-                    <Download className="h-3.5 w-3.5" /> Descargar PowerPoint
-                  </Button>
+              <TabsContent
+                value="pptx"
+                className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1 overflow-hidden"
+              >
+                <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+                  <ArtifactOfficeOnlinePreview
+                    bucket={pptxOutput.storage_bucket}
+                    storagePath={pptxOutput.storage_path}
+                    suiteLabel="PowerPoint"
+                    simplifiedFallback={
+                      <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center max-w-md mx-auto">
+                        <Presentation className="h-12 w-12 text-muted-foreground/50" />
+                        <p className="text-sm text-foreground">No hay vista simplificada de diapositivas en la app.</p>
+                        <p className="text-xs text-muted-foreground">
+                          Descarga el .pptx o usa <span className="font-medium text-foreground">Generar</span> para añadir PDF
+                          y verlo en «Vista previa PDF».
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="gap-1 bg-sky-600 hover:bg-sky-700"
+                          onClick={() => void handleDownloadFormat(pptxOutput)}
+                        >
+                          <Download className="h-3.5 w-3.5" /> Descargar PowerPoint
+                        </Button>
+                      </div>
+                    }
+                  />
                 </div>
               </TabsContent>
             ) : null}
@@ -477,10 +500,17 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1"
               >
                 <div className="flex min-h-0 flex-1 min-h-[min(80vh,900px)] min-[900px]:min-h-0 flex-col">
-                  <ArtifactSpreadsheetPreview
+                  <ArtifactOfficeOnlinePreview
                     bucket={xlsxOutput.storage_bucket}
                     storagePath={xlsxOutput.storage_path}
-                    fileName={xlsxOutput.file_name}
+                    suiteLabel="Excel"
+                    simplifiedFallback={
+                      <ArtifactSpreadsheetPreview
+                        bucket={xlsxOutput.storage_bucket}
+                        storagePath={xlsxOutput.storage_path}
+                        fileName={xlsxOutput.file_name}
+                      />
+                    }
                   />
                 </div>
               </TabsContent>
