@@ -27,6 +27,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -35,7 +36,7 @@ import { ArtifactSpreadsheetPreview } from "./ArtifactSpreadsheetPreview";
 import { ArtifactDocxPreview } from "./ArtifactDocxPreview";
 import { ArtifactOfficeOnlinePreview } from "./ArtifactOfficeOnlinePreview";
 import { FORMAT_LABEL, getTemplateMeta } from "@/lib/ai-templates";
-import { KAWIIL_AI_SOFT_BG, KAWIIL_AI_TEXT_GRADIENT_CLASS } from "@/lib/kawiilAi";
+import { KAWIIL_AI_TEXT_GRADIENT_CLASS } from "@/lib/kawiilAi";
 
 interface ArtifactViewerProps {
   artifact: AiArtifact;
@@ -152,6 +153,27 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
     return { tabOrder, defaultTab };
   }, [resolvedPrimaryFormat, pdfOutput, xlsxOutput, docxOutput, pptxOutput]);
 
+  const [activeTab, setActiveTab] = useState<ViewerTabId>(defaultTab);
+
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab, artifact.id]);
+
+  const tabDownloadOutput = useMemo(() => {
+    switch (activeTab) {
+      case "pdf":
+        return pdfOutput;
+      case "docx":
+        return docxOutput;
+      case "spreadsheet":
+        return xlsxOutput;
+      case "pptx":
+        return pptxOutput;
+      default:
+        return null;
+    }
+  }, [activeTab, pdfOutput, docxOutput, xlsxOutput, pptxOutput]);
+
   const availableFormats = useMemo(() => new Set(outputs.map((o) => o.format)), [outputs]);
   const missingFormats = useMemo(
     () => ALL_FORMATS.filter((f) => !availableFormats.has(f)),
@@ -236,64 +258,136 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
     toast.success("Artifact actualizado");
   };
 
+  const handleMainDownload = () => {
+    if (activeTab === "text") {
+      handleDownloadMarkdown();
+      return;
+    }
+    const target = tabDownloadOutput ?? primaryOutput;
+    if (target) void handleDownloadFormat(target);
+  };
+
+  const mainDownloadSuffix =
+    activeTab === "text"
+      ? "Markdown (.md)"
+      : tabDownloadOutput ?? primaryOutput
+        ? FORMAT_LABEL[(tabDownloadOutput ?? primaryOutput)!.format] ||
+          (tabDownloadOutput ?? primaryOutput)!.format.toUpperCase()
+        : "";
+
+  const mainDownloadDisabled =
+    isPending ||
+    (activeTab === "text" ? false : !(tabDownloadOutput ?? primaryOutput));
+
+  const moreMenuDownloadSection = outputs.length > 0 ? (
+    <>
+      {outputs.map((out) => (
+        <DropdownMenuItem
+          key={out.format + out.storage_path}
+          onClick={() => void handleDownloadFormat(out)}
+          className="gap-2 text-xs"
+        >
+          {formatIcon(out.format)}
+          {FORMAT_LABEL[out.format] || out.format.toUpperCase()}
+          {out.is_primary ? <span className="ml-1 text-[9px] text-muted-foreground">principal</span> : null}
+        </DropdownMenuItem>
+      ))}
+      <DropdownMenuItem onClick={() => void handleDownloadMarkdown()} className="gap-2 text-xs">
+        <FileTextIcon className="h-3.5 w-3.5" /> Markdown (.md)
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+    </>
+  ) : (
+    <>
+      <DropdownMenuItem onClick={() => void handleDownloadMarkdown()} className="gap-2 text-xs">
+        <FileTextIcon className="h-3.5 w-3.5" /> Markdown (.md)
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+    </>
+  );
+
+  const moreMenuUtilities = (
+    <>
+      <DropdownMenuItem onClick={handleCopy} className="gap-2 text-xs">
+        <Copy className="h-3.5 w-3.5" /> Copiar texto fuente
+      </DropdownMenuItem>
+      {(missingFormats.length > 0 || isFailed) ? (
+        <>
+          <DropdownMenuSeparator />
+          {missingFormats.map((fmt) => (
+            <DropdownMenuItem
+              key={fmt}
+              onClick={() => void handleGenerateFormats([fmt], fmt)}
+              disabled={isPending || generatingFormat !== null}
+              className="gap-2 text-xs"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Generar {FORMAT_LABEL[fmt] || fmt.toUpperCase()}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem
+            onClick={() => void handleGenerateFormats(ALL_FORMATS, "all")}
+            disabled={isPending || generatingFormat !== null}
+            className="gap-2 text-xs"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> Regenerar todos los formatos
+          </DropdownMenuItem>
+        </>
+      ) : null}
+      {!editing && isLegacyMarkdown ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="gap-2 text-xs"
+            onClick={() => {
+              setEditContent(artifact.content);
+              setEditing(true);
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Editar markdown
+          </DropdownMenuItem>
+        </>
+      ) : null}
+      {editing ? (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="gap-2 text-xs" onClick={handleSave}>
+            <Check className="h-3.5 w-3.5" /> Guardar cambios
+          </DropdownMenuItem>
+          <DropdownMenuItem className="gap-2 text-xs" onClick={() => setEditing(false)}>
+            <X className="h-3.5 w-3.5" /> Cancelar edición
+          </DropdownMenuItem>
+        </>
+      ) : null}
+    </>
+  );
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="p-3 border-b border-border/30 space-y-2" style={isKawiilDoc ? { background: KAWIIL_AI_SOFT_BG } : undefined}>
-        <button className="text-xs text-primary hover:underline flex items-center gap-1" onClick={onBack}>
-          <ArrowLeft className="h-3 w-3" /> Volver
-        </button>
-        <div className="flex items-start gap-2 justify-between">
-          <div className="min-w-0">
-            {templateMeta ? (
-              <Badge variant="secondary" className="text-[10px] mb-1 border-sky-200 bg-sky-50 text-sky-700">
-                KAWIIL AI · {templateMeta.shortLabel}
-              </Badge>
-            ) : null}
-            {isPending ? (
-              <Badge variant="secondary" className="text-[10px] mb-1 ml-1 border-amber-200 bg-amber-50 text-amber-800 gap-1">
-                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Generando documento…
-              </Badge>
-            ) : null}
-            {isFailed ? (
-              <Badge variant="secondary" className="text-[10px] mb-1 ml-1 border-rose-200 bg-rose-50 text-rose-800">
-                Generación falló
-              </Badge>
-            ) : null}
-            <h3 className={`text-sm font-semibold leading-tight ${isKawiilDoc ? KAWIIL_AI_TEXT_GRADIENT_CLASS : ""}`}>
-              {artifact.title}
-            </h3>
-            {primaryOutput ? (
-              <div className="text-[10px] text-muted-foreground mt-0.5 space-y-0.5">
-                <p>
-                  Formato primario: {FORMAT_LABEL[primaryOutput.format] || primaryOutput.format.toUpperCase()}
-                  {outputs.length > 1 ? ` · ${outputs.length} formatos disponibles` : ""}
-                </p>
-                {resolvedPrimaryFormat === "docx" && outputs.length > 0 ? (
-                  <p className="text-[10px] text-foreground/80">
-                    La pestaña <span className="font-medium">Vista previa Word</span> usa{" "}
-                    <span className="font-medium">Office Online</span>: solo lectura en el navegador (como el archivo descargado). Para
-                    editar, usa <span className="font-medium">Descargar para editar</span> en esa vista o el menú{" "}
-                    <span className="font-medium">Descargar</span> y abre el .docx en Word.{" "}
-                    <span className="font-medium">Resumen (Markdown)</span> conserva el texto fuente.
-                  </p>
-                ) : null}
-                {resolvedPrimaryFormat === "pptx" && outputs.length > 0 ? (
-                  <p className="text-[10px] text-foreground/80">
-                    PowerPoint en Office Online es solo lectura en el navegador. Para editar diapositivas, usa{" "}
-                    <span className="font-medium">Descargar para editar</span> en la vista previa o el menú{" "}
-                    <span className="font-medium">Descargar</span>. Opcional:{" "}
-                    <span className="font-medium">Generar</span> PDF para lectura rápida.
-                  </p>
-                ) : null}
-                {resolvedPrimaryFormat === "xlsx" && outputs.length > 0 ? (
-                  <p className="text-[10px] text-foreground/80">
-                    Excel en Office Online es solo lectura en el navegador. Para editar el libro, usa{" "}
-                    <span className="font-medium">Descargar para editar</span> en la vista previa o{" "}
-                    <span className="font-medium">Descargar</span>. «Vista simplificada» muestra solo la primera hoja en tabla.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
+      <div className="shrink-0 border-b border-border/30 px-3 py-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <button type="button" className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0" onClick={onBack}>
+            <ArrowLeft className="h-3 w-3" /> Volver
+          </button>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className={`text-sm font-semibold leading-tight truncate ${isKawiilDoc ? KAWIIL_AI_TEXT_GRADIENT_CLASS : ""}`}>
+                {artifact.title}
+              </h3>
+              {templateMeta ? (
+                <span className="text-[10px] text-muted-foreground shrink-0">{templateMeta.shortLabel}</span>
+              ) : null}
+              {isPending ? (
+                <Badge variant="secondary" className="text-[10px] h-5 gap-1 border-amber-200 bg-amber-50 text-amber-800">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" /> Generando…
+                </Badge>
+              ) : null}
+              {isFailed ? (
+                <Badge variant="secondary" className="text-[10px] h-5 border-rose-200 bg-rose-50 text-rose-800">
+                  Error al generar
+                </Badge>
+              ) : null}
+            </div>
             {isFailed && artifact.render_error ? (
               <p className="text-[10px] text-rose-700 mt-0.5 truncate" title={artifact.render_error}>
                 {artifact.render_error}
@@ -301,154 +395,85 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             ) : null}
           </div>
         </div>
-        <div className="flex gap-1.5 flex-wrap">
-          <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={handleCopy}>
-            <Copy className="h-2.5 w-2.5" /> Copiar texto
-          </Button>
-          {outputs.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" disabled={isPending}>
-                  <Download className="h-2.5 w-2.5" /> Descargar
-                  <ChevronDown className="h-2.5 w-2.5 ml-0.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {outputs.map((out) => (
-                  <DropdownMenuItem
-                    key={out.format + out.storage_path}
-                    onClick={() => void handleDownloadFormat(out)}
-                    className="gap-2 text-xs"
-                  >
-                    {formatIcon(out.format)}
-                    {FORMAT_LABEL[out.format] || out.format.toUpperCase()}
-                    {out.is_primary ? <span className="ml-1 text-[9px] text-muted-foreground">primario</span> : null}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem
-                  onClick={() => void handleDownloadMarkdown()}
-                  className="gap-2 text-xs border-t mt-1 pt-1"
-                >
-                  <FileTextIcon className="h-3.5 w-3.5" /> Markdown (.md)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={handleDownloadMarkdown}>
-              <Download className="h-2.5 w-2.5" /> Descargar .md
-            </Button>
-          )}
-
-          {/*
-            Botón "Generar" a demanda:
-            - Si faltan formatos (el artefacto solo tiene MD, o le falta XLSX/PPTX), mostramos
-              un dropdown con los que faltan + "Regenerar todos".
-            - Si ya tiene los 4 formatos, solo ofrecemos "Regenerar" como submenú.
-          */}
-          {(missingFormats.length > 0 || isFailed) ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="default"
-                  className="h-6 text-[10px] gap-1 px-2 bg-sky-600 hover:bg-sky-700"
-                  disabled={isPending || generatingFormat !== null}
-                >
-                  {generatingFormat !== null || isPending ? (
-                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-2.5 w-2.5" />
-                  )}
-                  {isFailed ? "Reintentar" : "Generar"}
-                  <ChevronDown className="h-2.5 w-2.5 ml-0.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {missingFormats.map((fmt) => (
-                  <DropdownMenuItem
-                    key={fmt}
-                    onClick={() => void handleGenerateFormats([fmt], fmt)}
-                    className="gap-2 text-xs"
-                  >
-                    {formatIcon(fmt)}
-                    Generar {FORMAT_LABEL[fmt] || fmt.toUpperCase()}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem
-                  onClick={() => void handleGenerateFormats(ALL_FORMATS, "all")}
-                  className="gap-2 text-xs border-t mt-1 pt-1"
-                >
-                  <Sparkles className="h-3.5 w-3.5" /> Regenerar todos (incluye PDF, Word, Excel, PPT)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
-
-          {!editing && isLegacyMarkdown ? (
-            <Button size="sm" variant="outline" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setEditContent(artifact.content); setEditing(true); }}>
-              <Pencil className="h-2.5 w-2.5" /> Editar
-            </Button>
-          ) : editing ? (
-            <>
-              <Button size="sm" variant="default" className="h-6 text-[10px] gap-1 px-2" onClick={handleSave}>
-                <Check className="h-2.5 w-2.5" /> Guardar
-              </Button>
-              <Button size="sm" variant="ghost" className="h-6 text-[10px] gap-1 px-2" onClick={() => setEditing(false)}>
-                <X className="h-2.5 w-2.5" />
-              </Button>
-            </>
-          ) : null}
-        </div>
       </div>
 
       <div className="flex-1 min-h-[min(80vh,900px)] overflow-hidden flex flex-col">
         {hasPreviewPanel ? (
           <Tabs
             key={`${artifact.id}-${resolvedPrimaryFormat}`}
-            defaultValue={defaultTab}
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as ViewerTabId)}
             className="h-full min-h-[min(80vh,900px)] flex flex-1 flex-col"
           >
-            <div className="px-3 pt-2 border-b border-border/30 shrink-0">
-              <TabsList className="h-7">
+            <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2 border-b border-border/30 px-3 py-2 shrink-0 bg-muted/20">
+              <TabsList className="h-8 flex-wrap bg-background/80">
                 {tabOrder.map((value) => {
                   if (value === "spreadsheet" && xlsxOutput) {
                     return (
-                      <TabsTrigger key="spreadsheet" value="spreadsheet" className="text-[11px] h-5 px-2 gap-1">
-                        <FileSpreadsheet className="h-3 w-3" /> Vista previa Excel (lectura)
+                      <TabsTrigger key="spreadsheet" value="spreadsheet" className="text-[11px] h-7 px-2 gap-1">
+                        <FileSpreadsheet className="h-3 w-3" /> Excel
                       </TabsTrigger>
                     );
                   }
                   if (value === "pdf" && pdfOutput) {
                     return (
-                      <TabsTrigger key="pdf" value="pdf" className="text-[11px] h-5 px-2 gap-1">
-                        <FileText className="h-3 w-3" /> PDF (lectura / entrega)
+                      <TabsTrigger key="pdf" value="pdf" className="text-[11px] h-7 px-2 gap-1">
+                        <FileText className="h-3 w-3" /> PDF
                       </TabsTrigger>
                     );
                   }
                   if (value === "docx" && docxOutput) {
                     return (
-                      <TabsTrigger key="docx" value="docx" className="text-[11px] h-5 px-2 gap-1">
-                        <FileType2 className="h-3 w-3" /> Vista previa Word (lectura)
+                      <TabsTrigger key="docx" value="docx" className="text-[11px] h-7 px-2 gap-1">
+                        <FileType2 className="h-3 w-3" /> Word
                       </TabsTrigger>
                     );
                   }
                   if (value === "pptx" && pptxOutput) {
                     return (
-                      <TabsTrigger key="pptx" value="pptx" className="text-[11px] h-5 px-2 gap-1">
-                        <Presentation className="h-3 w-3" /> Vista previa PowerPoint (lectura)
+                      <TabsTrigger key="pptx" value="pptx" className="text-[11px] h-7 px-2 gap-1">
+                        <Presentation className="h-3 w-3" /> PowerPoint
                       </TabsTrigger>
                     );
                   }
                   if (value === "text") {
                     return (
-                      <TabsTrigger key="text" value="text" className="text-[11px] h-5 px-2 gap-1">
-                        <FileTextIcon className="h-3 w-3" /> Resumen (Markdown)
+                      <TabsTrigger key="text" value="text" className="text-[11px] h-7 px-2 gap-1">
+                        <FileTextIcon className="h-3 w-3" /> Texto
                       </TabsTrigger>
                     );
                   }
                   return null;
                 })}
               </TabsList>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  disabled={mainDownloadDisabled}
+                  className="h-8 gap-1.5 bg-sky-600 px-3 text-xs hover:bg-sky-700"
+                  onClick={handleMainDownload}
+                >
+                  {isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  Descargar{mainDownloadSuffix ? ` · ${mainDownloadSuffix}` : ""}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 p-0" aria-label="Más opciones">
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {moreMenuDownloadSection}
+                    {moreMenuUtilities}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
             {docxOutput ? (
               <TabsContent value="docx" className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1 overflow-hidden">
@@ -457,22 +482,8 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     bucket={docxOutput.storage_bucket}
                     storagePath={docxOutput.storage_path}
                     suiteLabel="Word"
-                    onDownloadForEdit={() => void handleDownloadFormat(docxOutput)}
-                    downloadForEditLabel="Descargar para editar (.docx)"
                     simplifiedFallback={
                       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-                        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border/40 bg-muted/20 px-2 py-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            className="h-7 text-[11px] gap-1"
-                            onClick={() => void handleDownloadFormat(docxOutput)}
-                          >
-                            <Download className="h-3 w-3 shrink-0" />
-                            Descargar para editar (.docx)
-                          </Button>
-                        </div>
                         <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
                       </div>
                     }
@@ -490,24 +501,13 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     bucket={pptxOutput.storage_bucket}
                     storagePath={pptxOutput.storage_path}
                     suiteLabel="PowerPoint"
-                    onDownloadForEdit={() => void handleDownloadFormat(pptxOutput)}
-                    downloadForEditLabel="Descargar para editar (.pptx)"
                     simplifiedFallback={
-                      <div className="flex flex-col items-center justify-center gap-4 py-16 px-6 text-center max-w-md mx-auto">
+                      <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center max-w-md mx-auto">
                         <Presentation className="h-12 w-12 text-muted-foreground/50" />
-                        <p className="text-sm text-foreground">No hay vista simplificada de diapositivas en la app.</p>
+                        <p className="text-sm text-foreground">No hay vista simplificada en la app.</p>
                         <p className="text-xs text-muted-foreground">
-                          Descarga el .pptx o usa <span className="font-medium text-foreground">Generar</span> para añadir PDF
-                          y verlo en «Vista previa PDF».
+                          Usa <span className="font-medium text-foreground">Descargar · PowerPoint</span> en la barra superior.
                         </p>
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="gap-1 bg-sky-600 hover:bg-sky-700"
-                          onClick={() => void handleDownloadFormat(pptxOutput)}
-                        >
-                          <Download className="h-3.5 w-3.5" /> Descargar PowerPoint
-                        </Button>
                       </div>
                     }
                   />
@@ -524,28 +524,12 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                     bucket={xlsxOutput.storage_bucket}
                     storagePath={xlsxOutput.storage_path}
                     suiteLabel="Excel"
-                    onDownloadForEdit={() => void handleDownloadFormat(xlsxOutput)}
-                    downloadForEditLabel="Descargar para editar (.xlsx)"
                     simplifiedFallback={
-                      <div className="flex min-h-0 flex-1 flex-col">
-                        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border/40 bg-muted/20 px-2 py-1.5">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            className="h-7 text-[11px] gap-1"
-                            onClick={() => void handleDownloadFormat(xlsxOutput)}
-                          >
-                            <Download className="h-3 w-3 shrink-0" />
-                            Descargar para editar (.xlsx)
-                          </Button>
-                        </div>
-                        <ArtifactSpreadsheetPreview
-                          bucket={xlsxOutput.storage_bucket}
-                          storagePath={xlsxOutput.storage_path}
-                          fileName={xlsxOutput.file_name}
-                        />
-                      </div>
+                      <ArtifactSpreadsheetPreview
+                        bucket={xlsxOutput.storage_bucket}
+                        storagePath={xlsxOutput.storage_path}
+                        fileName={xlsxOutput.file_name}
+                      />
                     }
                   />
                 </div>
@@ -565,22 +549,42 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             ) : null}
           </Tabs>
         ) : (
-          // IMPORTANTE: el contenedor padre es `flex-1 min-h-0 overflow-hidden`
-          // (no flex en sí mismo), así que aquí usamos `h-full overflow-y-auto`
-          // para poder hacer scroll de markdown largos. Sin `h-full` el div
-          // colapsa al alto del contenido y el viewer recortaba el documento.
-          <div className="h-full min-h-[min(80vh,900px)] overflow-y-auto p-4">
-            {editing ? (
-              <Textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="min-h-[400px] text-sm font-mono resize-none"
-              />
-            ) : (
-              <div className="prose prose-sm max-w-none pb-8 [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
-                <ReactMarkdown>{artifact.content}</ReactMarkdown>
-              </div>
-            )}
+          <div className="flex flex-1 flex-col min-h-[min(80vh,900px)] min-h-0 overflow-hidden">
+            <div className="flex shrink-0 justify-end gap-1 border-b border-border/30 bg-muted/20 px-3 py-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                className="h-8 gap-1.5 bg-sky-600 px-3 text-xs hover:bg-sky-700"
+                onClick={handleDownloadMarkdown}
+              >
+                <Download className="h-3.5 w-3.5 shrink-0" />
+                Descargar · Markdown (.md)
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-8 w-8 shrink-0 p-0" aria-label="Más opciones">
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {moreMenuUtilities}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+              {editing ? (
+                <Textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="min-h-[400px] text-sm font-mono resize-none"
+                />
+              ) : (
+                <div className="prose prose-sm max-w-none pb-8 [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
+                  <ReactMarkdown>{artifact.content}</ReactMarkdown>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

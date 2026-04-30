@@ -1,7 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Loader2, ExternalLink, Rows3, Download } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Loader2, MoreHorizontal } from "lucide-react";
 import { buildAbsoluteSignedStorageUrl, buildMicrosoftOfficeEmbedUrl } from "@/lib/officeOnlineEmbed";
 
 const SIGNED_URL_TTL_SEC = 3600;
@@ -15,14 +21,11 @@ interface ArtifactOfficeOnlinePreviewProps {
   simplifiedFallback: ReactNode;
   /** Si true, el bloque ocupa el alto disponible del panel. */
   fitContainer?: boolean;
-  /** Misma acción que Descargar en el menú del visor (p. ej. .docx para Word de escritorio). */
-  onDownloadForEdit?: () => void;
-  downloadForEditLabel?: string;
 }
 
 /**
- * Vista previa de alta fidelidad vía Microsoft Office Online (`view.officeapps.live.com`).
- * Microsoft obtiene el archivo desde la URL firmada de Supabase Storage.
+ * Vista previa vía Microsoft Office Online (`view.officeapps.live.com`).
+ * Chrome mínimo: la descarga va en la barra del visor principal.
  */
 export function ArtifactOfficeOnlinePreview({
   bucket,
@@ -30,8 +33,6 @@ export function ArtifactOfficeOnlinePreview({
   suiteLabel,
   simplifiedFallback,
   fitContainer = true,
-  onDownloadForEdit,
-  downloadForEditLabel = "Descargar para editar",
 }: ArtifactOfficeOnlinePreviewProps) {
   const [loading, setLoading] = useState(true);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
@@ -76,7 +77,7 @@ export function ArtifactOfficeOnlinePreview({
         }`}
       >
         <Loader2 className="h-5 w-5 animate-spin" />
-        <p className="text-xs">Preparando vista previa de {suiteLabel} (Office Online)…</p>
+        <p className="text-xs">Cargando vista previa de {suiteLabel}…</p>
       </div>
     );
   }
@@ -86,40 +87,27 @@ export function ArtifactOfficeOnlinePreview({
   }
 
   return (
-    <div className={`flex flex-col ${fitContainer ? "min-h-0 flex-1 h-full" : ""}`}>
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border/40 bg-muted/20 px-2 py-1.5">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 text-[11px] gap-1"
-          onClick={() => window.open(embedUrl, "_blank", "noopener,noreferrer")}
-        >
-          <ExternalLink className="h-3 w-3 shrink-0" />
-          Abrir vista previa en nueva pestaña
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 text-[11px] gap-1 text-muted-foreground"
-          onClick={() => setUseSimplified(true)}
-        >
-          <Rows3 className="h-3 w-3 shrink-0" />
-          Vista simplificada en la app
-        </Button>
-        {onDownloadForEdit ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="h-7 text-[11px] gap-1"
-            onClick={onDownloadForEdit}
-          >
-            <Download className="h-3 w-3 shrink-0" />
-            {downloadForEditLabel}
-          </Button>
-        ) : null}
+    <div className={`relative flex flex-col ${fitContainer ? "min-h-0 flex-1 h-full" : ""}`}>
+      <div className="pointer-events-none absolute right-2 top-2 z-10 flex justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              className="pointer-events-auto h-8 w-8 border border-border/60 bg-background/90 shadow-sm backdrop-blur-sm"
+              aria-label={`Más opciones de vista previa ${suiteLabel}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={() => window.open(embedUrl, "_blank", "noopener,noreferrer")}>
+              Abrir en nueva pestaña
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setUseSimplified(true)}>Vista simplificada en la app</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <iframe
         title={`Vista previa ${suiteLabel}`}
@@ -127,12 +115,6 @@ export function ArtifactOfficeOnlinePreview({
         className={`w-full shrink-0 border-0 bg-background ${fitContainer ? "min-h-[min(70vh,800px)] flex-1" : "min-h-[480px]"}`}
         referrerPolicy="strict-origin-when-cross-origin"
       />
-      <p className="shrink-0 px-2 py-1 text-[10px] text-muted-foreground">
-        Office Online solo permite leer el archivo en el navegador. Para editar,{" "}
-        <span className="font-medium text-foreground">descárgalo</span> y ábrelo en {suiteLabel} de escritorio (o usa el botón de
-        arriba). Si no carga el visor, prueba «Vista simplificada» o{" "}
-        <span className="font-medium text-foreground">Descargar</span> en la barra del documento.
-      </p>
     </div>
   );
 }
