@@ -112,7 +112,7 @@ export function ArtifactOfficeOnlinePreview({
       <iframe
         title={`Vista previa ${suiteLabel}`}
         src={embedUrl}
-        className={`w-full shrink-0 border-0 bg-background ${fitContainer ? "min-h-[min(70vh,800px)] flex-1" : "min-h-[480px]"}`}
+        className={`w-full border-0 bg-background ${fitContainer ? "min-h-0 flex-1 h-full" : "min-h-[480px]"}`}
         referrerPolicy="strict-origin-when-cross-origin"
       />
     </div>

@@ -113,8 +113,7 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
     const hasS = !!pptxOutput;
     const fmt = resolvedPrimaryFormat;
 
-    const pieces: ViewerTabId[] = [];
-    const pushAvailable = (...ids: ViewerTabId[]) => {
+    const pushAvailable = (pieces: ViewerTabId[], ...ids: ViewerTabId[]) => {
       for (const id of ids) {
         if (pieces.includes(id)) continue;
         if (id === "pdf" && !hasP) continue;
@@ -125,25 +124,25 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
       }
     };
 
-    if (fmt === "xlsx" && hasX) {
-      pushAvailable("spreadsheet", "pdf", "docx", "pptx", "text");
-    } else if (fmt === "pdf" && hasP) {
-      pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
-    } else if (fmt === "docx" && hasD) {
-      // PDF primero cuando existe: más cercano al entregable impreso/enviado que solo Word en navegador.
-      if (hasP) pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
-      else pushAvailable("docx", "pdf", "spreadsheet", "pptx", "text");
-    } else if (fmt === "pptx" && hasS) {
-      pushAvailable("pptx", "pdf", "docx", "spreadsheet", "text");
-    } else {
-      pushAvailable("pdf", "docx", "spreadsheet", "pptx", "text");
-    }
+    /** Pestaña que corresponde al formato solicitado (primary), si ya hay archivo. */
+    const primaryTab: ViewerTabId | null =
+      fmt === "docx" && hasD ? "docx"
+      : fmt === "pdf" && hasP ? "pdf"
+      : fmt === "xlsx" && hasX ? "spreadsheet"
+      : fmt === "pptx" && hasS ? "pptx"
+      : null;
 
+    const pieces: ViewerTabId[] = [];
+    if (primaryTab) pieces.push(primaryTab);
+    pushAvailable(pieces, "pdf", "docx", "spreadsheet", "pptx", "text");
+
+    /** Pestaña inicial: siempre el formato principal si existe; si no, primer binario disponible. */
     let def: ViewerTabId = "text";
-    if (fmt === "xlsx" && hasX) def = "spreadsheet";
+    if (fmt === "docx" && hasD) def = "docx";
+    else if (fmt === "pdf" && hasP) def = "pdf";
+    else if (fmt === "xlsx" && hasX) def = "spreadsheet";
     else if (fmt === "pptx" && hasS) def = "pptx";
-    else if (hasP && fmt !== "pptx") def = "pdf";
-    else if (fmt === "docx" && hasD) def = "docx";
+    else if (hasP) def = "pdf";
     else if (hasD) def = "docx";
     else if (hasX) def = "spreadsheet";
     else if (hasS) def = "pptx";
@@ -397,13 +396,13 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
         </div>
       </div>
 
-      <div className="flex-1 min-h-[min(80vh,900px)] overflow-hidden flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {hasPreviewPanel ? (
           <Tabs
             key={`${artifact.id}-${resolvedPrimaryFormat}`}
             value={activeTab}
             onValueChange={(v) => setActiveTab(v as ViewerTabId)}
-            className="h-full min-h-[min(80vh,900px)] flex flex-1 flex-col"
+            className="flex h-full min-h-0 flex-1 flex-col"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 gap-y-2 border-b border-border/30 px-3 py-2 shrink-0 bg-muted/20">
               <TabsList className="h-8 flex-wrap bg-background/80">
@@ -476,14 +475,14 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
               </div>
             </div>
             {docxOutput ? (
-              <TabsContent value="docx" className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1 overflow-hidden">
-                <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+              <TabsContent value="docx" className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <ArtifactOfficeOnlinePreview
                     bucket={docxOutput.storage_bucket}
                     storagePath={docxOutput.storage_path}
                     suiteLabel="Word"
                     simplifiedFallback={
-                      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+                      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
                         <ArtifactDocxPreview bucket={docxOutput.storage_bucket} storagePath={docxOutput.storage_path} />
                       </div>
                     }
@@ -494,9 +493,9 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             {pptxOutput ? (
               <TabsContent
                 value="pptx"
-                className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1 overflow-hidden"
+                className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1"
               >
-                <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <ArtifactOfficeOnlinePreview
                     bucket={pptxOutput.storage_bucket}
                     storagePath={pptxOutput.storage_path}
@@ -517,9 +516,9 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
             {xlsxOutput ? (
               <TabsContent
                 value="spreadsheet"
-                className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1"
+                className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1"
               >
-                <div className="flex min-h-0 flex-1 min-h-[min(80vh,900px)] min-[900px]:min-h-0 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <ArtifactOfficeOnlinePreview
                     bucket={xlsxOutput.storage_bucket}
                     storagePath={xlsxOutput.storage_path}
@@ -535,21 +534,21 @@ export function ArtifactViewer({ artifact, onBack, onUpdate }: ArtifactViewerPro
                 </div>
               </TabsContent>
             ) : null}
-            <TabsContent value="text" className="flex-1 m-0 overflow-y-auto p-4 min-h-0 min-h-[min(80vh,900px)]">
+            <TabsContent value="text" className="m-0 flex min-h-0 flex-1 flex-col overflow-y-auto p-4 data-[state=active]:flex-1">
               <div className="prose prose-sm max-w-none [&_p]:my-1.5 [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_code]:text-xs [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
                 <ReactMarkdown>{artifact.content}</ReactMarkdown>
               </div>
             </TabsContent>
             {pdfOutput ? (
-              <TabsContent value="pdf" className="flex-1 m-0 p-0 min-h-0 min-h-[min(80vh,900px)] flex flex-col data-[state=active]:flex-1">
-                <div className="flex-1 min-h-[min(80vh,900px)] min-[900px]:min-h-0 flex flex-col">
+              <TabsContent value="pdf" className="m-0 flex min-h-0 flex-1 flex-col overflow-hidden p-0 data-[state=active]:flex-1">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <ArtifactPdfPreview bucket={pdfOutput.storage_bucket} path={pdfOutput.storage_path} />
                 </div>
               </TabsContent>
             ) : null}
           </Tabs>
         ) : (
-          <div className="flex flex-1 flex-col min-h-[min(80vh,900px)] min-h-0 overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="flex shrink-0 justify-end gap-1 border-b border-border/30 bg-muted/20 px-3 py-2">
               <Button
                 type="button"
