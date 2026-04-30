@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { dismissSlackChannelSystemNotifications } from "@/lib/slackReadNotificationDismiss";
 
 const SLACK_NOTIF_TYPES = ["slack_message", "slack_mention"] as const;
 
@@ -54,4 +55,5 @@ export async function markSlackChannelNotificationsRead(userId: string, channelI
     .in("type", [...SLACK_NOTIF_TYPES])
     .like("entity_ref", `${channelId}|%`);
   if (error) throw error;
+  dismissSlackChannelSystemNotifications(channelId);
 }

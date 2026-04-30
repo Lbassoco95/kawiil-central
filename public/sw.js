@@ -29,3 +29,30 @@ self.addEventListener("notificationclick", (event) => {
   const full = url.startsWith("http") ? url : `${origin}${url.startsWith("/") ? url : `/${url}`}`;
   event.waitUntil(self.clients.openWindow(full));
 });
+
+self.addEventListener("message", (event) => {
+  try {
+    const d = event.data;
+    if (!d || typeof d !== "object") return;
+    if (d.type !== "CLOSE_SLACK_CHANNEL_PUSH") return;
+    const channelId = typeof d.channelId === "string" ? d.channelId.trim() : "";
+    if (!channelId) return;
+    const prefix = `slack-${channelId}-`;
+    event.waitUntil(
+      self.registration.getNotifications().then((list) => {
+        for (const n of list) {
+          const tag = typeof n.tag === "string" ? n.tag : "";
+          if (tag.startsWith(prefix)) {
+            try {
+              n.close();
+            } catch {
+              /* noop */
+            }
+          }
+        }
+      }),
+    );
+  } catch {
+    /* noop */
+  }
+});

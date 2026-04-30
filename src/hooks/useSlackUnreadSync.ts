@@ -79,29 +79,32 @@ export function useSlackUnreadSync({
     const remote = unreadSnapshotQuery.data;
     if (!remote) return;
 
-    // Solo auto-limpia el badge del canal ABIERTO actualmente cuando Slack ya reporta 0 no-leídos.
-    // Para los demás canales, el badge persiste hasta que el usuario abra esa conversación en Kawiil
-    // (Comunicacion.tsx dispara markSlackChannelNotificationsRead al seleccionar canal).
-    if (selectedChannel) {
-      const localCount = localUnreadByChannel[selectedChannel] ?? 0;
-      const remoteCount = remote[selectedChannel] ?? 0;
-      if (localCount > 0 && remoteCount === 0 && !inFlightReadRef.current.has(selectedChannel)) {
-        const channelId = selectedChannel;
-        inFlightReadRef.current.add(channelId);
-        void markSlackChannelNotificationsRead(userId, channelId)
-          .then(async () => {
-            await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
-            await qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
-            await qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
-          })
-          .catch((err) => {
-            console.warn("[slack-unread-sync] markRead falló (silenciado):", err);
-          })
-          .finally(() => {
-            inFlightReadRef.current.delete(channelId);
-          });
+    const toMark: string[] = [];
+    for (const ch of pollChannelIds) {
+      const localCount = localUnreadByChannel[ch] ?? 0;
+      const remoteCount = remote[ch] ?? 0;
+      if (localCount > 0 && remoteCount === 0 && !inFlightReadRef.current.has(ch)) {
+        toMark.push(ch);
       }
+    }
 
+    if (toMark.length > 0) {
+      for (const ch of toMark) inFlightReadRef.current.add(ch);
+      void Promise.all(toMark.map((ch) => markSlackChannelNotificationsRead(userId, ch)))
+        .then(async () => {
+          await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
+          await qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
+          await qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
+        })
+        .catch((err) => {
+          console.warn("[slack-unread-sync] markRead falló (silenciado):", err);
+        })
+        .finally(() => {
+          for (const ch of toMark) inFlightReadRef.current.delete(ch);
+        });
+    }
+
+    if (selectedChannel) {
       const remoteCurrent = remote[selectedChannel] ?? 0;
       const localCurrent = localUnreadByChannel[selectedChannel] ?? 0;
       if (remoteCurrent > 0 && localCurrent === 0) {
@@ -112,7 +115,9 @@ export function useSlackUnreadSync({
         void qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
       }
     }
-  }, [localUnreadSig, remoteUnreadSig, selectedChannel, userId, qc]);
+    // `localUnreadByChannel`: solo nos importan cambios de conteos → `localUnreadSig`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- firmas arriba cubren maps por contenido
+  }, [localUnreadSig, remoteUnreadSig, pollKey, selectedChannel, userId, qc, pollChannelIds]);
 
   return unreadSnapshotQuery;
 }

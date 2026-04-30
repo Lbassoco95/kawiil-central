@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { playNotificationBeep } from "@/lib/notificationBeep";
 import { asistenteChatDeepLinkFromNotification } from "@/lib/asistenteNotificationLink";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
+import {
+  slackDesktopNotificationTagFromEntityRef,
+  slackChannelAndMessageTsFromEntityRef,
+  trackSlackDesktopNotification,
+} from "@/lib/slackReadNotificationDismiss";
 import { SlackNotificationToast } from "@/components/notifications/SlackNotificationToast";
 
 type NotifRow = {
@@ -244,7 +249,12 @@ export function useNotificationDelivery() {
       Notification.permission === "granted"
     ) {
       try {
-        const tag = row.id ? `kawiil-${row.id}` : `kawiil-${row.type || "notif"}-${Date.now()}`;
+        const slackTag = isSlackInAppNotification(row)
+          ? slackDesktopNotificationTagFromEntityRef(row.entity_ref)
+          : null;
+        const tag =
+          slackTag ??
+          (row.id ? `kawiil-${row.id}` : `kawiil-${row.type || "notif"}-${Date.now()}`);
         const n = new Notification(title, {
           body: row.body?.trim() || undefined,
           tag,
@@ -254,6 +264,8 @@ export function useNotificationDelivery() {
           requireInteraction: mandatorySurface,
           data: deepLink ? { url: deepLink } : undefined,
         });
+        const slackCh = slackChannelAndMessageTsFromEntityRef(row.entity_ref);
+        if (slackCh) trackSlackDesktopNotification(slackCh.channelId, n);
         n.onclick = () => {
           try {
             window.focus();

@@ -354,6 +354,8 @@ export default function Comunicacion() {
     return r;
   }, [slackCommPrefs]);
 
+  const slackUnreadByChannel = useSlackChannelNotificationBadges(user?.id);
+
   const savePrefMutation = useMutation({
     mutationFn: async (p: {
       delete?: boolean;
@@ -503,6 +505,9 @@ export default function Comunicacion() {
       seen.add(id);
       ids.push(id);
     };
+    for (const ch of Object.keys(slackUnreadByChannel)) {
+      if ((slackUnreadByChannel[ch] ?? 0) > 0) add(ch);
+    }
     for (const c of conversations) {
       const p = commPrefsByChannel[c.id];
       if (p?.is_starred) add(c.id);
@@ -511,7 +516,7 @@ export default function Comunicacion() {
       add(c.id);
     }
     return ids;
-  }, [conversations, commPrefsByChannel]);
+  }, [conversations, commPrefsByChannel, slackUnreadByChannel]);
 
   const vipSanitizedRef = useRef(false);
   useEffect(() => {
@@ -669,7 +674,6 @@ export default function Comunicacion() {
   const lastMessageTs = messages.length ? messages[messages.length - 1]?.ts : undefined;
   slackLatestMessageTsRef.current = lastMessageTs;
 
-  const slackUnreadByChannel = useSlackChannelNotificationBadges(user?.id);
   const slackUnreadSnapshotQuery = useSlackUnreadSync({
     enabled: isConnected,
     userId: user?.id,
