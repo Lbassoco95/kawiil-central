@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, Fragment } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useProjectDetail } from "@/hooks/useProjects";
@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   CircleAlert,
   ListTree,
+  FolderKanban,
 } from "lucide-react";
 import { ProjectCommentsTab } from "@/components/projects/ProjectCommentsTab";
 import { MeetingMinutesDialog } from "@/components/projects/MeetingMinutesDialog";
@@ -88,6 +89,28 @@ const ProyectoDetalle = () => {
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [reconcilingBracketPhases, setReconcilingBracketPhases] = useState(false);
+
+  const { data: complianceSiblingProjects = [] } = useQuery({
+    queryKey: ["compliance-sibling-projects", project?.client_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id,name,status,updated_at")
+        .eq("client_id", project!.client_id!)
+        .eq("area", "cumplimiento")
+        .neq("status", "cancelado")
+        .order("updated_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user && !!project?.client_id && project?.area === "cumplimiento",
+  });
+
+  const sortedComplianceSiblings = useMemo(() => {
+    return [...complianceSiblingProjects].sort((a, b) =>
+      (a.name || "").localeCompare(b.name || "", "es", { sensitivity: "base" }),
+    );
+  }, [complianceSiblingProjects]);
 
   const { data: tasks = [] } = useQuery({
     queryKey: ["project-tasks", id],
@@ -333,6 +356,11 @@ const ProyectoDetalle = () => {
     }
   }, [searchParams]);
 
+  const complianceSiblingNavigateTab = useMemo(() => {
+    const ok = ["general", "cumplimiento", "tareas", "comentarios", "firmas"];
+    return ok.includes(tab) ? tab : "cumplimiento";
+  }, [tab]);
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -480,17 +508,42 @@ const ProyectoDetalle = () => {
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 flex-nowrap">
           {projectTabs.map((t) => {
             const Icon = t.icon;
+            const showComplianceSiblings =
+              isCumplimiento && t.key === "tareas" && sortedComplianceSiblings.length > 1;
             return (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`tab-pill inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap ${
-                  tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
-                }`}
-              >
-                {Icon && <Icon className="h-3 w-3" />}
-                {t.label}
-              </button>
+              <Fragment key={t.key}>
+                {showComplianceSiblings &&
+                  sortedComplianceSiblings.map((sp) => {
+                    const isHere = sp.id === project.id;
+                    return (
+                      <button
+                        key={`cumplimiento-sibling-${sp.id}`}
+                        type="button"
+                        title={sp.name}
+                        onClick={() => {
+                          if (isHere) return;
+                          navigate(`/proyectos/${sp.id}?tab=${complianceSiblingNavigateTab}`);
+                        }}
+                        className={`tab-pill inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap max-w-[min(200px,45vw)] ${
+                          isHere ? "tab-pill-active" : "tab-pill-inactive"
+                        }`}
+                      >
+                        <FolderKanban className="h-3 w-3 shrink-0 opacity-80" />
+                        <span className="truncate">{sp.name}</span>
+                      </button>
+                    );
+                  })}
+                <button
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={`tab-pill inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap ${
+                    tab === t.key ? "tab-pill-active" : "tab-pill-inactive"
+                  }`}
+                >
+                  {Icon && <Icon className="h-3 w-3" />}
+                  {t.label}
+                </button>
+              </Fragment>
             );
           })}
         </div>
@@ -605,6 +658,7 @@ const ProyectoDetalle = () => {
                 selectedTaskIds={selectedTaskIds}
                 onToggleTaskSelection={toggleTaskSelection}
                 expandPhaseKey={expandPhaseKeyForDeepLink}
+                phaseGrouping={isCumplimiento ? "compliance_catalog" : "none"}
               />
             )}
 

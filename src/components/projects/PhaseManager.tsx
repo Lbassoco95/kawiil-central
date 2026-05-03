@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, type ReactNode } from "react";
+import { useState, useMemo, useCallback, useEffect, Fragment, type ReactNode } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -33,6 +33,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { projectPhaseColorClass } from "./projectPhaseVisual";
+import {
+  compareComplianceCategoryKeys,
+  isStandardComplianceCategoryKey,
+} from "@/lib/compliancePhaseCatalog";
 
 export interface Phase {
   key: string;
@@ -66,6 +70,8 @@ interface PhaseManagerProps {
   showTaskDragHint?: boolean;
   /** Al enlazar desde /tareas: expandir esta fase (o `__none__`) y hacer scroll */
   expandPhaseKey?: string | null;
+  /** Agrupa fases del catálogo PLD vs fases añadidas por documentos/minutas (solo cumplimiento). */
+  phaseGrouping?: "none" | "compliance_catalog";
 }
 
 /** Evita fallos al soltar: el puntero debe caer dentro de la fase; si no, por intersección de rectángulos. */
@@ -286,6 +292,7 @@ export function PhaseManager({
   phases, tasks, profileMap, onPhasesChange, onTaskClick, onTaskPhaseAssign, onAddTask,
   canDeleteTasks, onDeleteTask, selectionMode, selectedTaskIds, onToggleTaskSelection,
   renderPhaseFooter, hideBuiltInAddPhase, showTaskDragHint = true, expandPhaseKey,
+  phaseGrouping = "none",
 }: PhaseManagerProps) {
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [editingPhase, setEditingPhase] = useState<string | null>(null);
@@ -322,9 +329,38 @@ export function PhaseManager({
     return map;
   }, [phases, tasks]);
 
-  const sortedPhases = useMemo(() =>
-    [...phases].sort((a, b) => a.order - b.order),
-  [phases]);
+  const sortedPhases = useMemo(
+    () => [...phases].sort((a, b) => a.order - b.order),
+    [phases],
+  );
+
+  const sectionsWithColorIdx = useMemo(() => {
+    if (phaseGrouping !== "compliance_catalog") {
+      return [{ label: null as string | null, items: sortedPhases.map((phase, colorIdx) => ({ phase, colorIdx })) }];
+    }
+    const catalog = sortedPhases.filter((p) => isStandardComplianceCategoryKey(p.key));
+    const extra = sortedPhases.filter((p) => !isStandardComplianceCategoryKey(p.key));
+    const catalogSorted = [...catalog].sort((a, b) => compareComplianceCategoryKeys(a.key, b.key));
+    const rows: { label: string | null; items: { phase: Phase; colorIdx: number }[] }[] = [];
+    let offset = 0;
+    if (catalogSorted.length > 0) {
+      rows.push({
+        label: "Catálogo regulatorio",
+        items: catalogSorted.map((phase, i) => ({ phase, colorIdx: offset + i })),
+      });
+      offset += catalogSorted.length;
+    }
+    if (extra.length > 0) {
+      rows.push({
+        label: "Del documento o iniciativa",
+        items: extra.map((phase, i) => ({ phase, colorIdx: offset + i })),
+      });
+    }
+    if (rows.length === 0) {
+      return [{ label: null as string | null, items: sortedPhases.map((phase, colorIdx) => ({ phase, colorIdx })) }];
+    }
+    return rows;
+  }, [sortedPhases, phaseGrouping]);
 
   const unassignedTasks = tasksByPhase.get("__none__") || [];
   const unassignedOpen = unassignedTasks.filter((t) => !isTaskClosedStatus(t.status));
@@ -426,7 +462,20 @@ export function PhaseManager({
           Mantén pulsada la fila de la tarea (≈6px) y suéltala sobre la fase destino o sobre «Sin fase asignada». En móvil, mantén presionado un instante antes de arrastrar.
         </p>
       ) : null}
-      {sortedPhases.map((phase, idx) => {
+      {sectionsWithColorIdx.map((section, si) => (
+        <Fragment key={section.label ?? "phases-default"}>
+          {section.label ? (
+            <p
+              className={cn(
+                "text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5 pb-0.5",
+                si > 0 ? "border-t border-border/40 mt-3 pt-3" : "pt-0",
+              )}
+            >
+              {section.label}
+            </p>
+          ) : null}
+          <div className={section.label ? "space-y-3" : "contents"}>
+      {section.items.map(({ phase, colorIdx: idx }) => {
         const phaseTasks = tasksByPhase.get(phase.key) || [];
         const openInPhase = phaseTasks.filter((t) => !isTaskClosedStatus(t.status));
         const closedInPhase = phaseTasks.filter((t) => isTaskClosedStatus(t.status));
@@ -601,6 +650,9 @@ export function PhaseManager({
           </div>
         );
       })}
+          </div>
+        </Fragment>
+      ))}
 
       {/* Unassigned tasks — siempre visible con fases para poder soltar y quitar fase */}
       {phases.length > 0 && (

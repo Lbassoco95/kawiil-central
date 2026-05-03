@@ -46,6 +46,21 @@ import {
   X,
 } from "lucide-react";
 import { appendProjectPhases, ensureCompliancePhasesOnProject, type SyncPhase } from "@/lib/projectPhaseSync";
+import { isStandardComplianceCategoryKey } from "@/lib/compliancePhaseCatalog";
+
+function suggestNewProjectTitleFromMinuta(summary: string, filesHint: string): string {
+  const line =
+    summary
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .find((l) => l.length > 0) ?? "";
+  const cleaned = line.replace(/^#+\s*/, "").replace(/\*\*/g, "").trim();
+  if (cleaned.length > 0) return cleaned.slice(0, 120);
+  const firstFile = filesHint.split(",").map((s) => s.trim())[0] ?? "";
+  const base = firstFile.replace(/\.[^.]+$/i, "").trim();
+  if (base.length > 0) return base.slice(0, 120);
+  return "";
+}
 
 interface ProposedTask {
   title: string;
@@ -104,21 +119,27 @@ export function MeetingMinutesDialog({
   const [newProjectName, setNewProjectName] = useState("");
   /** Con `projectId`: añadir al actual o crear proyecto nuevo. */
   const [importMode, setImportMode] = useState<"same" | "new">("same");
+  /** Heurística front: fases fuera del catálogo → sugerimos proyecto nuevo. */
+  const [nonCatalogPhaseHint, setNonCatalogPhaseHint] = useState(false);
   const isStandalone = !projectId;
 
   const applyAnalyzeResponse = useCallback(
-    (data: {
-      summary?: string;
-      phases?: { key: string; name: string }[];
-      tasks?: any[];
-      import_mode_suggestion?: string | null;
-    }, projectRows: { key: string; name: string }[]) => {
+    (
+      data: {
+        summary?: string;
+        phases?: { key: string; name: string }[];
+        tasks?: any[];
+        import_mode_suggestion?: string | null;
+      },
+      projectRows: { key: string; name: string }[],
+      sourceFileHint: string,
+    ) => {
       const fromProject: Record<string, string> = {};
       for (const p of projectRows) {
         fromProject[p.key] = p.name;
       }
-      const fromApi: { key: string; name: string }[] = Array.isArray(data.phases) ? data.phases : [];
-      for (const p of fromApi) {
+      const fromApiPhases: { key: string; name: string }[] = Array.isArray(data.phases) ? data.phases : [];
+      for (const p of fromApiPhases) {
         fromProject[p.key] = p.name;
       }
       const rawTasks = data.tasks || [];
@@ -127,6 +148,33 @@ export function MeetingMinutesDialog({
           if (!fromProject[t.phase_key]) fromProject[t.phase_key] = t.phase;
         }
       }
+      const phaseKeysFromAnalysis = new Set<string>();
+      for (const p of fromApiPhases) {
+        if (typeof p.key === "string" && p.key.trim()) phaseKeysFromAnalysis.add(p.key.trim());
+      }
+      for (const t of rawTasks) {
+        if (t?.phase_key && String(t.phase_key).trim()) {
+          phaseKeysFromAnalysis.add(String(t.phase_key).trim());
+        }
+      }
+      const hasNonCatalogFromDoc = [...phaseKeysFromAnalysis].some(
+        (k) => !isStandardComplianceCategoryKey(k),
+      );
+
+      let nextMode: "same" | "new" = data.import_mode_suggestion === "new_project" ? "new" : "same";
+      let showNonCatalogHint = false;
+      if (area === "cumplimiento" && projectId && nextMode === "same" && hasNonCatalogFromDoc) {
+        nextMode = "new";
+        showNonCatalogHint = true;
+      }
+      setNonCatalogPhaseHint(showNonCatalogHint);
+      setImportMode(nextMode);
+
+      const suggestedTitle = suggestNewProjectTitleFromMinuta(data.summary ?? "", sourceFileHint);
+      if (nextMode === "new") {
+        setNewProjectName((prev) => (prev.trim() ? prev : suggestedTitle));
+      }
+
       setPhaseKeyNameMap({ ...fromProject });
       setProposedTasks(
         rawTasks.map((t: any) => ({
@@ -138,13 +186,8 @@ export function MeetingMinutesDialog({
             : t.phase ?? null,
         })),
       );
-      if (data.import_mode_suggestion === "new_project") {
-        setImportMode("new");
-      } else {
-        setImportMode("same");
-      }
     },
-    [],
+    [area, projectId],
   );
 
   const fetchExistingPhasesForProject = useCallback(async (): Promise<{ key: string; name: string }[]> => {
@@ -263,7 +306,7 @@ export function MeetingMinutesDialog({
           setContent(extractedText);
         }
         setSummary(data.summary ?? "");
-        applyAnalyzeResponse(data, projectRows);
+        applyAnalyzeResponse(data, projectRows, fileName);
         setStep("preview");
         toast.success("Análisis listo. Revisa las tareas propuestas.");
       } catch (err: any) {
@@ -378,7 +421,7 @@ export function MeetingMinutesDialog({
       if (data?.error) throw new Error(data.message || data.error);
 
       setSummary(data.summary || "");
-      applyAnalyzeResponse(data, projectRows);
+      applyAnalyzeResponse(data, projectRows, fileName);
       setStep("preview");
     } catch (err: any) {
       toast.error("Error al analizar: " + err.message);
@@ -553,6 +596,9 @@ export function MeetingMinutesDialog({
       }
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      if (clientId) {
+        queryClient.invalidateQueries({ queryKey: ["compliance-sibling-projects", clientId] });
+      }
       handleClose();
     } catch (err: any) {
       toast.error("Error al crear tareas: " + err.message);
@@ -572,6 +618,7 @@ export function MeetingMinutesDialog({
     setNewPhaseName("");
     setNewProjectName("");
     setImportMode("same");
+    setNonCatalogPhaseHint(false);
     onOpenChange(false);
   };
 
@@ -674,7 +721,10 @@ export function MeetingMinutesDialog({
                     size="sm"
                     variant={importMode === "same" ? "default" : "outline"}
                     className="justify-start h-auto min-h-9 py-1.5 px-3"
-                    onClick={() => setImportMode("same")}
+                    onClick={() => {
+                      setImportMode("same");
+                      setNonCatalogPhaseHint(false);
+                    }}
                   >
                     Añadir a «{projectName || "este proyecto"}»
                   </Button>
@@ -683,11 +733,23 @@ export function MeetingMinutesDialog({
                     size="sm"
                     variant={importMode === "new" ? "default" : "outline"}
                     className="justify-start h-auto min-h-9 py-1.5 px-3"
-                    onClick={() => setImportMode("new")}
+                    onClick={() => {
+                      setImportMode("new");
+                      setNewProjectName((prev) =>
+                        prev.trim() ? prev : suggestNewProjectTitleFromMinuta(summary, fileName),
+                      );
+                    }}
                   >
                     Crear un proyecto nuevo (mismo cliente/área)
                   </Button>
                 </div>
+                {nonCatalogPhaseHint && (
+                  <p className="text-xs text-amber-800 dark:text-amber-300/95 bg-amber-500/10 border border-amber-500/25 rounded-md px-2.5 py-2 leading-snug">
+                    Detectamos fases propias del documento (fuera del catálogo habitual). Suele convenir un{" "}
+                    <strong className="font-semibold">proyecto aparte</strong> para ver mejor la iniciativa (auditoría,
+                    plan de acción, etc.). Puedes elegir «Añadir a este proyecto» si prefieres todo junto.
+                  </p>
+                )}
               </div>
             )}
 

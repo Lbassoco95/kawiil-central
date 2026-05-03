@@ -307,7 +307,10 @@ INSTRUCCIONES:
    - "name": etiqueta legible en español (puede coincidir con títulos de fases del proyecto).
    Incluye en "phases" TODA fase a la que vaya a referirse alguna tarea.
 3. Por cada tarea: title, description, priority, due_date, assigned_to_name, assigned_to_id, y "phase_key" (la key de la fase, o null si no aplica a ninguna fase).
-4. "import_mode_suggestion": "same_project" si el documento añade trabajo al flujo del proyecto actual; "new_project" si describe un cierre de acciones, plan de remediación o iniciativa MUY desacoplada (p. ej. respuesta a auditoría separada). Solo sugerencia.
+4. "import_mode_suggestion":
+   - "new_project" cuando el documento describe auditoría (externa/interna), observaciones, plan de remediación o contestación, cierre de hallazgos, proyecto o mejoras específicas acordadas, hitos con entregables acotados, o varias fases nuevas que no son solo seguimiento recurrente del catálogo.
+   - "same_project" solo para pendientes que encajan en el flujo diario del proyecto actual (recordatorios, tareas en categorías ya existentes).
+   Si dudas entre ambos en planes multi‑fase o auditorías: usa "new_project".
 5. Incluye todas las tareas y pendientes relevantes.
 6. Responde SOLO con JSON válido, sin markdown ni texto adicional.
 
