@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { FunctionsHttpError } from "@supabase/functions-js";
-import { withAiRateLimit, invalidateAiCache } from "@/lib/kawiilAiCache";
+import { withAiRateLimit, invalidateAiCache, readAiCache } from "@/lib/kawiilAiCache";
 
 /**
  * Extrae el mensaje real de una Edge Function cuando responde 4xx/5xx.
@@ -71,8 +71,9 @@ async function extractEdgeFunctionError(error: unknown, fallback: string): Promi
  * EmailKawiilCard — Fase 2 del rediseño v2.4 del módulo Correo.
  * Muestra resumen ejecutivo + puntos clave + acción sugerida + sugerencias de respuesta rápida.
  *
+ * Resumen: solo bajo demanda (o desde caché cliente al cambiar de correo).
  * Llama a las Edge Functions:
- *   - email-ai-summary
+ *   - email-ai-summary (al pulsar «Generar resumen» / «Regenerar»)
  *   - email-ai-quick-reply
  *
  * Las dos requieren JWT (`verify_jwt = true`).
@@ -156,8 +157,7 @@ export function EmailKawiilCard({
   const [expandedReplyId, setExpandedReplyId] = useState<string | null>(null);
 
   // Refs a las props volátiles para que `fetchSummary` / `fetchQuickReplies`
-  // no cambien de identidad en cada render (lo cual antes disparaba el effect
-  // y generaba peticiones redundantes contra la Edge Function).
+  // no cambien de identidad en cada render.
   const propsRef = useRef({ subject, senderName, senderEmail, body, thread, userName });
   useEffect(() => {
     propsRef.current = { subject, senderName, senderEmail, body, thread, userName };
@@ -261,15 +261,19 @@ export function EmailKawiilCard({
   }, [emailId]);
 
   useEffect(() => {
+    setTab("summary");
     setExpandedReplyId(null);
     setSummaryError(null);
     setRepliesError(null);
-    // Se limpia el estado local; `withAiRateLimit` decidirá si sirve del caché
-    // persistente o dispara la Edge Function.
-    setSummary(null);
     setQuickReplies(null);
-    void fetchSummary({ emailId });
-  }, [emailId, fetchSummary]);
+    const cached = readAiCache<SummaryResult>(CACHE_SCOPE_SUMMARY, emailId);
+    if (cached !== null) {
+      setSummary(cached);
+      onSummaryReadyRef.current?.(cached);
+    } else {
+      setSummary(null);
+    }
+  }, [emailId]);
 
   const showActionBadge = useMemo(() => Boolean(summary?.suggestedAction), [summary]);
 
@@ -308,20 +312,22 @@ export function EmailKawiilCard({
               Acción sugerida
             </span>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => {
-              invalidateAiCache(CACHE_SCOPE_SUMMARY, emailId);
-              void fetchSummary({ force: true, emailId });
-            }}
-            disabled={summaryLoading}
-            aria-label="Regenerar resumen"
-            title="Regenerar resumen"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", summaryLoading && "animate-spin")} />
-          </Button>
+          {summary !== null && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => {
+                invalidateAiCache(CACHE_SCOPE_SUMMARY, emailId);
+                void fetchSummary({ force: true, emailId });
+              }}
+              disabled={summaryLoading}
+              aria-label="Regenerar resumen"
+              title="Regenerar resumen"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", summaryLoading && "animate-spin")} />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -333,12 +339,14 @@ export function EmailKawiilCard({
             <button
               key={t.id}
               type="button"
+              disabled={!summary && (t.id === "keyPoints" || t.id === "action")}
               onClick={() => setTab(t.id)}
               className={cn(
                 "flex items-center gap-1.5 rounded-t-md border-b-2 px-2 py-1.5 text-[11px] font-medium transition-colors",
                 active
                   ? "border-sky-500 text-sky-700 dark:text-sky-300"
                   : "border-transparent text-muted-foreground hover:text-foreground",
+                !summary && (t.id === "keyPoints" || t.id === "action") && "opacity-40 cursor-not-allowed hover:text-muted-foreground",
               )}
             >
               <Icon className="h-3 w-3" />
@@ -358,6 +366,25 @@ export function EmailKawiilCard({
         {summaryError && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
             {summaryError}
+          </div>
+        )}
+        {!summary && !summaryLoading && (
+          <div className="flex flex-col gap-2 py-1">
+            {!summaryError && (
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Genera un resumen ejecutivo con puntos clave y acción sugerida. La IA solo se usa cuando pulsas el botón (o si este correo ya estaba en caché en este equipo).
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 w-fit gap-1.5 text-xs"
+              onClick={() => void fetchSummary({ emailId })}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {summaryError ? "Intentar de nuevo" : "Generar resumen"}
+            </Button>
           </div>
         )}
 

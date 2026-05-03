@@ -184,15 +184,7 @@ export function EmailInboxAiPanel({
     return `kawiil-email-triage-${hashIds(ids)}-${ids.length}`;
   }, [subset]);
 
-  const [result, setResult] = useState<ClassifyResult | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      return cached ? (JSON.parse(cached) as ClassifyResult) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [result, setResult] = useState<ClassifyResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -250,12 +242,21 @@ export function EmailInboxAiPanel({
     [subset, cacheKey, selfAddress],
   );
 
+  /** Al abrir el panel o cambiar la vista: solo hidratar desde caché local. La IA no se llama hasta que el usuario pulse «Analizar». */
   useEffect(() => {
     if (!open) return;
-    if (!result && !loading && subset.length > 0) {
-      void generate(false);
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        setResult(JSON.parse(cached) as ClassifyResult);
+        setError(null);
+        return;
+      }
+    } catch {
+      /* ignore */
     }
-  }, [open, result, loading, subset.length, generate]);
+    setResult(null);
+  }, [open, cacheKey]);
 
   if (!open) return null;
 
@@ -283,7 +284,9 @@ export function EmailInboxAiPanel({
             </p>
             <p className="text-[10.5px] text-muted-foreground truncate leading-tight">
               {folderLabel ? `${folderLabel} · ` : ""}
-              {subset.length} correo{subset.length === 1 ? "" : "s"} analizad{subset.length === 1 ? "o" : "os"}
+              {result
+                ? `Triaje de ${subset.length} correo${subset.length === 1 ? "" : "s"}`
+                : `Hasta ${subset.length} correo${subset.length === 1 ? "" : "s"} en vista (IA bajo demanda)`}
             </p>
           </div>
         </div>
@@ -295,7 +298,7 @@ export function EmailInboxAiPanel({
             className="h-7 w-7"
             onClick={() => void generate(true)}
             title="Regenerar clasificación"
-            disabled={loading || subset.length === 0}
+            disabled={loading || subset.length === 0 || !result}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           </Button>
@@ -344,6 +347,24 @@ export function EmailInboxAiPanel({
               <Loader2 className="h-3 w-3 animate-spin" />
               Analizando los últimos {subset.length} correos…
             </p>
+          ) : null}
+
+          {!result && !loading && !error && subset.length > 0 ? (
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-3 space-y-2">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Clasifica hasta {subset.length} correos visibles y genera un resumen corto del estado del inbox. Solo se
+                usa IA cuando pulsas el botón (o si ya existe un triaje guardado en este equipo).
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => void generate(false)}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Analizar bandeja con IA
+              </Button>
+            </div>
           ) : null}
 
           {!result && !loading && subset.length === 0 ? (
@@ -425,7 +446,7 @@ export function EmailInboxAiPanel({
           })}
 
           <p className="pt-1 text-[10.5px] text-muted-foreground">
-            La clasificación se cachea localmente; pulsa actualizar tras mover o leer correos.
+            La clasificación se guarda en este navegador; usa actualizar tras mover o leer correos (vuelve a consumir IA).
           </p>
         </div>
       </ScrollArea>
