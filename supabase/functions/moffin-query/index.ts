@@ -29,7 +29,7 @@ import {
   moffinSolutionsQueryPathForConsult,
 } from "../_shared/moffinQueryPaths.ts";
 import {
-  extractMoffinErrorMessage,
+  buildMoffinConsultFailErrorMessage,
   extractMoffinReportStatus,
   mapMoffinReportStatus,
   mapMoffinStatus,
@@ -361,14 +361,7 @@ async function persistMoffinReportToConsult(
   else summary = summarizeSatRfc(ct, report);
 
   const errMsg =
-    st === "fail" || st === "error"
-      ? String(
-          extractMoffinErrorMessage(report) ??
-            report.message ??
-            report.error ??
-            "Moffin reportó un fallo",
-        ).slice(0, 500)
-      : null;
+    st === "fail" || st === "error" ? buildMoffinConsultFailErrorMessage(report) : null;
 
   const uploadUid = row.requested_by ?? fallbackUserId;
   let documentId = row.document_id;
@@ -966,7 +959,7 @@ Deno.serve(async (req) => {
           consult_type: consultType,
           moffin_service: moffinServiceName,
           status: "error",
-          error_message: satRes.message,
+          error_message: `Origen: Moffin Solutions (API). ${satRes.message}`.slice(0, 500),
           raw_response: { _error: satRes.message, _status: satRes.status },
           requested_by: user.id,
         })
@@ -1114,9 +1107,10 @@ Deno.serve(async (req) => {
       if (fr.ok) await runSolUpload(fr.json);
     }
 
+    const solutionsFailMsg = buildMoffinConsultFailErrorMessage(json);
     const insertErrorMessage =
       moffinStatus === "fail" || moffinStatus === "error"
-        ? String(json.message ?? json.error ?? "Consulta Moffin fallida").slice(0, 500)
+        ? solutionsFailMsg
         : moffinStatus === "pending"
           ? null
           : pdfSidecarError
@@ -1378,9 +1372,13 @@ Deno.serve(async (req) => {
     }
   }
 
-  const insertErrorMessage =
-    !moffinRes.ok
-      ? errMsg
+  const legacyFailMsg = buildMoffinConsultFailErrorMessage(json);
+  const insertErrorMessage = !moffinRes.ok
+    ? /sin mensaje detallado/i.test(legacyFailMsg)
+      ? `Origen: Moffin. ${String(errMsg ?? "Error").trim()}`.slice(0, 500)
+      : legacyFailMsg
+    : moffinStatus === "fail" || moffinStatus === "error"
+      ? legacyFailMsg
       : moffinStatus === "pending"
         ? null
         : pdfSidecarError

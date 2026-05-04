@@ -954,9 +954,17 @@ export function AccountingDashboard({
                       <td className="p-2 font-medium">{MOFFIN_CONSULT_META[key].label}</td>
                       <td className="p-2">
                         {row ? (
-                          <Badge variant={statusBadgeVariant} className="text-[10px]">
-                            {row.status}
-                          </Badge>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant={statusBadgeVariant} className="text-[10px]">
+                              {row.status}
+                            </Badge>
+                            {(row.status === "fail" || row.status === "error") &&
+                            row.error_message?.trim().startsWith("Origen:") ? (
+                              <span className="text-[9px] font-medium text-muted-foreground rounded border border-border/60 px-1 py-0">
+                                Moffin
+                              </span>
+                            ) : null}
+                          </div>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -1022,9 +1030,17 @@ export function AccountingDashboard({
                         <tr key={hist.id} className="border-t border-border/50">
                           <td className="p-2 font-medium align-top">{histLabel}</td>
                           <td className="p-2 align-top">
-                            <Badge variant={histBadgeVariant} className="text-[10px]">
-                              {hist.status}
-                            </Badge>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant={histBadgeVariant} className="text-[10px]">
+                                {hist.status}
+                              </Badge>
+                              {(hist.status === "fail" || hist.status === "error") &&
+                              hist.error_message?.trim().startsWith("Origen:") ? (
+                                <span className="text-[9px] font-medium text-muted-foreground rounded border border-border/60 px-1 py-0">
+                                  Moffin
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="p-2 text-muted-foreground max-w-[220px] align-top">
                             <div className="line-clamp-2" title={hist.summary ?? undefined}>

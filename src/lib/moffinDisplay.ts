@@ -1,3 +1,26 @@
+/** Evita "Error X — CSF · fallo Moffin: Error X" cuando summary ya incluye error_message. */
+export function mergeMoffinUiDetailParts(
+  parts: (string | null | undefined)[],
+): string | undefined {
+  const cleaned = parts.map((p) => (typeof p === "string" ? p.trim() : "")).filter(Boolean);
+  if (!cleaned.length) return undefined;
+  if (cleaned.length === 1) return cleaned[0];
+  let acc = cleaned[0];
+  for (let i = 1; i < cleaned.length; i++) {
+    const next = cleaned[i];
+    const accL = acc.toLowerCase();
+    const nextL = next.toLowerCase();
+    if (accL === nextL) continue;
+    if (accL.includes(nextL)) continue;
+    if (nextL.includes(accL)) {
+      acc = next;
+      continue;
+    }
+    acc = `${acc} — ${next}`;
+  }
+  return acc;
+}
+
 export type MoffinConsultRow = {
   id: string;
   consult_type: string;
@@ -62,13 +85,13 @@ export function lista69bHeadline(row: MoffinConsultRow | undefined): {
     return { title: "Sin consulta reciente", tone: "muted" };
   }
   if (row.status === "pending") {
-    const detail = [row.summary, row.error_message].filter(Boolean).join(" — ") || undefined;
+    const detail = mergeMoffinUiDetailParts([row.summary, row.error_message]);
     return { title: "Lista 69-B en proceso", detail, tone: "muted" };
   }
   if (row.status === "fail" || row.status === "error") {
     return {
       title: "Sin resultado válido",
-      detail: [row.error_message, row.summary].filter(Boolean).join(" — ") || undefined,
+      detail: mergeMoffinUiDetailParts([row.error_message, row.summary]),
       tone: "bad",
     };
   }
@@ -106,15 +129,19 @@ export function certConsultLine(
   if (row.status === "pending") {
     return {
       title: `${label} en proceso`,
-      detail: [row.summary, row.error_message].filter(Boolean).join(" — ") || undefined,
+      detail: mergeMoffinUiDetailParts([row.summary, row.error_message]),
       hasFile: false,
       tone: "muted",
     };
   }
   if (row.status === "fail" || row.status === "error") {
+    const em = row.error_message?.trim() ?? "";
+    const fromMoffinApi = em.startsWith("Origen:");
     return {
-      title: `${label}: error`,
-      detail: [row.error_message, row.summary].filter(Boolean).join(" — ") || undefined,
+      title: fromMoffinApi ? `${label}: error (Moffin)` : `${label}: error`,
+      detail: fromMoffinApi
+        ? em
+        : mergeMoffinUiDetailParts([row.error_message, row.summary]),
       hasFile: false,
       tone: "bad",
     };

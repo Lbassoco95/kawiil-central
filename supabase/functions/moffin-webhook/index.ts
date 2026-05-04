@@ -21,7 +21,7 @@ import {
 } from "../_shared/moffinApiFlavor.ts";
 import { resolveMoffinSolutionsBearer } from "../_shared/moffinSolutionsAuth.ts";
 import {
-  extractMoffinErrorMessage,
+  buildMoffinConsultFailErrorMessage,
   mapMoffinReportStatus,
   mapMoffinStatus,
   moffinMessageImpliesSatStillProcessing,
@@ -396,13 +396,7 @@ Deno.serve(async (req) => {
   }
   const errMsg =
     st === "fail" || st === "error"
-      ? String(
-          (mr ? extractMoffinErrorMessage(mr) : null) ??
-            mr?.message ??
-            mr?.error ??
-            (typeof mr?.response === "object" && mr?.response && (mr.response as Record<string, unknown>)?.message) ??
-            "Consulta Moffin fallida",
-        ).slice(0, 500)
+      ? buildMoffinConsultFailErrorMessage(mr ?? {})
       : null;
 
   // Reintento Nubarium si el webhook trae FAIL upstream transitorio (Solutions CSF/32D).
