@@ -93,7 +93,7 @@ export function OutlookSignatureSettings() {
     <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border/60 bg-muted/15">
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors",
+          "flex w-full items-center justify-between gap-2 px-4 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted/40 transition-colors",
           open && "bg-muted/25",
         )}
       >

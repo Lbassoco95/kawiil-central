@@ -14,26 +14,25 @@ const Microsoft365Correo = () => {
   return (
     <AppLayout contentMaxWidth="full">
       <div className="flex flex-col h-full min-h-0 min-w-0 bg-card">
-        <div className="shrink-0 border-b border-border/70 bg-card/80 backdrop-blur-sm px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2.5">
+        <div className="shrink-0 border-b border-border/70 bg-card/80 backdrop-blur-sm px-3 py-1.5">
+          <div className="flex min-w-0 items-center gap-2">
             <div
-              className="grid h-9 w-9 place-items-center rounded-xl text-white shadow-sm ring-1 ring-white/10"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white shadow-sm ring-1 ring-white/10"
               style={{ background: "linear-gradient(135deg, hsl(207 100% 42%), hsl(217 91% 60%))" }}
             >
-              <Mail className="h-4 w-4" />
+              <Mail className="h-3.5 w-3.5" />
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80 leading-none mb-0.5">
-                Kawiil OS<span className="mx-1 opacity-50">·</span>Integraciones<span className="mx-1 opacity-50">·</span>Correo
-              </p>
-              <div className="flex items-baseline gap-2">
-                <h1 className="text-base font-bold tracking-tight gradient-text leading-tight">Correo</h1>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[11px] leading-tight text-muted-foreground">
+                <span className="font-bold gradient-text text-foreground">Correo</span>
+                <span> · Integraciones</span>
                 {profile && (
-                  <p className="truncate text-[11px] text-muted-foreground leading-tight">
-                    Outlook · {profile.displayName || profile.mail || ""}
-                  </p>
+                  <span>
+                    {" · Outlook · "}
+                    {profile.displayName || profile.mail || ""}
+                  </span>
                 )}
-              </div>
+              </p>
             </div>
           </div>
         </div>

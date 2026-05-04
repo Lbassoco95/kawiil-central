@@ -1855,7 +1855,7 @@ export function EmailView() {
     <>
       <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden bg-background">
         <div
-          className="hidden shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/50 px-3 py-2 md:flex"
+          className="hidden shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/50 px-3 py-1.5 md:flex"
           data-kawiil-email-toolbar="1"
         >
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Paneles</span>
@@ -2339,7 +2339,7 @@ export function EmailView() {
 
         {/* Lista con scroll + pie fijo para «más correos» (siempre visible) */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <ScrollArea className="min-h-0 flex-1 px-0" ref={listRef}>
+        <ScrollArea className="min-h-0 min-w-0 flex-1 px-0" ref={listRef}>
           {isLoading ? (
             <div className="py-2 space-y-0">
               {[...Array(8)].map((_, i) => (
@@ -2416,7 +2416,7 @@ export function EmailView() {
                     draggable
                     onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
-                      "group flex cursor-pointer transition-colors border-b border-border/40 px-4 py-2.5",
+                      "group flex min-w-0 w-full max-w-full cursor-pointer transition-colors border-b border-border/40 px-4 py-2.5",
                       isActive && "bg-accent border-l-2 border-l-blue-500",
                       unread && !isActive && "bg-blue-50/50 dark:bg-blue-950/20",
                       !isActive && "hover:bg-muted/50",
@@ -2443,8 +2443,9 @@ export function EmailView() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2 min-w-0">
                           <span
+                            title={senderName}
                             className={cn(
-                              "truncate text-sm text-foreground",
+                              "min-w-0 flex-1 truncate text-sm text-foreground",
                               unread ? "font-bold" : "font-normal text-foreground/85",
                             )}
                           >
@@ -2531,7 +2532,10 @@ export function EmailView() {
                           {email.importance === "high" && (
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden />
                           )}
-                          <p className="min-w-0 flex-1 truncate text-sm">
+                          <p
+                            className="min-w-0 flex-1 truncate text-sm"
+                            title={`${subject} — ${bodyPreview}`}
+                          >
                             <span className={cn(unread && "font-semibold")}>{subject}</span>
                             <span className="text-muted-foreground font-normal"> - {bodyPreview}</span>
                           </p>
