@@ -92,6 +92,9 @@ export function useSlackUnreadSync({
       for (const ch of toMark) inFlightReadRef.current.add(ch);
       void Promise.all(toMark.map((ch) => markSlackChannelNotificationsRead(userId, ch)))
         .then(async () => {
+          for (const ch of toMark) {
+            void qc.invalidateQueries({ queryKey: ["slack-channel-info", ch] });
+          }
           await qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
           await qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
           await qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
@@ -110,6 +113,7 @@ export function useSlackUnreadSync({
       if (remoteCurrent > 0 && localCurrent === 0) {
         // No invalidar `slack-history` del canal abierto: el snapshot de no leídos puede dispararse en bucle
         // (remoto > 0, badges locales aún 0) y cada invalidación cancela/refetch del historial → spinner perpetuo.
+        void qc.invalidateQueries({ queryKey: ["slack-channel-info", selectedChannel] });
         void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
         void qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
         void qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });

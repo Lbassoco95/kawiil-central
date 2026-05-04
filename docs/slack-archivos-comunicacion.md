@@ -1,5 +1,7 @@
 # Archivos al enviar a Slack (Comunicación / API)
 
+**Diagnóstico general** (carga lenta, timeouts, lectura Slack ↔ Kawiil): [slack-comunicacion-diagnostico.md](./slack-comunicacion-diagnostico.md).
+
 ## Qué documenta Slack (y qué no)
 
 - **Slack no publica una lista blanca** de “todos los formatos permitidos”. Lo habitual es que **casi cualquier documento, imagen, audio o vídeo** se pueda subir, salvo restricciones de seguridad o de la organización.

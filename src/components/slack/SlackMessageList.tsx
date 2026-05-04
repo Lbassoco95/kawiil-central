@@ -97,10 +97,8 @@ type Props = {
   /** Etiqueta amable del canal actual para persistir con el guardado. */
   currentChannelName?: string | null;
   /**
-   * TS del último mensaje leído por el usuario en este canal. Si se provee,
-   * se pinta un divisor "Nuevos" antes del primer mensaje posterior.
-   * TODO: aún no cableado desde Supabase/estado de canal; prop listo para
-   * consumirlo cuando tengamos persistencia de last_read por conversación.
+   * TS del último mensaje considerado leído (máximo entre `last_read` de Slack y cursor local en Comunicación).
+   * Alimenta el divisor «Nuevos» antes del primer mensaje posterior.
    */
   lastReadTs?: string | null;
   /** Editar mensaje propio (Slack `chat.update`). Requiere canal real en `slackReactionChannelId`. */
@@ -509,8 +507,9 @@ export function SlackMessageList({
         {loadSlowHint && (
           <div className="text-center space-y-2 max-w-sm">
             <p className="text-sm text-muted-foreground">
-              Slack está tardando más de lo habitual. Comprueba la red, usa «Actualizar permisos Slack» en la barra
-              lateral si falta algún permiso, o reintenta.
+              Slack está tardando más de lo habitual (la primera carga puede llevar hasta ~2 min en canales
+              complejos). Comprueba la red, usa «Actualizar permisos Slack» en la barra lateral si falta algún
+              permiso, o reintenta.
             </p>
             {onRetryLoad && (
               <Button type="button" variant="outline" size="sm" onClick={onRetryLoad}>

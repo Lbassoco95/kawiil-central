@@ -34,7 +34,13 @@ import {
   type SlackMessage,
 } from "@/lib/slackApi";
 import { fetchAllSlackConversations, loadCachedSlackConversations } from "@/lib/slackWorkspaceFetch";
-import { saveSlackReadCursor } from "@/lib/slackReadCursor";
+import {
+  saveSlackReadCursor,
+  loadSlackReadMap,
+  parseSlackChannelLastRead,
+  maxSlackTs,
+  compareSlackTs,
+} from "@/lib/slackReadCursor";
 import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
 import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
@@ -197,6 +203,8 @@ export default function Comunicacion() {
   const [slackSecondaryFetchOk, setSlackSecondaryFetchOk] = useState(false);
   /** Retrasa prefetch MPIM tras tener la lista del workspace. */
   const [slackMpimPrefetchOk, setSlackMpimPrefetchOk] = useState(false);
+  /** Fuerza recomputar cursor efectivo tras fusionar `last_read` de Slack en localStorage. */
+  const [slackReadMergeBump, setSlackReadMergeBump] = useState(0);
 
   const switchChannel = useCallback(
     (id: string, updateUrl: boolean) => {
@@ -217,6 +225,7 @@ export default function Comunicacion() {
       }
       setMobileListOpen(false);
       setThreadRootTs(null);
+      setSlackReadMergeBump(0);
     },
     [user?.id, selectedChannel, draft, setSearchParams],
   );
@@ -1126,6 +1135,48 @@ export default function Comunicacion() {
     staleTime: 120_000,
   });
 
+  const slackLastReadFromInfo = useMemo(
+    () => parseSlackChannelLastRead(channelInfo ?? undefined),
+    [channelInfo],
+  );
+
+  /** Si el usuario leyó en el cliente Slack, `last_read` va por delante del cursor local: persistimos para snapshot/badges. */
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+    const slack = slackLastReadFromInfo;
+    if (!slack) return;
+    const local = loadSlackReadMap(user.id)[selectedChannel];
+    if (!local || compareSlackTs(slack, local) > 0) {
+      saveSlackReadCursor(user.id, selectedChannel, slack);
+      setSlackReadMergeBump((b) => b + 1);
+    }
+  }, [user?.id, selectedChannel, slackLastReadFromInfo]);
+
+  const effectiveLastReadTs = useMemo(() => {
+    if (!user?.id || !selectedChannel) return null;
+    const local = loadSlackReadMap(user.id)[selectedChannel]?.trim();
+    const slack = slackLastReadFromInfo?.trim();
+    if (!slack && !local) return null;
+    if (!slack) return local ?? null;
+    if (!local) return slack;
+    return maxSlackTs(slack, local);
+  }, [user?.id, selectedChannel, slackLastReadFromInfo, lastMessageTs, slackReadMergeBump]);
+
+  useEffect(() => {
+    if (!selectedChannel || !isConnected) return;
+    const bump = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void qc.invalidateQueries({ queryKey: ["slack-channel-info", selectedChannel] });
+    };
+    if (typeof window === "undefined") return;
+    window.addEventListener("focus", bump);
+    document.addEventListener("visibilitychange", bump);
+    return () => {
+      window.removeEventListener("focus", bump);
+      document.removeEventListener("visibilitychange", bump);
+    };
+  }, [selectedChannel, isConnected, qc]);
+
   const selectedMeta = useMemo(
     () => (selectedChannel ? conversations.find((c) => c.id === selectedChannel) : undefined),
     [conversations, selectedChannel],
@@ -1863,6 +1914,7 @@ export default function Comunicacion() {
               }
               onToggleReaction={(ts, name, add) => reactionMutation.mutate({ ts, name, add })}
               selectedChannelId={selectedChannel}
+              lastReadTs={effectiveLastReadTs}
               onCreateTaskFromMessage={(message) => setTaskFromSlackMessage(message)}
               savedMessageKeys={savedKeySet}
               currentChannelName={headerTitle}
