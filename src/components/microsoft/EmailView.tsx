@@ -558,7 +558,7 @@ function getBucketLabel(bucket: DateBucket, sampleDate: Date | null): string {
 }
 
 /** Versión UI del lector (visible en inspección; útil para comprobar deploy en Lovable/preview). */
-export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv22-sheet-csv-preview";
+export const EMAIL_VIEW_LAYOUT_VERSION = "2026.04-readerv23-reader-fit";
 
 type AttachmentPreviewState = {
   url: string;
@@ -2229,17 +2229,16 @@ export function EmailView() {
         )}
       </div>
 
-      {/* Email list panel — flex + anchos fijos en escritorio (evita solapes tipo iframe/Lovable) */}
+      {/* Email list panel — escritorio: base min(28rem,36vw), puede encoger para no exprimir el lector */}
       <div
         className={cn(
           "relative z-[2] flex min-h-0 flex-col overflow-hidden border-r border-border bg-background transition-[width,opacity] duration-200 ease-out",
           isMobile
             ? "min-w-0 flex-1"
             : cn(
-                "shrink-0",
                 listPaneCollapsed && selectedEmailId
                   ? "pointer-events-none w-0 min-w-0 shrink-0 overflow-hidden border-0 p-0 opacity-0"
-                  : "w-[min(28rem,40vw)] min-w-[17.5rem] max-w-[28rem]",
+                  : "max-w-[28rem] min-w-[15rem] flex-[0_1_min(28rem,36vw)]",
               ),
           selectedEmailId && isMobile && "hidden",
         )}
@@ -2721,25 +2720,27 @@ export function EmailView() {
               >
                 {emailDetail.subject || "(sin asunto)"}
               </h2>
-              <div className="flex items-start gap-3">
-                <div className={cn(
-                  "h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0",
-                  getAvatarColor(emailDetail.from?.emailAddress?.address)
-                )}>
-                  {getInitials(emailDetail.from?.emailAddress?.name, emailDetail.from?.emailAddress?.address)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-foreground">{emailDetail.from?.emailAddress?.name}</span>
-                    <span className="text-xs text-muted-foreground hidden sm:inline">&lt;{emailDetail.from?.emailAddress?.address}&gt;</span>
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-3">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <div className={cn(
+                    "h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0",
+                    getAvatarColor(emailDetail.from?.emailAddress?.address)
+                  )}>
+                    {getInitials(emailDetail.from?.emailAddress?.name, emailDetail.from?.emailAddress?.address)}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    Para:{" "}
-                    {emailDetail.toRecipients?.map((r: any) => recipientToFieldDisplay(r)).filter(Boolean).join(", ") ||
-                      "—"}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">{emailDetail.from?.emailAddress?.name}</span>
+                      <span className="text-xs text-muted-foreground hidden sm:inline">&lt;{emailDetail.from?.emailAddress?.address}&gt;</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      Para:{" "}
+                      {emailDetail.toRecipients?.map((r: any) => recipientToFieldDisplay(r)).filter(Boolean).join(", ") ||
+                        "—"}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end gap-1.5 shrink-0 pt-0.5 sm:text-right">
+                <div className="flex w-full shrink-0 flex-col items-start gap-1.5 border-t border-border/40 pt-2 text-left lg:w-auto lg:border-0 lg:items-end lg:pt-0.5 lg:text-right">
                   {import.meta.env.DEV && (
                     <Badge
                       variant="outline"
@@ -3030,7 +3031,7 @@ export function EmailView() {
                 </Tooltip>
 
                 <div
-                  className="ml-auto flex items-center gap-0.5 shrink-0 rounded-md bg-primary/5 px-1 py-0.5 ring-1 ring-primary/10"
+                  className="ml-0 mt-1 flex w-full shrink-0 flex-wrap items-center justify-end gap-0.5 rounded-md bg-primary/5 px-1 py-0.5 ring-1 ring-primary/10 sm:ml-auto sm:mt-0 sm:w-auto"
                   aria-label="Acciones inteligentes"
                 >
                   <Tooltip>

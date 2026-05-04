@@ -432,14 +432,14 @@ export function EmailKawiilCard({
       </div>
 
       <div className="border-t border-sky-200/40 px-3 py-2.5 dark:border-sky-900/30">
-        <div className="mb-1.5 flex items-center justify-between">
+        <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Respuesta rápida
           </p>
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 gap-1 text-[11px]"
+            className="h-6 w-fit shrink-0 gap-1 self-start text-[11px] sm:self-auto"
             onClick={() => {
               const forceRegen = Boolean(quickReplies);
               if (forceRegen) invalidateAiCache(CACHE_SCOPE_QUICK_REPLY, emailId);
