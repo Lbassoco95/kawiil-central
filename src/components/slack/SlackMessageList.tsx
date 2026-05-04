@@ -381,6 +381,7 @@ export function SlackMessageList({
   onDeleteSlackMessage,
   slackMessageActionPending = false,
 }: Props) {
+  const anchorTs = (highlightTs ?? "").trim();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [mentionUserId, setMentionUserId] = useState<string | null>(null);
   const [reactionPickerTs, setReactionPickerTs] = useState<string | null>(null);
@@ -392,54 +393,52 @@ export function SlackMessageList({
   const stickBottomRef = useRef(true);
   const anchorPrefetchCountRef = useRef(0);
   const anchorPrefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevSelectedChannelRef = useRef(selectedChannelId);
 
   const formatCtx: FormatContext = {
     userMap,
     onUserMentionClick: (id) => setMentionUserId(id),
   };
 
-  const scrollToBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+  const scrollToBottomStable = useCallback(() => {
+    const snap = () => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    };
+    snap();
+    requestAnimationFrame(() => {
+      snap();
+      requestAnimationFrame(snap);
+    });
   }, []);
 
   useLayoutEffect(() => {
-    if (!messages.length || highlightTs) return;
+    if (!messages.length || anchorTs) return;
     const el = scrollRef.current;
     if (!el) return;
     if (messages.length !== prevLenRef.current) {
       if (stickBottomRef.current || messages.length <= prevLenRef.current) {
-        requestAnimationFrame(() => {
-          el.scrollTop = el.scrollHeight;
-        });
+        scrollToBottomStable();
       }
       prevLenRef.current = messages.length;
     }
-  }, [messages.length, messages, highlightTs]);
+  }, [messages.length, messages, anchorTs, scrollToBottomStable]);
 
-  useEffect(() => {
-    prevLenRef.current = 0;
-    stickBottomRef.current = true;
-  }, [selectedChannelId]);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (prevSelectedChannelRef.current !== selectedChannelId) {
+      prevSelectedChannelRef.current = selectedChannelId;
+      prevLenRef.current = 0;
+      stickBottomRef.current = true;
+    }
     anchorPrefetchCountRef.current = 0;
     if (anchorPrefetchTimeoutRef.current) {
       clearTimeout(anchorPrefetchTimeoutRef.current);
       anchorPrefetchTimeoutRef.current = null;
     }
-  }, [selectedChannelId, highlightTs]);
 
-  useLayoutEffect(() => {
-    if (highlightTs?.trim()) return;
-    stickBottomRef.current = true;
-    const el = scrollRef.current;
-    if (!el) return;
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
-    });
-  }, [selectedChannelId, highlightTs]);
+    if (anchorTs) return;
+    scrollToBottomStable();
+  }, [selectedChannelId, anchorTs, scrollToBottomStable]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -457,25 +456,25 @@ export function SlackMessageList({
   }, [hasMore, isFetchingMore, onLoadMore]);
 
   const highlightAnchorInList = useMemo(
-    () => (highlightTs?.trim() ? messages.some((m) => m.ts === highlightTs) : false),
-    [messages, highlightTs],
+    () => (anchorTs ? messages.some((m) => m.ts === anchorTs) : false),
+    [messages, anchorTs],
   );
 
   useEffect(() => {
-    if (!highlightTs?.trim() || !messages.length) return;
-    const idSafe = highlightTs.replace(/\./g, "-");
+    if (!anchorTs || !messages.length) return;
+    const idSafe = anchorTs.replace(/\./g, "-");
     const t = setTimeout(() => {
       document.getElementById(`slack-msg-${idSafe}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 200);
     return () => clearTimeout(t);
-  }, [highlightTs, messages.length, highlightAnchorInList]);
+  }, [anchorTs, messages.length, highlightAnchorInList]);
 
   /** Mientras haya ancla en la URL y el mensaje no esté en el lote cargado, pide más historial (tope, con retraso entre páginas). */
   useEffect(() => {
-    if (!highlightTs?.trim() || !onLoadMore || !hasMore) return;
+    if (!anchorTs || !onLoadMore || !hasMore) return;
     if (highlightAnchorInList) return;
     if (isFetchingMore) return;
-    const idSafe = highlightTs.replace(/\./g, "-");
+    const idSafe = anchorTs.replace(/\./g, "-");
     if (document.getElementById(`slack-msg-${idSafe}`)) return;
     if (anchorPrefetchCountRef.current >= ANCHOR_PREFETCH_MAX) return;
     if (anchorPrefetchTimeoutRef.current) clearTimeout(anchorPrefetchTimeoutRef.current);
@@ -492,7 +491,7 @@ export function SlackMessageList({
       }
     };
   }, [
-    highlightTs,
+    anchorTs,
     highlightAnchorInList,
     hasMore,
     isFetchingMore,
@@ -535,7 +534,7 @@ export function SlackMessageList({
   for (let i = 0; i < messages.length; i++) {
     const m = messages[i];
     const idSafe = m.ts.replace(/\./g, "-");
-    const highlight = highlightTs && m.ts === highlightTs;
+    const highlight = !!anchorTs && m.ts === anchorTs;
     const uid = m.user;
     const label = slackMessageAuthorDisplayName(m, userMap);
     const prof = uid ? userMap[uid] : undefined;

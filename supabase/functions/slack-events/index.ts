@@ -159,14 +159,14 @@ async function slackChannelMembersViaUserToken(
   return [];
 }
 
-/** Nombre para título de notificación (#canal, MD, grupo); requiere SLACK_BOT_TOKEN. */
+/** Nombre para título de notificación (#canal, MD, grupo); acepta token de bot o de usuario con scopes adecuados. */
 async function slackConversationDisplayName(
   channelId: string,
-  botToken: string,
+  bearerToken: string,
 ): Promise<string | undefined> {
   const u = new URL("https://slack.com/api/conversations.info");
   u.searchParams.set("channel", channelId);
-  const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${botToken}` } });
+  const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${bearerToken}` } });
   const j = (await res.json()) as {
     ok?: boolean;
     error?: string;
@@ -183,14 +183,14 @@ async function slackConversationDisplayName(
   return undefined;
 }
 
-/** Nombre visible del remitente Slack para poner en el título de la notificación. */
+/** Nombre visible del usuario Slack; acepta token de bot o de usuario. */
 async function slackUserDisplayName(
   slackUserId: string,
-  botToken: string,
+  bearerToken: string,
 ): Promise<string | undefined> {
   const u = new URL("https://slack.com/api/users.info");
   u.searchParams.set("user", slackUserId);
-  const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${botToken}` } });
+  const res = await fetch(u.toString(), { headers: { Authorization: `Bearer ${bearerToken}` } });
   const j = (await res.json()) as {
     ok?: boolean;
     error?: string;
@@ -209,6 +209,34 @@ async function slackUserDisplayName(
     .map((x) => (typeof x === "string" ? x.trim() : ""))
     .find((x) => x.length > 0);
   return cand || undefined;
+}
+
+/** Bearer para lecturas Slack (users.info, conversations.info): bot si existe; si no, token del remitente o cualquier conexión del equipo. */
+async function fetchWorkspaceSlackBearerForApi(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  teamId: string,
+  senderKawiilId: string | undefined,
+): Promise<string | undefined> {
+  const bot = Deno.env.get("SLACK_BOT_TOKEN")?.trim();
+  if (bot) return bot;
+  if (senderKawiilId) {
+    const { data } = await supabase
+      .from("user_slack_connections")
+      .select("access_token")
+      .eq("user_id", senderKawiilId)
+      .eq("slack_team_id", teamId)
+      .maybeSingle();
+    const t = (data?.access_token as string | undefined)?.trim();
+    if (t) return t;
+  }
+  const { data: row } = await supabase
+    .from("user_slack_connections")
+    .select("access_token")
+    .eq("slack_team_id", teamId)
+    .not("access_token", "is", null)
+    .limit(1)
+    .maybeSingle();
+  return (row?.access_token as string | undefined)?.trim();
 }
 
 const SLACK_DM_PROBE_MAX = 100;
@@ -370,14 +398,46 @@ function describeSlackAttachments(files: SlackFile[] | undefined | null): string
   return `${name}${suffix}${extras}`;
 }
 
+const SLACK_PREVIEW_MAX_USER_LOOKUPS = 12;
+
 /**
- * Preview del mensaje respetando hasta 3 líneas de texto y fusionando con la descripción
- * del adjunto cuando hay archivos/imágenes. Preserva saltos de línea para que el toast pueda
- * aplicar `line-clamp-3`.
+ * Preview del mensaje con menciones legibles (`<@U…|nombre>` o users.info).
+ * Sin bearer válido, las menciones sin etiqueta quedan como "@…".
  */
-function buildSlackPreview(text: string, files?: SlackFile[] | null): string {
-  const cleanText = (text || "")
-    .replace(/<@[A-Z0-9]+>/g, "@…")
+async function buildSlackPreviewResolved(
+  text: string,
+  files: SlackFile[] | undefined | null,
+  bearerToken: string | undefined,
+): Promise<string> {
+  let expanded = text || "";
+  expanded = expanded.replace(
+    /<@([UW][A-Z0-9]+)\|([^>]+)>/g,
+    (_full, _id: string, label: string) => `@${String(label).trim()}`,
+  );
+
+  const cache = new Map<string, string>();
+  let lookups = 0;
+  const resolveOne = async (uid: string): Promise<string> => {
+    if (cache.has(uid)) return cache.get(uid)!;
+    if (lookups >= SLACK_PREVIEW_MAX_USER_LOOKUPS || !bearerToken?.trim()) {
+      cache.set(uid, "@…");
+      return "@…";
+    }
+    lookups += 1;
+    const name = await slackUserDisplayName(uid, bearerToken.trim());
+    const label = name ? `@${name}` : "@…";
+    cache.set(uid, label);
+    return label;
+  };
+
+  const ids = [...new Set([...expanded.matchAll(/<@([UW][A-Z0-9]+)>/g)].map((m) => m[1]))];
+  for (const uid of ids) {
+    const repl = await resolveOne(uid);
+    expanded = expanded.split(`<@${uid}>`).join(repl);
+  }
+  expanded = expanded.replace(/<@[A-Z0-9]+>/g, "@…");
+
+  const cleanText = expanded
     .replace(/[ \t]+/g, " ")
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -702,18 +762,20 @@ async function handleMessageNotificationEvent(
     return;
   }
 
+  const apiBearer = await fetchWorkspaceSlackBearerForApi(supabase, teamId, senderKawiilId);
+
   let channelDisplay: string | undefined;
   let senderName: string | undefined;
-  const botForInfo = Deno.env.get("SLACK_BOT_TOKEN");
-  if (botForInfo) {
-    channelDisplay = await slackConversationDisplayName(channel, botForInfo);
+  if (apiBearer) {
+    channelDisplay = await slackConversationDisplayName(channel, apiBearer);
     if (senderSlackId) {
-      senderName = await slackUserDisplayName(senderSlackId, botForInfo);
+      senderName = await slackUserDisplayName(senderSlackId, apiBearer);
     }
   }
 
   const preview =
-    buildSlackPreview(text, event.files as SlackFile[] | undefined) || "(sin contenido)";
+    (await buildSlackPreviewResolved(text, event.files as SlackFile[] | undefined, apiBearer)) ||
+    "(sin contenido)";
 
   const rows = [...targets.entries()].map(([user_id, flags]) => {
     const baseType = slackNotificationType(flags);

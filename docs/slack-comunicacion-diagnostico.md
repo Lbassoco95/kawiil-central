@@ -36,6 +36,12 @@ sequenceDiagram
 
 Errores legibles en cliente: [`formatSlackHistoryLoadError`](../src/lib/slackApi.ts).
 
+## Notificaciones Slack (`slack-events`) y `SLACK_BOT_TOKEN`
+
+- La Edge **`slack-events`** inserta títulos y cuerpos en [`notifications`](../supabase/functions/slack-events/index.ts) usando `users.info` / `conversations.info`.
+- **Sin `SLACK_BOT_TOKEN`**, el código usa el **token de usuario** del remitente (si tiene cuenta Kawiil enlazada) o el primer `access_token` del workspace en `user_slack_connections`, para seguir resolviendo nombres en títulos y menciones en el preview.
+- **`SLACK_BOT_TOKEN`** sigue siendo recomendable para miembros de canal vía `conversations.members` donde el bot está invitado y para cargas más predecibles; no es el único medio para mostrar «quién escribió» en el texto de la notificación.
+
 ## Tiempo casi real
 
 Kawiil **no** usa el socket RTM de Slack. Los mensajes de otros aparecen al enfocar la ventana, refetch periódico (~90 s con pestaña visible), o tras acciones locales; ver [slack-archivos-comunicacion.md § Comunicación en tiempo casi real](./slack-archivos-comunicacion.md).
