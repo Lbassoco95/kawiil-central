@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Send, Search, Hash, Lock, MessageCircle, Users, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAllSlackConversations } from "@/lib/slackWorkspaceFetch";
+import { fetchAllSlackConversations, SLACK_CONV_LIST_TIMEOUT_MS } from "@/lib/slackWorkspaceFetch";
 import { useSlackConnection } from "@/hooks/useSlackConnection";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
@@ -114,7 +114,10 @@ export function SendEmailToSlackDialog({
 
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ["slack", "send-email-conversations"],
-    queryFn: fetchAllSlackConversations,
+    queryFn: () =>
+      fetchAllSlackConversations({
+        timeoutMs: SLACK_CONV_LIST_TIMEOUT_MS,
+      }),
     enabled: open && isConnected,
     staleTime: 5 * 60 * 1000,
   });

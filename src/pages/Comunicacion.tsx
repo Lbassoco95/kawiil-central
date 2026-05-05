@@ -33,7 +33,13 @@ import {
   type SlackConversation,
   type SlackMessage,
 } from "@/lib/slackApi";
-import { fetchAllSlackConversations, loadCachedSlackConversations } from "@/lib/slackWorkspaceFetch";
+import {
+  fetchSlackConversationsPaged,
+  loadCachedSlackConversations,
+  MAX_SLACK_CONV_LIST_PAGES,
+  SLACK_CONV_BOOTSTRAP_PAGES,
+  SLACK_CONV_LIST_TIMEOUT_MS,
+} from "@/lib/slackWorkspaceFetch";
 import {
   saveSlackReadCursor,
   loadSlackReadMap,
@@ -195,6 +201,8 @@ export default function Comunicacion() {
   const slackReadAckTimerRef = useRef<ReturnType<typeof setTimeout>>();
   /** Agrupa INSERT de notificaciones Slack (ráfagas) en una sola pasada de “marcar leído”. */
   const slackOpenChannelNotifDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Descarta resultados de una carga en segundo plano del sidebar si hubo refetch o nueva conexión. */
+  const slackConversationsLoadGenRef = useRef(0);
   /** Evita ráfagas mark-read + invalidate al cargar historial o cambiar de canal (menos trabajo = menos “pasmado”). */
   const slackMarkChannelReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Último `ts` del historial visible; se actualiza cada render tras `messages` (evita TDZ con deps de efectos). */
@@ -496,9 +504,34 @@ export default function Comunicacion() {
 
   const conversationsQuery = useQuery({
     queryKey: ["slack-conversations", connection?.id],
-    queryFn: () => fetchAllSlackConversations({ cacheConnectionId: connection!.id }),
+    queryFn: async () => {
+      const connectionId = connection!.id!;
+      const gen = ++slackConversationsLoadGenRef.current;
+      const bootstrap = await fetchSlackConversationsPaged({
+        cacheConnectionId: connectionId,
+        maxPages: SLACK_CONV_BOOTSTRAP_PAGES,
+        timeoutMs: SLACK_CONV_LIST_TIMEOUT_MS,
+      });
+      if (!bootstrap.complete && bootstrap.nextCursor) {
+        const restBudget = Math.max(1, MAX_SLACK_CONV_LIST_PAGES - SLACK_CONV_BOOTSTRAP_PAGES);
+        void fetchSlackConversationsPaged({
+          cacheConnectionId: connectionId,
+          maxPages: restBudget,
+          startCursor: bootstrap.nextCursor,
+          seedConversations: bootstrap.conversations,
+          timeoutMs: SLACK_CONV_LIST_TIMEOUT_MS,
+        }).then((full) => {
+          if (slackConversationsLoadGenRef.current !== gen) return;
+          qc.setQueryData(["slack-conversations", connectionId], full.conversations);
+        });
+      }
+      return bootstrap.conversations;
+    },
     enabled: isConnected && !!connection?.id,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
     placeholderData: () =>
       connection?.id ? loadCachedSlackConversations(connection.id) : undefined,
   });
@@ -626,17 +659,17 @@ export default function Comunicacion() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
     /**
-     * Sincronización ligera con Slack: un refetch periódico solo con la pestaña visible.
-     * Intervalo alto para reducir 429; con mucho historial desactivamos el poller.
+     * Refetch periódico solo con la primera página cargada: un `refetch` del infinite query pide
+     * de nuevo todas las páginas ya acumuladas; con >1 página es costoso, así que desactivamos el poller.
+     * Nuevos mensajes siguen llegando vía envío local, mutaciones y foco/reconexión.
      */
     refetchInterval: (query) => {
       if (typeof document === "undefined") return false;
       if (document.visibilityState !== "visible") return false;
       if (query.state.fetchStatus === "fetching") return false;
-      /** Cada tick refetch vuelve a pedir todas las páginas cargadas; con mucho historial desactivamos el poller. */
       const pageCount = query.state.data?.pages?.length ?? 0;
-      if (pageCount > 4) return false;
-      return 90_000;
+      if (pageCount !== 1) return false;
+      return 120_000;
     },
     refetchIntervalInBackground: false,
   });
@@ -1621,6 +1654,22 @@ export default function Comunicacion() {
       unreadByChannel={displayUnreadByChannel}
       headerActions={
         <div className="flex flex-col gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full h-8 text-[10px] gap-1.5 justify-start"
+            disabled={conversationsQuery.isFetching}
+            title="Vuelve a pedir la lista desde Slack"
+            onClick={() => void conversationsQuery.refetch()}
+          >
+            {conversationsQuery.isFetching ? (
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3 shrink-0 opacity-80" />
+            )}
+            Actualizar lista de chats
+          </Button>
           {showSlackPushBanner && (
             <Alert className="border-amber-300/60 dark:border-amber-700/40 bg-amber-50/80 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100 py-2 px-3">
               <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />

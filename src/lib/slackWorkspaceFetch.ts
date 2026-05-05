@@ -1,7 +1,15 @@
 import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
 
 const CONV_PAGE_LIMIT = 1000;
-const MAX_CONV_PAGES = 60;
+/** Cota de páginas Slack (1000 conversaciones/página) antes de parar; alineada con el edge. */
+export const MAX_SLACK_CONV_LIST_PAGES = 60;
+const MAX_CONV_PAGES = MAX_SLACK_CONV_LIST_PAGES;
+
+/** Margen sobre el abort del cliente hacia Slack (~ Edge 25 s) por página. */
+export const SLACK_CONV_LIST_TIMEOUT_MS = 32_000;
+
+/** Páginas iniciales antes de cargar el resto en segundo plano (Comunicación). */
+export const SLACK_CONV_BOOTSTRAP_PAGES = 4;
 
 const SLACK_CONV_CACHE_PREFIX = "kawiil-slack-conv:";
 const SLACK_CONV_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -25,10 +33,7 @@ export function loadCachedSlackConversations(
   }
 }
 
-function saveCachedSlackConversations(
-  connectionId: string,
-  conversations: SlackConversation[],
-): void {
+function saveCachedSlackConversations(connectionId: string, conversations: SlackConversation[]): void {
   if (typeof sessionStorage === "undefined") return;
   try {
     const payload: CachedConversationsPayload = {
@@ -41,46 +46,107 @@ function saveCachedSlackConversations(
   }
 }
 
-export type FetchAllSlackConversationsOpts = {
-  /** Si se indica, persiste el resultado en sessionStorage para `loadCachedSlackConversations`. */
+export type FetchSlackConversationsPagedOpts = {
+  /** Continuación: cursor tras la última página. Omitir en la primera tanda. */
+  startCursor?: string;
+  seedConversations?: SlackConversation[];
+  maxPages: number;
+  timeoutMs?: number;
+  /** Si existe, persistir snapshot en sesión al terminar esta tanda (parcial o completo). */
   cacheConnectionId?: string;
 };
 
-/** Recorre `conversations.list` con cursor hasta agotar resultados (evita perder MPIM / canales fuera de la primera página). */
-export async function fetchAllSlackConversations(
-  opts?: FetchAllSlackConversationsOpts,
-): Promise<SlackConversation[]> {
-  const out: SlackConversation[] = [];
-  const seen = new Set<string>();
-  let cursor: string | undefined;
+export type FetchSlackConversationsPagedResult = {
+  conversations: SlackConversation[];
+  /** Solo si `complete` es false. */
+  nextCursor?: string;
+  complete: boolean;
+};
 
-  for (let page = 0; page < MAX_CONV_PAGES; page++) {
+/**
+ * Obtiene hasta `maxPages` de `conversations.list`; corta ante fin de cursores en Slack.
+ */
+export async function fetchSlackConversationsPaged(
+  opts: FetchSlackConversationsPagedOpts,
+): Promise<FetchSlackConversationsPagedResult> {
+  const timeoutMs = opts.timeoutMs ?? SLACK_CONV_LIST_TIMEOUT_MS;
+  const maxPages = Math.max(1, Math.min(MAX_CONV_PAGES, opts.maxPages));
+  const seed = opts.seedConversations ?? [];
+  const out: SlackConversation[] = [...seed];
+  const seen = new Set<string>();
+  for (const c of out) {
+    if (c?.id) seen.add(c.id);
+  }
+  let cursor: string | undefined = opts.startCursor?.trim() || undefined;
+
+  for (let page = 0; page < maxPages; page++) {
     const data = await invokeSlackApi<{
       ok: boolean;
       channels?: SlackConversation[];
       error?: string;
       response_metadata?: { next_cursor?: string };
-    }>({
-      action: "conversations.list",
-      types: "public_channel,private_channel,mpim,im",
-      limit: CONV_PAGE_LIMIT,
-      cursor,
-    });
+    }>(
+      {
+        action: "conversations.list",
+        types: "public_channel,private_channel,mpim,im",
+        limit: CONV_PAGE_LIMIT,
+        cursor,
+      },
+      { timeoutMs },
+    );
+
     if (!data.ok) throw new Error(data.error || "No se pudieron cargar conversaciones");
+
     for (const c of data.channels || []) {
       if (c?.id && !seen.has(c.id)) {
         seen.add(c.id);
         out.push(c);
       }
     }
-    const next = data.response_metadata?.next_cursor?.trim();
-    if (!next) break;
-    cursor = next;
+
+    const nextCursor = data.response_metadata?.next_cursor?.trim() || undefined;
+    if (!nextCursor) {
+      if (opts.cacheConnectionId) {
+        saveCachedSlackConversations(opts.cacheConnectionId, out);
+      }
+      return { conversations: out, complete: true, nextCursor: undefined };
+    }
+
+    cursor = nextCursor;
   }
-  if (opts?.cacheConnectionId) {
+
+  if (opts.cacheConnectionId) {
     saveCachedSlackConversations(opts.cacheConnectionId, out);
   }
-  return out;
+  return {
+    conversations: out,
+    complete: false,
+    nextCursor: cursor,
+  };
+}
+
+export type FetchAllSlackConversationsOpts = {
+  cacheConnectionId?: string;
+  maxPages?: number;
+  timeoutMs?: number;
+  startCursor?: string;
+  seedConversations?: SlackConversation[];
+};
+
+/**
+ * Recorre `conversations.list` hasta agotar Slack o llegar al tope `maxPages` (default 60).
+ */
+export async function fetchAllSlackConversations(
+  opts?: FetchAllSlackConversationsOpts,
+): Promise<SlackConversation[]> {
+  const r = await fetchSlackConversationsPaged({
+    cacheConnectionId: opts?.cacheConnectionId,
+    maxPages: opts?.maxPages ?? MAX_CONV_PAGES,
+    timeoutMs: opts?.timeoutMs ?? SLACK_CONV_LIST_TIMEOUT_MS,
+    startCursor: opts?.startCursor,
+    seedConversations: opts?.seedConversations,
+  });
+  return r.conversations;
 }
 
 export type SlackWorkspaceUserRow = {
@@ -112,11 +178,14 @@ export async function fetchAllSlackWorkspaceUsers(): Promise<SlackWorkspaceUserR
       }>;
       error?: string;
       response_metadata?: { next_cursor?: string };
-    }>({
-      action: "users.list",
-      limit: USERS_PAGE_LIMIT,
-      cursor,
-    });
+    }>(
+      {
+        action: "users.list",
+        limit: USERS_PAGE_LIMIT,
+        cursor,
+      },
+      { timeoutMs: SLACK_CONV_LIST_TIMEOUT_MS },
+    );
     if (!data.ok) throw new Error(data.error || "No se pudieron cargar usuarios");
     for (const m of data.members || []) {
       if (!m?.id || seen.has(m.id)) continue;

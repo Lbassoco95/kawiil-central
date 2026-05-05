@@ -631,7 +631,8 @@ Deno.serve(async (req) => {
         const channelIds = [...new Set(rawIds.map((x) => String(x)).filter(Boolean))].slice(0, 18);
         /** Secuencial: menos ráfagas concurrentes a Slack (rate limits / cierres de sesión). */
         const fromHist = await slackUnreadHistoryBatch(conn.access_token, readState, channelIds);
-        const listSnap = await slackUnreadSnapshot(conn.access_token, 8);
+        /** Pocas páginas: el merge con `unread_count` no debe duplicar un barrido tipo sidebar (8+ páginas). */
+        const listSnap = await slackUnreadSnapshot(conn.access_token, 2);
         const tokenFatal = new Set([
           "invalid_auth",
           "token_revoked",
