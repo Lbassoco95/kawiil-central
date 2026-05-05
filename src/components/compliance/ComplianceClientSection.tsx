@@ -7,6 +7,7 @@ import { ComplianceEntitySelector } from "./ComplianceEntitySelector";
 import {
   useClientComplianceConfig,
   useSaveClientCompliance,
+  useComplianceTasksAutoSync,
 } from "@/hooks/useCompliance";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Shield } from "lucide-react";
@@ -19,6 +20,8 @@ interface ComplianceClientSectionProps {
 export function ComplianceClientSection({ clientId, readOnly }: ComplianceClientSectionProps) {
   const { data: configs, isLoading } = useClientComplianceConfig(clientId);
   const saveCompliance = useSaveClientCompliance();
+
+  useComplianceTasksAutoSync(clientId, undefined, { disabled: isLoading });
 
   const [enabled, setEnabled] = useState(false);
   const [selectedEntityTypeIds, setSelectedEntityTypeIds] = useState<string[]>([]);

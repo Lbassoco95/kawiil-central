@@ -1,3 +1,4 @@
+import { useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -89,6 +90,54 @@ export function useClientComplianceConfig(clientId: string | undefined) {
     },
     enabled: !!user && !!clientId,
   });
+}
+
+/**
+ * Poda tareas de plantilla anteriores al ancla del proyecto y genera faltantes (idempotente).
+ * Sin toast. Usar al cargar vista de cumplimiento o ficha cliente con config activa.
+ */
+export function useComplianceTasksAutoSync(
+  clientId: string | null | undefined,
+  projectId?: string | null,
+  options?: { disabled?: boolean },
+) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const disabled = options?.disabled ?? false;
+  const { data: configs, isLoading: configLoading } = useClientComplianceConfig(clientId ?? undefined);
+
+  const entityKey = useMemo(
+    () =>
+      (configs || [])
+        .map((c) => c.entity_type_id)
+        .filter(Boolean)
+        .sort()
+        .join(","),
+    [configs],
+  );
+
+  useEffect(() => {
+    if (disabled || !user?.id || !clientId || configLoading) return;
+    if (!entityKey) return;
+    const entityTypeIds = entityKey.split(",").filter(Boolean);
+    if (entityTypeIds.length === 0) return;
+    let cancelled = false;
+    ensureComplianceProjectForClient({ clientId, userId: user.id, entityTypeIds })
+      .then(() => {
+        if (cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["client-projects", clientId] });
+        if (projectId) {
+          queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
+          queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [disabled, user?.id, clientId, configLoading, entityKey, projectId, queryClient]);
 }
 
 export function useSaveClientCompliance() {

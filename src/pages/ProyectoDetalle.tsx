@@ -59,6 +59,7 @@ import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { reconcileBracketPhasesForProject } from "@/lib/reconcileTaskPhasesFromTitles";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
+import { useComplianceTasksAutoSync } from "@/hooks/useCompliance";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = Object.fromEntries(
   Object.entries(PROJECT_STATUS_CONFIG).map(([k, v]) => [k, v.color])
@@ -73,6 +74,13 @@ const ProyectoDetalle = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { data: project, isLoading } = useProjectDetail(id);
+
+  useComplianceTasksAutoSync(
+    project?.area === "cumplimiento" ? project.client_id ?? undefined : undefined,
+    project?.area === "cumplimiento" ? project.id : undefined,
+    { disabled: isLoading },
+  );
+
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showTaskForm, setShowTaskForm] = useState(false);

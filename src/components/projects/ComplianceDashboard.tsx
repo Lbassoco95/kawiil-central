@@ -38,7 +38,6 @@ import { ensureCompliancePhasesOnProject, type SyncPhase } from "@/lib/projectPh
 import { complianceCategoryLabel } from "@/lib/compliancePhaseCatalog";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { formatComplianceRegDate } from "@/lib/complianceProjectSummary";
-import { ensureComplianceProjectForClient } from "@/lib/ensureComplianceProject";
 
 function ComplianceRegulatorySummary({
   configs,
@@ -354,16 +353,6 @@ export function ComplianceDashboard({
   const hasComplianceConfig = (complianceConfigs || []).length > 0;
   const complianceEntityTypeIds = (complianceConfigs || []).map((c) => c.entity_type_id);
 
-  const complianceSyncEntityKey = useMemo(
-    () =>
-      (complianceConfigs || [])
-        .map((c) => c.entity_type_id)
-        .filter(Boolean)
-        .sort()
-        .join(","),
-    [complianceConfigs],
-  );
-
   const { data: projectRow } = useQuery({
     queryKey: ["compliance-dashboard-project", projectId],
     queryFn: async () => {
@@ -389,30 +378,6 @@ export function ComplianceDashboard({
       cancelled = true;
     };
   }, [user, projectId, queryClient]);
-
-  /** Al abrir el tab: poda de tareas anteriores a la apertura del proyecto + alta de faltantes (idempotente). Sin guardar de nuevo la config. */
-  useEffect(() => {
-    if (!user?.id || !clientId || !projectId || configLoading) return;
-    if (!complianceSyncEntityKey) return;
-    const entityTypeIds = complianceSyncEntityKey.split(",").filter(Boolean);
-    if (entityTypeIds.length === 0) return;
-    let cancelled = false;
-    ensureComplianceProjectForClient({
-      clientId,
-      userId: user.id,
-      entityTypeIds,
-    })
-      .then(() => {
-        if (cancelled) return;
-        queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
-        queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, clientId, projectId, configLoading, complianceSyncEntityKey, queryClient]);
 
   const projectPhases: SyncPhase[] = useMemo(() => {
     const raw = projectRow?.phases;
