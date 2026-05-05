@@ -861,7 +861,7 @@ const anthropicTools = [
   },
   {
     name: "get_team_members",
-    description: "Obtiene los miembros del equipo (Kawiilers).",
+    description: "Obtiene los miembros del equipo (Kawiilers) con user_id (UUID de auth), nombre, email y área. Usa user_id para assigned_to en create_tasks o update_task.",
     input_schema: {
       type: "object",
       properties: {
@@ -899,7 +899,8 @@ const anthropicTools = [
   // ─── Deep-context tools ───
   {
     name: "get_task_details",
-    description: "Obtiene una tarea específica con su descripción completa, comentarios de equipo y archivos adjuntos.",
+    description:
+      "Obtiene una tarea específica con descripción, assigned_to, parent_task_id, is_subtask, responsable_principal, colaboradores (asignados_detalle), comentarios y contexto de cliente/proyecto.",
     input_schema: {
       type: "object",
       properties: {
@@ -1138,7 +1139,8 @@ const anthropicTools = [
   },
   {
     name: "create_tasks",
-    description: "Crea múltiples tareas de una sola vez. USA ESTA HERRAMIENTA cuando el usuario pida crear tareas para un proyecto, a partir de una minuta, o a partir de instrucciones. Puedes crear tareas con prioridad, área, fecha límite y asignarlas a un proyecto existente.",
+    description:
+      "Crea múltiples tareas de una sola vez. USA ESTA HERRAMIENTA cuando el usuario pida crear tareas para un proyecto, a partir de una minuta, o a partir de instrucciones. Puedes crear tareas con prioridad, área, fecha límite, asignarlas (UUID o email del Kawiiler, ver get_team_members) y crear subtareas con parent_task_id.",
     input_schema: {
       type: "object",
       properties: {
@@ -1155,6 +1157,23 @@ const anthropicTools = [
               priority: { type: "string", enum: ["urgente", "alta", "media", "baja"] },
               due_date: { type: "string", description: "YYYY-MM-DD" },
               phase_key: { type: "string", description: "Key de la fase del proyecto" },
+              assigned_to: { type: "string", description: "UUID del responsable principal (opcional; si omites, queda quien usa el chat)" },
+              assigned_to_email: { type: "string", description: "Email del responsable principal (alternativa a assigned_to)" },
+              additional_assignee_user_ids: {
+                type: "array",
+                items: { type: "string" },
+                description: "UUIDs de colaboradores en task_assignees (máx. 10 en total con emails)",
+              },
+              additional_assignee_emails: {
+                type: "array",
+                items: { type: "string" },
+                description: "Emails de colaboradores adicionales (máx. 10 combinados con IDs)",
+              },
+              parent_task_id: { type: "string", description: "UUID de la tarea padre para subtarea" },
+              is_subtask: {
+                type: "boolean",
+                description: "true para marcar como subtarea; si hay parent_task_id se fuerza true",
+              },
             },
             required: ["title"],
           },
@@ -1196,6 +1215,10 @@ const anthropicTools = [
         title: { type: "string" },
         description: { type: "string" },
         assigned_to: { type: "string", description: "UUID del responsable; cadena vacía para quitar asignación" },
+        assigned_to_email: {
+          type: "string",
+          description: "Email del responsable (alternativa a assigned_to); no uses ambos salvo que coincidan",
+        },
       },
       required: ["task_id"],
     },
@@ -1223,6 +1246,7 @@ const anthropicTools = [
               title: { type: "string" },
               description: { type: "string" },
               assigned_to: { type: "string", description: "UUID; vacío para quitar" },
+              assigned_to_email: { type: "string", description: "Email del responsable (alternativa a assigned_to)" },
             },
             required: ["task_id"],
           },
@@ -1248,6 +1272,130 @@ const anthropicTools = [
 
 const TASK_STATUS_AI = ["pendiente", "en_progreso", "en_revision", "completada", "cancelada"] as const;
 const TASK_PRIORITY_AI = ["urgente", "alta", "media", "baja"] as const;
+const MAX_AI_ADDITIONAL_ASSIGNEES = 10;
+
+/** Resuelve responsable por UUID y/o email dentro de la organización (CoT: get_team_members). */
+async function resolveUserIdInOrg(
+  supabase: any,
+  orgId: string,
+  opts: { uuid?: string | null; email?: string | null },
+): Promise<{ user_id: string } | { error: string }> {
+  const uuid = typeof opts.uuid === "string" ? opts.uuid.trim() : "";
+  const emailRaw = typeof opts.email === "string" ? opts.email.trim() : "";
+  const email = emailRaw ? emailRaw.toLowerCase() : "";
+
+  if (!uuid && !email) {
+    return { error: "Indica assigned_to (UUID) o assigned_to_email." };
+  }
+
+  if (uuid && email) {
+    const { data: row, error } = await supabase
+      .from("profiles")
+      .select("user_id, email")
+      .eq("user_id", uuid)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (error) return { error: error.message };
+    if (!row) return { error: "UUID de usuario no encontrado en tu organización." };
+    const em = String(row.email || "").toLowerCase();
+    if (em !== email) return { error: "El email no coincide con el UUID indicado." };
+    return { user_id: row.user_id };
+  }
+
+  if (uuid) {
+    const { data: row, error } = await supabase
+      .from("profiles")
+      .select("user_id")
+      .eq("user_id", uuid)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (error) return { error: error.message };
+    if (!row) return { error: "UUID de usuario no encontrado en tu organización." };
+    return { user_id: row.user_id };
+  }
+
+  const { data: rows, error: e2 } = await supabase
+    .from("profiles")
+    .select("user_id, email")
+    .eq("organization_id", orgId)
+    .ilike("email", email);
+  if (e2) return { error: e2.message };
+  if (!rows?.length) return { error: `No hay usuario con email ${email} en tu organización.` };
+  if (rows.length > 1) {
+    return { error: "Varios perfiles coinciden con ese email; usa user_id de get_team_members." };
+  }
+  return { user_id: rows[0].user_id };
+}
+
+/** Valida que el user_id pertenezca a la org (para colaboradores adicionales ya como UUID). */
+async function assertUserIdInOrg(supabase: any, orgId: string, userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) return error.message;
+  if (!data) return "Usuario no encontrado en tu organización.";
+  return null;
+}
+
+/** Paridad con useCreateTask / createNotifications: avisos in-app al asignar. */
+async function insertTaskAssignedNotificationsFromAi(
+  supabase: any,
+  opts: {
+    orgId: string;
+    sourceUserId: string;
+    notifyUserIds: string[];
+    taskTitle: string;
+    taskDescription: string | null;
+    newTaskId: string;
+    parentTaskId: string | null;
+    parentTitle: string | null;
+    isSubtask: boolean;
+  },
+): Promise<void> {
+  const filtered = [...new Set(opts.notifyUserIds)].filter((uid) => uid !== opts.sourceUserId);
+  if (filtered.length === 0) return;
+
+  const appOrigin = (Deno.env.get("APP_ORIGIN") || "").replace(/\/$/, "");
+  const parentLink = opts.parentTaskId && appOrigin
+    ? `${appOrigin}/tareas?taskId=${opts.parentTaskId}`
+    : opts.parentTaskId
+    ? `/tareas?taskId=${opts.parentTaskId}`
+    : undefined;
+
+  const sub = opts.isSubtask && opts.parentTitle;
+  const title = sub
+    ? `Subtarea de «${opts.parentTitle}»: te asignaron «${opts.taskTitle}»`
+    : `Te asignaron la tarea "${opts.taskTitle}"`;
+
+  let body: string | undefined;
+  if (sub && opts.parentTitle) {
+    body = [
+      opts.taskDescription ? opts.taskDescription.slice(0, 160) : "",
+      parentLink ? `Tarea principal: ${parentLink}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n") || parentLink;
+  } else {
+    body = opts.taskDescription ? opts.taskDescription.slice(0, 200) : undefined;
+  }
+
+  const rows = filtered.map((user_id) => ({
+    user_id,
+    type: "task_assigned",
+    title,
+    body: body || null,
+    entity_type: "task",
+    entity_id: opts.parentTaskId ?? opts.newTaskId,
+    source_user_id: opts.sourceUserId,
+    organization_id: opts.orgId,
+  }));
+
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) console.warn("[ai-chat] notifications insert failed:", error.message);
+}
 
 /** Igual que en el cliente: no completar padre si checklist o subtareas enlazadas abiertas. */
 async function assertCanCompleteParentTaskEdge(supabase: any, taskId: string): Promise<string | null> {
@@ -1316,6 +1464,7 @@ type TaskUpdatePatch = {
   title?: string;
   description?: string;
   assigned_to?: string | null;
+  assigned_to_email?: string | null;
 };
 
 async function applyTaskPatchFromAi(
@@ -1356,8 +1505,22 @@ async function applyTaskPatchFromAi(
   }
   if (patch.title !== undefined) updates.title = patch.title;
   if (patch.description !== undefined) updates.description = patch.description;
+
+  let resolvedAssignTo: string | null | undefined = undefined;
   if (patch.assigned_to !== undefined) {
-    updates.assigned_to = patch.assigned_to === "" ? null : patch.assigned_to;
+    if (patch.assigned_to === "" || patch.assigned_to === null) resolvedAssignTo = null;
+    else resolvedAssignTo = patch.assigned_to;
+  } else if (
+    patch.assigned_to_email !== undefined &&
+    patch.assigned_to_email !== null &&
+    String(patch.assigned_to_email).trim() !== ""
+  ) {
+    const r = await resolveUserIdInOrg(supabase, orgId, { email: String(patch.assigned_to_email) });
+    if ("error" in r) return { task_id: taskId, error: r.error };
+    resolvedAssignTo = r.user_id;
+  }
+  if (resolvedAssignTo !== undefined) {
+    updates.assigned_to = resolvedAssignTo;
   }
 
   if (patch.due_date !== undefined) {
@@ -1544,6 +1707,7 @@ async function executeTool(
         return { total_kawiilers: profiles?.length || 0, por_area: byArea, por_rol: byRole };
       }
       return (profiles || []).map((p: any) => ({
+        user_id: p.user_id,
         nombre: p.full_name, email: p.email, area: p.area || "Sin área",
         rol: roleMap[p.user_id] || "sin_rol", activo: p.is_active, telefono: p.phone,
       }));
@@ -1589,9 +1753,22 @@ async function executeTool(
     // ─── Deep-context tools ───
     case "get_task_details": {
       const { data: task, error: tErr } = await supabase.from("tasks")
-        .select("id, title, description, status, priority, due_date, area, created_at, completed_at, time_spent_seconds, criticality_level, delay_category, delay_notes, checklist, tags, clients(name), projects(name)")
+        .select("id, title, description, status, priority, due_date, area, created_at, completed_at, time_spent_seconds, criticality_level, delay_category, delay_notes, checklist, tags, assigned_to, parent_task_id, is_subtask, clients(name), projects(name)")
         .eq("id", args.task_id).single();
       if (tErr) return { error: tErr.message };
+
+      let responsable_principal: { user_id: string; nombre: string; email: string | null } | null = null;
+      if (task.assigned_to) {
+        const { data: rp } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, email")
+          .eq("user_id", task.assigned_to)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (rp) {
+          responsable_principal = { user_id: rp.user_id, nombre: rp.full_name || "", email: rp.email ?? null };
+        }
+      }
 
       const { data: comments } = await supabase.from("task_comments")
         .select("content, created_at, user_id")
@@ -1614,13 +1791,29 @@ async function executeTool(
 
       const { data: assignees } = await supabase.from("task_assignees")
         .select("user_id").eq("task_id", args.task_id);
+      let asignados_detalle: { user_id: string; nombre: string; email: string | null }[] = [];
       let assigneeNames: string[] = [];
       if (assignees?.length) {
-        const { data: profs } = await supabase.from("profiles").select("user_id, full_name").in("user_id", assignees.map((a: any) => a.user_id));
-        assigneeNames = (profs || []).map((p: any) => p.full_name);
+        const ids = assignees.map((a: any) => a.user_id);
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, email")
+          .in("user_id", ids);
+        asignados_detalle = (profs || []).map((p: any) => ({
+          user_id: p.user_id,
+          nombre: p.full_name || "",
+          email: p.email ?? null,
+        }));
+        assigneeNames = asignados_detalle.map((a) => a.nombre);
       }
 
-      return { ...task, comentarios: commentData, asignados: assigneeNames };
+      return {
+        ...task,
+        responsable_principal,
+        asignados_detalle,
+        asignados: assigneeNames,
+        comentarios: commentData,
+      };
     }
 
     case "get_project_details": {
@@ -1942,6 +2135,75 @@ async function executeTool(
     case "create_tasks": {
       const results: any[] = [];
       for (const task of args.tasks || []) {
+        let parentTaskId: string | null =
+          typeof task.parent_task_id === "string" && task.parent_task_id.trim()
+            ? task.parent_task_id.trim()
+            : null;
+        let parentTitle: string | null = null;
+        if (parentTaskId) {
+          const { data: parent, error: pe } = await supabase
+            .from("tasks")
+            .select("id, organization_id, title")
+            .eq("id", parentTaskId)
+            .single();
+          if (pe || !parent) {
+            results.push({ title: task.title, error: "parent_task_id: tarea padre no encontrada." });
+            continue;
+          }
+          if (parent.organization_id !== orgId) {
+            results.push({ title: task.title, error: "parent_task_id: no autorizado." });
+            continue;
+          }
+          parentTitle = parent.title ?? null;
+        }
+
+        const isSubtask = task.is_subtask === true || !!parentTaskId;
+
+        let assignedTo = userId;
+        const uRaw = task.assigned_to != null ? String(task.assigned_to).trim() : "";
+        const eRaw = task.assigned_to_email != null ? String(task.assigned_to_email).trim() : "";
+        if (uRaw || eRaw) {
+          const r = await resolveUserIdInOrg(supabase, orgId, {
+            uuid: uRaw || null,
+            email: eRaw || null,
+          });
+          if ("error" in r) {
+            results.push({ title: task.title, error: r.error });
+            continue;
+          }
+          assignedTo = r.user_id;
+        }
+
+        const idList = Array.isArray(task.additional_assignee_user_ids) ? task.additional_assignee_user_ids : [];
+        const emList = Array.isArray(task.additional_assignee_emails) ? task.additional_assignee_emails : [];
+        const extraIds: string[] = [];
+        let taskAborted = false;
+        for (const uid of idList) {
+          if (extraIds.length >= MAX_AI_ADDITIONAL_ASSIGNEES) break;
+          if (typeof uid !== "string" || !uid.trim()) continue;
+          const errAss = await assertUserIdInOrg(supabase, orgId, uid.trim());
+          if (errAss) {
+            results.push({ title: task.title, error: `Colaborador adicional: ${errAss}` });
+            taskAborted = true;
+            break;
+          }
+          if (!extraIds.includes(uid.trim())) extraIds.push(uid.trim());
+        }
+        if (taskAborted) continue;
+
+        for (const em of emList) {
+          if (extraIds.length >= MAX_AI_ADDITIONAL_ASSIGNEES) break;
+          if (typeof em !== "string" || !em.trim()) continue;
+          const rEm = await resolveUserIdInOrg(supabase, orgId, { email: em.trim() });
+          if ("error" in rEm) {
+            results.push({ title: task.title, error: rEm.error });
+            taskAborted = true;
+            break;
+          }
+          if (!extraIds.includes(rEm.user_id)) extraIds.push(rEm.user_id);
+        }
+        if (taskAborted) continue;
+
         const { data, error } = await supabase.from("tasks").insert({
           title: task.title,
           description: task.description || null,
@@ -1949,18 +2211,46 @@ async function executeTool(
           client_id: args.client_id || null,
           organization_id: orgId,
           created_by: userId,
-          assigned_to: userId,
+          assigned_to: assignedTo,
           area: args.area || null,
           priority: task.priority || "media",
           due_date: task.due_date || null,
           phase_key: task.phase_key || null,
           status: "pendiente",
-        }).select("id, title, priority, status").single();
+          parent_task_id: parentTaskId,
+          is_subtask: isSubtask,
+        }).select("id, title, priority, status, description, parent_task_id").single();
+
         if (error) {
           results.push({ title: task.title, error: error.message });
-        } else {
-          results.push(data);
+          continue;
         }
+
+        const assigneeRows = extraIds
+          .filter((uid) => uid !== assignedTo)
+          .map((uid) => ({ task_id: data.id, user_id: uid }));
+        if (assigneeRows.length > 0) {
+          const { error: ae } = await supabase.from("task_assignees").insert(assigneeRows);
+          if (ae) {
+            results.push({ title: task.title, id: data.id, error: `Tarea creada pero colaboradores: ${ae.message}` });
+            continue;
+          }
+        }
+
+        const notifyIds = [assignedTo, ...extraIds];
+        await insertTaskAssignedNotificationsFromAi(supabase, {
+          orgId,
+          sourceUserId: userId,
+          notifyUserIds: notifyIds,
+          taskTitle: data.title,
+          taskDescription: data.description ?? task.description ?? null,
+          newTaskId: data.id,
+          parentTaskId,
+          parentTitle,
+          isSubtask,
+        });
+
+        results.push(data);
       }
       return { success: true, created: results.filter((r) => !r.error).length, tasks: results };
     }
@@ -1976,6 +2266,7 @@ async function executeTool(
         title: args.title,
         description: args.description,
         assigned_to: args.assigned_to,
+        assigned_to_email: args.assigned_to_email,
       });
       return r.error ? r : { success: true, ...r };
     }
@@ -1996,6 +2287,7 @@ async function executeTool(
           title: p.title,
           description: p.description,
           assigned_to: p.assigned_to,
+          assigned_to_email: p.assigned_to_email,
         });
         results.push(r);
         if (!r.error) ok++;
@@ -2168,6 +2460,7 @@ La regla principal: **el usuario debe leer prosa conectada, no un inventario**. 
 ### 3. Conocimiento profundo de la plataforma
 - Tienes acceso a comentarios de tareas, detalles de proyectos, actividad reciente y documentos procesados.
 - **USA get_task_details** cuando necesites entender el contexto de una tarea específica, incluyendo las discusiones del equipo en los comentarios.
+- **USA get_team_members** cuando necesites UUIDs (\`user_id\`) o emails de Kawiilers para asignar tareas correctamente.
 - **USA get_project_details** para dar un panorama completo de un proyecto con sus miembros y tareas.
 - **USA get_recent_activity** para saber qué ha pasado recientemente en la organización.
 - **USA get_extracted_documents** para consultar información fiscal extraída de documentos (CFDIs, declaraciones, etc.).
@@ -2241,15 +2534,17 @@ Los artifacts aparecen en un panel lateral: vista de texto, descarga de DOCX, y 
 
 ### 5b. Creación de proyectos y tareas
 - **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto. Puedes incluir fases y tareas directamente en la herramienta.
-- **USA create_tasks** cuando el usuario pida crear tareas, ya sea a partir de instrucciones directas, una minuta, un análisis, o fases de un proyecto. Puedes crear múltiples tareas de una vez.
+- **USA create_tasks** cuando el usuario pida crear tareas, ya sea a partir de instrucciones directas, una minuta, un análisis, o fases de un proyecto. Puedes crear múltiples tareas de una vez. Puedes asignar con \`assigned_to\` (UUID de **get_team_members.user_id**) o con \`assigned_to_email\`. Para colaboradores extra usa \`additional_assignee_user_ids\` / \`additional_assignee_emails\` (máximo 10 combinados).
+- **Continuidad y subtareas:** Antes de crear trabajo nuevo sobre una tarea que ya existe en contexto, llama **get_task_details** con su \`task_id\`. Si el usuario pide seguimiento, desglose o siguiente paso respecto a esa tarea, **crea subtareas** usando \`parent_task_id\` (UUID de la tarea padre), no una tarea independiente sin padre, salvo que el usuario pida explícitamente algo separado.
 - **USA suggest_template** para buscar plantillas relevantes cuando el usuario quiera crear un proyecto similar a uno anterior.
 - Cuando el usuario comparta una minuta o notas de reunión, analiza el contenido y propón la creación del proyecto y tareas correspondientes. Confirma con el usuario antes de crearlos, a menos que el usuario diga explícitamente "crea las tareas".
 - Al crear proyectos, intenta identificar el cliente y área correctos basándote en el contexto.
 - Al crear tareas, asigna prioridades inteligentemente según la urgencia y la naturaleza de la tarea.
+- **Tareas vencidas:** si el usuario quiere reactivar o continuar una tarea con fecha pasada, puedes crear subtareas bajo la misma tarea padre y/o usar **update_task** para nueva \`due_date\` o estatus \`en_progreso\`.
 - **IMPORTANTE:** Cuando crees un proyecto exitosamente, SIEMPRE incluye en tu respuesta el marcador [project:UUID_DEL_PROYECTO|NOMBRE_DEL_PROYECTO|AREA] para que aparezca una tarjeta visual del proyecto en el chat. Ejemplo: [project:abc-123|Contabilidad Grupo Dazon|contabilidad]
 
 ### 5c. Actualización de tareas existentes (no digas que no puedes)
-- **USA update_task** para cambiar una sola tarea: estatus (p. ej. completada), fecha límite (\`due_date\` en YYYY-MM-DD), \`clear_due_date: true\` para quitar vencimiento, prioridad, título, descripción o responsable (\`assigned_to\` UUID; cadena vacía para quitar).
+- **USA update_task** para cambiar una sola tarea: estatus (p. ej. completada), fecha límite (\`due_date\` en YYYY-MM-DD), \`clear_due_date: true\` para quitar vencimiento, prioridad, título, descripción o responsable. Para el responsable usa \`assigned_to\` (UUID de **get_team_members**) o \`assigned_to_email\`; cadena vacía en \`assigned_to\` quita la asignación.
 - **USA update_tasks** cuando haya muchas tareas con el mismo cambio (p. ej. reprogramar varias al mismo día): envía un arreglo \`updates\` con un objeto por tarea (mismos campos que \`update_task\`).
 - **USA add_task_comment** cuando el usuario quiera dejar notas o cierre en el hilo de la tarea.
 - Antes de tocar muchas tareas o si los IDs no están claros, usa **get_my_tasks**, **get_all_org_tasks** o **get_task_details** y confirma con el usuario si la petición es ambigua o destructiva.
