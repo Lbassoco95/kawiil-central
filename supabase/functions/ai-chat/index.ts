@@ -770,7 +770,8 @@ async function resolveChatAttachments(
 const anthropicTools = [
   {
     name: "get_my_tasks",
-    description: "Obtiene las tareas asignadas al usuario actual. Puede filtrar por estatus, prioridad o área.",
+    description:
+      "Obtiene las tareas del usuario: responsable principal (assigned_to) y las que tiene como colaborador en task_assignees. El campo id es siempre tasks.id (válido como parent_task_id). Puede filtrar por estatus, prioridad.",
     input_schema: {
       type: "object",
       properties: {
@@ -1575,6 +1576,14 @@ async function applyTaskPatchFromAi(
   return { task_id: taskId, success: true, updated: changeKeys };
 }
 
+/** Lectura de tareas para herramientas de IA: evita falsos “no encontrado” cuando RLS del JWT oculta filas aunque el id sea válido y la FK exista. Siempre acotar con organization_id del usuario. */
+function getSupabaseServiceRole(): ReturnType<typeof createClient> | null {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
 // ─── Tool executor ───
 async function executeTool(
   name: string,
@@ -1586,15 +1595,59 @@ async function executeTool(
 ) {
   switch (name) {
     case "get_my_tasks": {
-      let q = supabase.from("tasks")
+      const limit = Math.min(Math.max(args.limit || 20, 1), 100);
+
+      const applyStatus = (q: any) => {
+        if (args.status) return q.eq("status", args.status);
+        return q.in("status", ["pendiente", "en_progreso", "en_revision"]);
+      };
+
+      let q1 = supabase.from("tasks")
         .select("id, title, status, priority, due_date, area, description, clients(name)")
         .eq("assigned_to", userId);
-      if (args.status) q = q.eq("status", args.status);
-      else q = q.in("status", ["pendiente", "en_progreso", "en_revision"]);
-      if (args.priority) q = q.eq("priority", args.priority);
-      q = q.order("due_date", { ascending: true, nullsFirst: false }).limit(args.limit || 20);
-      const { data, error } = await q;
-      return error ? { error: error.message } : data;
+      q1 = applyStatus(q1);
+      if (args.priority) q1 = q1.eq("priority", args.priority);
+      const { data: primaryRows, error: e1 } = await q1.order("due_date", { ascending: true, nullsFirst: false }).limit(limit);
+      if (e1) return { error: e1.message };
+
+      const { data: coMemberRows, error: e2 } = await supabase
+        .from("task_assignees")
+        .select("task_id")
+        .eq("user_id", userId)
+        .limit(500);
+      if (e2) return { error: e2.message };
+
+      const coIds = [...new Set((coMemberRows || []).map((r: { task_id: string }) => r.task_id).filter(Boolean))];
+      let coTasks: any[] = [];
+      if (coIds.length > 0) {
+        let q2 = supabase
+          .from("tasks")
+          .select("id, title, status, priority, due_date, area, description, clients(name)")
+          .in("id", coIds)
+          .eq("organization_id", orgId);
+        q2 = applyStatus(q2);
+        if (args.priority) q2 = q2.eq("priority", args.priority);
+        const { data: ct, error: e3 } = await q2;
+        if (e3) return { error: e3.message };
+        coTasks = ct || [];
+      }
+
+      const byId = new Map<string, any>();
+      for (const t of primaryRows || []) {
+        if (t?.id) byId.set(t.id, { ...t, rol_en_tarea: "responsable" });
+      }
+      for (const t of coTasks) {
+        if (!t?.id) continue;
+        if (byId.has(t.id)) continue;
+        byId.set(t.id, { ...t, rol_en_tarea: "colaborador" });
+      }
+
+      const merged = Array.from(byId.values()).sort((a, b) => {
+        const da = a.due_date ? String(a.due_date).slice(0, 10) : "\uffff";
+        const db = b.due_date ? String(b.due_date).slice(0, 10) : "\uffff";
+        return da.localeCompare(db);
+      });
+      return merged.slice(0, limit);
     }
     case "get_all_org_tasks": {
       let q = supabase.from("tasks")
@@ -1752,10 +1805,28 @@ async function executeTool(
 
     // ─── Deep-context tools ───
     case "get_task_details": {
-      const { data: task, error: tErr } = await supabase.from("tasks")
-        .select("id, title, description, status, priority, due_date, area, created_at, completed_at, time_spent_seconds, criticality_level, delay_category, delay_notes, checklist, tags, assigned_to, parent_task_id, is_subtask, clients(name), projects(name)")
-        .eq("id", args.task_id).single();
+      const taskId = typeof args.task_id === "string" ? args.task_id.trim() : "";
+      if (!taskId) return { error: "task_id es obligatorio." };
+
+      const svcRead = getSupabaseServiceRole();
+      const taskClient = svcRead ?? supabase;
+
+      const { data: task, error: tErr } = await taskClient.from("tasks")
+        .select("id, title, description, status, priority, due_date, area, created_at, completed_at, time_spent_seconds, criticality_level, delay_category, delay_notes, checklist, tags, assigned_to, parent_task_id, is_subtask, organization_id, clients(name), projects(name)")
+        .eq("id", taskId)
+        .maybeSingle();
       if (tErr) return { error: tErr.message };
+      if (!task) {
+        return {
+          error:
+            "No hay tarea con ese id: puede haberse eliminado o el UUID no es el de la tabla tasks (usa el campo id de get_my_tasks / get_all_org_tasks / vista de tarea, no otro identificador).",
+        };
+      }
+      if (task.organization_id !== orgId) {
+        return { error: "Tarea no encontrada en tu organización." };
+      }
+
+      const { organization_id: _orgTask, ...taskRest } = task as Record<string, unknown>;
 
       let responsable_principal: { user_id: string; nombre: string; email: string | null } | null = null;
       if (task.assigned_to) {
@@ -1772,7 +1843,7 @@ async function executeTool(
 
       const { data: comments } = await supabase.from("task_comments")
         .select("content, created_at, user_id")
-        .eq("task_id", args.task_id)
+        .eq("task_id", taskId)
         .order("created_at", { ascending: true })
         .limit(30);
 
@@ -1790,7 +1861,7 @@ async function executeTool(
       }
 
       const { data: assignees } = await supabase.from("task_assignees")
-        .select("user_id").eq("task_id", args.task_id);
+        .select("user_id").eq("task_id", taskId);
       let asignados_detalle: { user_id: string; nombre: string; email: string | null }[] = [];
       let assigneeNames: string[] = [];
       if (assignees?.length) {
@@ -1808,7 +1879,7 @@ async function executeTool(
       }
 
       return {
-        ...task,
+        ...taskRest,
         responsable_principal,
         asignados_detalle,
         asignados: assigneeNames,
@@ -2141,17 +2212,27 @@ async function executeTool(
             : null;
         let parentTitle: string | null = null;
         if (parentTaskId) {
-          const { data: parent, error: pe } = await supabase
+          const svcParent = getSupabaseServiceRole();
+          const pClient = svcParent ?? supabase;
+          const { data: parent, error: pe } = await pClient
             .from("tasks")
             .select("id, organization_id, title")
             .eq("id", parentTaskId)
-            .single();
-          if (pe || !parent) {
-            results.push({ title: task.title, error: "parent_task_id: tarea padre no encontrada." });
+            .maybeSingle();
+          if (pe) {
+            results.push({ title: task.title, error: `parent_task_id: ${pe.message}` });
+            continue;
+          }
+          if (!parent) {
+            results.push({
+              title: task.title,
+              error:
+                "parent_task_id: no existe tarea con ese id. Confirma con get_task_details o get_all_org_tasks; el UUID debe ser tasks.id (no proyecto, cliente, usuario ni artifact).",
+            });
             continue;
           }
           if (parent.organization_id !== orgId) {
-            results.push({ title: task.title, error: "parent_task_id: no autorizado." });
+            results.push({ title: task.title, error: "parent_task_id: la tarea padre es de otra organización." });
             continue;
           }
           parentTitle = parent.title ?? null;
@@ -2535,7 +2616,7 @@ Los artifacts aparecen en un panel lateral: vista de texto, descarga de DOCX, y 
 ### 5b. Creación de proyectos y tareas
 - **USA create_project** cuando el usuario pida crear un proyecto nuevo, ya sea directamente ("crea un proyecto de..."), analizando una minuta de reunión, o cuando del contexto se deduzca que hay que crear un nuevo proyecto. Puedes incluir fases y tareas directamente en la herramienta.
 - **USA create_tasks** cuando el usuario pida crear tareas, ya sea a partir de instrucciones directas, una minuta, un análisis, o fases de un proyecto. Puedes crear múltiples tareas de una vez. Puedes asignar con \`assigned_to\` (UUID de **get_team_members.user_id**) o con \`assigned_to_email\`. Para colaboradores extra usa \`additional_assignee_user_ids\` / \`additional_assignee_emails\` (máximo 10 combinados).
-- **Continuidad y subtareas:** Antes de crear trabajo nuevo sobre una tarea que ya existe en contexto, llama **get_task_details** con su \`task_id\`. Si el usuario pide seguimiento, desglose o siguiente paso respecto a esa tarea, **crea subtareas** usando \`parent_task_id\` (UUID de la tarea padre), no una tarea independiente sin padre, salvo que el usuario pida explícitamente algo separado.
+- **parent_task_id** debe ser siempre el \`id\` de una fila en \`tasks\` (el mismo que devuelven get_my_tasks, get_all_org_tasks y get_task_details). No uses UUID de conversación, proyecto ni perfil.
 - **USA suggest_template** para buscar plantillas relevantes cuando el usuario quiera crear un proyecto similar a uno anterior.
 - Cuando el usuario comparta una minuta o notas de reunión, analiza el contenido y propón la creación del proyecto y tareas correspondientes. Confirma con el usuario antes de crearlos, a menos que el usuario diga explícitamente "crea las tareas".
 - Al crear proyectos, intenta identificar el cliente y área correctos basándote en el contexto.
