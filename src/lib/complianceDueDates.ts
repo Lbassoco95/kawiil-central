@@ -95,6 +95,25 @@ export function complianceAnchorYmdFromProject(
 }
 
 /**
+ * Si hay fecha de vencimiento, solo cuenta para semáforos cuando es >= ancla del proyecto.
+ * Sin fecha: true (la UI usa la rama «sin fecha»).
+ */
+export function complianceDueDateIsActionable(dueDate: string | null | undefined, anchorYmd: string): boolean {
+  if (dueDate == null || String(dueDate).trim() === "") return true;
+  return dueDate >= anchorYmd;
+}
+
+/**
+ * Días de calendario hasta la fecha de vencimiento (negativo = ya pasó). Basado en calendario local del Date MX.
+ */
+export function complianceCalendarDaysFromToday(dueYmd: string, todayMx: Date): number {
+  const d = toMXDate(dueYmd);
+  const d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const t0 = new Date(todayMx.getFullYear(), todayMx.getMonth(), todayMx.getDate()).getTime();
+  return Math.round((d0 - t0) / 86400000);
+}
+
+/**
  * Indica si una ocurrencia generada desde plantilla debe crearse para este proyecto.
  */
 export function shouldIncludeComplianceOccurrence(

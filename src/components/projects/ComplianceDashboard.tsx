@@ -38,6 +38,11 @@ import { ensureCompliancePhasesOnProject, type SyncPhase } from "@/lib/projectPh
 import { complianceCategoryLabel } from "@/lib/compliancePhaseCatalog";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
 import { formatComplianceRegDate } from "@/lib/complianceProjectSummary";
+import {
+  complianceAnchorYmdFromProject,
+  complianceCalendarDaysFromToday,
+  complianceDueDateIsActionable,
+} from "@/lib/complianceDueDates";
 
 function ComplianceRegulatorySummary({
   configs,
@@ -84,7 +89,7 @@ function ComplianceRegulatorySummary({
   );
 }
 
-function sortComplianceTasksForList(a: ComplianceTask, b: ComplianceTask) {
+function sortComplianceTasksForList(a: ComplianceTask, b: ComplianceTask, anchorYmd: string) {
   const rank = (s: string) => {
     if (isTaskOpenStatus(s)) return 0;
     if (s === "completada") return 1;
@@ -93,9 +98,12 @@ function sortComplianceTasksForList(a: ComplianceTask, b: ComplianceTask) {
   };
   const d = rank(a.status) - rank(b.status);
   if (d !== 0) return d;
-  const ad = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-  const bd = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
-  return ad - bd;
+  const preA = a.due_date != null && a.due_date !== "" && a.due_date < anchorYmd;
+  const preB = b.due_date != null && b.due_date !== "" && b.due_date < anchorYmd;
+  if (preA !== preB) return preA ? 1 : -1;
+  const ad = a.due_date ?? "9999-12-31";
+  const bd = b.due_date ?? "9999-12-31";
+  return ad.localeCompare(bd);
 }
 
 function resolveComplianceBucket(task: ComplianceTask): string {
@@ -136,6 +144,7 @@ function ComplianceClosedTasksCollapsible({
   projectId,
   clientDropboxPath,
   clientId,
+  projectDueAnchorYmd,
   getUrgencyBadge,
   onUpdate,
 }: {
@@ -143,6 +152,7 @@ function ComplianceClosedTasksCollapsible({
   projectId: string;
   clientDropboxPath?: string;
   clientId?: string | null;
+  projectDueAnchorYmd?: string | null;
   getUrgencyBadge: (task: ComplianceTask) => ReactNode;
   onUpdate: () => void;
 }) {
@@ -162,6 +172,7 @@ function ComplianceClosedTasksCollapsible({
             clientDropboxPath={clientDropboxPath}
             clientId={clientId ?? undefined}
             urgencyBadge={getUrgencyBadge(task)}
+            projectDueAnchorYmd={projectDueAnchorYmd}
             onUpdate={onUpdate}
             index={idx}
           />
@@ -181,6 +192,7 @@ function CompliancePhaseCard({
   projectId,
   clientDropboxPath,
   clientId,
+  projectDueAnchorYmd,
   getUrgencyBadge,
   onUpdate,
   onAddTask,
@@ -197,6 +209,7 @@ function CompliancePhaseCard({
   projectId: string;
   clientDropboxPath?: string;
   clientId?: string | null;
+  projectDueAnchorYmd?: string | null;
   getUrgencyBadge: (task: ComplianceTask) => ReactNode;
   onUpdate: () => void;
   onAddTask: (phaseKey: string) => void;
@@ -300,6 +313,7 @@ function CompliancePhaseCard({
                     clientDropboxPath={clientDropboxPath}
                     clientId={clientId ?? undefined}
                     urgencyBadge={getUrgencyBadge(task)}
+                    projectDueAnchorYmd={projectDueAnchorYmd}
                     onUpdate={onUpdate}
                     index={idx}
                   />
@@ -309,6 +323,7 @@ function CompliancePhaseCard({
                   projectId={projectId}
                   clientDropboxPath={clientDropboxPath}
                   clientId={clientId}
+                  projectDueAnchorYmd={projectDueAnchorYmd}
                   getUrgencyBadge={getUrgencyBadge}
                   onUpdate={onUpdate}
                 />
@@ -356,7 +371,11 @@ export function ComplianceDashboard({
   const { data: projectRow } = useQuery({
     queryKey: ["compliance-dashboard-project", projectId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("id, phases").eq("id", projectId).single();
+      const { data, error } = await supabase
+        .from("projects")
+        .select("id, phases, start_date, created_at")
+        .eq("id", projectId)
+        .single();
       if (error) throw error;
       return data;
     },
@@ -378,6 +397,11 @@ export function ComplianceDashboard({
       cancelled = true;
     };
   }, [user, projectId, queryClient]);
+
+  const projectAnchorYmd = useMemo(
+    () => complianceAnchorYmdFromProject(projectRow?.start_date ?? null, projectRow?.created_at ?? null),
+    [projectRow?.start_date, projectRow?.created_at],
+  );
 
   const projectPhases: SyncPhase[] = useMemo(() => {
     const raw = projectRow?.phases;
@@ -408,47 +432,61 @@ export function ComplianceDashboard({
 
   const today = useMemo(() => nowMX(), []);
 
-  const getUrgencyBadge = (task: ComplianceTask) => {
-    if (task.status === "completada") {
-      return (
-        <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-[10px]">Completada</Badge>
-      );
-    }
-    if (!task.due_date) {
+  const getUrgencyBadge = useCallback(
+    (task: ComplianceTask) => {
+      if (task.status === "completada") {
+        return (
+          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-[10px]">Completada</Badge>
+        );
+      }
+      if (!task.due_date) {
+        return (
+          <Badge variant="secondary" className="text-[10px]">
+            Sin fecha
+          </Badge>
+        );
+      }
+      if (!complianceDueDateIsActionable(task.due_date, projectAnchorYmd)) {
+        return (
+          <Badge
+            variant="secondary"
+            className="text-[10px]"
+            title="Vencimiento de calendario anterior al inicio del proyecto; no cuenta como atraso operativo."
+          >
+            Pre-apertura
+          </Badge>
+        );
+      }
+      const daysUntil = complianceCalendarDaysFromToday(task.due_date, today);
+      if (daysUntil < 0) {
+        return (
+          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 text-[10px]">
+            Vencida ({Math.abs(daysUntil)}d)
+          </Badge>
+        );
+      }
+      if (daysUntil <= 7) {
+        return (
+          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 text-[10px]">
+            Urgente ({daysUntil}d)
+          </Badge>
+        );
+      }
+      if (daysUntil <= 30) {
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-[10px]">
+            Próxima ({daysUntil}d)
+          </Badge>
+        );
+      }
       return (
         <Badge variant="secondary" className="text-[10px]">
-          Sin fecha
+          Pendiente
         </Badge>
       );
-    }
-    const daysUntil = Math.ceil((new Date(task.due_date).getTime() - today.getTime()) / 86400000);
-    if (daysUntil < 0) {
-      return (
-        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 text-[10px]">
-          Vencida ({Math.abs(daysUntil)}d)
-        </Badge>
-      );
-    }
-    if (daysUntil <= 7) {
-      return (
-        <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 text-[10px]">
-          Urgente ({daysUntil}d)
-        </Badge>
-      );
-    }
-    if (daysUntil <= 30) {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-[10px]">
-          Próxima ({daysUntil}d)
-        </Badge>
-      );
-    }
-    return (
-      <Badge variant="secondary" className="text-[10px]">
-        Pendiente
-      </Badge>
-    );
-  };
+    },
+    [today, projectAnchorYmd],
+  );
 
   const tasksByBucket = useMemo(() => {
     const map = new Map<string, ComplianceTask[]>();
@@ -458,10 +496,10 @@ export function ComplianceDashboard({
       map.get(b)!.push(t);
     }
     for (const [, list] of map) {
-      list.sort(sortComplianceTasksForList);
+      list.sort((a, b) => sortComplianceTasksForList(a, b, projectAnchorYmd));
     }
     return map;
-  }, [tasks]);
+  }, [tasks, projectAnchorYmd]);
 
   const sortedProjectPhases = useMemo(
     () => [...projectPhases].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -516,8 +554,8 @@ export function ComplianceDashboard({
   const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   const urgentTasks = tasks.filter((t) => {
     if (t.status === "completada" || t.status === "cancelada" || !t.due_date) return false;
-    const daysUntil = Math.ceil((new Date(t.due_date).getTime() - today.getTime()) / 86400000);
-    return daysUntil <= 7;
+    if (!complianceDueDateIsActionable(t.due_date, projectAnchorYmd)) return false;
+    return complianceCalendarDaysFromToday(t.due_date, today) <= 7;
   }).length;
 
   const entityTypeNames = (complianceConfigs || []).map((c) => c.entity_type?.name).filter(Boolean);
@@ -747,6 +785,7 @@ export function ComplianceDashboard({
               projectId={projectId}
               clientDropboxPath={clientDropboxPath}
               clientId={clientId}
+              projectDueAnchorYmd={projectAnchorYmd}
               getUrgencyBadge={getUrgencyBadge}
               onUpdate={refreshTasks}
               onAddTask={openAddTask}

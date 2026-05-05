@@ -52,6 +52,8 @@ export interface UnifiedStepRowProps {
   commentStepKey?: string;
   /** Client ID for linking subtasks to a client */
   clientId?: string;
+  /** YYYY-MM-DD ancla del proyecto: no marcar vencido en fila de paso si due_date es anterior */
+  projectDueAnchorYmd?: string | null;
   /** Clases del contenedor raíz (p. ej. dentro de ProjectPhaseStageCard) */
   rootClassName?: string;
 }
@@ -59,7 +61,7 @@ export interface UnifiedStepRowProps {
 export function UnifiedStepRow({
   step, index, projectId, onSave, onToggle, saving,
   showTimer = true, showCheckbox = true, clientDropboxPath, extraFields,
-  commentStepKey, clientId, rootClassName,
+  commentStepKey, clientId, rootClassName, projectDueAnchorYmd,
 }: UnifiedStepRowProps) {
   const [open, setOpen] = useState(false);
   const [localStatus, setLocalStatus] = useState<StepStatus>((step.step_status as StepStatus) || "pendiente");
@@ -84,7 +86,20 @@ export function UnifiedStepRow({
   const hadPreviousDueDate = useRef(!!step.due_date);
 
   const savedTime = step.time_spent_seconds || 0;
-  const isOverdue = localDueDate && !step.completed && isPast(localDueDate) && !isToday(localDueDate);
+  const localYmd = localDueDate
+    ? `${localDueDate.getFullYear()}-${String(localDueDate.getMonth() + 1).padStart(2, "0")}-${String(localDueDate.getDate()).padStart(2, "0")}`
+    : null;
+  const dueDateActionableForOverdue =
+    projectDueAnchorYmd == null ||
+    String(projectDueAnchorYmd).trim() === "" ||
+    !localYmd ||
+    localYmd >= projectDueAnchorYmd;
+  const isOverdue =
+    !!localDueDate &&
+    !step.completed &&
+    dueDateActionableForOverdue &&
+    isPast(localDueDate) &&
+    !isToday(localDueDate);
 
   // Only reset local state when step identity changes (not on every prop update)
   const stepKeyRef = useRef(step.key);

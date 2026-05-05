@@ -57,6 +57,7 @@ import { ProjectDelayPredictorCard } from "@/components/projects/ProjectDelayPre
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { TeamVisibilityBanner } from "@/components/shared/TeamVisibilityBanner";
 import { reconcileBracketPhasesForProject } from "@/lib/reconcileTaskPhasesFromTitles";
+import { complianceAnchorYmdFromProject } from "@/lib/complianceDueDates";
 import { useOpenTaskAssigneeUserIds } from "@/hooks/useOpenTaskAssigneeUserIds";
 import { useClientCollaboratorIds } from "@/hooks/useClientCollaborators";
 import { useComplianceTasksAutoSync } from "@/hooks/useCompliance";
@@ -327,6 +328,13 @@ const ProyectoDetalle = () => {
   const isGestoria = project?.area === "gestoria";
   const isLawsuit = project?.area === "juicios" && (project as any)?.lawsuit_details;
   const isCumplimiento = project?.area === "cumplimiento";
+  const compliancePhaseAnchorYmd = useMemo(
+    () =>
+      project?.area === "cumplimiento"
+        ? complianceAnchorYmdFromProject(project.start_date ?? null, project.created_at ?? null)
+        : null,
+    [project?.area, project?.start_date, project?.created_at],
+  );
   const lawsuitDetails = (project as any)?.lawsuit_details;
   const constitutionDetails = (project as any)?.constitution_details ?? null;
 
@@ -667,6 +675,7 @@ const ProyectoDetalle = () => {
                 onToggleTaskSelection={toggleTaskSelection}
                 expandPhaseKey={expandPhaseKeyForDeepLink}
                 phaseGrouping={isCumplimiento ? "compliance_catalog" : "none"}
+                complianceAnchorYmd={compliancePhaseAnchorYmd}
               />
             )}
 

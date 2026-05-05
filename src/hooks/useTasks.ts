@@ -145,7 +145,7 @@ export function useTaskDetail(taskId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, clients(name), projects(name)")
+        .select("*, clients(name), projects(name, area, start_date, created_at)")
         .eq("id", taskId!)
         .single();
       if (error) throw error;

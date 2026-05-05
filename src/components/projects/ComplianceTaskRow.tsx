@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -43,12 +43,14 @@ export interface ComplianceTaskRowProps {
   projectId: string;
   clientDropboxPath?: string;
   clientId?: string;
-  urgencyBadge: React.ReactNode;
+  urgencyBadge: ReactNode;
+  /** Ancla YYYY-MM-DD del proyecto (misma que predictor / badges). */
+  projectDueAnchorYmd?: string | null;
   onUpdate: () => void;
   index?: number;
 }
 
-export function ComplianceTaskRow({ task, projectId, clientDropboxPath, clientId, urgencyBadge, onUpdate, index = 0 }: ComplianceTaskRowProps) {
+export function ComplianceTaskRow({ task, projectId, clientDropboxPath, clientId, urgencyBadge, projectDueAnchorYmd, onUpdate, index = 0 }: ComplianceTaskRowProps) {
   const queryClient = useQueryClient();
   const { data: profiles = [] } = useProfiles();
 
@@ -170,6 +172,7 @@ export function ComplianceTaskRow({ task, projectId, clientDropboxPath, clientId
       onToggle={handleToggle}
       onSave={handleSave}
       extraFields={extraFields}
+      projectDueAnchorYmd={projectDueAnchorYmd}
     />
   );
 }

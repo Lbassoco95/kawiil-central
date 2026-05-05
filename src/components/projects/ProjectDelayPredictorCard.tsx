@@ -11,7 +11,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isPastDueCalendarMX, formatDateMX } from "@/lib/dateUtils";
-import { complianceAnchorYmdFromProject } from "@/lib/complianceDueDates";
+import {
+  complianceAnchorYmdFromProject,
+  complianceDueDateIsActionable,
+} from "@/lib/complianceDueDates";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -47,15 +50,13 @@ export function ProjectDelayPredictorCard({ project, tasks }: Props) {
 
   const data = useMemo(() => {
     const projectAnchorYmd = complianceAnchorYmdFromProject(project.start_date, project.created_at);
-    const dueDateCountsForPredictor = (due: string | null | undefined) =>
-      due != null && String(due).trim() !== "" && due >= projectAnchorYmd;
 
     const open = tasks.filter((t) => !isTaskClosedStatus(t.status));
     const closed = tasks.filter((t) => isTaskClosedStatus(t.status) && t.status === "completada");
     const overdue = open.filter(
       (t) =>
         t.due_date &&
-        dueDateCountsForPredictor(t.due_date) &&
+        complianceDueDateIsActionable(t.due_date, projectAnchorYmd) &&
         isPastDueCalendarMX(t.due_date),
     );
     const inReview = open.filter((t) => t.status === "en_revision");

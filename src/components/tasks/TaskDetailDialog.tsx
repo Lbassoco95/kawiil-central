@@ -27,6 +27,7 @@ import {
   ChevronRight, Activity as ActivityIcon, CheckCircle2, FileText,
 } from "lucide-react";
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
+import { complianceAnchorYmdFromProject, complianceDueDateIsActionable } from "@/lib/complianceDueDates";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
 import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import { extractDropboxFilenameFromUrl, getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
@@ -660,7 +661,23 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     ? pendingChanges.estimated_hours
     : (task as any)?.estimated_hours ?? null;
   const registeredHours = (displaySeconds || 0) / 3600;
-  const overdueBadge = task?.due_date && isPastDueCalendarMX(task.due_date) && !isTaskClosedStatus(currentStatus);
+  const proj = (task as any)?.projects as
+    | { name?: string; area?: string | null; start_date?: string | null; created_at?: string }
+    | undefined;
+  const taskProjectAnchorYmd = proj
+    ? complianceAnchorYmdFromProject(proj.start_date ?? null, proj.created_at ?? null)
+    : null;
+  const overdueBadge =
+    !!task?.due_date &&
+    isPastDueCalendarMX(task.due_date) &&
+    !isTaskClosedStatus(currentStatus) &&
+    (!proj || complianceDueDateIsActionable(task.due_date, taskProjectAnchorYmd));
+  const isPreAnchorOpenDue =
+    !!task?.due_date &&
+    !!taskProjectAnchorYmd &&
+    task.due_date < taskProjectAnchorYmd &&
+    !isTaskClosedStatus(currentStatus);
+  const displayPriorityForPills = isPreAnchorOpenDue ? "media" : currentPriority;
   const subtaskTotal = childSubtasks.length;
   const subtaskClosed = childSubtasks.filter((s: any) => isTaskClosedStatus(s.status)).length;
   const subtaskProgressPct = subtaskTotal === 0 ? 0 : Math.round((subtaskClosed / subtaskTotal) * 100);
@@ -669,13 +686,13 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const clientChip = (task as any)?.clients?.name as string | undefined;
 
   const priorityTagLabel =
-    currentPriority === "urgente" ? "P1 · URGENTE" :
-    currentPriority === "alta" ? "P2 · ALTA" :
-    currentPriority === "media" ? "P3 · MEDIA" : "P4 · BAJA";
+    displayPriorityForPills === "urgente" ? "P1 · URGENTE" :
+    displayPriorityForPills === "alta" ? "P2 · ALTA" :
+    displayPriorityForPills === "media" ? "P3 · MEDIA" : "P4 · BAJA";
   const priorityPillClass =
-    currentPriority === "urgente" ? "prio-pill p1" :
-    currentPriority === "alta" ? "prio-pill p2" :
-    currentPriority === "media" ? "prio-pill p3" : "prio-pill p4";
+    displayPriorityForPills === "urgente" ? "prio-pill p1" :
+    displayPriorityForPills === "alta" ? "prio-pill p2" :
+    displayPriorityForPills === "media" ? "prio-pill p3" : "prio-pill p4";
 
   return (
     <Dialog open={!!taskId} onOpenChange={() => onClose()}>

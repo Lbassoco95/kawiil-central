@@ -72,6 +72,8 @@ interface PhaseManagerProps {
   expandPhaseKey?: string | null;
   /** Agrupa fases del catálogo PLD vs fases añadidas por documentos/minutas (solo cumplimiento). */
   phaseGrouping?: "none" | "compliance_catalog";
+  /** Ancla YYYY-MM-DD (inicio operativo del proyecto, CDMX) para no mostrar prioridad «urgente» ficticia en cumplimiento. */
+  complianceAnchorYmd?: string | null;
 }
 
 /** Evita fallos al soltar: el puntero debe caer dentro de la fase; si no, por intersección de rectángulos. */
@@ -84,6 +86,7 @@ const phaseDropCollision: CollisionDetection = (args) => {
 export function PhaseTaskRow({
   task, profileMap, onClick, canDelete, onDelete, selectionMode, isSelected, onToggle, showCleanTitle, archived,
   grabCursor,
+  complianceAnchorYmd,
 }: {
   task: any; profileMap: Map<string, string>; onClick: () => void;
   canDelete?: boolean; onDelete?: () => void;
@@ -92,8 +95,16 @@ export function PhaseTaskRow({
   archived?: boolean;
   /** Cursor de arrastre cuando la fila vive dentro de un draggable de fases */
   grabCursor?: boolean;
+  /** Ancla YYYY-MM-DD (inicio proyecto CDMX): prioridad/fecha «pre-apertura» para cumplimiento. */
+  complianceAnchorYmd?: string | null;
 }) {
   const title = showCleanTitle && task.phase_key ? task.title.replace(/^\[[^\]]+\]\s*/, "") : task.title;
+  const isPreAnchor =
+    !archived &&
+    complianceAnchorYmd &&
+    task.due_date &&
+    String(task.due_date) < complianceAnchorYmd;
+  const displayPriority = isPreAnchor ? "media" : task.priority;
   return (
     <div
       className={cn(
@@ -116,8 +127,8 @@ export function PhaseTaskRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
           <span className={cn("text-[13px] font-medium truncate", archived && "line-through text-muted-foreground")}>{title}</span>
-          <Badge className={`text-[9px] border-0 px-1 py-0 ${PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`} variant="secondary">
-            {PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG]?.label || task.priority}
+          <Badge className={`text-[9px] border-0 px-1 py-0 ${PRIORITY_CONFIG[displayPriority as keyof typeof PRIORITY_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`} variant="secondary">
+            {PRIORITY_CONFIG[displayPriority as keyof typeof PRIORITY_CONFIG]?.label || displayPriority}
           </Badge>
           <Badge className={`text-[9px] border-0 px-1 py-0 ${TASK_STATUS_CONFIG[task.status as keyof typeof TASK_STATUS_CONFIG]?.color || "bg-secondary/60 text-muted-foreground"}`} variant="secondary">
             {TASK_STATUS_CONFIG[task.status as keyof typeof TASK_STATUS_CONFIG]?.label || task.status}
@@ -128,7 +139,11 @@ export function PhaseTaskRow({
             <span className="flex items-center gap-1"><User className="h-3 w-3" />{profileMap.get(task.assigned_to)}</span>
           )}
           {task.due_date && (
-            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatMX(task.due_date, "dd MMM")}</span>
+            <span className={cn("flex items-center gap-1", isPreAnchor && "text-muted-foreground")}>
+              <Calendar className="h-3 w-3" />
+              {formatMX(task.due_date, "dd MMM")}
+              {isPreAnchor && <span className="text-muted-foreground/90">· pre-apertura</span>}
+            </span>
           )}
         </div>
       </div>
@@ -158,6 +173,7 @@ function DraggableOpenTaskRow({
   onToggle,
   showCleanTitle,
   dragEnabled,
+  complianceAnchorYmd,
 }: {
   task: any;
   profileMap: Map<string, string>;
@@ -169,6 +185,7 @@ function DraggableOpenTaskRow({
   onToggle?: () => void;
   showCleanTitle?: boolean;
   dragEnabled: boolean;
+  complianceAnchorYmd?: string | null;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `${TASK_DRAG_PREFIX}${task.id}`,
@@ -204,6 +221,7 @@ function DraggableOpenTaskRow({
           onToggle={onToggle}
           showCleanTitle={showCleanTitle}
           grabCursor={dragEnabled}
+          complianceAnchorYmd={complianceAnchorYmd}
         />
       </div>
     </div>
@@ -220,6 +238,7 @@ function ClosedTasksCollapsible({
   selectedTaskIds,
   onToggleTaskSelection,
   showCleanTitle,
+  complianceAnchorYmd,
 }: {
   tasks: any[];
   profileMap: Map<string, string>;
@@ -230,6 +249,7 @@ function ClosedTasksCollapsible({
   selectedTaskIds?: Set<string>;
   onToggleTaskSelection?: (id: string) => void;
   showCleanTitle?: boolean;
+  complianceAnchorYmd?: string | null;
 }) {
   if (closedTasks.length === 0) return null;
   return (
@@ -252,6 +272,7 @@ function ClosedTasksCollapsible({
             isSelected={selectedTaskIds?.has(t.id)}
             onToggle={() => onToggleTaskSelection?.(t.id)}
             showCleanTitle={showCleanTitle}
+            complianceAnchorYmd={complianceAnchorYmd}
           />
         ))}
       </CollapsibleContent>
@@ -293,6 +314,7 @@ export function PhaseManager({
   canDeleteTasks, onDeleteTask, selectionMode, selectedTaskIds, onToggleTaskSelection,
   renderPhaseFooter, hideBuiltInAddPhase, showTaskDragHint = true, expandPhaseKey,
   phaseGrouping = "none",
+  complianceAnchorYmd = null,
 }: PhaseManagerProps) {
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [editingPhase, setEditingPhase] = useState<string | null>(null);
@@ -589,6 +611,7 @@ export function PhaseManager({
                           onToggle={() => onToggleTaskSelection?.(t.id)}
                           showCleanTitle
                           dragEnabled={canDragTasks}
+                          complianceAnchorYmd={complianceAnchorYmd}
                         />
                       ) : (
                         <PhaseTaskRow
@@ -602,6 +625,7 @@ export function PhaseManager({
                           isSelected={selectedTaskIds?.has(t.id)}
                           onToggle={() => onToggleTaskSelection?.(t.id)}
                           showCleanTitle
+                          complianceAnchorYmd={complianceAnchorYmd}
                         />
                       )
                     )}
@@ -615,6 +639,7 @@ export function PhaseManager({
                       selectedTaskIds={selectedTaskIds}
                       onToggleTaskSelection={onToggleTaskSelection}
                       showCleanTitle
+                      complianceAnchorYmd={complianceAnchorYmd}
                     />
                   </div>
                 ) : !phaseFooter ? (
@@ -688,6 +713,7 @@ export function PhaseManager({
                     isSelected={selectedTaskIds?.has(t.id)}
                     onToggle={() => onToggleTaskSelection?.(t.id)}
                     dragEnabled={canDragTasks}
+                    complianceAnchorYmd={complianceAnchorYmd}
                   />
                 ))}
                 <ClosedTasksCollapsible
@@ -699,6 +725,7 @@ export function PhaseManager({
                   selectionMode={selectionMode}
                   selectedTaskIds={selectedTaskIds}
                   onToggleTaskSelection={onToggleTaskSelection}
+                  complianceAnchorYmd={complianceAnchorYmd}
                 />
                 {onAddTask && (
                   <Button variant="outline" size="sm" className="w-full mt-2 text-xs" onClick={() => onAddTask()}>
@@ -730,6 +757,7 @@ export function PhaseManager({
                       canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
                       selectionMode={selectionMode} isSelected={selectedTaskIds?.has(t.id)}
                       onToggle={() => onToggleTaskSelection?.(t.id)}
+                      complianceAnchorYmd={complianceAnchorYmd}
                     />
                   ))}
                   <ClosedTasksCollapsible
@@ -741,6 +769,7 @@ export function PhaseManager({
                     selectionMode={selectionMode}
                     selectedTaskIds={selectedTaskIds}
                     onToggleTaskSelection={onToggleTaskSelection}
+                    complianceAnchorYmd={complianceAnchorYmd}
                   />
                   {onAddTask && (
                     <Button variant="outline" size="sm" className="w-full mt-2 text-xs" onClick={() => onAddTask()}>
@@ -766,6 +795,7 @@ export function PhaseManager({
               canDelete={canDeleteTasks} onDelete={() => onDeleteTask?.(t.id)}
               selectionMode={selectionMode} isSelected={selectedTaskIds?.has(t.id)}
               onToggle={() => onToggleTaskSelection?.(t.id)}
+              complianceAnchorYmd={complianceAnchorYmd}
             />
           ))}
           <ClosedTasksCollapsible
@@ -777,6 +807,7 @@ export function PhaseManager({
             selectionMode={selectionMode}
             selectedTaskIds={selectedTaskIds}
             onToggleTaskSelection={onToggleTaskSelection}
+            complianceAnchorYmd={complianceAnchorYmd}
           />
         </div>
       )}
