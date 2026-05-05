@@ -10,7 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Shield, AlertTriangle } from "lucide-react";
+import {
+  Shield,
+  AlertTriangle,
+  Landmark,
+  ShieldCheck,
+  Users,
+  Receipt,
+  type LucideIcon,
+} from "lucide-react";
 import {
   useComplianceTemplates,
   useGenerateComplianceTasks,
@@ -20,6 +28,10 @@ import {
 const CATEGORY_LABELS: Record<string, string> = {
   reportes_uif: "Reportes al SAT/UIF",
   reportes_cnbv: "Reportes a CNBV",
+  reportes_banxico: "Reportes Banxico",
+  reportes_condusef: "Reportes Condusef",
+  fiscal: "Obligaciones SAT/Fiscal",
+  gobierno_corporativo: "Gobierno corporativo",
   capacitacion: "Capacitación",
   kyc: "KYC / Expedientes",
   politicas: "Políticas y manuales",
@@ -27,6 +39,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   avisos_sat: "Avisos al SAT",
   conservacion: "Conservación",
 };
+
+const CATEGORY_ICONS: Partial<Record<string, LucideIcon>> = {
+  reportes_banxico: Landmark,
+  reportes_condusef: ShieldCheck,
+  gobierno_corporativo: Users,
+  fiscal: Receipt,
+};
+
+/** Orden de secciones en el modal (categorías desconocidas al final por nombre). */
+const CATEGORY_SORT_ORDER = Object.keys(CATEGORY_LABELS);
 
 const PERIODICITY_LABELS: Record<string, string> = {
   mensual: "Mensual",
@@ -42,6 +64,8 @@ interface ComplianceTaskGeneratorModalProps {
   projectId: string;
   entityTypeIds: string[];
   responsibleUserId: string;
+  /** Si existe, las tareas llevan contexto regulatorio (folio, entidad, etc.) y `client_id`. */
+  clientId?: string | null;
   onGenerated?: () => void;
 }
 
@@ -51,6 +75,7 @@ export function ComplianceTaskGeneratorModal({
   projectId,
   entityTypeIds,
   responsibleUserId,
+  clientId,
   onGenerated,
 }: ComplianceTaskGeneratorModalProps) {
   const { data: templates = [] } = useComplianceTemplates(entityTypeIds);
@@ -65,8 +90,12 @@ export function ComplianceTaskGeneratorModal({
       groups[cat].push(t);
     }
     return Object.entries(groups).sort(([a], [b]) => {
-      const order = Object.keys(CATEGORY_LABELS);
-      return order.indexOf(a) - order.indexOf(b);
+      const ia = CATEGORY_SORT_ORDER.indexOf(a);
+      const ib = CATEGORY_SORT_ORDER.indexOf(b);
+      if (ia === -1 && ib === -1) return a.localeCompare(b, "es");
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
     });
   }, [templates]);
 
@@ -100,6 +129,7 @@ export function ComplianceTaskGeneratorModal({
       projectId,
       templates: selectedTemplates,
       responsibleUserId,
+      clientId: clientId ?? undefined,
     });
     onOpenChange(false);
     onGenerated?.();
@@ -117,14 +147,23 @@ export function ComplianceTaskGeneratorModal({
 
         <div className="text-sm text-muted-foreground mb-2">
           Se generarán <strong>{estimatedTotal}</strong> tareas para el año{" "}
-          <strong>{new Date().getFullYear()}</strong>. Desmarca las que no apliquen.
+          <strong>{new Date().getFullYear()}</strong>.
+          {clientId
+            ? " En cada tarea se añade el contexto regulatorio del cliente (tipos de entidad, folio, fechas) tomado de la ficha Cumplimiento."
+            : " Vincula el proyecto al cliente para incluir folio y tipo de entidad en las descripciones de las tareas."}{" "}
+          Desmarca las obligaciones que no apliquen.
         </div>
 
         <ScrollArea className="max-h-[50vh]">
           <div className="space-y-4 pr-4">
-            {grouped.map(([category, tpls]) => (
+            {grouped.map(([category, tpls]) => {
+              const CategoryIcon = CATEGORY_ICONS[category];
+              return (
               <div key={category}>
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                <h4 className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  {CategoryIcon ? (
+                    <CategoryIcon className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                  ) : null}
                   {CATEGORY_LABELS[category] || category}
                 </h4>
                 <div className="space-y-1">
@@ -145,14 +184,19 @@ export function ComplianceTaskGeneratorModal({
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </ScrollArea>
 
         {templates.length === 0 && (
-          <div className="flex items-center gap-2 text-sm text-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md p-3">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>No se encontraron plantillas para los tipos de entidad del cliente.</span>
+          <div className="flex items-start gap-2 text-sm text-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400 rounded-md p-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>
+              No hay plantillas en el catálogo para los tipos de entidad seleccionados. Puedes crear tareas manualmente
+              en el tab Tareas del proyecto o subir un documento de referencia en Documentos y registrar obligaciones
+              una a una.
+            </span>
           </div>
         )}
 

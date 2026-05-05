@@ -7,6 +7,7 @@ import { sendSlackNotification } from "@/lib/slackNotifications";
 import { logActivity } from "@/lib/activityLog";
 import { invokeSavioFinanceWrite } from "@/lib/savioFinanceWriteInvoke";
 import { extractSavioIdFromWriteData } from "@/lib/clientSavioLink";
+import { syncComplianceProjectDescription } from "@/lib/ensureComplianceProject";
 
 export type Client = Tables<"clients">;
 export type ClientInsert = TablesInsert<"clients">;
@@ -210,6 +211,14 @@ export function useCreateClient() {
             } as any);
           if (projectError) {
             console.error(`Error creating auto project (${proj.area}):`, projectError);
+          }
+        }
+
+        if (services.includes("cumplimiento")) {
+          try {
+            await syncComplianceProjectDescription(data.id);
+          } catch (e) {
+            console.error("syncComplianceProjectDescription after client create:", e);
           }
         }
 
@@ -440,6 +449,14 @@ export function useUpdateClient() {
             responsible_user_id: data.responsible_user_id || user!.id,
             tax_obligations: [],
           } as any);
+        }
+
+        if (projectsToCreate.some((p) => p.area === "cumplimiento")) {
+          try {
+            await syncComplianceProjectDescription(id);
+          } catch (e) {
+            console.error("syncComplianceProjectDescription after client update:", e);
+          }
         }
 
         if (projectsToCreate.length > 0) {

@@ -25,7 +25,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useClientComplianceConfig, useSaveClientCompliance } from "@/hooks/useCompliance";
+import { useClientComplianceConfig, useSaveClientCompliance, type ClientComplianceConfig } from "@/hooks/useCompliance";
 import { ComplianceEntitySelector } from "@/components/compliance/ComplianceEntitySelector";
 import { ComplianceTaskGeneratorModal } from "@/components/compliance/ComplianceTaskGeneratorModal";
 import { ComplianceTaskRow } from "@/components/projects/ComplianceTaskRow";
@@ -37,6 +37,52 @@ import { projectPhaseColorClass } from "./projectPhaseVisual";
 import { ensureCompliancePhasesOnProject, type SyncPhase } from "@/lib/projectPhaseSync";
 import { complianceCategoryLabel } from "@/lib/compliancePhaseCatalog";
 import { TaskFormDialog } from "@/components/tasks/TaskFormDialog";
+import { formatComplianceRegDate } from "@/lib/complianceProjectSummary";
+
+function ComplianceRegulatorySummary({
+  configs,
+  className,
+}: {
+  configs: ClientComplianceConfig[];
+  className?: string;
+}) {
+  if (!configs.length) return null;
+  const ref = configs[0];
+  if (
+    !ref.registration_number?.trim() &&
+    !ref.authorization_date &&
+    !ref.compliance_officer_name?.trim()
+  ) {
+    return null;
+  }
+  return (
+    <div
+      className={cn(
+        "mt-3 rounded-md border border-border/60 bg-muted/25 px-3 py-2 text-xs text-muted-foreground space-y-1 max-w-md mx-auto",
+        className,
+      )}
+    >
+      {ref.registration_number?.trim() ? (
+        <p>
+          <span className="font-medium text-foreground/80">Folio / registro:</span>{" "}
+          {ref.registration_number.trim()}
+        </p>
+      ) : null}
+      {ref.authorization_date ? (
+        <p>
+          <span className="font-medium text-foreground/80">Autorización / inicio:</span>{" "}
+          {formatComplianceRegDate(ref.authorization_date)}
+        </p>
+      ) : null}
+      {ref.compliance_officer_name?.trim() ? (
+        <p>
+          <span className="font-medium text-foreground/80">Responsable en el cliente:</span>{" "}
+          {ref.compliance_officer_name.trim()}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function sortComplianceTasksForList(a: ComplianceTask, b: ComplianceTask) {
   const rank = (s: string) => {
@@ -605,6 +651,7 @@ export function ComplianceDashboard({
                   </Badge>
                 ))}
               </div>
+              <ComplianceRegulatorySummary configs={complianceConfigs || []} />
               <p className="text-sm text-muted-foreground mt-3">
                 Las obligaciones regulatorias aún no han sido generadas. Haz clic para crear todas las tareas del año{" "}
                 {new Date().getFullYear()}.
@@ -623,6 +670,7 @@ export function ComplianceDashboard({
           projectId={projectId}
           entityTypeIds={complianceEntityTypeIds}
           responsibleUserId={projectResponsibleUserId || user!.id}
+          clientId={clientId}
           onGenerated={() => {
             queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
           }}
@@ -651,6 +699,10 @@ export function ComplianceDashboard({
                   ))}
                 </div>
               )}
+              <ComplianceRegulatorySummary
+                configs={complianceConfigs || []}
+                className="mx-0 max-w-none mb-3"
+              />
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
@@ -711,6 +763,7 @@ export function ComplianceDashboard({
         projectId={projectId}
         entityTypeIds={complianceEntityTypeIds}
         responsibleUserId={projectResponsibleUserId || user!.id}
+        clientId={clientId}
         onGenerated={() => {
           queryClient.invalidateQueries({ queryKey: ["compliance-tasks", projectId] });
         }}

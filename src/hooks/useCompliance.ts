@@ -2,6 +2,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import {
+  ensureComplianceProjectForClient,
+  syncComplianceProjectDescription,
+} from "@/lib/ensureComplianceProject";
+import { buildComplianceTaskDescriptionSuffix } from "@/lib/complianceProjectSummary";
+import { calculateDueDates } from "@/lib/complianceDueDates";
+
+export type { ComplianceTemplateForDueDates } from "@/lib/complianceDueDates";
+export { calculateDueDates };
 
 export interface ComplianceEntityType {
   id: string;
@@ -111,15 +120,16 @@ export function useSaveClientCompliance() {
 
       // Deactivate removed
       for (const r of toRemove) {
-        await supabase
+        const { error } = await supabase
           .from("client_compliance_config")
           .update({ is_active: false })
           .eq("id", (r as any).id);
+        if (error) throw error;
       }
 
       // Add new
       for (const entityTypeId of toAdd) {
-        await supabase.from("client_compliance_config").insert({
+        const { error } = await supabase.from("client_compliance_config").insert({
           organization_id: orgId!,
           client_id: clientId,
           entity_type_id: entityTypeId,
@@ -127,11 +137,12 @@ export function useSaveClientCompliance() {
           authorization_date: authorizationDate || null,
           compliance_officer_name: complianceOfficerName || null,
         });
+        if (error) throw error;
       }
 
       // Update shared fields on all active configs
       if (entityTypeIds.length > 0) {
-        await supabase
+        const { error } = await supabase
           .from("client_compliance_config")
           .update({
             registration_number: registrationNumber || null,
@@ -140,11 +151,39 @@ export function useSaveClientCompliance() {
           })
           .eq("client_id", clientId)
           .eq("is_active", true);
+        if (error) throw error;
       }
+
+      let tasksCreated = 0;
+      if (entityTypeIds.length > 0) {
+        const r = await ensureComplianceProjectForClient({
+          clientId,
+          userId: user!.id,
+          entityTypeIds,
+        });
+        tasksCreated = r.tasksCreated;
+      } else {
+        await syncComplianceProjectDescription(clientId);
+      }
+
+      return { tasksCreated };
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["client-compliance-config", vars.clientId] });
-      toast.success("Configuración de cumplimiento guardada");
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["client-projects", vars.clientId] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["client", vars.clientId] });
+      queryClient.invalidateQueries({ queryKey: ["project"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
+      if (data.tasksCreated > 0) {
+        toast.success(
+          `Configuración guardada. Se añadieron ${data.tasksCreated} tareas de cumplimiento nuevas.`,
+        );
+      } else {
+        toast.success("Configuración de cumplimiento guardada");
+      }
     },
     onError: (err: Error) => {
       toast.error("Error al guardar configuración: " + err.message);
@@ -171,81 +210,6 @@ export function useComplianceTemplates(entityTypeIds: string[]) {
   });
 }
 
-// Calculate due dates for compliance tasks
-export function calculateDueDates(
-  template: ComplianceTaskTemplate,
-  year: number
-): { dueDate: string; period: string }[] {
-  const results: { dueDate: string; period: string }[] = [];
-
-  switch (template.periodicity) {
-    case "mensual": {
-      for (let m = 1; m <= 12; m++) {
-        const day = template.due_day || 17;
-        // For monthly tasks, the due date is in the NEXT month
-        const dueMonth = m === 12 ? 1 : m + 1;
-        const dueYear = m === 12 ? year + 1 : year;
-        const lastDay = new Date(dueYear, dueMonth, 0).getDate();
-        const d = Math.min(day, lastDay);
-        results.push({
-          dueDate: `${dueYear}-${String(dueMonth).padStart(2, "0")}-${String(d).padStart(2, "0")}`,
-          period: `${year}-${String(m).padStart(2, "0")}`,
-        });
-      }
-      break;
-    }
-    case "trimestral": {
-      const quarters = [
-        { months: [1, 2, 3], label: "Q1", dueMonth: 3, dueDay: 31 },
-        { months: [4, 5, 6], label: "Q2", dueMonth: 6, dueDay: 30 },
-        { months: [7, 8, 9], label: "Q3", dueMonth: 9, dueDay: 30 },
-        { months: [10, 11, 12], label: "Q4", dueMonth: 12, dueDay: 31 },
-      ];
-      for (const q of quarters) {
-        results.push({
-          dueDate: `${year}-${String(q.dueMonth).padStart(2, "0")}-${String(q.dueDay).padStart(2, "0")}`,
-          period: `${year}-${q.label}`,
-        });
-      }
-      break;
-    }
-    case "semestral": {
-      const m1 = template.due_month || 6;
-      const m2 = template.due_month_2 || 12;
-      const lastDay1 = new Date(year, m1, 0).getDate();
-      const lastDay2 = new Date(year, m2, 0).getDate();
-      results.push({
-        dueDate: `${year}-${String(m1).padStart(2, "0")}-${String(lastDay1).padStart(2, "0")}`,
-        period: `${year}-S1`,
-      });
-      results.push({
-        dueDate: `${year}-${String(m2).padStart(2, "0")}-${String(lastDay2).padStart(2, "0")}`,
-        period: `${year}-S2`,
-      });
-      break;
-    }
-    case "anual": {
-      const m = template.due_month || 1;
-      const lastDay = new Date(year, m, 0).getDate();
-      results.push({
-        dueDate: `${year}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
-        period: `${year}`,
-      });
-      break;
-    }
-    case "cuando_aplique": {
-      // No auto-generated dates; create a single placeholder
-      results.push({
-        dueDate: "",
-        period: `${year}`,
-      });
-      break;
-    }
-  }
-
-  return results;
-}
-
 export function useGenerateComplianceTasks() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -255,14 +219,28 @@ export function useGenerateComplianceTasks() {
       projectId,
       templates,
       responsibleUserId,
+      clientId,
     }: {
       projectId: string;
       templates: (ComplianceTaskTemplate & { compliance_entity_types?: any })[];
       responsibleUserId: string;
+      clientId?: string | null;
     }) => {
       const { data: orgId } = await supabase.rpc("get_user_org_id", { _user_id: user!.id });
       const year = new Date().getFullYear();
-      const today = new Date().toISOString().split("T")[0];
+
+      let taskContextSuffix = "";
+      if (clientId) {
+        const { data: cfgRows, error: cfgErr } = await supabase
+          .from("client_compliance_config")
+          .select(
+            "registration_number, authorization_date, compliance_officer_name, compliance_entity_types(name, code, group_name)",
+          )
+          .eq("client_id", clientId)
+          .eq("is_active", true);
+        if (cfgErr) throw cfgErr;
+        if (cfgRows?.length) taskContextSuffix = buildComplianceTaskDescriptionSuffix(cfgRows as any);
+      }
 
       const tasksToInsert: any[] = [];
 
@@ -278,9 +256,12 @@ export function useGenerateComplianceTasks() {
             else if (daysUntil <= 30) priority = "alta";
           }
 
+          const baseDesc = tpl.description?.trim() || "";
+          const description = [baseDesc, taskContextSuffix].filter(Boolean).join("") || null;
+
           tasksToInsert.push({
             title: tpl.task_name,
-            description: tpl.description || null,
+            description,
             area: "cumplimiento" as any,
             priority,
             status: "pendiente",
@@ -292,6 +273,7 @@ export function useGenerateComplianceTasks() {
             compliance_template_id: tpl.id,
             compliance_periodicity: tpl.periodicity,
             compliance_period: period,
+            client_id: clientId || null,
           });
         }
       }
@@ -305,9 +287,13 @@ export function useGenerateComplianceTasks() {
 
       return tasksToInsert.length;
     },
-    onSuccess: (count) => {
+    onSuccess: (count, vars) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["project-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["project", vars.projectId] });
+      if (vars.clientId) {
+        queryClient.invalidateQueries({ queryKey: ["client-projects", vars.clientId] });
+      }
       toast.success(`${count} tareas de cumplimiento generadas`);
     },
     onError: (err: Error) => {

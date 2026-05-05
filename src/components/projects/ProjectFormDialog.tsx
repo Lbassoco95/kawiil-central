@@ -353,6 +353,7 @@ export function ProjectFormDialog() {
           projectId={createdProjectId}
           entityTypeIds={complianceEntityTypeIds}
           responsibleUserId={user!.id}
+          clientId={clientId || undefined}
           onGenerated={() => {
             queryClient.invalidateQueries({ queryKey: ["project-tasks", createdProjectId] });
             resetForm();
