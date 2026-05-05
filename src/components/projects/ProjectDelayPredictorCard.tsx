@@ -16,6 +16,7 @@ import {
   complianceDueDateIsActionable,
 } from "@/lib/complianceDueDates";
 import { useMexicoToday } from "@/hooks/useMexicoToday";
+import { isTaskClosedStatus } from "@/lib/taskStatusGroups";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Task = Tables<"tasks">;
