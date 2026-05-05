@@ -1,3 +1,5 @@
+import { toDateStringMX, toMXDate } from "@/lib/dateUtils";
+
 /** Campos mínimos de plantilla para calcular fechas (alineado a `compliance_task_templates`). */
 export type ComplianceTemplateForDueDates = {
   periodicity: string;
@@ -76,4 +78,38 @@ export function calculateDueDates(
   }
 
   return results;
+}
+
+/**
+ * Primer día en que aplica el calendario de cumplimiento para un proyecto (CDMX):
+ * `start_date` si existe, si no `created_at`.
+ * Evita generar obligaciones con vencimiento antes de la apertura del proyecto.
+ */
+export function complianceAnchorYmdFromProject(
+  startDate: string | null | undefined,
+  createdAt: string | null | undefined,
+): string {
+  const raw = (startDate && String(startDate).trim()) || createdAt;
+  if (!raw) return toDateStringMX();
+  return toDateStringMX(toMXDate(raw));
+}
+
+/**
+ * Indica si una ocurrencia generada desde plantilla debe crearse para este proyecto.
+ */
+export function shouldIncludeComplianceOccurrence(
+  dueDate: string,
+  period: string,
+  periodicity: string,
+  anchorYmd: string,
+): boolean {
+  const p = (periodicity || "").toLowerCase();
+  if (p === "cuando_aplique") {
+    const anchorYear = parseInt(anchorYmd.slice(0, 4), 10);
+    const m = /^(\d{4})$/.exec(period.trim());
+    if (m) return parseInt(m[1], 10) >= anchorYear;
+    return true;
+  }
+  if (!dueDate) return true;
+  return dueDate >= anchorYmd;
 }

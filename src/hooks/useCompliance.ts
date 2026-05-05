@@ -7,7 +7,11 @@ import {
   syncComplianceProjectDescription,
 } from "@/lib/ensureComplianceProject";
 import { buildComplianceTaskDescriptionSuffix } from "@/lib/complianceProjectSummary";
-import { calculateDueDates } from "@/lib/complianceDueDates";
+import {
+  calculateDueDates,
+  complianceAnchorYmdFromProject,
+  shouldIncludeComplianceOccurrence,
+} from "@/lib/complianceDueDates";
 
 export type { ComplianceTemplateForDueDates } from "@/lib/complianceDueDates";
 export { calculateDueDates };
@@ -242,12 +246,36 @@ export function useGenerateComplianceTasks() {
         if (cfgRows?.length) taskContextSuffix = buildComplianceTaskDescriptionSuffix(cfgRows as any);
       }
 
+      const { data: projectMeta, error: metaErr } = await supabase
+        .from("projects")
+        .select("start_date, created_at, client_id")
+        .eq("id", projectId)
+        .single();
+      if (metaErr) throw metaErr;
+
+      const anchorYmd = complianceAnchorYmdFromProject(projectMeta?.start_date, projectMeta?.created_at);
+
+      const cid = projectMeta?.client_id;
+      if (cid) {
+        const { error: pruneErr } = await supabase
+          .from("tasks")
+          .delete()
+          .eq("client_id", cid)
+          .eq("project_id", projectId)
+          .eq("status", "pendiente")
+          .not("compliance_template_id", "is", null)
+          .lt("due_date", anchorYmd);
+        if (pruneErr) throw pruneErr;
+      }
+
       const tasksToInsert: any[] = [];
 
       for (const tpl of templates) {
         const dates = calculateDueDates(tpl, year);
 
         for (const { dueDate, period } of dates) {
+          if (!shouldIncludeComplianceOccurrence(dueDate, period, tpl.periodicity, anchorYmd)) continue;
+
           // Calculate priority based on due date
           let priority = "media";
           if (dueDate) {

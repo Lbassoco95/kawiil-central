@@ -4,7 +4,11 @@ import {
   buildComplianceProjectDescription,
   buildComplianceTaskDescriptionSuffix,
 } from "@/lib/complianceProjectSummary";
-import { calculateDueDates } from "@/lib/complianceDueDates";
+import {
+  calculateDueDates,
+  complianceAnchorYmdFromProject,
+  shouldIncludeComplianceOccurrence,
+} from "@/lib/complianceDueDates";
 
 type ServiceArea = Database["public"]["Enums"]["service_area"];
 
@@ -58,6 +62,25 @@ async function syncComplianceTasksForTemplates(params: {
   const { clientId, userId, projectId, organizationId, entityTypeIds, responsibleUserId } = params;
   const year = new Date().getFullYear();
 
+  const { data: projectMeta, error: metaErr } = await supabase
+    .from("projects")
+    .select("start_date, created_at")
+    .eq("id", projectId)
+    .single();
+  if (metaErr) throw metaErr;
+
+  const anchorYmd = complianceAnchorYmdFromProject(projectMeta?.start_date, projectMeta?.created_at);
+
+  const { error: pruneErr } = await supabase
+    .from("tasks")
+    .delete()
+    .eq("client_id", clientId)
+    .eq("project_id", projectId)
+    .eq("status", "pendiente")
+    .not("compliance_template_id", "is", null)
+    .lt("due_date", anchorYmd);
+  if (pruneErr) throw pruneErr;
+
   const { data: templates, error: tplErr } = await supabase
     .from("compliance_task_templates")
     .select("*")
@@ -110,6 +133,17 @@ async function syncComplianceTasksForTemplates(params: {
     );
 
     for (const { dueDate, period } of dates) {
+      if (
+        !shouldIncludeComplianceOccurrence(
+          dueDate,
+          period,
+          tpl.periodicity as string,
+          anchorYmd,
+        )
+      ) {
+        continue;
+      }
+
       const k = complianceTaskDedupeKey(tpl.id, dueDate || null, period);
       if (existingKeys.has(k)) continue;
       existingKeys.add(k);
