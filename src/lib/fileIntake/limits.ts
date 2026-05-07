@@ -108,6 +108,7 @@ export const slackUploadLimits: FileIntakeLimits = {
   maxFiles: STANDARD_BATCH_MAX_FILES,
   maxBytesPerFile: 50 * MB,
   maxBatchBytes: 50 * MB * STANDARD_BATCH_MAX_FILES,
+  /** `keep`: no expandir ZIP en el navegador (un solo archivo hacia Slack); evita congelar el hilo principal. */
   zipMode: "keep",
   clientUnzipMaxBytes: 25 * MB,
   maxZipEntriesForClientExpand: 150,

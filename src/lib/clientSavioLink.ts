@@ -32,6 +32,19 @@ export function extractSavioIdFromWriteData(data: unknown): string | null {
   return null;
 }
 
+/** ID devuelto por POST /invoice (Savio/OpenAPI puede usar varias claves). */
+export function extractSavioInvoiceIdFromWriteData(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const top = pickSavioString(data, ["invoice_id", "charge_id", "id", "uuid"]);
+  if (top !== "—") return top;
+  const inner = (data as { data?: unknown }).data;
+  if (inner && typeof inner === "object") {
+    const id = pickSavioString(inner, ["invoice_id", "charge_id", "id", "uuid"]);
+    return id !== "—" ? id : null;
+  }
+  return null;
+}
+
 /** Clientes Savio cuyo id no está enlazado en ningún cliente Kawiil de la org. */
 export function savioCustomersMissingInKawiil(
   customerRows: SavioCustomerRowView[],

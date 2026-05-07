@@ -37,6 +37,10 @@ interface Factor {
   tone: "good" | "warning" | "bad" | "neutral";
 }
 
+function taskIsClosed(status: string): boolean {
+  return status === "completada" || status === "cancelada";
+}
+
 /**
  * Predictor determinístico de retraso de proyecto basado en:
  *  - Velocity = tareas completadas en últimas 4 semanas / 4
@@ -52,8 +56,8 @@ export function ProjectDelayPredictorCard({ project, tasks }: Props) {
   const data = useMemo(() => {
     const projectAnchorYmd = complianceAnchorYmdFromProject(project.start_date, project.created_at);
 
-    const open = tasks.filter((t) => !isTaskClosedStatus(t.status));
-    const closed = tasks.filter((t) => isTaskClosedStatus(t.status) && t.status === "completada");
+    const open = tasks.filter((t) => !taskIsClosed(t.status));
+    const closed = tasks.filter((t) => taskIsClosed(t.status) && t.status === "completada");
     const overdue = open.filter(
       (t) =>
         t.due_date &&

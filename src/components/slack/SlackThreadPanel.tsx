@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { invokeSlackApi, withHardTimeout, formatSlackHistoryLoadError, type SlackMessage } from "@/lib/slackApi";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
-import { SlackComposer } from "./SlackComposer";
+import { SlackComposer, type SlackComposerHandle } from "./SlackComposer";
 import { SlackMessageList } from "./SlackMessageList";
 import { SlackChatFileDropZone } from "./SlackChatFileDropZone";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /** Alineado con Comunicación: primera carga puede encadenar varias llamadas en la edge. */
 const SLACK_THREAD_FIRST_INVOKE_MS = 110_000;
@@ -69,6 +69,7 @@ export function SlackThreadPanel({
 }: Props) {
   const [draft, setDraft] = useState("");
   const [threadLoadSlow, setThreadLoadSlow] = useState(false);
+  const threadComposerRef = useRef<SlackComposerHandle | null>(null);
 
   const threadQuery = useQuery({
     queryKey: ["slack-thread", channelId, threadTs],
@@ -195,6 +196,8 @@ export function SlackThreadPanel({
       )}
       <div className="shrink-0 border-t bg-background">
         <SlackComposer
+          ref={threadComposerRef}
+          key={`${channelId}-${threadTs ?? ""}`}
           value={draft}
           onChange={setDraft}
           onSend={() => {
@@ -239,7 +242,9 @@ export function SlackThreadPanel({
           <SlackChatFileDropZone
             enabled={open && !!threadTs && !uploadingThreadFile}
             busy={uploadingThreadFile}
-            onFiles={(files) => void onUploadThreadFiles(files, draft.trim() || undefined)}
+            onDroppedFileList={(files) =>
+              threadComposerRef.current?.addFilesFromDrop(files) ?? Promise.resolve()
+            }
             className={threadColumnClass}
           >
             {threadMainColumn}

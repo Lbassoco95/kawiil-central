@@ -23,14 +23,13 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, Flame, Mail, Phone, Sparkles, ArrowRight, Filter } from "lucide-react";
+import { Plus, Flame, Sparkles, ArrowRight, Filter } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,7 +43,6 @@ import {
   initialsFromName,
   avatarBgFromName,
   scoreDotColor,
-  stageCta,
   hexToRgba,
 } from "@/lib/pipelineFormat";
 import { cn } from "@/lib/utils";
@@ -84,7 +82,6 @@ function LeadCard({ lead, stage, taskSummary }: { lead: Lead; stage: PipelineSta
     lead.priority === "urgent" ||
     lead.priority === "high";
   const flag = flagForCountry(lead.country_code);
-  const cta = stageCta(stage?.slug);
   const hasInsight = !!(lead.notes && lead.notes.trim().length > 0);
   const insight = hasInsight ? lead.notes!.split("\n")[0].slice(0, 140) : null;
 
@@ -152,37 +149,15 @@ function LeadCard({ lead, stage, taskSummary }: { lead: Lead; stage: PipelineSta
           </div>
         </CardContent>
       </div>
-      <div className="flex items-center gap-1 border-t border-border/40 bg-muted/20 px-2 py-1.5 backdrop-blur-sm">
+      <div className="border-t border-border/40 bg-muted/20 px-2 py-1.5 backdrop-blur-sm">
         <Link
           to={`/pipeline/leads/${lead.id}`}
-          className="inline-flex flex-1 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
           onPointerDown={(e) => e.stopPropagation()}
         >
           <ArrowRight className="h-3 w-3" aria-hidden />
-          {cta}
+          Ver tarjeta
         </Link>
-        {lead.email ? (
-          <a
-            href={`mailto:${lead.email}`}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-            onPointerDown={(e) => e.stopPropagation()}
-            aria-label={`Enviar correo a ${lead.full_name}`}
-            title="Enviar correo"
-          >
-            <Mail className="h-3.5 w-3.5" />
-          </a>
-        ) : null}
-        {lead.phone ? (
-          <a
-            href={`tel:${lead.phone}`}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-            onPointerDown={(e) => e.stopPropagation()}
-            aria-label={`Llamar a ${lead.full_name}`}
-            title="Llamar"
-          >
-            <Phone className="h-3.5 w-3.5" />
-          </a>
-        ) : null}
       </div>
     </Card>
   );

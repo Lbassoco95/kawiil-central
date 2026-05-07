@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,22 @@ import { createNotifications } from "@/lib/notificationHelpers";
 import { UserAvatar } from "@/components/shared/UserAvatar";
 
 import { STEP_STATUS_CONFIG } from "@/lib/statusStyles";
+
+/** Aplica step_status + started_at y dispara checkbox completado cuando aplica (compartido por Guardar y cambio en caliente). */
+function appendStepStatusPersistence(
+  target: Partial<AccountingStep>,
+  prevStep: AccountingStep,
+  nextStatus: StepStatus,
+  onToggle?: (completed: boolean) => void,
+) {
+  target.step_status = nextStatus;
+  if (nextStatus !== "pendiente" && !prevStep.started_at) {
+    target.started_at = new Date().toISOString();
+  }
+  if (nextStatus === "completado" && !prevStep.completed && onToggle) {
+    onToggle(true);
+  }
+}
 
 export interface UnifiedStepRowProps {
   step: AccountingStep;
@@ -163,22 +179,22 @@ export function UnifiedStepRow({
   const handleSave = () => {
     const updates: Partial<AccountingStep> = {
       label: localLabel,
-      step_status: localStatus,
       due_date: localDueDate ? localDueDate.toISOString() : null,
       notes: localNotes || null,
       assigned_to: localAssignee,
       collaborators: localCollaborators,
       checklist: localChecklist,
     };
-    // Auto-set started_at when moving from pendiente
-    if (localStatus !== "pendiente" && !step.started_at) {
-      updates.started_at = new Date().toISOString();
-    }
-    if (localStatus === "completado" && !step.completed && onToggle) {
-      onToggle(true);
-    }
+    appendStepStatusPersistence(updates, step, localStatus, onToggle);
     onSave(updates);
     setHasChanges(false);
+  };
+
+  const handleStepStatusChange = (next: StepStatus) => {
+    setLocalStatus(next);
+    const patch: Partial<AccountingStep> = {};
+    appendStepStatusPersistence(patch, step, next, onToggle);
+    onSave(patch);
   };
 
   // Checklist helpers
@@ -448,7 +464,7 @@ export function UnifiedStepRow({
                 <StepAssigneeSelect value={localAssignee} onChange={(v) => { setLocalAssignee(v); markChanged(); }} />
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Estatus</label>
-                  <Select value={localStatus} onValueChange={(v) => { setLocalStatus(v as StepStatus); markChanged(); }}>
+                  <Select value={localStatus} onValueChange={(v) => handleStepStatusChange(v as StepStatus)}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {STEP_STATUS_OPTIONS.map((opt) => (<SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>))}

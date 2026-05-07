@@ -27,8 +27,6 @@ import {
   SLACK_CHAT_API_PERMISSION_HINT,
   SLACK_REACTIONS_PERMISSION_HINT,
   SLACK_FILE_UPLOAD_PERMISSION_HINT,
-  SLACK_HELP_RESTRICTED_FILE_TYPES_URL,
-  SLACK_HELP_MANAGE_CONNECT_FILE_UPLOADS_URL,
   SLACK_PERMISSION_TOAST_MS,
   type SlackConversation,
   type SlackMessage,
@@ -57,7 +55,7 @@ import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrgani
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SlackChannelHeader } from "@/components/slack/SlackChannelHeader";
 import { SlackMessageList } from "@/components/slack/SlackMessageList";
-import { SlackComposer } from "@/components/slack/SlackComposer";
+import { SlackComposer, type SlackComposerHandle } from "@/components/slack/SlackComposer";
 import { SlackThreadPanel } from "@/components/slack/SlackThreadPanel";
 import { SlackAiPanel } from "@/components/slack/SlackAiPanel";
 import { SlackActivityPanel } from "@/components/slack/SlackActivityPanel";
@@ -184,6 +182,7 @@ export default function Comunicacion() {
   const [selectedChannel, setSelectedChannel] = useState<string>(channelFromUrl);
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const slackComposerRef = useRef<SlackComposerHandle | null>(null);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [activityPanelOpen, setActivityPanelOpen] = useState(false);
@@ -589,13 +588,21 @@ export default function Comunicacion() {
   const historyInfinite = useInfiniteQuery({
     queryKey: ["slack-history", selectedChannel, tsFromUrl || ""],
     initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam, signal }): Promise<HistoryPage> => {
+    queryFn: async ({ pageParam, signal, queryKey }): Promise<HistoryPage> => {
+      const channel = queryKey[1] as string;
+      const anchorTs = String(queryKey[2] ?? "").trim();
+      if (import.meta.env.DEV) {
+        console.debug("[kawiil-slack-history]", "fetch:start", {
+          channel,
+          pageParam: pageParam ?? "(first)",
+          anchorTs: anchorTs || "(none)",
+        });
+      }
       const base = {
         action: "conversations.history" as const,
-        channel: selectedChannel!,
+        channel,
         limit: 50,
       };
-      const anchorTs = (tsFromUrl || "").trim();
       const payload = pageParam
         ? { ...base, cursor: pageParam }
         : anchorTs
@@ -625,8 +632,14 @@ export default function Comunicacion() {
         );
       } catch (e) {
         const msg = e instanceof Error ? e.message : "";
-        // Si React Query cancela por invalidaciones/reenfoques, intentamos una vez sin signal.
+        // Si React Query cancela por invalidaciones/cambio de foco, intentamos una vez sin signal.
         if (msg.includes("se canceló") && !msg.includes("tardó demasiado")) {
+          if (import.meta.env.DEV) {
+            console.debug("[kawiil-slack-history]", "fetch:retry-no-signal", {
+              channel,
+              pageParam: pageParam ?? "(first)",
+            });
+          }
           data = await withHardTimeout(
             invokeSlackApi<{
               ok: boolean;
@@ -638,6 +651,9 @@ export default function Comunicacion() {
             "La recarga del historial tardó demasiado. Vuelve a abrir el canal.",
           );
         } else {
+          if (import.meta.env.DEV) {
+            console.debug("[kawiil-slack-history]", "fetch:error", { channel, message: msg || String(e) });
+          }
           throw e;
         }
       }
@@ -645,13 +661,21 @@ export default function Comunicacion() {
       const raw = data.messages || [];
       const chrono = [...raw].reverse();
       const nextCursor = data.response_metadata?.next_cursor || undefined;
+      if (import.meta.env.DEV) {
+        console.debug("[kawiil-slack-history]", "fetch:ok", {
+          channel,
+          count: chrono.length,
+          hasMore: !!nextCursor,
+        });
+      }
       return { messages: chrono, nextCursor };
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     enabled: isConnected && !!selectedChannel,
     retry(failureCount, err) {
       const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("tardó demasiado") || msg.includes("se canceló")) return false;
+      if (msg.includes("tardó demasiado")) return false;
+      if (msg.includes("se canceló")) return failureCount < 1;
       return failureCount < 2;
     },
     staleTime: 45_000,
@@ -1288,7 +1312,7 @@ export default function Comunicacion() {
       if (!data.ok) throw new Error(data.error || "No se pudo actualizar la reacción");
     },
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+      qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel], cancelRefetch: false });
       if (threadRootTs) {
         qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, threadRootTs] });
       }
@@ -1387,7 +1411,7 @@ export default function Comunicacion() {
   });
 
   const invalidateSlackHistoryAndOpenThread = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+    qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel], cancelRefetch: false });
     if (threadRootTs) {
       qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, threadRootTs] });
     }
@@ -1479,10 +1503,14 @@ export default function Comunicacion() {
     onSuccess: (_d, vars) => {
       const n = vars.files.length;
       toast.success(n === 1 ? "Archivo enviado a Slack" : `${n} archivos enviados a Slack`);
-      qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel] });
+      qc.invalidateQueries({ queryKey: ["slack-history", selectedChannel], cancelRefetch: false });
       const t = vars.thread_ts?.trim();
       if (t) {
         qc.invalidateQueries({ queryKey: ["slack-thread", selectedChannel, t] });
+      }
+      if (!t && user?.id && selectedChannel) {
+        setDraft("");
+        clearSlackDraft(user.id, selectedChannel);
       }
     },
     onError: onSlackFileUploadError,
@@ -1877,9 +1905,7 @@ export default function Comunicacion() {
           <SlackChatFileDropZone
             enabled={!!selectedChannel && !uploadMutation.isPending}
             busy={uploadMutation.isPending}
-            onFiles={(files) =>
-              uploadMutation.mutate({ files, initial_comment: draft.trim() || undefined })
-            }
+            onDroppedFileList={(files) => slackComposerRef.current?.addFilesFromDrop(files) ?? Promise.resolve()}
             className="flex flex-1 min-w-0 min-h-0 flex-col"
           >
             <SlackChannelHeader
@@ -1944,7 +1970,7 @@ export default function Comunicacion() {
               messages={messages}
               userMap={userMap}
               highlightTs={tsFromUrl}
-              isLoading={historyInfinite.isLoading && !historyInfinite.data}
+              isLoading={!historyInfinite.data && historyInfinite.fetchStatus === "fetching"}
               loadSlowHint={historyLoadSlow}
               onRetryLoad={() => void historyInfinite.refetch()}
               error={historyPanelError}
@@ -2004,6 +2030,8 @@ export default function Comunicacion() {
               }}
             />
             <SlackComposer
+              ref={slackComposerRef}
+              key={selectedChannel || "none"}
               value={draft}
               onChange={setDraft}
               onSend={() => postMutation.mutate({ text: draft.trim() })}
@@ -2015,7 +2043,7 @@ export default function Comunicacion() {
               onSchedule={(postAt, text) => scheduleMutation.mutateAsync({ postAt, text })}
               scheduling={scheduleMutation.isPending}
               onUploadFiles={(files, initial_comment) =>
-                uploadMutation.mutate({ files, initial_comment })
+                uploadMutation.mutateAsync({ files, initial_comment })
               }
               uploading={uploadMutation.isPending}
               showRestoreDraft={showRestoreDraft}
@@ -2054,29 +2082,6 @@ export default function Comunicacion() {
                 return (data.improved || "").trim();
               }}
             />
-            <p className="shrink-0 border-t border-border/60 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-              Slack no publica un listado de todos los formatos permitidos. Los documentos habituales (.docx, .pdf, .pptx)
-              suelen aceptarse; en{" "}
-              <a
-                className="text-primary underline underline-offset-2 hover:text-primary/90"
-                href={SLACK_HELP_RESTRICTED_FILE_TYPES_URL}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Slack Connect
-              </a>{" "}
-              hay extensiones explícitamente bloqueadas. Si una subida falla, revisa política de org o subidas en Connect (
-              <a
-                className="text-primary underline underline-offset-2 hover:text-primary/90"
-                href={SLACK_HELP_MANAGE_CONNECT_FILE_UPLOADS_URL}
-                target="_blank"
-                rel="noreferrer"
-              >
-                guía de administración
-              </a>
-              ). Más detalle en el repositorio:{" "}
-              <code className="rounded bg-muted px-1">docs/slack-archivos-comunicacion.md</code>
-            </p>
           </SlackChatFileDropZone>
           <SlackThreadPanel
             open={!!threadRootTs}
@@ -2126,7 +2131,7 @@ export default function Comunicacion() {
             onUploadThreadFiles={
               threadRootTs
                 ? (files, initial_comment) =>
-                    uploadMutation.mutate({ files, initial_comment, thread_ts: threadRootTs })
+                    uploadMutation.mutateAsync({ files, initial_comment, thread_ts: threadRootTs })
                 : undefined
             }
             uploadingThreadFile={uploadMutation.isPending}

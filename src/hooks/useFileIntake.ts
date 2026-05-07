@@ -181,6 +181,8 @@ export function useFileIntake({
         for (const f of arr) {
           const out = await expandIfZip(f);
           for (const e of out) expanded.push(e);
+          // Ceder un frame entre archivos (p. ej. varios ZIP) para que la UI siga respondiendo.
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
 
         const next = [...filesRef.current];

@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Clock,
   Inbox,
+  Landmark,
 } from "lucide-react";
 import type { Json } from "@/integrations/supabase/types";
 import { renderTextWithMentionHighlights } from "@/lib/renderMentionHighlights";
@@ -55,6 +56,7 @@ const typeConfig: Record<string, { icon: typeof Phone; color: string; label: str
   assignment: { icon: UserCheck, color: "text-cyan-600 bg-cyan-100", label: "Asignación" },
   score_change: { icon: TrendingUp, color: "text-orange-600 bg-orange-100", label: "Score" },
   lead_created: { icon: CheckCircle2, color: "text-green-700 bg-green-100", label: "Lead creado" },
+  savio_promotion: { icon: Landmark, color: "text-teal-700 bg-teal-100", label: "Savio" },
 };
 
 const defaultConfig = { icon: Clock, color: "text-gray-600 bg-gray-100", label: "Actividad" };
@@ -109,6 +111,11 @@ function getActivityDescription(type: string, metadata: Record<string, unknown> 
           : "";
     case "score_change":
       return metadata.reason ? `Razón: ${metadata.reason}` : "";
+    case "savio_promotion": {
+      const cid = metadata.savio_customer_id != null ? String(metadata.savio_customer_id) : "";
+      const iid = metadata.savio_invoice_id != null ? String(metadata.savio_invoice_id) : "";
+      return [cid && `Cliente Savio: ${cid}`, iid && `Cargo: ${iid}`].filter(Boolean).join(" · ");
+    }
     default:
       return "";
   }

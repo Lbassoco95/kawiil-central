@@ -1,44 +1,31 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { useFileIntake } from "@/hooks/useFileIntake";
-import { slackUploadLimits } from "@/lib/fileIntake/limits";
 import { cn } from "@/lib/utils";
 
 type Props = {
   children: ReactNode;
   /** Si false, no se aceptan soltadas (p. ej. sin canal). */
   enabled: boolean;
-  /** Mientras el padre sube archivos, ignorar nuevos drops. */
+  /** Mientras el padre sube archivos, ignorar nuevas soltadas. */
   busy?: boolean;
-  /** Archivos ya validados/expandidos (ZIP) listos para subir a Slack. */
-  onFiles: (files: File[]) => void | Promise<void>;
+  /** Archivos crudos del `DataTransfer`; el compositor aplica intake (ZIP, límites). */
+  onDroppedFileList: (files: FileList) => void | Promise<void>;
   className?: string;
 };
 
 /**
- * Zona de arrastre sobre el chat Slack: misma validación que el clip del compositor (useFileIntake + slackUploadLimits).
+ * Zona de arrastre sobre el chat Slack: reenvía al compositor para la misma cola que el clip.
  */
-export function SlackChatFileDropZone({ children, enabled, busy = false, onFiles, className }: Props) {
-  const [staged, setStaged] = useState<File[]>([]);
+export function SlackChatFileDropZone({
+  children,
+  enabled,
+  busy = false,
+  onDroppedFileList,
+  className,
+}: Props) {
   const dragCounterRef = useRef(0);
   const [dragging, setDragging] = useState(false);
 
-  const onIntakeChange = useCallback(
-    (next: File[]) => {
-      if (next.length === 0) return;
-      if (!enabled || busy) return;
-      setStaged([]);
-      void Promise.resolve(onFiles(next));
-    },
-    [enabled, busy, onFiles],
-  );
-
-  const intake = useFileIntake({
-    files: staged,
-    onChange: onIntakeChange,
-    limits: slackUploadLimits,
-  });
-
-  const interactiveDisabled = !enabled || busy || intake.isProcessing;
+  const interactiveDisabled = !enabled || busy;
 
   const handleDragEnter = useCallback(
     (e: React.DragEvent) => {
@@ -85,10 +72,10 @@ export function SlackChatFileDropZone({ children, enabled, busy = false, onFiles
       setDragging(false);
       const dropped = e.dataTransfer?.files;
       if (dropped && dropped.length > 0) {
-        await intake.addFiles(dropped);
+        await Promise.resolve(onDroppedFileList(dropped));
       }
     },
-    [interactiveDisabled, intake],
+    [interactiveDisabled, onDroppedFileList],
   );
 
   return (
@@ -105,7 +92,7 @@ export function SlackChatFileDropZone({ children, enabled, busy = false, onFiles
           className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-background/85 backdrop-blur-[2px]"
           aria-hidden
         >
-          <p className="text-sm font-medium text-foreground px-4 text-center">Suelta para enviar a Slack</p>
+          <p className="text-sm font-medium text-foreground px-4 text-center">Suelta para adjuntar al mensaje</p>
         </div>
       ) : null}
     </div>

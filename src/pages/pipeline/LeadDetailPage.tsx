@@ -37,6 +37,8 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LeadActivityPanel } from "@/components/pipeline/LeadActivityPanel";
 import { LeadActivityTimeline } from "@/components/pipeline/LeadActivityTimeline";
+import { LeadSavioPromotionCard } from "@/components/pipeline/LeadSavioPromotionCard";
+import { formatMxnShort } from "@/lib/pipelineFormat";
 
 const priorityOptions = [
   { value: "urgent", label: "Urgente" },
@@ -96,6 +98,11 @@ const schema = z.object({
   urgency: z.string().optional().nullable(),
   needs_visa: z.boolean().optional().default(false),
   softlanding_notes: z.string().optional().nullable(),
+  estimated_value: z.preprocess((val) => {
+    if (val === "" || val === undefined || val === null) return null;
+    const n = typeof val === "number" ? val : Number(val);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  }, z.number().nullable().optional()),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -142,6 +149,10 @@ export default function LeadDetailPage() {
       urgency: (leadAny.urgency as string) || null,
       needs_visa: !!(leadAny.needs_visa as boolean),
       softlanding_notes: (leadAny.softlanding_notes as string) || null,
+      estimated_value:
+        typeof lead.estimated_value === "number" && Number.isFinite(lead.estimated_value)
+          ? lead.estimated_value
+          : null,
     });
   }, [lead, form]);
 
@@ -158,6 +169,10 @@ export default function LeadDetailPage() {
         notes: vals.notes || null,
         campaign_name: vals.campaign_name || null,
         // Softlanding fields - use spread to handle columns that may not exist yet
+        estimated_value:
+          vals.estimated_value !== null && vals.estimated_value !== undefined
+            ? vals.estimated_value
+            : null,
         ...({
           country_origin: vals.country_origin || null,
           entity_type: vals.entity_type || null,
@@ -229,6 +244,11 @@ export default function LeadDetailPage() {
     );
   }
 
+  const estimatedCloseMxn =
+    typeof lead.estimated_value === "number" && Number.isFinite(lead.estimated_value)
+      ? lead.estimated_value
+      : null;
+
   return (
     <div className="space-y-6 max-w-5xl pb-24 md:pb-8">
       {/* Header v2.4 — paleta Kawiil AI */}
@@ -269,6 +289,11 @@ export default function LeadDetailPage() {
           <Badge variant="outline" className="border-white/40 bg-white/10 text-white">
             score {lead.score}
           </Badge>
+          {estimatedCloseMxn !== null ? (
+            <Badge variant="outline" className="border-amber-200/50 bg-amber-500/20 text-white shrink-0">
+              {formatMxnShort(estimatedCloseMxn)} MXN estim.
+            </Badge>
+          ) : null}
         </div>
       </header>
 
@@ -294,6 +319,16 @@ export default function LeadDetailPage() {
           </p>
         </div>
       </div>
+
+      <LeadSavioPromotionCard
+        leadId={lead.id}
+        organizationId={lead.organization_id}
+        fullName={lead.full_name}
+        companyName={lead.company_name}
+        email={lead.email}
+        phone={lead.phone}
+        estimatedCloseMxn={estimatedCloseMxn}
+      />
 
       {/* Activity action buttons */}
       <Card>
@@ -344,6 +379,27 @@ export default function LeadDetailPage() {
                 <div>
                   <Label>Campaña</Label>
                   <Input {...form.register("campaign_name")} />
+                </div>
+                <div>
+                  <Label>Valor estimado al cierre (MXN)</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    placeholder="Ej. 45000"
+                    {...form.register("estimated_value", {
+                      setValueAs: (v) =>
+                        v === "" || v === null || v === undefined
+                          ? null
+                          : typeof v === "number"
+                            ? v
+                            : Number(v),
+                    })}
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Sirve para el tablero (sumatoria por etapa), la lista del pipeline y el alta en Savio.
+                  </p>
                 </div>
                 <div>
                   <Label>Prioridad</Label>

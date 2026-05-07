@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, MessageSquare, ExternalLink } from "lucide-react";
@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SlackMessageList } from "@/components/slack/SlackMessageList";
-import { SlackComposer } from "@/components/slack/SlackComposer";
+import { SlackComposer, type SlackComposerHandle } from "@/components/slack/SlackComposer";
 import { SlackChatFileDropZone } from "@/components/slack/SlackChatFileDropZone";
 import type { SlackDeepLinkPartsCompat } from "@/lib/slackDeepLink";
 import {
@@ -63,6 +63,7 @@ export function SlackQuickReplyPanel({
   const { isConnected, isLoading: loadingConn, connection } = useSlackConnection();
   const [draft, setDraft] = useState("");
   const [listTab, setListTab] = useState<ListTab>("channel");
+  const quickComposerRef = useRef<SlackComposerHandle | null>(null);
 
   const channelId = parsed?.channel ?? "";
   const hasThread = !!parsed?.replyTs;
@@ -196,7 +197,7 @@ export function SlackQuickReplyPanel({
   const invalidateQuickAndMain = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["slack-quick-history", channelId] });
     qc.invalidateQueries({ queryKey: ["slack-quick-thread", channelId, threadRootTs] });
-    qc.invalidateQueries({ queryKey: ["slack-history", channelId] });
+    qc.invalidateQueries({ queryKey: ["slack-history", channelId], cancelRefetch: false });
     if (threadRootTs) {
       qc.invalidateQueries({ queryKey: ["slack-thread", channelId, threadRootTs] });
     }
@@ -366,9 +367,9 @@ export function SlackQuickReplyPanel({
   const highlightChannel = parsed?.mainTs ?? "";
   const highlightThread = parsed?.replyTs ?? parsed?.mainTs ?? "";
 
-  const channelLoading = historyQuery.isLoading;
+  const channelLoading = !historyQuery.data && historyQuery.fetchStatus === "fetching";
   const channelError = historyQuery.error as Error | null;
-  const threadLoading = threadQuery.isLoading;
+  const threadLoading = !threadQuery.data && threadQuery.fetchStatus === "fetching";
   const threadError = threadQuery.error as Error | null;
 
   const reactionPending =
@@ -389,7 +390,7 @@ export function SlackQuickReplyPanel({
         messages={channelMessages}
         userMap={userMap}
         highlightTs={highlightChannel}
-        isLoading={channelLoading && !historyQuery.data}
+        isLoading={channelLoading}
         error={channelError}
         hasMore={false}
         isFetchingMore={false}
@@ -409,7 +410,7 @@ export function SlackQuickReplyPanel({
         messages={threadMessages}
         userMap={userMap}
         highlightTs={highlightThread}
-        isLoading={threadLoading && !threadQuery.data}
+        isLoading={threadLoading}
         error={threadError}
         hasMore={false}
         isFetchingMore={false}
@@ -460,12 +461,8 @@ export function SlackQuickReplyPanel({
             <SlackChatFileDropZone
               enabled={!!channelId && !uploadMutation.isPending}
               busy={uploadMutation.isPending}
-              onFiles={(files) =>
-                uploadMutation.mutate({
-                  files,
-                  initial_comment: draft.trim() || undefined,
-                  thread_ts: resolveQuickReplyUploadThreadTs(),
-                })
+              onDroppedFileList={(files) =>
+                quickComposerRef.current?.addFilesFromDrop(files) ?? Promise.resolve()
               }
               className="flex flex-1 min-h-0 flex-col overflow-hidden"
             >
@@ -507,6 +504,8 @@ export function SlackQuickReplyPanel({
 
                 <div className="shrink-0 border-t border-border/80 bg-muted/25 p-3 space-y-2">
                   <SlackComposer
+                    ref={quickComposerRef}
+                    key={`${channelId}-${listTab}`}
                     value={draft}
                     onChange={setDraft}
                     onSend={() => handleSend(composerSendMode())}
@@ -517,7 +516,7 @@ export function SlackQuickReplyPanel({
                     userMap={userMap}
                     compact
                     onUploadFiles={(files, initial_comment) =>
-                      uploadMutation.mutate({
+                      uploadMutation.mutateAsync({
                         files,
                         initial_comment,
                         thread_ts: resolveQuickReplyUploadThreadTs(),
@@ -563,8 +562,8 @@ export function SlackQuickReplyPanel({
                     </Button>
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    ⌘/Ctrl+Enter envía según la pestaña activa (Canal o Hilo); los botones fuerzan el destino.
-                    También puedes pegar capturas, usar el clip o arrastrar archivos sobre este panel (los mismos límites que en Comunicación).
+                    Los adjuntos se muestran arriba y se envían con Enter (o el botón de enviar). ⌘/Ctrl+Enter sigue el modo
+                    de la pestaña; los botones fuerzan canal o hilo solo para texto.
                   </p>
                   <Button
                     type="button"

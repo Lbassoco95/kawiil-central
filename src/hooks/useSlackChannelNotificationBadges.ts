@@ -12,6 +12,8 @@ const EMPTY_SLACK_BADGE_COUNTS: Record<string, number> = Object.freeze({});
  *
  * Slack guarda `channel|ts` (texto, no UUID) en `entity_ref`. La columna `entity_id`
  * es UUID y queda nula para notificaciones de Slack.
+ * La columna `entity_ref` en `public.notifications` está en la migración
+ * `20260417165629_a35c16f1-5939-45cc-82ed-6eae6a4a6e70.sql` (índice parcial Slack).
  */
 export function useSlackChannelNotificationBadges(userId: string | undefined) {
   const query = useQuery({
