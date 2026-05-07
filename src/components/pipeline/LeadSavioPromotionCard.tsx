@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSavioWriteAccess } from "@/hooks/useSavioWriteAccess";
 import { useSavioFinanceWriteMutation } from "@/hooks/useSavioFinanceWrite";
-import { pipelineQueryKeys } from "@/hooks/usePipeline";
+import { useUpdateLead, pipelineQueryKeys } from "@/hooks/usePipeline";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   extractSavioIdFromWriteData,
   extractSavioInvoiceIdFromWriteData,
 } from "@/lib/clientSavioLink";
+import { canSendLeadToSavio, isLeadPipelineLost } from "@/lib/pipelineSavioGate";
 
 const SAVIO_APP_URL =
   typeof import.meta !== "undefined"
@@ -28,6 +29,11 @@ export type LeadSavioPromotionCardProps = {
   companyName: string | null;
   email: string | null;
   phone: string | null;
+  /** Slug de la etapa actual (`convertido` = trato ganado). */
+  stageSlug: string | undefined;
+  billingLegalName: string | null;
+  billingRfc: string | null;
+  billingServiceDescription: string | null;
   /** Valor al cierre (MXN); null si falta cargar/guardar en la ficha. */
   estimatedCloseMxn: number | null;
 };
@@ -39,26 +45,45 @@ export function LeadSavioPromotionCard({
   companyName,
   email,
   phone,
+  stageSlug,
+  billingLegalName,
+  billingRfc,
+  billingServiceDescription,
   estimatedCloseMxn,
 }: LeadSavioPromotionCardProps) {
   const qc = useQueryClient();
   const { data: access, isLoading: accessLoading } = useSavioWriteAccess();
   const writeMut = useSavioFinanceWriteMutation();
+  const updateLead = useUpdateLead();
 
   const [legalName, setLegalName] = useState("");
   const [rfc, setRfc] = useState("");
   const [serviceDescription, setServiceDescription] = useState("");
   const [amountStr, setAmountStr] = useState("");
 
+  const allowSavio = canSendLeadToSavio(stageSlug);
+  const isLost = isLeadPipelineLost(stageSlug);
+
   useEffect(() => {
-    setLegalName(companyName?.trim() ? companyName.trim() : fullName.trim());
-  }, [companyName, fullName]);
+    const defaultLegal =
+      billingLegalName?.trim() || companyName?.trim() || fullName.trim() || "";
+    setLegalName(defaultLegal);
+    setRfc(billingRfc ?? "");
+    setServiceDescription(billingServiceDescription ?? "");
+  }, [
+    leadId,
+    billingLegalName,
+    billingRfc,
+    billingServiceDescription,
+    companyName,
+    fullName,
+  ]);
 
   useEffect(() => {
     if (estimatedCloseMxn != null && Number.isFinite(estimatedCloseMxn) && estimatedCloseMxn > 0) {
       setAmountStr(String(estimatedCloseMxn));
     }
-  }, [estimatedCloseMxn]);
+  }, [leadId, estimatedCloseMxn]);
 
   const canWrite = access?.canWrite === true;
   const rpcError = access?.rpcError;
@@ -72,17 +97,43 @@ export function LeadSavioPromotionCard({
         </p>
       ) : (
         <p>
-          Quién pueda crear cargos necesita «Crear cargos y registrar pagos» en Kawiil; el rol en app.savio.mx no es suficiente.
+          Quién pueda crear cargos necesita «Crear cargos y registrar pagos» en Kawiil; el rol en app.savio.mx no es
+          suficiente.
         </p>
       )}
     </div>
   );
 
+  async function saveBillingDraft() {
+    try {
+      await updateLead.mutateAsync({
+        id: leadId,
+        billing_legal_name: legalName.trim() || null,
+        billing_rfc: rfc.trim() || null,
+        billing_service_description: serviceDescription.trim() || null,
+      });
+      toast.success("Datos fiscales guardados en el lead. Sigue el seguimiento; Savio será al cerrar el trato.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudieron guardar los datos.");
+    }
+  }
+
   async function promoteToSavio() {
+    if (!allowSavio) {
+      toast.error("Primero marca el lead como ganado (etapa «Cerrado») antes de enviarlo a Savio.");
+      return;
+    }
+    if (isLost) return;
+
     const legal = legalName.trim();
     const amtRaw = parseFloat(amountStr.replace(/,/g, ""));
+    const rfcTrim = rfc.trim();
     if (!legal) {
       toast.error("Indica la razón social o nombre del cliente en Savio.");
+      return;
+    }
+    if (!rfcTrim) {
+      toast.error("Savio requiere RFC (tax_id) para validación SAT en la mayoría de las cuentas.");
       return;
     }
     if (!Number.isFinite(amtRaw) || amtRaw <= 0) {
@@ -90,13 +141,13 @@ export function LeadSavioPromotionCard({
       return;
     }
 
-    const customerPayload: Record<string, unknown> = { legal_name: legal };
+    const customerPayload: Record<string, unknown> = {
+      legal_name: legal,
+      rfc: rfcTrim,
+      tax_id: rfcTrim,
+    };
     if (email?.trim()) customerPayload.email = email.trim();
     if (phone?.trim()) customerPayload.phone = phone.trim();
-    if (rfc.trim()) {
-      customerPayload.rfc = rfc.trim();
-      customerPayload.tax_id = rfc.trim();
-    }
 
     let customerRes: Awaited<ReturnType<typeof writeMut.mutateAsync>>;
     try {
@@ -169,7 +220,7 @@ export function LeadSavioPromotionCard({
     return (
       <Card className="border-dashed">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Savio (cliente y cargo)</CardTitle>
+          <CardTitle className="text-base">Facturación y Savio</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">Comprobando permisos…</CardContent>
       </Card>
@@ -180,7 +231,7 @@ export function LeadSavioPromotionCard({
     return (
       <Card className="border-dashed">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Savio (cliente y cargo)</CardTitle>
+          <CardTitle className="text-base">Facturación y Savio</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground">
@@ -204,7 +255,7 @@ export function LeadSavioPromotionCard({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <CardTitle className="text-base">Savio · Cliente y cargo</CardTitle>
+          <CardTitle className="text-base">Facturación y Savio</CardTitle>
           {SAVIO_APP_URL ? (
             <Button variant="ghost" size="sm" className="h-8 text-xs" asChild>
               <a href={SAVIO_APP_URL} target="_blank" rel="noreferrer">
@@ -215,8 +266,20 @@ export function LeadSavioPromotionCard({
           ) : null}
         </div>
         <p className="text-xs text-muted-foreground font-normal">
-          Crea el cliente y un cargo con el monto del lead. El servicio se envía como descripción del cargo (o ajusta
-          conceptos avanzados desde Finanzas).
+          {isLost ? (
+            <>Lead marcado como perdido: no puedes darlo de alta en Savio desde aquí. Puedes guardar borrador por si el caso revive.</>
+          ) : allowSavio ? (
+            <>
+              El trato está en <strong className="text-foreground font-medium">cerrado ganado</strong>. Revisa datos y RFC
+              (requeridos para SAT) y crea cliente y cargo en Savio cuando estés listo.
+            </>
+          ) : (
+            <>
+              Durante el seguimiento, <strong className="text-foreground font-medium">solo guardamos</strong> razón social, RFC,
+              servicio y monto en el lead. El envío a Savio está disponible cuando muevas este lead a la etapa{" "}
+              <strong className="text-foreground font-medium">«Cerrado»</strong> (trato ganado).
+            </>
+          )}
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -227,11 +290,11 @@ export function LeadSavioPromotionCard({
         ) : null}
         <div>
           <Label>Razón social / nombre (Savio)</Label>
-          <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Empresa o nombre" />
+          <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Empresa o nombre fiscal" />
         </div>
         <div>
-          <Label>RFC (opcional)</Label>
-          <Input value={rfc} onChange={(e) => setRfc(e.target.value)} placeholder="Para facturación en Savio" />
+          <Label>RFC {allowSavio ? "(obligatorio para SAT)" : "(guárdalo aquí antes del cierre)"}</Label>
+          <Input value={rfc} onChange={(e) => setRfc(e.target.value)} placeholder="Ej. XAXX010101000" />
         </div>
         <div>
           <Label>Monto del cargo (MXN)</Label>
@@ -246,8 +309,8 @@ export function LeadSavioPromotionCard({
           />
           {estimatedCloseMxn == null ? (
             <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
-              No hay valor estimado al cierre en la ficha; indica el monto manualmente o guárdalo arriba y vuelve a
-              intentar.
+              En “Datos del lead” también puedes cargar el <strong>valor estimado al cierre</strong>; si no está guardado ahí,
+              indica aquí el monto que usarás al crear el cargo en Savio.
             </p>
           ) : null}
         </div>
@@ -257,17 +320,37 @@ export function LeadSavioPromotionCard({
             rows={2}
             value={serviceDescription}
             onChange={(e) => setServiceDescription(e.target.value)}
-            placeholder="Ej. Constitución S.A. de C.V. — honorarios iniciales"
+            placeholder="Ej. Constitución de empresa — honorarios"
           />
         </div>
-        <Button
-          type="button"
-          disabled={writeMut.isPending}
-          onClick={() => void promoteToSavio()}
-          className="w-full sm:w-auto"
-        >
-          {writeMut.isPending ? "Enviando a Savio…" : "Crear cliente y cargo en Savio"}
-        </Button>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={updateLead.isPending}
+            onClick={() => void saveBillingDraft()}
+            className="w-full sm:w-auto"
+          >
+            {updateLead.isPending ? "Guardando…" : "Guardar datos fiscales en el lead"}
+          </Button>
+          <Button
+            type="button"
+            disabled={writeMut.isPending || !allowSavio || isLost}
+            onClick={() => void promoteToSavio()}
+            className="w-full sm:w-auto"
+            title={
+              !allowSavio ? "Primero marca el lead como ganado en la etapa Cerrado" : isLost ? "Lead perdido" : undefined
+            }
+          >
+            {writeMut.isPending ? "Enviando a Savio…" : "Crear cliente y cargo en Savio"}
+          </Button>
+        </div>
+        {!allowSavio && !isLost ? (
+          <p className="text-[11px] text-muted-foreground">
+            Usa <strong className="text-foreground">Registrar actividad</strong> y correos/notas para el seguimiento. Savio espera hasta el cierre ganado.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

@@ -33,7 +33,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { LeadActivityPanel } from "@/components/pipeline/LeadActivityPanel";
 import { LeadActivityTimeline } from "@/components/pipeline/LeadActivityTimeline";
@@ -235,6 +235,11 @@ export default function LeadDetailPage() {
     }
   };
 
+  const currentStageSlug = useMemo(() => {
+    if (!lead) return undefined;
+    return stages.find((s) => s.id === lead.stage_id)?.slug;
+  }, [stages, lead]);
+
   if (isLoading || !lead) {
     return (
       <div className="space-y-4">
@@ -327,6 +332,10 @@ export default function LeadDetailPage() {
         companyName={lead.company_name}
         email={lead.email}
         phone={lead.phone}
+        stageSlug={currentStageSlug}
+        billingLegalName={lead.billing_legal_name}
+        billingRfc={lead.billing_rfc}
+        billingServiceDescription={lead.billing_service_description}
         estimatedCloseMxn={estimatedCloseMxn}
       />
 

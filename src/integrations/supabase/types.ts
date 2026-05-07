@@ -3116,6 +3116,9 @@ export type Database = {
           calendly_booked_at: string | null
           calendly_event_uri: string | null
           calendly_status: string | null
+          billing_legal_name: string | null
+          billing_rfc: string | null
+          billing_service_description: string | null
           campaign_name: string | null
           company_name: string | null
           country_code: string | null
@@ -3166,6 +3169,9 @@ export type Database = {
           entity_type?: string | null
           estimated_budget?: string | null
           estimated_value?: number | null
+          billing_legal_name?: string | null
+          billing_rfc?: string | null
+          billing_service_description?: string | null
           form_name?: string | null
           full_name: string
           id?: string
@@ -3206,6 +3212,9 @@ export type Database = {
           entity_type?: string | null
           estimated_budget?: string | null
           estimated_value?: number | null
+          billing_legal_name?: string | null
+          billing_rfc?: string | null
+          billing_service_description?: string | null
           form_name?: string | null
           full_name?: string
           id?: string
