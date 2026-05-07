@@ -203,9 +203,10 @@ function groupAgents(agents: Agent[]): Record<AgentGroupKey, Agent[]> {
   };
 
   for (const agent of agents) {
+    const nameKey = agent.name.trim().toLowerCase();
     let placed = false;
     for (const [groupKey, names] of Object.entries(AGENT_GROUPS)) {
-      if ((names as readonly string[]).includes(agent.name)) {
+      if ((names as readonly string[]).includes(nameKey)) {
         groups[groupKey as keyof typeof AGENT_GROUPS].push(agent);
         placed = true;
         break;

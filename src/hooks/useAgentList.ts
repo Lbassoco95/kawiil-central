@@ -15,8 +15,8 @@ import { useAuth } from "@/contexts/AuthContext";
  *     filas de `client_agents` del cliente con el template anidado. Este
  *     hook filtra solo `instance_status='active'` (oculta pausadas/archivadas).
  *   - `template`: cuando `clientId` es null/undefined. La edge function
- *     devuelve directamente los templates consultables activos. No hay
- *     `instance_status`, se devuelven tal cual.
+ *     devuelve templates `kind=consultable` excepto `status='archived'`.
+ *     No hay `instance_status`; se devuelven tal cual.
  *
  * Cache:
  *   - `queryKey: ['agent-list', clientId ?? null]` → cache separado por

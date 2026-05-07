@@ -12,7 +12,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  *       Se devuelven las filas de client_agents del cliente (instancias)
  *       con el template anidado desde agent_registry.
  *   - "template": cuando no hay cliente en contexto.
- *       Se devuelven directamente los templates consultables activos.
+ *       Se devuelven templates consultables cuyo status no sea "archived"
+ *       (idle, working, resting, etc.). Así la lista del modal no pierde áreas
+ *       solo porque el estado operativo reflejó una corrida reciente en la VM.
  *
  * Diseño (Bloque B1.6 del plan v6):
  *   - verify_jwt=true en supabase/config.toml.
@@ -170,14 +172,14 @@ serve(async (req: Request) => {
     }
 
     // =========================================================================
-    // CASO B — sin client_id: devolver templates consultables activos.
+    // CASO B — sin client_id: devolver templates consultables utilizables (no archivados).
     // =========================================================================
     if (!clientId) {
       const { data, error } = await supabaseAdmin
         .from("agent_registry")
         .select("id, name, display_name, description, role, capabilities, config")
         .eq("kind", "consultable")
-        .eq("status", "idle")
+        .neq("status", "archived")
         .order("display_name", { ascending: true });
 
       if (error) {
@@ -233,7 +235,7 @@ serve(async (req: Request) => {
 
     // Leer client_agents con JOIN a agent_registry (org global) via service_role.
     // Filtramos en SQL solo por client_id; los filtros de template (kind='consultable',
-    // status='idle') se aplican en memoria porque el filtro `.eq('template.kind', …)`
+    // status != 'archived') se aplican en memoria porque el filtro `.eq('template.kind', …)`
     // en nested selects de PostgREST no siempre excluye filas, solo deja el embed null.
     const { data, error } = await supabaseAdmin
       .from("client_agents")
@@ -271,7 +273,7 @@ serve(async (req: Request) => {
           | null;
         if (!template) return null;
         if (template.kind !== "consultable") return null;
-        if (template.status !== "idle") return null;
+        if (template.status === "archived") return null;
         return {
           instance_id: row.id,
           instance_status: row.status,
