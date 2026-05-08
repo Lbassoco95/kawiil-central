@@ -150,7 +150,9 @@ Deno.serve(async (req) => {
       missing.push("MOFFIN_SAT_CIEC_SECRET o MOFFIN_FIEL_SECRET (mínimo 32 caracteres; cifrado CIEC en moffin-sat-ciec)");
     }
     if (!Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET")?.trim()) {
-      missing.push("MOFFIN_SVIX_SIGNING_SECRET (webhook Svix; actualización de consultas async)");
+      warnings.push(
+        "MOFFIN_SVIX_SIGNING_SECRET: opcional en Solutions. CSF y opinión 32D notifican con POST JSON directo (sin firma Svix); el whsec sólo sirve si aún recibís webhooks Svix firmados (cabeceras svix-*) desde otro producto.",
+      );
     }
     if (!moffinLegacyApiKey()) {
       warnings.push(
@@ -186,9 +188,9 @@ Deno.serve(async (req) => {
       baseUrlHost,
       solutionsBaseHost,
       looksLikeSandbox,
-      /** URL exacta que debe registrar Moffin/Svix (verify_jwt false en moffin-webhook). */
+      /** URL POST que debe tener Moffin/Solutions configurada (verify_jwt false en moffin-webhook). CSF/32D: POST JSON sin Svix. */
       moffinWebhookFullUrl,
-      /** true si existe MOFFIN_SVIX_SIGNING_SECRET (no se expone el valor). */
+      /** true si existe MOFFIN_SVIX_SIGNING_SECRET (opcional si sólo llegan POST directos Solutions). */
       svixSigningSecretPresent,
       hint: ok
         ? "Credenciales mínimas para el modo configurado están presentes (no se muestran valores)."

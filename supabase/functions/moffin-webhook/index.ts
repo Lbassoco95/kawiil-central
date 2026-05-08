@@ -1,16 +1,13 @@
 /**
- * Webhook Svix (Moffin): verifica firma y actualiza moffin_consults cuando llega el resultado asíncrono.
+ * Webhook Moffin: actualiza moffin_consults cuando llega el resultado asíncrono.
  *
- * sat_rfc (constancia/opinión en Kawiil): la API pública documenta certificados RFC; el payload puede traer
- * `.cer` u otros campos. Revisa logs `moffin_webhook_sat_rfc_payload_shape` y compáralos con lo que indique Moffin.
- * Si documentan nombres de campo con URL de PDF, configura `MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES` en Edge (misma
- * variable que usa moffin-query / pickSatRfcPdfUrlForConsult).
+ * Dos entradas:
+ * - Svix: cabeceras svix-id, svix-timestamp, svix-signature + MOFFIN_SVIX_SIGNING_SECRET (p. ej. otros productos).
+ * - POST directo Solutions (CSF / opinión 32D según Moffin): mismo URL, sin cabeceras Svix ni firma; correlación por queryId en el JSON.
  *
- * Configuración:
- * - MOFFIN_SVIX_SIGNING_SECRET = whsec_... (Svix / Moffin)
- * - URL: https://<ref>.supabase.co/functions/v1/moffin-webhook (no usar moffin-query: exige JWT)
+ * sat_rfc: revisa logs `moffin_webhook_sat_rfc_payload_shape`. PDF opcional vía MOFFIN_SAT_RFC_EXTRA_PDF_FIELD_NAMES.
  *
- * Deploy: verify_jwt = false (supabase/config.toml)
+ * URL: https://<ref>.supabase.co/functions/v1/moffin-webhook · verify_jwt = false (supabase/config.toml)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import {
@@ -229,57 +226,84 @@ Deno.serve(async (req) => {
     });
   }
 
-  const secret = Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET");
-  if (!secret?.trim()) {
-    console.error("moffin-webhook: MOFFIN_SVIX_SIGNING_SECRET no configurado");
-    return new Response(
-      JSON.stringify({
-        error: "svix_secret_missing",
-        message: "Configura MOFFIN_SVIX_SIGNING_SECRET en Edge Functions (valor whsec_... de Svix).",
-      }),
-      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-
   const rawBody = await req.text();
   const svixId = req.headers.get("svix-id");
   const svixTs = req.headers.get("svix-timestamp");
   const svixSig = req.headers.get("svix-signature");
+  const hasFullSvix = !!(svixId && svixTs && svixSig);
 
-  if (!svixId || !svixTs || !svixSig) {
-    return new Response(
-      JSON.stringify({
-        error: "missing_svix_headers",
-        message: "Se requieren cabeceras svix-id, svix-timestamp y svix-signature",
-      }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  let eventType: string;
+  let data: unknown;
+  /** Envelope completo guardado en raw_response (Svix verificado o cuerpo JSON Solutions). */
+  let envelopeRecord: Record<string, unknown>;
+  let delivery: "svix" | "solutions_direct";
+
+  if (hasFullSvix) {
+    const secret = Deno.env.get("MOFFIN_SVIX_SIGNING_SECRET");
+    if (!secret?.trim()) {
+      console.error("moffin-webhook: MOFFIN_SVIX_SIGNING_SECRET no configurado (ruta Svix)");
+      return new Response(
+        JSON.stringify({
+          error: "svix_secret_missing",
+          message: "Configura MOFFIN_SVIX_SIGNING_SECRET en Edge Functions (valor whsec_... de Svix).",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    try {
+      const wh = new Webhook(secret);
+      envelopeRecord = wh.verify(rawBody, {
+        "svix-id": svixId,
+        "svix-timestamp": svixTs,
+        "svix-signature": svixSig,
+      }) as Record<string, unknown>;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn("moffin-webhook: verificación Svix falló:", msg);
+      return new Response(JSON.stringify({ error: "invalid_signature", message: msg }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    eventType = String(envelopeRecord.type ?? "unknown");
+    data = envelopeRecord.data;
+    delivery = "svix";
+    console.log(
+      `moffin-webhook: delivery=svix type=${eventType}`,
+      JSON.stringify(envelopeRecord).slice(0, 1500),
+    );
+  } else {
+    // POST directo Solutions (CSF / 32D): sin firma Svix. Si Moffin añade cabecera compartida, validar aquí.
+    let parsed: unknown;
+    try {
+      parsed = rawBody.trim() ? JSON.parse(rawBody) : null;
+    } catch (_e) {
+      return new Response(
+        JSON.stringify({
+          error: "invalid_json",
+          message: "Cuerpo JSON inválido (webhook POST directo de Solutions espera objeto JSON).",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return new Response(
+        JSON.stringify({
+          error: "invalid_body",
+          message: "Se esperaba un objeto JSON en la raíz (POST directo Solutions).",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    envelopeRecord = parsed as Record<string, unknown>;
+    data = envelopeRecord;
+    eventType = "solutions_direct";
+    delivery = "solutions_direct";
+    console.log(
+      "moffin-webhook: delivery=solutions_direct",
+      JSON.stringify(envelopeRecord).slice(0, 1500),
     );
   }
-
-  let verified: Record<string, unknown>;
-  try {
-    const wh = new Webhook(secret);
-    verified = wh.verify(rawBody, {
-      "svix-id": svixId,
-      "svix-timestamp": svixTs,
-      "svix-signature": svixSig,
-    }) as Record<string, unknown>;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("moffin-webhook: verificación Svix falló:", msg);
-    return new Response(JSON.stringify({ error: "invalid_signature", message: msg }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  const eventType = String(verified.type ?? "unknown");
-  const data = verified.data;
-
-  console.log(
-    `moffin-webhook: type=${eventType}`,
-    JSON.stringify(verified).slice(0, 1500),
-  );
 
   const admin = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -302,11 +326,11 @@ Deno.serve(async (req) => {
     }
   }
 
-  const moffinReport = extractMoffinReport(data) ?? extractMoffinReport(verified);
+  const moffinReport = extractMoffinReport(data) ?? extractMoffinReport(envelopeRecord);
   const queryId = moffinReport
     ? extractMoffinQueryIdFromPayload(moffinReport)
     : extractMoffinQueryIdFromPayload(data);
-  const extId = findKawiilExternalId(data) ?? findKawiilExternalId(verified);
+  const extId = findKawiilExternalId(data) ?? findKawiilExternalId(envelopeRecord);
 
   let row:
     | {
@@ -367,8 +391,9 @@ Deno.serve(async (req) => {
 
   const mergedRaw = {
     ...(moffinReport ?? {}),
+    _webhookDelivery: delivery,
     _svixEventType: eventType,
-    _svixPayload: verified,
+    _svixPayload: envelopeRecord,
   };
 
   const consultType = row.consult_type as ConsultType;

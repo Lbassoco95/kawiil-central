@@ -63,9 +63,12 @@ export function MoffinIntegrationCard() {
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <p className="text-xs text-muted-foreground">
-          Las API keys y el secreto Svix viven solo en{" "}
+          Las API keys viven solo en{" "}
           <strong className="text-foreground font-medium">Supabase → Edge Functions → Secrets</strong> (una vez por
-          entorno). La app no las almacena ni las vuelve a pedir.
+          entorno). En Solutions, CSF y 32D suelen notificar al webhook con{" "}
+          <strong className="text-foreground font-medium">POST JSON directo</strong> (sin Svix);{" "}
+          <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> es opcional salvo que recibáis eventos con
+          cabeceras <code className="text-foreground">svix-*</code>. La app no almacena secretos.
         </p>
 
         {isLoading ? (
@@ -133,11 +136,11 @@ export function MoffinIntegrationCard() {
             ) : null}
             {typeof data?.svixSigningSecretPresent === "boolean" ? (
               <p className="text-[11px] text-muted-foreground">
-                Webhook Svix: secreto en Edge{" "}
+                Webhook: <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> en Edge{" "}
                 <strong className="text-foreground font-medium">
-                  {data.svixSigningSecretPresent ? "configurado" : "no configurado"}
+                  {data.svixSigningSecretPresent ? "configurado" : "no configurado (ok para Solutions si sólo hay POST directo)"}
                 </strong>
-                . La URL del endpoint debe coincidir con la que ve Moffin (misma instancia Supabase).
+                . La URL del endpoint debe coincidir con la que configuró Moffin (misma instancia Supabase).
               </p>
             ) : null}
             {data?.moffinWebhookFullUrl ? (
@@ -225,8 +228,9 @@ export function MoffinIntegrationCard() {
                 >
                   Opinión 32D
                 </a>{" "}
-                — <code className="text-foreground">POST /query/sat/compliance-opinion</code>; resultado puede llegar por
-                webhook.
+                — <code className="text-foreground">POST /query/sat/compliance-opinion</code>; el resultado asíncrono lo
+                envía Solutions con <strong className="text-foreground font-medium">POST JSON</strong> a{" "}
+                <code className="text-foreground">moffin-webhook</code> (sin cabeceras Svix).
               </li>
             </ol>
           </div>
@@ -256,7 +260,8 @@ export function MoffinIntegrationCard() {
                 <code className="text-foreground">MOFFIN_SAT_CIEC_SECRET</code> o <code className="text-foreground">MOFFIN_FIEL_SECRET</code> (≥32) para CIEC cifrada
               </li>
               <li>
-                <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> para <code className="text-foreground">moffin-webhook</code>
+                <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> sólo si usáis webhooks Svix firmados (
+                cabeceras <code className="text-foreground">svix-*</code>); CSF/32D en Solutions usan POST directo
               </li>
             </ul>
           </div>
@@ -284,9 +289,10 @@ export function MoffinIntegrationCard() {
           </p>
           <ol className="list-decimal pl-4 space-y-1.5">
             <li>
-              <strong className="text-foreground">Admin</strong> (esta tarjeta): confirma{" "}
-              <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> y que el endpoint de arriba sea{" "}
-              <strong className="text-foreground">exactamente</strong> el que configuraste en Moffin/Svix
+              <strong className="text-foreground">Admin</strong> (esta tarjeta): la URL del webhook debe coincidir con la
+              de Moffin/Solutions (<code className="text-foreground">…/functions/v1/moffin-webhook</code>).{" "}
+              <code className="text-foreground">MOFFIN_SVIX_SIGNING_SECRET</code> sólo hace falta si el proveedor envía
+              Svix (<code className="text-foreground">svix-id</code>, etc.)
               {supabaseProjectRef ? (
                 <>
                   {" "}
@@ -296,15 +302,16 @@ export function MoffinIntegrationCard() {
               .
             </li>
             <li>
-              En <strong className="text-foreground">Supabase → Edge Functions → Logs</strong>, filtra{" "}
-              <code className="text-foreground">moffin-webhook</code>: si ves{" "}
-              <code className="text-foreground">sin fila moffin_consults coincidente</code>, el evento llegó pero el{" "}
+              En <strong className="text-foreground">Supabase → Edge Functions → Logs</strong>, busca{" "}
+              <code className="text-foreground">delivery=solutions_direct</code> en CSF/32D; si ves{" "}
+              <code className="text-foreground">sin fila moffin_consults coincidente</code>, el POST llegó pero el{" "}
               <code className="text-foreground">moffin_query_id</code> o el <code className="text-foreground">externalId</code>{" "}
               no coincide con la fila (revisa con Moffin el payload).
             </li>
             <li>
-              Si ves <code className="text-foreground">verificación Svix falló</code>, el <code className="text-foreground">whsec_…</code> en
-              Secrets no es el mismo que en el portal de Moffin/Svix para ese endpoint.
+              Si ves <code className="text-foreground">verificación Svix falló</code>, llegó un POST con cabeceras{" "}
+              <code className="text-foreground">svix-*</code> y el <code className="text-foreground">whsec_…</code> en
+              Secrets no coincide con ese flujo firmado.
             </li>
             <li>
               En <strong className="text-foreground">SQL Editor</strong>, revisa filas atascadas (quizá consultas viejas
@@ -344,7 +351,8 @@ limit 25;`}
               en legacy, carga FIEL (.cer/.key) y contraseña por consulta.
             </li>
             <li>
-              Webhook Svix debe apuntar a <code className="break-all text-foreground">{webhookUrl || "…/moffin-webhook"}</code>
+              La URL del webhook debe estar registrada en Moffin (<code className="break-all text-foreground">{webhookUrl || "…/moffin-webhook"}</code>
+              ): POST JSON corporativo Solutions, sin Svix obligatorio para CSF/32D.
             </li>
             <li>
               Si el estado queda pendiente: botón «Sincronizar con Moffin» en Contabilidad y revisar logs de{" "}
