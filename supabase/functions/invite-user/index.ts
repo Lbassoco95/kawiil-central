@@ -44,7 +44,14 @@ serve(async (req) => {
     const { data: orgId } = await adminClient.rpc('get_user_org_id', { _user_id: callerUser.id });
     if (!orgId) throw new Error('Could not determine organization');
 
-    const siteUrl = Deno.env.get('SITE_URL') || '';
+    const siteBase = (Deno.env.get('SITE_URL') || Deno.env.get('PUBLIC_APP_URL') || '').replace(/\/$/, '');
+    if (!siteBase || !/^https?:\/\//i.test(siteBase)) {
+      throw new Error(
+        'SITE_URL no configurada en Edge Functions (Secrets). Debe ser la URL pública del app (https://...) ' +
+          'y permitirse en Auth → URL Configuration → Redirect URLs.',
+      );
+    }
+    const redirectTo = `${siteBase}/cambiar-contrasena?flow=direct`;
 
     // Robust first-access flow: create confirmed user + send recovery link for password setup.
     const { data: createData, error: createError } = await adminClient.auth.admin.createUser({
@@ -87,7 +94,7 @@ serve(async (req) => {
     if (roleError) console.error('Role assignment error:', roleError);
 
     const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/cambiar-contrasena?flow=direct`,
+      redirectTo,
     });
 
     if (resetError) throw resetError;

@@ -35,8 +35,16 @@ Deno.serve(async (req) => {
     const { data: { user: targetUser }, error: userError } = await adminClient.auth.admin.getUserById(user_id);
     if (userError || !targetUser) throw new Error('Usuario no encontrado');
 
-    const siteUrl = Deno.env.get('SITE_URL') || '';
-    const email = targetUser.email!;
+    const siteBase = (Deno.env.get('SITE_URL') || Deno.env.get('PUBLIC_APP_URL') || '').replace(/\/$/, '');
+    if (!siteBase || !/^https?:\/\//i.test(siteBase)) {
+      throw new Error(
+        'SITE_URL no configurada en Edge Functions (Secrets). Debe ser la URL pública del app, p. ej. https://tu-dominio.com — ' +
+          'y esa misma URL base debe estar en Auth → URL Configuration → Redirect URLs.',
+      );
+    }
+    const redirectTo = `${siteBase}/cambiar-contrasena?flow=direct`;
+    const email = targetUser.email?.trim();
+    if (!email) throw new Error('El usuario no tiene correo en Auth; no se puede enviar el enlace.');
     const isConfirmed = !!targetUser.email_confirmed_at;
 
     console.log(`Resending for ${email}, confirmed: ${isConfirmed}`);
@@ -54,12 +62,17 @@ Deno.serve(async (req) => {
 
       // Now send recovery email
       const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${siteUrl}/cambiar-contrasena?flow=direct`,
+        redirectTo,
       });
 
       if (resetError) {
         const msg = resetError.message || '';
-        const isRateLimited = msg.toLowerCase().includes('for security purposes') && msg.toLowerCase().includes('after');
+        const m = msg.toLowerCase();
+        const isRateLimited =
+          (m.includes('for security purposes') && m.includes('after')) ||
+          m.includes('email rate limit') ||
+          m.includes('rate limit exceeded') ||
+          (m.includes('seconds') && m.includes('wait'));
         if (isRateLimited) {
           const secondsMatch = msg.match(/after\s+(\d+)\s+seconds/i);
           const retryAfterSeconds = secondsMatch ? Number(secondsMatch[1]) : 60;
@@ -77,7 +90,7 @@ Deno.serve(async (req) => {
 
       await adminClient.from('profiles').update({
         invitation_accepted: false,
-        onboarding_status: 'password_pending',
+        onboarding_status: 'invited',
       }).eq('user_id', user_id);
 
       console.log(`User confirmed + recovery sent to ${email}`);
@@ -91,12 +104,17 @@ Deno.serve(async (req) => {
 
       // Send recovery email (rate-limited by provider to ~60s per email)
       const { error: resetError } = await adminClient.auth.resetPasswordForEmail(email, {
-        redirectTo: `${siteUrl}/cambiar-contrasena?flow=direct`,
+        redirectTo,
       });
 
       if (resetError) {
         const msg = resetError.message || '';
-        const isRateLimited = msg.toLowerCase().includes('for security purposes') && msg.toLowerCase().includes('after');
+        const m = msg.toLowerCase();
+        const isRateLimited =
+          (m.includes('for security purposes') && m.includes('after')) ||
+          m.includes('email rate limit') ||
+          m.includes('rate limit exceeded') ||
+          (m.includes('seconds') && m.includes('wait'));
 
         if (isRateLimited) {
           const secondsMatch = msg.match(/after\s+(\d+)\s+seconds/i);
@@ -117,7 +135,7 @@ Deno.serve(async (req) => {
 
       // Update onboarding status to reflect they need to set password
       await adminClient.from('profiles').update({
-        onboarding_status: 'password_pending',
+        onboarding_status: 'invited',
       }).eq('user_id', user_id);
 
       console.log(`Recovery email sent to ${email}`);

@@ -22,7 +22,7 @@ import {
   effectiveCanEditTaskDueDates,
 } from "@/lib/kawiilerPermissions";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { functionInvokeUserMessageAsync, invokeFunctionWithSession } from "@/lib/supabaseInvoke";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -180,18 +180,27 @@ export function UserManagement() {
   const handleResendInvite = async (userId: string, email: string) => {
     setResendingInvite(userId);
     try {
-      const { data, error } = await supabase.functions.invoke("resend-invite", {
-        body: { user_id: userId },
-      });
-      if (error) throw error;
+      const { data, error } = await invokeFunctionWithSession<{
+        rate_limited?: boolean;
+        message?: string;
+        error?: string;
+        success?: boolean;
+      }>("resend-invite", { user_id: userId });
+      if (error) {
+        toast.error(await functionInvokeUserMessageAsync(data, error));
+        return;
+      }
       if (data?.rate_limited) {
         toast.error(data.message || "Debes esperar antes de reenviar nuevamente");
         return;
       }
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
       toast.success(data?.message || `Invitación reenviada a ${email}`);
-    } catch (e: any) {
-      toast.error(e.message || "Error al reenviar invitación");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Error al reenviar invitación");
     } finally {
       setResendingInvite(null);
     }
