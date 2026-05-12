@@ -340,9 +340,31 @@ export function UserManagement() {
                           </span>
                         </div>
                         <div>
-                          <span className="text-xs text-muted-foreground block">Estado</span>
-                          <Badge variant="outline" className="text-xs mt-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                            Activo
+                          <span className="text-xs text-muted-foreground block">Registro</span>
+                          {(() => {
+                            const raw = user.onboarding_status || (user.invitation_accepted ? "active" : "invited");
+                            const status = (raw in ONBOARDING_CONFIG ? raw : "invited") as OnboardingStatus;
+                            const config = ONBOARDING_CONFIG[status];
+                            const StatusIcon = config.icon;
+                            return (
+                              <Badge variant="outline" className={`text-xs mt-0.5 ${config.className}`}>
+                                <StatusIcon className="h-3 w-3 mr-1" />
+                                {config.label}
+                              </Badge>
+                            );
+                          })()}
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground block">Cuenta</span>
+                          <Badge
+                            variant="outline"
+                            className={
+                              user.is_active
+                                ? "text-xs mt-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-300"
+                                : "text-xs mt-0.5 bg-muted text-muted-foreground"
+                            }
+                          >
+                            {user.is_active ? "Activa" : "Inactiva"}
                           </Badge>
                         </div>
                         <div className="sm:col-span-2">
