@@ -6,6 +6,8 @@ import { openCommandPalette } from "@/lib/openCommandPalette";
 import { openMobileSidebar } from "@/lib/openMobileSidebar";
 import { cn } from "@/lib/utils";
 import { TopbarWidgets } from "./TopbarWidgets";
+import { RealtimeStatusIndicator } from "./RealtimeStatusIndicator";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface AppTopbarProps {
   isFullWidth?: boolean;
@@ -84,6 +86,10 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
             </kbd>
           )}
         </button>
+
+        <TooltipProvider delayDuration={150}>
+          <RealtimeStatusIndicator />
+        </TooltipProvider>
 
         <TopbarWidgets />
       </div>

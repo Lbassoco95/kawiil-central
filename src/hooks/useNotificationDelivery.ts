@@ -11,7 +11,23 @@ import {
   slackDesktopNotificationTagFromEntityRef,
   slackChannelAndMessageTsFromEntityRef,
   trackSlackDesktopNotification,
+  closeSlackDesktopNotificationsForChannel,
+  dismissSlackChannelSystemNotifications,
 } from "@/lib/slackReadNotificationDismiss";
+import {
+  applyRemoteSlackReadBroadcast,
+  ensureSlackReadBroadcastChannel,
+  getSlackReadBroadcastDeviceId,
+  SLACK_READ_BROADCAST_EVENT,
+  teardownSlackReadBroadcastChannel,
+  type SlackReadBroadcastPayload,
+} from "@/lib/slackReadBroadcast";
+import {
+  markRealtimeEventReceived,
+  setRealtimeStatusDown,
+  setRealtimeStatusReconnecting,
+  setRealtimeStatusSubscribed,
+} from "@/lib/realtimeStatusStore";
 import { SlackNotificationToast } from "@/components/notifications/SlackNotificationToast";
 
 type NotifRow = {
@@ -71,9 +87,10 @@ function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row:
   // Comunicación con `refetchInterval` y las mutaciones al enviar/reaccionar.
 }
 
-const RT_ERROR_TOAST_COOLDOWN_MS = 60_000;
 const SLACK_POLL_MS = 22_000;
 const TOAST_DEDUPE_MS = 120_000;
+/** Health-check: si Realtime no está SUBSCRIBED y la pestaña está visible, forzar refetch. */
+const RT_HEALTH_CHECK_MS = 60_000;
 /** Ventana en que, al montar el hook, seguimos considerando "en vivo" una fila no leída. */
 const FIRST_TICK_CATCHUP_MS = 30_000;
 /** Backoff exponencial para reintentar la suscripción Realtime. */
@@ -121,10 +138,10 @@ export function useNotificationDelivery() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const lastRtErrorToastAt = useRef(0);
   const prefsRef = useRef<NotificationDeliveryPrefs | undefined>(undefined);
   const toastDedupeIdsRef = useRef<Set<string>>(new Set());
   const pollCursorIsoRef = useRef<string | null>(null);
+  const rtSubscribedRef = useRef(false);
 
   const { data: prefs } = useQuery({
     queryKey: ["notification-delivery-prefs", user?.id],
@@ -356,6 +373,63 @@ export function useNotificationDelivery() {
     };
   }, [user?.id, qc, deliverNotificationRow]);
 
+  /**
+   * Mensajes del Service Worker (`sw.js`) cuando el usuario hace click en una push del SO.
+   * Forzamos invalidación inmediata de queries Slack para que el badge desaparezca antes
+   * incluso del próximo refetch automático.
+   */
+  useEffect(() => {
+    if (!user?.id) return;
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    const handler = (event: MessageEvent) => {
+      const d = event?.data;
+      if (!d || typeof d !== "object") return;
+      if (d.type !== "KAWIIL_INVALIDATE_SLACK_UNREAD") return;
+      qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+      void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
+      void qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+      void qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, [user?.id, qc]);
+
+  /**
+   * Suscripción al broadcast `slack-read` propio del usuario. Cuando el usuario lee en
+   * cualquiera de sus dispositivos, los demás reciben el evento e invalidan badges/snapshot
+   * sin esperar al polling. Ignoramos broadcasts emitidos por este mismo dispositivo
+   * (filtro por `payload.source` vs `getSlackReadBroadcastDeviceId()`).
+   */
+  useEffect(() => {
+    if (!user?.id) return;
+    const userId = user.id;
+    const myDeviceId = getSlackReadBroadcastDeviceId();
+    const ch = ensureSlackReadBroadcastChannel(userId);
+    const handler = (msg: { payload?: unknown }) => {
+      const payload = msg?.payload as SlackReadBroadcastPayload | undefined;
+      if (!payload || typeof payload !== "object") return;
+      if (!payload.channelId) return;
+      if (payload.source === myDeviceId) return;
+      console.debug("[slack-read-broadcast] aplicar remoto", {
+        channelId: payload.channelId,
+        from: payload.source,
+      });
+      applyRemoteSlackReadBroadcast(userId, payload);
+      closeSlackDesktopNotificationsForChannel(payload.channelId);
+      dismissSlackChannelSystemNotifications(payload.channelId);
+      qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
+      void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
+      void qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
+      void qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
+    };
+    ch.on("broadcast", { event: SLACK_READ_BROADCAST_EVENT }, handler);
+    return () => {
+      // No teardown agresivo aquí: el canal puede compartirse con el helper que emite.
+      // Removemos solo el listener de este efecto evitando colisiones al desmontar el hook.
+      teardownSlackReadBroadcastChannel(userId);
+    };
+  }, [user?.id, qc]);
+
   useEffect(() => {
     if (!user?.id) return;
 
@@ -370,6 +444,12 @@ export function useNotificationDelivery() {
       const delay = RT_RECONNECT_BACKOFF_MS[Math.min(attempt, RT_RECONNECT_BACKOFF_MS.length - 1)];
       attempt += 1;
       console.warn("[notif] realtime reconnect scheduled", { reason, delayMs: delay, attempt });
+      // A partir del 3er reintento sin éxito asumimos caída prolongada y reportamos `down` al store.
+      if (attempt >= 3) {
+        setRealtimeStatusDown(reason);
+      } else {
+        setRealtimeStatusReconnecting(reason);
+      }
       if (retryTimerId !== null) {
         window.clearTimeout(retryTimerId);
       }
@@ -400,6 +480,7 @@ export function useNotificationDelivery() {
             filter: `user_id=eq.${user.id}`,
           },
           (payload) => {
+            markRealtimeEventReceived();
             const row = payload.new as NotifRow;
             qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
             qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
@@ -416,6 +497,7 @@ export function useNotificationDelivery() {
             filter: `user_id=eq.${user.id}`,
           },
           (payload) => {
+            markRealtimeEventReceived();
             const row = payload.new as NotifRow;
             qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
             qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
@@ -427,17 +509,14 @@ export function useNotificationDelivery() {
           if (status === "SUBSCRIBED") {
             console.debug("[notif] realtime SUBSCRIBED", channelTopic);
             attempt = 0;
+            rtSubscribedRef.current = true;
+            setRealtimeStatusSubscribed();
             return;
           }
           if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
             console.error("notifications realtime:", status, err);
-            const now = Date.now();
-            if (now - lastRtErrorToastAt.current > RT_ERROR_TOAST_COOLDOWN_MS) {
-              lastRtErrorToastAt.current = now;
-              toast.error("Avisos en vivo desconectados. Intentando reconectar…", {
-                duration: 6000,
-              });
-            }
+            rtSubscribedRef.current = false;
+            setRealtimeStatusReconnecting(status);
             // Limpia este canal y programa reintento con backoff.
             try {
               supabase.removeChannel(channel);
@@ -466,4 +545,25 @@ export function useNotificationDelivery() {
       }
     };
   }, [user?.id, qc, deliverNotificationRow]);
+
+  /**
+   * Health-check Realtime: si la suscripción no está SUBSCRIBED y la pestaña está visible,
+   * forzamos refetch de las queries clave cada `RT_HEALTH_CHECK_MS` para que el sidebar
+   * no quede ciego mientras se reconecta. El polling de 22 s ya cubre `notifications` per se;
+   * este hook agrega cobertura para badges Slack y snapshot de unread.
+   */
+  useEffect(() => {
+    if (!user?.id) return;
+    const userId = user.id;
+    const id = window.setInterval(() => {
+      if (rtSubscribedRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      console.debug("[notif] realtime health-check refetch (RT no SUBSCRIBED, pestaña visible)");
+      void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
+      void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
+      void qc.invalidateQueries({ queryKey: ["user-notifications", userId] });
+      void qc.invalidateQueries({ queryKey: ["unread-notifications-count", userId] });
+    }, RT_HEALTH_CHECK_MS);
+    return () => window.clearInterval(id);
+  }, [user?.id, qc]);
 }

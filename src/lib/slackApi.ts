@@ -385,13 +385,55 @@ function base64ToBlob(base64: string, contentType: string): Blob {
   return new Blob([bytes], { type: contentType || "application/octet-stream" });
 }
 
+/**
+ * Error con código original devuelto por Slack (p. ej. `missing_scope`, `not_authed`,
+ * `invalid_auth`, `channel_not_found`). Permite al caller decidir si mostrar banner
+ * de "reconectar Slack" o solo loggear silenciosamente fallos transitorios.
+ */
+export class SlackMarkReadError extends Error {
+  readonly slackError: string;
+  readonly channel: string;
+  readonly ts?: string;
+  constructor(slackError: string, channel: string, ts: string | undefined, message?: string) {
+    super(message || slackError || "No se pudo marcar leído en Slack");
+    this.name = "SlackMarkReadError";
+    this.slackError = slackError;
+    this.channel = channel;
+    this.ts = ts;
+  }
+}
+
+const SLACK_MARK_READ_FATAL_CODES = new Set<string>([
+  "missing_scope",
+  "invalid_scope",
+  "not_authed",
+  "invalid_auth",
+  "token_revoked",
+  "account_inactive",
+  "not_allowed_token",
+]);
+
+/**
+ * `true` si el error indica que la sesión OAuth de Slack está rota y hay que reconectar
+ * (no es un fallo transitorio de red ni un problema puntual del canal).
+ */
+export function isSlackMarkReadFatal(err: unknown): boolean {
+  if (!(err instanceof SlackMarkReadError)) return false;
+  const code = (err.slackError || "").trim().toLowerCase();
+  if (!code) return false;
+  if (SLACK_MARK_READ_FATAL_CODES.has(code)) return true;
+  return code.startsWith("missing_scope");
+}
+
 export async function markSlackConversationRead(channel: string, ts?: string): Promise<void> {
   const data = await invokeSlackApi<{ ok: boolean; error?: string }>({
     action: "conversations.mark",
     channel,
     ts,
   });
-  if (!data.ok) throw new Error(data.error || "No se pudo marcar leído en Slack");
+  if (!data.ok) {
+    throw new SlackMarkReadError(data.error || "", channel, ts);
+  }
 }
 
 export type SlackUnreadSnapshotParams = {

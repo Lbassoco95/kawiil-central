@@ -457,6 +457,12 @@ async function handleMessageNotificationEvent(
   event: Record<string, unknown>,
   teamId: string,
   eventId?: string,
+  /**
+   * True cuando Slack está reintentando el mismo `event_id` (cabecera `x-slack-retry-num`).
+   * En ese caso evitamos el "dedup blando" (UPDATE) porque el contenido no cambió y ya hubo
+   * un INSERT; basta con dejar la fila tal cual para no generar tráfico Realtime extra.
+   */
+  isSlackRetry?: boolean,
 ) {
   const subtype = event.subtype as string | undefined;
   if (
@@ -801,16 +807,59 @@ async function handleMessageNotificationEvent(
   const userIds = rows.map((r) => r.user_id);
   const { data: existingRows } = await supabase
     .from("notifications")
-    .select("user_id, type")
+    .select("id, user_id, type")
     .eq("entity_type", "slack")
     .eq("entity_ref", entityRef)
     .in("user_id", userIds)
     .in("type", ["slack_message", "slack_mention"]);
 
-  const existingKey = new Set((existingRows || []).map((r) => `${r.user_id}|${r.type}`));
-  const dedupedRows = rows.filter((r) => !existingKey.has(`${r.user_id}|${r.type}`));
+  const existingByKey = new Map<string, { id: string; user_id: string; type: string }>();
+  for (const r of (existingRows || []) as Array<{ id: string; user_id: string; type: string }>) {
+    existingByKey.set(`${r.user_id}|${r.type}`, r);
+  }
+  const dedupedRows = rows.filter((r) => !existingByKey.has(`${r.user_id}|${r.type}`));
+  /**
+   * "Dedup blando": filas que ya existían (reentrega legítima de Slack o retry tras Realtime caído)
+   * se actualizan a `is_read=false` para forzar un evento Realtime UPDATE en el frontend.
+   * Sin esto, si el primer INSERT no llegó al cliente (Realtime down, refetch race), el badge se queda
+   * silencioso aunque el push del SO sí llegue. El frontend no muestra toast en UPDATE → no habrá doble toast.
+   * Saltamos UPDATE en reintentos del Event API: ahí no aporta y reduciría carga.
+   */
+  const updateableRows = isSlackRetry
+    ? []
+    : rows
+        .map((r) => existingByKey.get(`${r.user_id}|${r.type}`))
+        .filter((x): x is { id: string; user_id: string; type: string } => !!x);
+  if (updateableRows.length > 0) {
+    const ids = updateableRows.map((r) => r.id);
+    const { error: updErr } = await supabase
+      .from("notifications")
+      .update({ is_read: false })
+      .in("id", ids);
+    if (updErr) {
+      console.warn("slack-events: dedup blando UPDATE falló (silenciado)", {
+        channel,
+        ts,
+        eventId,
+        count: ids.length,
+        message: updErr.message,
+      });
+    } else {
+      console.log("slack-events: dedup blando UPDATE OK", {
+        channel,
+        ts,
+        eventId,
+        count: ids.length,
+      });
+    }
+  }
   if (dedupedRows.length === 0) {
-    console.log("Slack event deduped: no new notification rows", { channel, ts, eventId });
+    console.log("Slack event sin filas nuevas (todas existentes)", {
+      channel,
+      ts,
+      eventId,
+      softUpdated: updateableRows.length,
+    });
     return;
   }
 
@@ -1306,10 +1355,12 @@ serve(async (req) => {
             teamId,
             channel: event.channel,
             api_app_id: (data as { api_app_id?: string }).api_app_id,
+            isRetry: !!retryNum,
           });
           /** Responder 200 antes del tope de Slack (~3s); el trabajo sigue con waitUntil. */
+          const isSlackRetry = !!retryNum && retryNum !== "0";
           runSlackEventInBackground("handleMessageNotificationEvent", () =>
-            handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId, eventId),
+            handleMessageNotificationEvent(getSupabaseAdmin(), event, teamId, eventId, isSlackRetry),
           );
         } else {
           console.warn("slack-events: message sin team_id resolvible; no se crean notificaciones Kawiil", {

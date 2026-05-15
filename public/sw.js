@@ -27,7 +27,43 @@ self.addEventListener("notificationclick", (event) => {
   const url = event.notification.data?.url || "/";
   const origin = self.location.origin;
   const full = url.startsWith("http") ? url : `${origin}${url.startsWith("/") ? url : `/${url}`}`;
-  event.waitUntil(self.clients.openWindow(full));
+  // Adicional al abrir la URL, avisamos a las pestañas existentes para que invaliden caches Slack
+  // y refresquen badges de inmediato (la URL que abrimos puede estar en otra pestaña ya viva).
+  event.waitUntil(
+    (async () => {
+      try {
+        const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        for (const c of all) {
+          try {
+            c.postMessage({ type: "KAWIIL_INVALIDATE_SLACK_UNREAD", url: full });
+          } catch {
+            /* noop */
+          }
+        }
+        // Si ya hay una ventana abierta del mismo origen, enfócala en lugar de abrir otra.
+        const sameOrigin = all.find((c) => c.url && c.url.startsWith(origin));
+        if (sameOrigin && "focus" in sameOrigin) {
+          try {
+            await sameOrigin.focus();
+            if ("navigate" in sameOrigin && typeof sameOrigin.navigate === "function") {
+              try {
+                await sameOrigin.navigate(full);
+                return;
+              } catch {
+                /* algunos navegadores no permiten navigate cross-document; cae al openWindow */
+              }
+            }
+            return;
+          } catch {
+            /* abre una nueva como fallback */
+          }
+        }
+        await self.clients.openWindow(full);
+      } catch {
+        await self.clients.openWindow(full);
+      }
+    })(),
+  );
 });
 
 self.addEventListener("message", (event) => {

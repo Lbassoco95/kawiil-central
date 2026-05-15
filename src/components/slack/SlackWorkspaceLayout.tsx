@@ -2,7 +2,42 @@ import type { ReactNode } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Plus, MessageSquarePlus, Activity, Bookmark } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+export type SlackUnreadBreakdown = {
+  starred: number;
+  custom: number;
+  public: number;
+  private: number;
+  dm: number;
+};
+
+const EMPTY_BREAKDOWN: SlackUnreadBreakdown = {
+  starred: 0,
+  custom: 0,
+  public: 0,
+  private: 0,
+  dm: 0,
+};
+
+function fmtBadge(n: number): string {
+  if (n <= 0) return "0";
+  return n > 99 ? "99+" : String(n);
+}
+
+const BREAKDOWN_LABELS: Array<{ key: keyof SlackUnreadBreakdown; label: string }> = [
+  { key: "starred", label: "Destacados" },
+  { key: "custom", label: "Grupos" },
+  { key: "dm", label: "Mensajes directos" },
+  { key: "private", label: "Canales privados" },
+  { key: "public", label: "Canales" },
+];
 
 type Props = {
   sidebar: ReactNode;
@@ -17,6 +52,12 @@ type Props = {
   isConnected?: boolean;
   connectionLabel?: string;
   totalUnread?: number;
+  /**
+   * Desglose de no leídos por sección del sidebar. Se muestra como tooltip al hover del avatar
+   * del workspace en el rail; ayuda a localizar dónde están los pendientes cuando el usuario
+   * solo ve "99+" en el badge agregado.
+   */
+  unreadBreakdown?: SlackUnreadBreakdown;
   totalConversations?: number;
   channelsCount?: number;
   directsCount?: number;
@@ -55,6 +96,7 @@ export function SlackWorkspaceLayout({
   isConnected = false,
   connectionLabel,
   totalUnread = 0,
+  unreadBreakdown = EMPTY_BREAKDOWN,
   totalConversations,
   channelsCount,
   directsCount,
@@ -70,8 +112,11 @@ export function SlackWorkspaceLayout({
   const unreadBadge = totalUnread > 0 ? (totalUnread > 99 ? "99+" : String(totalUnread)) : null;
   const activityBadge = activityUnread > 0 ? (activityUnread > 99 ? "99+" : String(activityUnread)) : null;
   const laterBadge = laterCount > 0 ? (laterCount > 99 ? "99+" : String(laterCount)) : null;
+  const breakdownEntries = BREAKDOWN_LABELS.map((b) => ({ ...b, value: unreadBreakdown[b.key] ?? 0 }));
+  const hasAnyBreakdown = breakdownEntries.some((b) => b.value > 0);
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="flex h-full min-h-0 w-full flex-1 overflow-hidden rounded-2xl border border-slate-200/70 bg-card shadow-sm dark:border-slate-800/60">
       {/* Mini rail vertical de workspaces (estilo Slack-nativo). Solo desktop. */}
       <aside
@@ -81,21 +126,80 @@ export function SlackWorkspaceLayout({
         }}
         aria-label="Workspaces"
       >
-        <button
-          type="button"
-          className="relative grid h-10 w-10 place-items-center rounded-xl text-white text-sm font-bold shadow-sm ring-2 ring-white/10 hover:ring-white/30 transition"
-          style={{
-            background: "linear-gradient(135deg, hsl(207 100% 42%), hsl(217 91% 60%))",
-          }}
-          title={workspaceName}
-        >
-          {initial}
-          {unreadBadge && (
-            <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white tabular-nums leading-none">
-              {unreadBadge}
-            </span>
-          )}
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="relative grid h-10 w-10 place-items-center rounded-xl text-white text-sm font-bold shadow-sm ring-2 ring-white/10 hover:ring-white/30 transition"
+              style={{
+                background: "linear-gradient(135deg, hsl(207 100% 42%), hsl(217 91% 60%))",
+              }}
+              aria-label={
+                hasAnyBreakdown
+                  ? `${workspaceName} · ${unreadBadge ?? "0"} pendientes`
+                  : workspaceName
+              }
+            >
+              {initial}
+              {unreadBadge && (
+                <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white tabular-nums leading-none">
+                  {unreadBadge}
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" sideOffset={10} className="max-w-[260px] text-xs">
+            <p className="text-sm font-semibold leading-tight">{workspaceName}</p>
+            {hasAnyBreakdown ? (
+              <>
+                <p className="mt-1 text-muted-foreground">No leídos por sección:</p>
+                <ul className="mt-1 space-y-0.5">
+                  {breakdownEntries
+                    .filter((b) => b.value > 0)
+                    .map((b) => (
+                      <li
+                        key={b.key}
+                        className="flex items-center justify-between gap-3 tabular-nums"
+                      >
+                        <span>{b.label}</span>
+                        <span className="font-semibold">{fmtBadge(b.value)}</span>
+                      </li>
+                    ))}
+                </ul>
+              </>
+            ) : (
+              <p className="mt-1 text-muted-foreground">Sin pendientes en este momento.</p>
+            )}
+          </TooltipContent>
+        </Tooltip>
+        {hasAnyBreakdown && (
+          <div
+            className="flex flex-wrap justify-center gap-1 px-1"
+            aria-label="Indicador rápido de no leídos por sección"
+          >
+            {breakdownEntries
+              .filter((b) => b.value > 0)
+              .map((b) => (
+                <Tooltip key={b.key}>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        b.key === "starred" && "bg-amber-400",
+                        b.key === "custom" && "bg-sky-400",
+                        b.key === "dm" && "bg-emerald-400",
+                        b.key === "private" && "bg-violet-400",
+                        b.key === "public" && "bg-slate-300",
+                      )}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" sideOffset={10} className="text-xs">
+                    {b.label}: <span className="font-semibold tabular-nums">{fmtBadge(b.value)}</span>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+          </div>
+        )}
         {onNewMessage && (
           <button
             type="button"
@@ -218,5 +322,6 @@ export function SlackWorkspaceLayout({
       {/* Main panel */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-card">{main}</div>
     </div>
+    </TooltipProvider>
   );
 }

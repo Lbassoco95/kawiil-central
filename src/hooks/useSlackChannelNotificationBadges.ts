@@ -41,8 +41,10 @@ export function useSlackChannelNotificationBadges(userId: string | undefined) {
     },
     enabled: !!userId,
     staleTime: 15_000,
-    refetchInterval: 90_000,
+    /** 45 s reduce ventana ciega cuando Realtime falla; query es un select count-only barato. */
+    refetchInterval: 45_000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   return query.data ?? EMPTY_SLACK_BADGE_COUNTS;

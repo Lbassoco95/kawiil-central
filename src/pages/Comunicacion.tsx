@@ -16,6 +16,8 @@ import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   markSlackConversationRead,
+  isSlackMarkReadFatal,
+  SlackMarkReadError,
   invokeSlackApi,
   withHardTimeout,
   invokeSlackFileUpload,
@@ -46,6 +48,7 @@ import {
   compareSlackTs,
 } from "@/lib/slackReadCursor";
 import { clearSlackDraft, loadSlackDraft, saveSlackDraft } from "@/lib/slackDrafts";
+import { broadcastSlackChannelRead } from "@/lib/slackReadBroadcast";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
 import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
 import { SlackWorkspaceLayout } from "@/components/slack/SlackWorkspaceLayout";
@@ -212,6 +215,8 @@ export default function Comunicacion() {
   const [slackMpimPrefetchOk, setSlackMpimPrefetchOk] = useState(false);
   /** Fuerza recomputar cursor efectivo tras fusionar `last_read` de Slack en localStorage. */
   const [slackReadMergeBump, setSlackReadMergeBump] = useState(0);
+  /** Cooldown para no spamear el toast de "reconectar Slack" si fallan varios `conversations.mark` seguidos. */
+  const slackReconnectToastAtRef = useRef<number>(0);
 
   const switchChannel = useCallback(
     (id: string, updateUrl: boolean) => {
@@ -1036,6 +1041,47 @@ export default function Comunicacion() {
     saveSlackReadCursor(user.id, selectedChannel, lastMessageTs);
   }, [user?.id, selectedChannel, lastMessageTs]);
 
+  /**
+   * Wrapper alrededor de `markSlackConversationRead`:
+   * - Loguea fallos con contexto (channel, ts, hilo abierto) para diagnosticar el caso de hilos donde
+   *   el `ts` enviado puede no ser el que Slack espera y los badges quedan colgados.
+   * - Si el error indica sesión OAuth rota (`missing_scope`, `not_authed`, etc.), muestra un banner
+   *   persistente "Reconecta tu Slack" en lugar de tragar el error en silencio.
+   * - Otros errores (red, transitorios) se loguean a `console.warn` sin molestar al usuario.
+   */
+  const markSlackReadSafe = useCallback(
+    async (channelId: string, ts: string | undefined, ctx?: { source: string }) => {
+      try {
+        await markSlackConversationRead(channelId, ts);
+        if (user?.id) {
+          /** Notifica a otros dispositivos del mismo usuario para limpiar badges sin esperar polling. */
+          void broadcastSlackChannelRead(user.id, channelId, ts);
+        }
+      } catch (err) {
+        const slackError = err instanceof SlackMarkReadError ? err.slackError : "";
+        console.warn("[slack-mark-read] falló", {
+          source: ctx?.source ?? "unknown",
+          channelId,
+          ts,
+          threadOpen: !!threadRootTs,
+          slackError,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        if (isSlackMarkReadFatal(err)) {
+          const now = Date.now();
+          if (now - slackReconnectToastAtRef.current > 60_000) {
+            slackReconnectToastAtRef.current = now;
+            toast.error(
+              "Tu sesión de Slack no permite marcar mensajes como leídos. Pulsa «Actualizar permisos Slack» en la barra lateral.",
+              { duration: SLACK_PERMISSION_TOAST_MS },
+            );
+          }
+        }
+      }
+    },
+    [threadRootTs, user?.id],
+  );
+
   /** Al abrir una conversación o al fijar el último ts visible, limpiar avisos Kawiil de ese canal (no depender de la identidad del array `messages`). */
   useEffect(() => {
     if (!user?.id || !selectedChannel) return;
@@ -1051,22 +1097,32 @@ export default function Comunicacion() {
       void (async () => {
         try {
           await markSlackChannelNotificationsRead(uid, channelId);
-          if (latestTs) {
-            const ackKey = `${channelId}|${latestTs}`;
-            if (slackReadAckKeyRef.current !== ackKey) {
-              slackReadAckKeyRef.current = ackKey;
-              await markSlackConversationRead(channelId, latestTs);
-            }
-          }
-          await Promise.all([
-            qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] }),
-            qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", uid] }),
-            qc.invalidateQueries({ queryKey: ["user-notifications", uid] }),
-            qc.invalidateQueries({ queryKey: ["unread-notifications-count", uid] }),
-          ]);
-        } catch {
-          /* RLS u offline: no bloquear la UI */
+        } catch (err) {
+          console.warn("[slack-mark-read] markSlackChannelNotificationsRead falló", {
+            source: "channel-open",
+            channelId,
+            message: err instanceof Error ? err.message : String(err),
+          });
         }
+        if (latestTs) {
+          const ackKey = `${channelId}|${latestTs}`;
+          if (slackReadAckKeyRef.current !== ackKey) {
+            slackReadAckKeyRef.current = ackKey;
+            await markSlackReadSafe(channelId, latestTs, { source: "channel-open" });
+          }
+        }
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] }),
+          qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", uid] }),
+          qc.invalidateQueries({ queryKey: ["user-notifications", uid] }),
+          qc.invalidateQueries({ queryKey: ["unread-notifications-count", uid] }),
+        ]).catch((err) => {
+          console.warn("[slack-mark-read] invalidaciones tras marcar leído fallaron", {
+            source: "channel-open",
+            channelId,
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
       })();
     }, 450);
     return () => {
@@ -1075,7 +1131,7 @@ export default function Comunicacion() {
         slackMarkChannelReadDebounceRef.current = null;
       }
     };
-  }, [selectedChannel, user?.id, qc, lastMessageTs]);
+  }, [selectedChannel, user?.id, qc, lastMessageTs, markSlackReadSafe]);
 
   /** Si llega una notificación mientras el canal está abierto, márcala leída para que el badge no quede colgado. */
   useEffect(() => {
@@ -1109,22 +1165,26 @@ export default function Comunicacion() {
             void (async () => {
               try {
                 await markSlackChannelNotificationsRead(user.id, selectedChannel);
-                const latestTs = slackLatestMessageTsRef.current;
-                if (latestTs) {
-                  clearTimeout(slackReadAckTimerRef.current);
-                  slackReadAckTimerRef.current = setTimeout(() => {
-                    void markSlackConversationRead(selectedChannel, latestTs).catch(() => {
-                      /* sin bloqueo por fallo remoto */
-                    });
-                  }, 350);
-                }
-                qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
-                qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
-                qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
-                qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
-              } catch {
-                /* offline / RLS */
+              } catch (err) {
+                console.warn("[slack-mark-read] markSlackChannelNotificationsRead falló", {
+                  source: "active-channel-incoming",
+                  channelId: selectedChannel,
+                  message: err instanceof Error ? err.message : String(err),
+                });
               }
+              const latestTs = slackLatestMessageTsRef.current;
+              if (latestTs) {
+                clearTimeout(slackReadAckTimerRef.current);
+                slackReadAckTimerRef.current = setTimeout(() => {
+                  void markSlackReadSafe(selectedChannel, latestTs, {
+                    source: "active-channel-incoming",
+                  });
+                }, 350);
+              }
+              qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+              qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", user.id] });
+              qc.invalidateQueries({ queryKey: ["user-notifications", user.id] });
+              qc.invalidateQueries({ queryKey: ["unread-notifications-count", user.id] });
             })();
           }, 500);
         },
@@ -1143,7 +1203,7 @@ export default function Comunicacion() {
       }
       supabase.removeChannel(rt);
     };
-  }, [user?.id, selectedChannel, qc]);
+  }, [user?.id, selectedChannel, qc, markSlackReadSafe]);
 
   const { data: channelMembers = [] } = useQuery({
     queryKey: ["slack-channel-members", selectedChannel],
@@ -1618,8 +1678,43 @@ export default function Comunicacion() {
       (acc, n) => acc + (n || 0),
       0,
     );
-    return { totalConvs, channels, directs, totalUnread };
-  }, [conversations, displayUnreadByChannel]);
+
+    /**
+     * Desglose por sección del sidebar para que el rail/avatar (incluso colapsado)
+     * pueda mostrar dónde están los pendientes — no solo el total. Resuelve el caso
+     * "me llegó push pero no sé en qué grupo está la notificación".
+     */
+    let starredUnread = 0;
+    let customUnread = 0;
+    let publicUnread = 0;
+    let privateUnread = 0;
+    let dmUnread = 0;
+    for (const c of conversations) {
+      const u = displayUnreadByChannel[c.id] || 0;
+      if (u <= 0) continue;
+      const pref = commPrefsByChannel[c.id];
+      if (pref?.is_starred) {
+        starredUnread += u;
+      } else if (channelsInCustomGroups.has(c.id)) {
+        customUnread += u;
+      } else if (c.is_im || c.is_mpim) {
+        dmUnread += u;
+      } else if (c.is_private) {
+        privateUnread += u;
+      } else {
+        publicUnread += u;
+      }
+    }
+    const unreadBreakdown = {
+      starred: starredUnread,
+      custom: customUnread,
+      public: publicUnread,
+      private: privateUnread,
+      dm: dmUnread,
+    };
+
+    return { totalConvs, channels, directs, totalUnread, unreadBreakdown };
+  }, [conversations, displayUnreadByChannel, commPrefsByChannel, channelsInCustomGroups]);
 
   if (loadingConn) {
     return (
@@ -1957,7 +2052,7 @@ export default function Comunicacion() {
                       ? "private"
                       : "channel"
               }
-              unreadCount={slackUnreadByChannel[selectedChannel] ?? 0}
+              unreadCount={displayUnreadByChannel[selectedChannel] ?? 0}
               onJumpToFirst={() => {
                 const first = messages[0];
                 if (first) {
@@ -2340,6 +2435,7 @@ export default function Comunicacion() {
           isConnected={isConnected}
           connectionLabel={connection?.slack_user_id ? "OAuth ok" : "—"}
           totalUnread={slackHeaderSummary.totalUnread}
+          unreadBreakdown={slackHeaderSummary.unreadBreakdown}
           totalConversations={slackHeaderSummary.totalConvs}
           channelsCount={slackHeaderSummary.channels}
           directsCount={slackHeaderSummary.directs}

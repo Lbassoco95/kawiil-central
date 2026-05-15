@@ -4,6 +4,9 @@ import { fetchSlackUnreadSnapshot } from "@/lib/slackApi";
 import { loadSlackReadMap } from "@/lib/slackReadCursor";
 import { markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 
+/** Throttle entre invalidaciones por `visibilitychange` para no machacar slack-api al alternar pestañas. */
+const VISIBILITY_REFETCH_THROTTLE_MS = 10_000;
+
 /** Firma estable por contenido (los refetch de React Query suelen devolver otro objeto con los mismos números). */
 function unreadCountsSignature(m: Record<string, number>): string {
   if (!Object.keys(m).length) return "";
@@ -59,13 +62,34 @@ export function useSlackUnreadSync({
       return fetchSlackUnreadSnapshot({ channelIds: pollChannelIds, readState });
     },
     enabled: enabled && !!userId && pollChannelIds.length > 0 && !holdUnreadSnapshot,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
     refetchInterval: () => {
-      if (typeof document === "undefined") return 240_000;
-      return document.visibilityState === "visible" ? 120_000 : 240_000;
+      if (typeof document === "undefined") return 180_000;
+      return document.visibilityState === "visible" ? 30_000 : 180_000;
     },
   });
+
+  /**
+   * `visibilitychange`: si el usuario vuelve a la pestaña, forzar invalidación con throttle.
+   * Cubre el caso en que leyó en Slack oficial mientras Kawiil estaba en background; al volver,
+   * los badges deben actualizarse cuanto antes sin esperar al refetchInterval (30 s).
+   */
+  useEffect(() => {
+    if (!enabled || !userId) return;
+    if (typeof document === "undefined") return;
+    let lastInvalidatedAt = 0;
+    const handler = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastInvalidatedAt < VISIBILITY_REFETCH_THROTTLE_MS) return;
+      lastInvalidatedAt = now;
+      void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
+      void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [enabled, userId, qc]);
 
   const remoteUnreadSig = useMemo(() => {
     const d = unreadSnapshotQuery.data;
