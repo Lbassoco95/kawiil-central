@@ -40,6 +40,7 @@ import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { QUICK_DRAFT_TEMPLATES } from "@/components/microsoft/emailComposeAiShared";
 import { useEmailComposeAiAssist } from "@/hooks/useEmailComposeAiAssist";
 import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
+import { TemplatePickerBoundary } from "@/components/accounting/TemplatePickerBoundary";
 import type { ComposeDefaultTemplateContext } from "@/components/microsoft/ComposeEmailDialog";
 
 export type ReplyForwardAction = "reply" | "reply-all" | "forward";
@@ -249,15 +250,17 @@ export function ReplyForwardDialog({
   const iaToolbarButton = (
     <div className="flex items-center gap-1">
       {showAccountingTemplates ? (
-        <AccountingTemplatePicker
-          onApply={applyAccountingTemplate}
-          defaults={defaultTemplateContext as Record<string, string> | undefined}
-          onClientSelected={(client) => {
-            if (!client.email) return;
-            if (action === "forward" && !forwardTo.trim()) setForwardTo(client.email);
-            if ((action === "reply" || action === "reply-all") && !replyTo.trim()) setReplyTo(client.email);
-          }}
-        />
+        <TemplatePickerBoundary>
+          <AccountingTemplatePicker
+            onApply={applyAccountingTemplate}
+            defaults={defaultTemplateContext as Record<string, string> | undefined}
+            onClientSelected={(client) => {
+              if (!client.email) return;
+              if (action === "forward" && !forwardTo.trim()) setForwardTo(client.email);
+              if ((action === "reply" || action === "reply-all") && !replyTo.trim()) setReplyTo(client.email);
+            }}
+          />
+        </TemplatePickerBoundary>
       ) : null}
       <Button
         type="button"

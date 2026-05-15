@@ -36,6 +36,7 @@ import {
   type ComposerAttachment,
 } from "@/lib/emailComposer";
 import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
+import { TemplatePickerBoundary } from "@/components/accounting/TemplatePickerBoundary";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import {
@@ -244,6 +245,22 @@ export function ComposeEmailDialog({
         signatureAppliedRef.current = true;
       }
       setEditorKey((k) => k + 1);
+      // Defensivo: si el token está por expirar (<120s) lo refrescamos antes
+      // de que las queries internas (plantillas, contactos, firma) fallen
+      // silenciosamente y desaparezcan opciones del UI.
+      void (async () => {
+        try {
+          const { data } = await supabase.auth.getSession();
+          const expiresAt = data.session?.expires_at;
+          if (!expiresAt) return;
+          const secondsLeft = expiresAt - Math.floor(Date.now() / 1000);
+          if (secondsLeft < 120) {
+            await supabase.auth.refreshSession();
+          }
+        } catch (err) {
+          console.warn("[ComposeEmailDialog] session refresh check failed", err);
+        }
+      })();
     } else {
       setTo("");
       setCc("");
@@ -456,13 +473,15 @@ export function ComposeEmailDialog({
   const iaToolbarButton = (
     <div className="flex items-center gap-1">
       {showAccountingTemplates ? (
-        <AccountingTemplatePicker
-          onApply={applyAccountingTemplate}
-          defaults={defaultTemplateContext as Record<string, string> | undefined}
-          onClientSelected={(client) => {
-            if (!to.trim() && client.email) setTo(client.email);
-          }}
-        />
+        <TemplatePickerBoundary>
+          <AccountingTemplatePicker
+            onApply={applyAccountingTemplate}
+            defaults={defaultTemplateContext as Record<string, string> | undefined}
+            onClientSelected={(client) => {
+              if (!to.trim() && client.email) setTo(client.email);
+            }}
+          />
+        </TemplatePickerBoundary>
       ) : null}
       <Button
         type="button"

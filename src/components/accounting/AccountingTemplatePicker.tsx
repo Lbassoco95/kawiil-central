@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Loader2, Search, Sparkles, User } from "lucide-react";
+import {
+  AlertCircle,
+  FileText,
+  Loader2,
+  RefreshCw,
+  Search,
+  Sparkles,
+  User,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -17,7 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import {
+  accountingEmailTemplatesKey,
   useAccountingEmailTemplates,
   type AccountingEmailTemplate,
 } from "@/hooks/useAccountingEmailTemplates";
@@ -76,7 +86,16 @@ export function AccountingTemplatePicker({
   buttonVariant = "ghost",
 }: AccountingTemplatePickerProps) {
   const [open, setOpen] = useState(false);
-  const { data: templates = [], isLoading } = useAccountingEmailTemplates();
+  const {
+    data: templates = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+  } = useAccountingEmailTemplates();
+  const queryClient = useQueryClient();
+  const errorToastShownRef = useRef(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [modes, setModes] = useState<Record<string, CurrencyMode>>({});
@@ -248,15 +267,36 @@ export function AccountingTemplatePicker({
 
   const handleClose = (nextOpen: boolean) => {
     setOpen(nextOpen);
-    if (!nextOpen) {
-      setSelectedId(null);
-      setValues({});
-      setModes({});
-      setClientQuery("");
-      setSelectedClient(null);
-      setShowClientList(false);
+    if (nextOpen) {
+      // Forzar refetch al abrir el popover para recuperarse de caches frías,
+      // sesiones renovadas o fallos transitorios previos (reporte sreyes:
+      // "a la 4a vez ya no aparece").
+      void queryClient.refetchQueries({ queryKey: accountingEmailTemplatesKey });
+      return;
     }
+    setSelectedId(null);
+    setValues({});
+    setModes({});
+    setClientQuery("");
+    setSelectedClient(null);
+    setShowClientList(false);
   };
+
+  // Avisa una sola vez al usuario si la query rompió, para que no quede una
+  // experiencia silenciosa donde la lista "está vacía" cuando en realidad falló.
+  useEffect(() => {
+    if (isError && !errorToastShownRef.current) {
+      errorToastShownRef.current = true;
+      toast.error(
+        "No se pudieron cargar las plantillas contables. Reintenta o recarga la página.",
+        { id: "accounting-templates-error" },
+      );
+      console.warn("[AccountingTemplatePicker] templates query error", error);
+    }
+    if (!isError) {
+      errorToastShownRef.current = false;
+    }
+  }, [isError, error]);
 
   const defaultsRazonSocial = defaults?.razon_social?.trim() ?? "";
 
@@ -377,6 +417,33 @@ export function AccountingTemplatePicker({
           <div className="flex items-center gap-2 text-xs text-muted-foreground py-4">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Cargando plantillas…
+          </div>
+        ) : isError ? (
+          <div className="space-y-2 rounded-md border border-red-200 bg-red-50/60 p-2 dark:border-red-900/40 dark:bg-red-950/20">
+            <div className="flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">No se pudieron cargar las plantillas.</p>
+                <p className="text-[11px] leading-snug">
+                  {error instanceof Error ? error.message : "Error desconocido."}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 w-full gap-1 text-xs"
+              disabled={isRefetching}
+              onClick={() => void refetch()}
+            >
+              {isRefetching ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Reintentar
+            </Button>
           </div>
         ) : templates.length === 0 ? (
           <p className="text-xs text-muted-foreground py-2">

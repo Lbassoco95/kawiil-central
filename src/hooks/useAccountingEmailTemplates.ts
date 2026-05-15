@@ -16,9 +16,47 @@ export function useAccountingEmailTemplates() {
         .eq("scope", "accounting")
         .eq("is_active", true)
         .order("name");
-      if (error) throw error;
+      if (error) {
+        // Logueamos con contexto para diagnosticar reportes de "no aparece la opción".
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          console.warn("[useAccountingEmailTemplates] query failed", {
+            user_id: user?.id ?? null,
+            email: user?.email ?? null,
+            error,
+          });
+        } catch (innerErr) {
+          console.warn("[useAccountingEmailTemplates] query failed (no auth)", {
+            error,
+            innerErr,
+          });
+        }
+        throw error;
+      }
+      if (!Array.isArray(data) || data.length === 0) {
+        // Caso poco probable salvo borrado/desactivado masivo; lo dejamos
+        // visible en DevTools para que un usuario afectado pueda reportar.
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          console.warn("[useAccountingEmailTemplates] empty result", {
+            user_id: user?.id ?? null,
+            email: user?.email ?? null,
+          });
+        } catch {
+          // ignore
+        }
+      }
       return data ?? [];
     },
+    // Mantener cache cálido entre aperturas del compose (~5 min stale, 30 min en memoria).
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: 2,
+    refetchOnWindowFocus: true,
   });
 }
 
