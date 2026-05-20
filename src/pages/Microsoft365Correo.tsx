@@ -1,7 +1,6 @@
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { EmailView } from "@/components/microsoft/EmailView";
-import { OutlookSignatureSettings } from "@/components/microsoft/OutlookSignatureSettings";
+import { CorreoView } from "@/components/correo/CorreoView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
@@ -58,11 +57,8 @@ const Microsoft365Correo = () => {
             </div>
           ) : (
             <ErrorBoundary>
-              <div className="h-full min-h-0 min-w-0 w-full flex flex-col animate-fade-in">
-                <OutlookSignatureSettings />
-                <div className="min-h-0 min-w-0 flex-1">
-                  <EmailView />
-                </div>
+              <div className="h-full min-h-0 min-w-0 w-full animate-fade-in">
+                <CorreoView />
               </div>
             </ErrorBoundary>
           )}
