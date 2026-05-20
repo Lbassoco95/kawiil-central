@@ -7,17 +7,24 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useCreateTask, useProfiles } from "@/hooks/useTasks";
 import { useClients } from "@/hooks/useClients";
 import { useProjects } from "@/hooks/useProjects";
 import { useAreaOptions } from "@/hooks/useAreaOptions";
 import { Badge } from "@/components/ui/badge";
-import { X, Plus, Link, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Plus, Link, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { AIDescriptionButton } from "@/components/tasks/AIDescriptionButton";
 import { SearchableSelect } from "@/components/shared/SearchableSelect";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getDropboxLinkDisplayLabel } from "@/lib/dropboxLinkLabel";
+import {
+  RECURRENCE_PATTERN_OPTIONS,
+  RECURRENCE_TYPE_OPTIONS,
+  calculateNextOccurrenceDate,
+  formatRecurrenceDate,
+} from "@/lib/recurrenceUtils";
 
 interface Props {
   open: boolean;
@@ -41,6 +48,9 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
   const [projectId, setProjectId] = useState(defaultProjectId || "");
   const [dropboxLinks, setDropboxLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrencePattern, setRecurrencePattern] = useState<string>("weekly");
+  const [recurrenceType, setRecurrenceType] = useState<string>("on_complete");
   /** Al abrir el modal mostramos todas las opciones (descripción, cliente, proyecto…); la rápida queda en QuickTaskInput. */
   const [showAdvanced, setShowAdvanced] = useState(true);
 
@@ -103,6 +113,11 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     [profileOptions, assignedTo, additionalAssignees]
   );
 
+  const nextRecurrencePreview = useMemo(() => {
+    if (!isRecurring || !dueDate) return null;
+    return calculateNextOccurrenceDate(dueDate, recurrencePattern);
+  }, [isRecurring, dueDate, recurrencePattern]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createTask.mutate(
@@ -118,6 +133,13 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
         phase_key: defaultPhaseKey || undefined,
         additional_assignees: additionalAssignees,
         dropbox_links: dropboxLinks,
+        is_recurring: isRecurring || undefined,
+        recurrence_pattern: isRecurring ? recurrencePattern : undefined,
+        recurrence_type: isRecurring ? recurrenceType : undefined,
+        next_recurrence_date:
+          isRecurring && dueDate
+            ? calculateNextOccurrenceDate(dueDate, recurrencePattern)
+            : undefined,
       },
       {
         onSuccess: () => {
@@ -132,6 +154,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
     setTitle(""); setDescription(""); setArea(""); setPriority("media");
     setDueDate(""); setAssignedTo(""); setAdditionalAssignees([]);
     setClientId(""); setProjectId(""); setDropboxLinks([]); setNewLink("");
+    setIsRecurring(false); setRecurrencePattern("weekly"); setRecurrenceType("on_complete");
     setShowAdvanced(true);
   };
 
@@ -226,6 +249,56 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
             </div>
           </div>
 
+          {/* ── Recurrencia (siempre visible) ── */}
+          <div className="rounded-lg border border-border/60 px-3 py-2.5 space-y-2.5 bg-muted/10">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm flex items-center gap-1.5 cursor-pointer font-normal" htmlFor="recurrence-toggle">
+                <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+                Tarea recurrente
+              </Label>
+              <Switch
+                id="recurrence-toggle"
+                checked={isRecurring}
+                onCheckedChange={setIsRecurring}
+              />
+            </div>
+
+            {isRecurring && (
+              <div className="space-y-2 pt-0.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-xs text-muted-foreground block mb-1">Frecuencia</span>
+                    <Select value={recurrencePattern} onValueChange={setRecurrencePattern}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {RECURRENCE_PATTERN_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground block mb-1">Siguiente ocurrencia</span>
+                    <Select value={recurrenceType} onValueChange={setRecurrenceType}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {RECURRENCE_TYPE_OPTIONS.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {RECURRENCE_TYPE_OPTIONS.find((o) => o.value === recurrenceType)?.description}
+                  {nextRecurrencePreview && (
+                    <> · Próxima: <span className="text-foreground font-medium">{formatRecurrenceDate(nextRecurrencePreview)}</span></>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Expandable advanced section */}
           <button
             type="button"
@@ -310,6 +383,7 @@ export function TaskFormDialog({ open, onOpenChange, defaultProjectId, defaultCl
                   <Button type="button" variant="outline" size="sm" className="h-8" onClick={addLink}><Plus className="h-3 w-3" /></Button>
                 </div>
               </div>
+
             </div>
           )}
 

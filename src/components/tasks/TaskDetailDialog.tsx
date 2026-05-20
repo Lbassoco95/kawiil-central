@@ -24,8 +24,17 @@ import {
   MessageSquare, Paperclip, Link, Calendar, User, Clock,
   ExternalLink, Send, Plus, X, UserPlus, FolderOpen, Pencil, Camera,
   Download, Eye, Link2, Loader2, Play, Pause, Timer, UserCheck, ChevronDown, ListChecks, Settings2, Trash2, GitBranch,
-  ChevronRight, Activity as ActivityIcon, CheckCircle2, FileText,
+  ChevronRight, Activity as ActivityIcon, CheckCircle2, FileText, RefreshCw,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import {
+  RECURRENCE_PATTERN_OPTIONS,
+  RECURRENCE_TYPE_OPTIONS,
+  recurrencePatternLabel,
+  recurrenceTypeLabel,
+  calculateNextOccurrenceDate,
+  formatRecurrenceDate,
+} from "@/lib/recurrenceUtils";
 import { formatMX, isPastDueCalendarMX } from "@/lib/dateUtils";
 import { complianceAnchorYmdFromProject, complianceDueDateIsActionable } from "@/lib/complianceDueDates";
 import { KAWIIL_TEAM_ROOT } from "@/lib/dropboxConfig";
@@ -174,6 +183,11 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [activeTab, setActiveTab] = useState<"comments" | "links" | "files">("comments");
 
+  // Recurrence editing state
+  const [showRecurrenceEdit, setShowRecurrenceEdit] = useState(false);
+  const [editRecurrencePattern, setEditRecurrencePattern] = useState<string>("weekly");
+  const [editRecurrenceType, setEditRecurrenceType] = useState<string>("on_complete");
+
   // Buffered editable fields
   const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
   const hasPendingChanges = Object.keys(pendingChanges).length > 0;
@@ -192,14 +206,23 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
     });
   };
 
-  // Reset pending changes and formulario de subtarea al cambiar de tarea
+  // Reset pending changes y formulario de subtarea al cambiar de tarea
   useEffect(() => {
     setPendingChanges({});
     setNewSubtask("");
     setNewSubtaskAssignee(null);
     setNewSubtaskDueDate("");
     setNewSubtaskArea("__parent__");
+    setShowRecurrenceEdit(false);
   }, [taskId]);
+
+  // Sincronizar valores de edición de recurrencia con la tarea cargada
+  useEffect(() => {
+    if (task) {
+      setEditRecurrencePattern((task as any).recurrence_pattern ?? "weekly");
+      setEditRecurrenceType((task as any).recurrence_type ?? "on_complete");
+    }
+  }, [task?.id, (task as any)?.recurrence_pattern, (task as any)?.recurrence_type]);
 
   // Computed current values (pending override or task value)
   const currentTitle = pendingChanges.title ?? task?.title ?? "";
@@ -1035,6 +1058,107 @@ export function TaskDetailDialog({ taskId, onClose, nested = false }: Props) {
                             onChange={(e) => setPending("delay_notes", e.target.value || null)}
                           />
                         </div>
+                      )}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              </section>
+
+              {/* ── Recurrencia ── */}
+              <section className="dr-section">
+                <Collapsible open={showRecurrenceEdit} onOpenChange={setShowRecurrenceEdit}>
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full">
+                      <h3 className="cursor-pointer hover:text-foreground transition-colors">
+                        <RefreshCw className="h-3 w-3" />
+                        Recurrencia
+                        {task?.is_recurring && (
+                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0 h-4">
+                            {recurrencePatternLabel((task as any).recurrence_pattern ?? "")}
+                          </Badge>
+                        )}
+                        <ChevronDown className={cn("h-3 w-3 ml-1 transition-transform", showRecurrenceEdit && "rotate-180")} />
+                      </h3>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="p-3 rounded-lg border bg-muted/20 space-y-3 mt-2">
+                      {/* Toggle activar/desactivar */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Tarea recurrente</span>
+                        <Switch
+                          checked={!!task?.is_recurring}
+                          onCheckedChange={(checked) => {
+                            updateTask.mutate({
+                              id: taskId!,
+                              is_recurring: checked,
+                              recurrence_pattern: checked ? editRecurrencePattern : null,
+                              recurrence_type: checked ? editRecurrenceType : null,
+                              next_recurrence_date:
+                                checked && task?.due_date
+                                  ? calculateNextOccurrenceDate(task.due_date, editRecurrencePattern)
+                                  : null,
+                            });
+                          }}
+                        />
+                      </div>
+
+                      {task?.is_recurring && (
+                        <>
+                          <div>
+                            <span className="text-xs text-muted-foreground block mb-1">Frecuencia</span>
+                            <Select
+                              value={editRecurrencePattern}
+                              onValueChange={(v) => {
+                                setEditRecurrencePattern(v);
+                                updateTask.mutate({
+                                  id: taskId!,
+                                  recurrence_pattern: v,
+                                  next_recurrence_date: task?.due_date
+                                    ? calculateNextOccurrenceDate(task.due_date, v)
+                                    : undefined,
+                                });
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {RECURRENCE_PATTERN_OPTIONS.map((o) => (
+                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <span className="text-xs text-muted-foreground block mb-1">Crear siguiente ocurrencia</span>
+                            <Select
+                              value={editRecurrenceType}
+                              onValueChange={(v) => {
+                                setEditRecurrenceType(v);
+                                updateTask.mutate({ id: taskId!, recurrence_type: v });
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {RECURRENCE_TYPE_OPTIONS.map((o) => (
+                                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              {RECURRENCE_TYPE_OPTIONS.find((o) => o.value === editRecurrenceType)?.description}
+                            </p>
+                          </div>
+
+                          {(task as any).next_recurrence_date && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Próxima ocurrencia:{" "}
+                              <span className="text-foreground font-medium">
+                                {formatRecurrenceDate((task as any).next_recurrence_date)}
+                              </span>
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   </CollapsibleContent>

@@ -7,6 +7,7 @@ import { sendSlackNotification } from "@/lib/slackNotifications";
 import { logEntityActivity } from "@/lib/activityLog";
 import { createNotifications } from "@/lib/notificationHelpers";
 import { extractDropboxFilenameFromUrl } from "@/lib/dropboxLinkLabel";
+import { calculateNextOccurrenceDate, formatRecurrenceDate } from "@/lib/recurrenceUtils";
 
 /** Bloquea completar una tarea padre si el checklist tiene ítems abiertos o subtareas enlazadas no cerradas. */
 async function assertCanCompleteParentTask(taskId: string) {
@@ -271,6 +272,10 @@ export function useCreateTask() {
       delay_notes?: string;
       parent_task_id?: string | null;
       is_subtask?: boolean;
+      is_recurring?: boolean;
+      recurrence_pattern?: string;
+      recurrence_type?: string;
+      next_recurrence_date?: string;
     }) => {
       const { data: profile } = await supabase
         .from("profiles")
@@ -475,6 +480,50 @@ export function useUpdateTask() {
       }
       const { error } = await supabase.from("tasks").update(updates).eq("id", id);
       if (error) throw error;
+
+      // Recurrencia on_complete: al marcar como completada, crear la siguiente ocurrencia
+      if (updates.status === "completada") {
+        const { data: taskRow } = await supabase
+          .from("tasks")
+          .select(
+            "is_recurring, recurrence_type, recurrence_pattern, due_date, title, description, area, assigned_to, priority, client_id, project_id, phase_key, tags, dropbox_links, criticality_level, organization_id, created_by, template_id"
+          )
+          .eq("id", id)
+          .single();
+
+        if (taskRow?.is_recurring && taskRow.recurrence_type === "on_complete" && taskRow.recurrence_pattern) {
+          const baseDate = taskRow.due_date ?? new Date().toISOString().split("T")[0];
+          const nextDate = calculateNextOccurrenceDate(baseDate, taskRow.recurrence_pattern);
+          const nextNextDate = calculateNextOccurrenceDate(nextDate, taskRow.recurrence_pattern);
+
+          await supabase.from("tasks").insert({
+            organization_id: taskRow.organization_id,
+            project_id: taskRow.project_id,
+            client_id: taskRow.client_id,
+            title: taskRow.title,
+            description: taskRow.description,
+            area: taskRow.area,
+            assigned_to: taskRow.assigned_to,
+            priority: taskRow.priority,
+            status: "pendiente",
+            due_date: nextDate,
+            tags: taskRow.tags,
+            is_recurring: true,
+            recurrence_pattern: taskRow.recurrence_pattern,
+            recurrence_type: "on_complete",
+            next_recurrence_date: nextNextDate,
+            created_by: taskRow.created_by,
+            template_id: (taskRow.template_id as string | null) ?? id,
+            phase_key: taskRow.phase_key,
+            dropbox_links: taskRow.dropbox_links ?? [],
+            criticality_level: taskRow.criticality_level,
+          } as TablesInsert<"tasks">);
+
+          toast.info(
+            `Próxima ocurrencia creada para el ${formatRecurrenceDate(nextDate)}`
+          );
+        }
+      }
 
       const { data: profile } = await supabase
         .from("profiles")
