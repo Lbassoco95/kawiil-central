@@ -33,6 +33,9 @@ const DEFAULT_USER_SCOPES = [
   // Reacciones (emoji) con token de usuario: añadir/quitar como el propio usuario.
   "reactions:write",
   "reactions:read",
+  // Necesarios para conversations.mark en canales públicos y privados.
+  "channels:write",
+  "groups:write",
 ].join(",");
 
 Deno.serve(async (req) => {

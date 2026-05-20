@@ -67,7 +67,7 @@ const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 /** Mismo modelo que ai-chat / process-document (Haiku a veces falla o no está habilitado en la cuenta). Override: secreto opcional GENERATE_PHRASE_ANTHROPIC_MODEL. */
 function phraseAnthropicModel(): string {
   return (Deno.env.get("GENERATE_PHRASE_ANTHROPIC_MODEL") || "").trim() ||
-    "claude-sonnet-4-20250514";
+    "claude-sonnet-4-6";
 }
 
 function parseAnthropicErrorBody(text: string): string {

@@ -116,32 +116,100 @@ Deno.serve(async (req) => {
       return json({ error: "No autorizado para este artefacto" }, 403);
     }
 
-    const markdown = typeof artifact.content === "string" ? artifact.content : "";
-    if (!markdown.trim()) {
-      return json({ error: "El artefacto no tiene contenido markdown para re-renderizar" }, 400);
-    }
-
     const title = typeof artifact.title === "string" && artifact.title.trim()
       ? artifact.title
       : "Documento";
 
-    const generic = markdownToGenericContent(markdown, title);
+    // ── Determinar ruta: Kawiil template (create_ai_document async) vs markdown legacy ──
+    const templateKey = typeof artifact.template_key === "string" && artifact.template_key.trim()
+      ? artifact.template_key
+      : null;
+    const hasTemplateData = templateKey &&
+      artifact.template_data !== null &&
+      typeof artifact.template_data === "object";
 
-    // Sin `formats` en el body → Word + PDF de lectura + heurísticos (xlsx/pptx).
-    // Con `formats` explícitos → esos formatos + heurísticos de apoyo (p. ej. tablas largas).
-    const heuristicExtras = detectExtraFormats(markdown, generic);
-    let mergedFormats: Set<KawiilOutputFormat>;
-    if (requestedFormats.length === 0) {
-      mergedFormats = new Set<KawiilOutputFormat>(["docx", "pdf", ...heuristicExtras]);
-    } else {
-      mergedFormats = new Set<KawiilOutputFormat>([...requestedFormats]);
-      for (const h of heuristicExtras) mergedFormats.add(h);
-    }
     const FMT_ORDER: KawiilOutputFormat[] = ["docx", "xlsx", "pptx", "pdf"];
-    const finalFormats = (FMT_ORDER.filter((f) => mergedFormats.has(f)) as KawiilOutputFormat[]);
-    const primaryForRender: KawiilOutputFormat = finalFormats.includes("docx")
-      ? "docx"
-      : (finalFormats.includes("xlsx") ? "xlsx" : (finalFormats.includes("pptx") ? "pptx" : finalFormats[0]));
+    let finalFormats: KawiilOutputFormat[];
+    let primaryForRender: KawiilOutputFormat;
+    let renderBody: Record<string, unknown>;
+
+    if (hasTemplateData) {
+      // ── Ruta Kawiil template ────────────────────────────────────────────────
+      // El artefacto fue creado por handleCreateAiDocument con render_status='pending'.
+      // template_data contiene el contenido del template + _render_meta con los
+      // formatos solicitados y branding originales.
+      const td = artifact.template_data as Record<string, unknown>;
+      const renderMeta = (td._render_meta ?? {}) as {
+        requested_formats?: string[];
+        primary_format?: string;
+        branding?: Record<string, unknown>;
+      };
+
+      // Extraer _render_meta antes de pasar el contenido a render-ai-document.
+      const { _render_meta: _ignored, ...contentOnly } = td;
+
+      // Prioridad de formatos: (1) caller override, (2) meta almacenado, (3) primary_format, (4) docx.
+      const metaFormats = (renderMeta.requested_formats ?? [])
+        .filter((f): f is KawiilOutputFormat => (ALL_FORMATS as readonly string[]).includes(f));
+      if (requestedFormats.length > 0) {
+        finalFormats = requestedFormats;
+      } else if (metaFormats.length > 0) {
+        finalFormats = metaFormats;
+      } else {
+        const pf = (artifact.primary_format as KawiilOutputFormat) || "docx";
+        finalFormats = (ALL_FORMATS as readonly string[]).includes(pf) ? [pf] : ["docx"];
+      }
+      finalFormats = FMT_ORDER.filter((f) => (finalFormats as string[]).includes(f)) as KawiilOutputFormat[];
+      if (!finalFormats.length) finalFormats = ["docx"];
+
+      primaryForRender = finalFormats.includes("docx")
+        ? "docx"
+        : (finalFormats.includes("xlsx") ? "xlsx" : (finalFormats.includes("pptx") ? "pptx" : finalFormats[0]));
+
+      renderBody = {
+        title,
+        template_key: templateKey,
+        requested_formats: finalFormats,
+        primary_format: primaryForRender,
+        content: contentOnly,
+        confidence: 0.9,
+        reason: "reconcile-ai-artifact-formats (template async)",
+        ...(renderMeta.branding ? { branding: renderMeta.branding } : {}),
+      };
+
+      console.log(`reconcile: Kawiil template path — template_key=${templateKey} formats=${finalFormats.join(",")}`);
+    } else {
+      // ── Ruta markdown legacy (create_artifact auto-upgrade) ────────────────
+      const markdown = typeof artifact.content === "string" ? artifact.content : "";
+      if (!markdown.trim()) {
+        return json({ error: "El artefacto no tiene contenido markdown para re-renderizar" }, 400);
+      }
+
+      const generic = markdownToGenericContent(markdown, title);
+      const heuristicExtras = detectExtraFormats(markdown, generic);
+      let mergedFormats: Set<KawiilOutputFormat>;
+      if (requestedFormats.length === 0) {
+        mergedFormats = new Set<KawiilOutputFormat>(["docx", "pdf", ...heuristicExtras]);
+      } else {
+        mergedFormats = new Set<KawiilOutputFormat>([...requestedFormats]);
+        for (const h of heuristicExtras) mergedFormats.add(h);
+      }
+      finalFormats = FMT_ORDER.filter((f) => mergedFormats.has(f)) as KawiilOutputFormat[];
+      primaryForRender = finalFormats.includes("docx")
+        ? "docx"
+        : (finalFormats.includes("xlsx") ? "xlsx" : (finalFormats.includes("pptx") ? "pptx" : finalFormats[0]));
+
+      renderBody = {
+        title,
+        template_key: "generico",
+        requested_formats: finalFormats,
+        primary_format: primaryForRender,
+        content: generic,
+        confidence: 0.9,
+        reason: "reconcile-ai-artifact-formats",
+        preview_markdown: markdown,
+      };
+    }
 
     // Marcamos pending mientras trabajamos para que el UI muestre "Generando…"
     // aunque la llamada venga de un reintento automático.
@@ -169,16 +237,7 @@ Deno.serve(async (req) => {
             Authorization: authHeader,
             apikey: anonKey,
           },
-          body: JSON.stringify({
-            title,
-            template_key: "generico",
-            requested_formats: finalFormats,
-            primary_format: primaryForRender,
-            content: generic,
-            confidence: 0.9,
-            reason: "reconcile-ai-artifact-formats",
-            preview_markdown: markdown,
-          }),
+          body: JSON.stringify(renderBody),
         });
         const parsed = await resp.json().catch(() => null) as typeof renderJson;
         if (resp.ok && parsed?.success && Array.isArray(parsed.formats) && parsed.formats.length) {

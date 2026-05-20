@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 /** Reintentos con backoff ante 429, 529 (overload) y 503 transitorios. */
-const ANTHROPIC_RETRY_MAX_ATTEMPTS = 7;
+const ANTHROPIC_RETRY_MAX_ATTEMPTS = 5;
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -66,20 +66,22 @@ async function anthropicMessagesFetch(apiKey: string, body: Record<string, unkno
       });
     }
 
-    let waitMs = Math.min(90_000, 3000 * 2 ** attempt);
+    // Backoff máximo 30s: 5 reintentos × 30s = 150s máximo teórico — justo al límite del Edge Function.
+    // En práctica la mayoría cae en 3-12s de espera; el 30s es el techo de seguridad.
+    let waitMs = Math.min(30_000, 3000 * 2 ** attempt);
     if (resp.status === 529 || resp.status === 503 || anthropicErrorTypeFromBody(errText) === "overloaded_error") {
-      waitMs = Math.min(120_000, Math.max(waitMs, 4000 * 2 ** attempt));
+      waitMs = Math.min(30_000, Math.max(waitMs, 4000 * 2 ** attempt));
     }
 
     const retryHdr = resp.headers.get("retry-after");
     if (retryHdr) {
       const sec = parseInt(retryHdr, 10);
-      if (!Number.isNaN(sec) && sec > 0) waitMs = Math.min(120_000, sec * 1000);
+      if (!Number.isNaN(sec) && sec > 0) waitMs = Math.min(30_000, sec * 1000);
     }
     try {
       const j = JSON.parse(errText);
       const ra = j?.error?.retry_after ?? j?.retry_after;
-      if (typeof ra === "number" && ra > 0) waitMs = Math.min(120_000, Math.max(waitMs, ra * 1000));
+      if (typeof ra === "number" && ra > 0) waitMs = Math.min(30_000, Math.max(waitMs, ra * 1000));
     } catch {
       /* ignore */
     }
@@ -160,13 +162,13 @@ const XLSX_HUGE_FILE_BYTES = 10 * 1024 * 1024;
 
 /**
  * Presupuesto por **tokens estimados** en `messages` (no caracteres: base64 de imágenes pesa ~1 token cada ~12 chars en la práctica).
- * System + definición de tools también consumen contexto; dejamos margen bajo 200k totales.
+ * Tier 2: 450k input tokens/min — margen amplio. System + tools ≈ 10k tokens.
  */
-const MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS = 130_000;
+const MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS = 100_000;
 /** System + contexto proyecto/memorias: truncar para dejar margen a mensajes y tools. */
-const MAX_SYSTEM_PROMPT_CHARS = 95_000;
+const MAX_SYSTEM_PROMPT_CHARS = 70_000;
 /** Cada tool_result no debe exceder esto (JSON de tareas, búsquedas, etc.). */
-const MAX_TOOL_RESULT_CHARS = 28_000;
+const MAX_TOOL_RESULT_CHARS = 20_000;
 /** Contenido devuelto por memory view (archivos muy grandes saturan el contexto). */
 const MAX_MEMORY_VIEW_CHARS = 64_000;
 
@@ -2774,7 +2776,12 @@ serve(async (req) => {
         if (aiProject) {
           projectContext = `\n\n## PROYECTO DE IA ACTIVO: ${aiProject.name}`;
           if (aiProject.description) projectContext += `\nDescripción: ${aiProject.description}`;
-          if (aiProject.instructions) projectContext += `\n\n### Instrucciones del proyecto:\n${aiProject.instructions}`;
+          if (aiProject.instructions) {
+            const instr = aiProject.instructions.length > 15_000
+              ? aiProject.instructions.slice(0, 15_000) + "\n\n_(instrucciones truncadas por longitud)_"
+              : aiProject.instructions;
+            projectContext += `\n\n### Instrucciones del proyecto:\n${instr}`;
+          }
           if (aiProject.client_id) projectContext += `\n- Filtrar búsquedas semánticas por client_id: ${aiProject.client_id}`;
           if (aiProject.project_id) projectContext += `\n- Filtrar búsquedas semánticas por project_id: ${aiProject.project_id}`;
 
@@ -2792,21 +2799,27 @@ serve(async (req) => {
         }
       }
 
-      // Load existing memories for this context
+      // Load existing memories for this context.
+      // Se trae path + content (para preview de 120 chars) + updated_at.
+      // El preview ayuda a Claude a elegir cuáles archivos leer sin hacer tool calls
+      // extra, reduciendo drásticamente las rondas necesarias. Para proyectos grandes,
+      // se limita a las 50 memorias más recientes (orden DESC updated_at) para evitar
+      // descargar MB de datos; el resto sigue disponible vía memory view.
       let memQuery = svc.from("ai_project_memories")
         .select("path, content, updated_at")
         .eq("user_id", user.id)
         .eq("organization_id", orgId);
       if (ai_project_id) memQuery = memQuery.eq("ai_project_id", ai_project_id);
       else memQuery = memQuery.is("ai_project_id", null);
-      const { data: memories } = await memQuery.order("path");
+      const { data: memories } = await memQuery.order("updated_at", { ascending: false }).limit(50);
 
       let sharedMemories: { path: string; content: string; updated_at: string }[] = [];
       if (ai_project_id) {
         const { data: sm } = await svc.from("ai_project_shared_memories")
           .select("path, content, updated_at")
           .eq("ai_project_id", ai_project_id)
-          .order("path");
+          .order("updated_at", { ascending: false })
+          .limit(50);
         sharedMemories = sm || [];
       }
 
@@ -2814,23 +2827,39 @@ serve(async (req) => {
 - **Personal** (solo el usuario): rutas bajo \`/memories/\` — notas privadas del Kawiiler.
 - **Equipo** (proyecto de IA compartido): rutas bajo \`/team/\` — visibles para todos los miembros del proyecto. Requiere proyecto de IA activo.
 - COMANDOS: 'view', 'create', 'str_replace', 'insert', 'delete', 'rename'.
-- Usa \`/team/\` para decisiones y contexto que deban ver colegas en el mismo proyecto de IA.`;
+- Usa \`/team/\` para decisiones y contexto que deban ver colegas en el mismo proyecto de IA.
+- **Las 5 memorias más recientes se muestran con preview amplio (primeros 1500 chars). Para generar documentos, usa directamente este contexto pre-cargado antes de hacer memory views adicionales.**`;
+
+      // Las 5 memorias más recientes obtienen un preview amplio (1500 chars) para que
+      // Claude pueda generar documentos sin necesidad de leer archivos completos via tool
+      // call, reduciendo las rondas de 4+ a 1-2. El resto muestra solo 120 chars.
+      const TOP_PREVIEW_COUNT = 5;
+      const TOP_PREVIEW_CHARS = 1500;
+      const REST_PREVIEW_CHARS = 120;
 
       if (memories?.length) {
-        projectContext += `\n\n**Memorias personales (${memories.length}):**`;
-        for (const m of memories) {
-          const preview = m.content.substring(0, 120).replace(/\n/g, " ");
-          projectContext += `\n- \`${m.path}\` — ${preview}…`;
+        projectContext += `\n\n**Memorias personales (${memories.length} más recientes):**`;
+        for (let i = 0; i < memories.length; i++) {
+          const m = memories[i];
+          const maxChars = i < TOP_PREVIEW_COUNT ? TOP_PREVIEW_CHARS : REST_PREVIEW_CHARS;
+          const raw = typeof m.content === "string" ? m.content : "";
+          const preview = raw.substring(0, maxChars).replace(/\n/g, " ");
+          const ellipsis = raw.length > maxChars ? "…" : "";
+          projectContext += `\n- \`${m.path}\` — ${preview}${ellipsis}`;
         }
       } else {
         projectContext += `\n\nSin memorias personales en /memories/ todavía.`;
       }
 
       if (sharedMemories.length) {
-        projectContext += `\n\n**Memoria de equipo /team/ (${sharedMemories.length} archivos):**`;
-        for (const m of sharedMemories) {
-          const preview = m.content.substring(0, 120).replace(/\n/g, " ");
-          projectContext += `\n- \`${m.path}\` — ${preview}…`;
+        projectContext += `\n\n**Memoria de equipo /team/ (${sharedMemories.length} más recientes):**`;
+        for (let i = 0; i < sharedMemories.length; i++) {
+          const m = sharedMemories[i];
+          const maxChars = i < TOP_PREVIEW_COUNT ? TOP_PREVIEW_CHARS : REST_PREVIEW_CHARS;
+          const raw = typeof m.content === "string" ? m.content : "";
+          const preview = raw.substring(0, maxChars).replace(/\n/g, " ");
+          const ellipsis = raw.length > maxChars ? "…" : "";
+          projectContext += `\n- \`${m.path}\` — ${preview}${ellipsis}`;
         }
       } else if (ai_project_id) {
         projectContext += `\n\nAún no hay memorias de equipo (/team/). Crea con memory create en rutas /team/archivo.md cuando el conocimiento deba compartirse.`;
@@ -2924,7 +2953,7 @@ serve(async (req) => {
           const summaryPrompt = `El usuario buscó "${searchQuery}" en la plataforma. Estos son los resultados encontrados:\n${JSON.stringify(results, null, 2)}\n\nGenera un resumen breve (2-3 oraciones) en español que contextualice qué encontramos relacionado con "${searchQuery}". No listes los resultados, solo da contexto. Sé conciso y útil.`;
 
           const summaryResp = await anthropicMessagesFetch(ANTHROPIC_API_KEY, {
-            model: "claude-sonnet-4-20250514",
+            model: "claude-sonnet-4-6",
             max_tokens: 256,
             messages: [{ role: "user", content: summaryPrompt }],
           });
@@ -2950,7 +2979,7 @@ serve(async (req) => {
         MAX_CLAUDE_MESSAGES_ESTIMATED_TOKENS,
       );
       const resp = await anthropicMessagesFetch(ANTHROPIC_API_KEY, {
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 2048,
         system: systemPrompt,
         messages: simpleMsgs,
@@ -3040,22 +3069,36 @@ serve(async (req) => {
 
     (async () => {
       try {
-        await handleClaudeChat(
-          ANTHROPIC_API_KEY,
-          systemPrompt,
-          forClaude,
-          supabase,
-          user.id,
-          orgId!,
-          ai_project_id || null,
-          sseWriter,
-          authHeader!,
-          conversationIdForTools,
-        );
+        const PIPELINE_TIMEOUT_MS = 380_000;
+        await Promise.race([
+          handleClaudeChat(
+            ANTHROPIC_API_KEY,
+            systemPrompt,
+            forClaude,
+            supabase,
+            user.id,
+            orgId!,
+            ai_project_id || null,
+            sseWriter,
+            authHeader!,
+            conversationIdForTools,
+          ),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("PIPELINE_TIMEOUT")),
+              PIPELINE_TIMEOUT_MS,
+            )
+          ),
+        ]);
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
         console.warn("Claude chat failed:", errMsg);
-        if (errMsg.includes("RATE_LIMIT_429")) {
+        if (errMsg === "PIPELINE_TIMEOUT") {
+          sseWriter.fail(
+            "**La solicitud tardó demasiado** (límite de 380 s alcanzado). " +
+            "El documento es extremadamente complejo. Intenta dividirlo en secciones más pequeñas.",
+          );
+        } else if (errMsg.includes("RATE_LIMIT_429")) {
           sseWriter.fail(
             "**Demasiadas solicitudes al proveedor de IA.** Espera unos segundos e intenta de nuevo.",
           );
@@ -3077,7 +3120,16 @@ serve(async (req) => {
           sseWriter.fail(`**Error del servicio de IA.** ${errMsg}`);
         }
       } finally {
-        if (!sseWriter.isClosed()) sseWriter.close();
+        if (!sseWriter.isClosed()) {
+          // Si llegamos aquí sin haber cerrado el stream, algo falló en silencio.
+          // Escribimos un mensaje de error para que el cliente NO muestre "Sin respuesta".
+          console.error("ai-chat: pipeline terminó sin cerrar el stream — emitiendo error de respaldo");
+          sseWriter.fail(
+            "**Error interno del sistema.** La respuesta no pudo completarse. " +
+            "Reintenta en unos segundos. Si el problema persiste en esta conversación, " +
+            "inicia una nueva conversación (el historial muy largo puede causar este fallo).",
+          );
+        }
       }
     })().catch((e) => {
       console.error("ai-chat background pipeline error:", e);
@@ -3752,24 +3804,9 @@ async function handleCreateAiDocument(
     if (!requestedFormats.length) requestedFormats = ["docx"];
   }
 
-  // PDF de lectura por defecto con DOCX (vista cercana al entregable). No aplica a solo-PDF ni solo-Excel.
-  const onlyPdfOutput =
-    requestedFormats.length === 1 && requestedFormats[0] === "pdf";
-  const onlySpreadsheetOutput =
-    requestedFormats.length > 0 && requestedFormats.every((f) => f === "xlsx");
-  if (
-    !onlyPdfOutput &&
-    !onlySpreadsheetOutput &&
-    requestedFormats.includes("docx") &&
-    !requestedFormats.includes("pdf")
-  ) {
-    const ix = requestedFormats.indexOf("docx");
-    requestedFormats = [
-      ...requestedFormats.slice(0, ix + 1),
-      "pdf",
-      ...requestedFormats.slice(ix + 1),
-    ];
-  }
+  // No se añade PDF automáticamente junto a DOCX para evitar que el doble render
+  // supere el límite de 150 s del Edge Function. El usuario puede pedir
+  // explícitamente ["docx","pdf"] si necesita ambos formatos.
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -3795,85 +3832,36 @@ async function handleCreateAiDocument(
     brandingForRender.primary_color
   );
 
-  const renderPayload = {
-    title,
-    template_key: templateKey,
-    requested_formats: requestedFormats,
-    /** Tras normalizar orden (p. ej. Word antes que PDF), fijamos el primario explícito para render-ai-document. */
-    primary_format: requestedFormats[0],
-    content: input.content,
-    confidence: confidenceRaw,
-    reason,
-    preview_markdown: previewMarkdown,
-    ...(hasOrgBranding ? { branding: brandingForRender } : {}),
-  };
+  // ── RENDERIZADO ASÍNCRONO ──────────────────────────────────────────────────
+  // En lugar de llamar a render-ai-document inline (30-40 s), guardamos el
+  // artefacto con render_status='pending'. El frontend detecta el marcador
+  // [artifact:uuid], llama a reconcile-ai-artifact-formats en background
+  // (con su propio presupuesto de 150 s) y actualiza el archivo al terminar.
+  // Esto libera ~30-40 s del pipeline ai-chat, permitiendo documentos complejos.
+  // ──────────────────────────────────────────────────────────────────────────
 
-  const renderResp = await fetch(`${supabaseUrl}/functions/v1/render-ai-document`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: authHeader,
-      apikey: anonKey,
-    },
-    body: JSON.stringify(renderPayload),
-  });
-  const renderJson = await renderResp.json().catch(() => null);
-  if (!renderResp.ok || !renderJson?.success) {
-    const reasonMsg = renderJson?.error || `render-ai-document error ${renderResp.status}`;
-    return JSON.stringify({ error: reasonMsg, code: "document_render_failed" });
-  }
-
-  const renderedFormats: Array<{ format: KawiilOutputFormat; file_name: string; file_ext: string; mime_type: string; content_base64: string }>
-    = Array.isArray(renderJson.formats) ? renderJson.formats : [];
-  if (!renderedFormats.length) {
-    return JSON.stringify({ error: "render-ai-document no devolvió archivos." });
-  }
-
-  const primaryFormat: KawiilOutputFormat = (renderJson.primary_format as KawiilOutputFormat) || renderedFormats[0].format;
   const artifactId = crypto.randomUUID();
-  const safeTitle = title.replace(/[^\w\- ]+/g, "_").trim().replace(/\s+/g, "_").slice(0, 80) || "documento";
-  const storageBucket = "documents";
+  const primaryFormat: KawiilOutputFormat = requestedFormats[0];
+  const contentType = primaryFormat === "pdf" ? "pdf" : "office";
+  const previewBody = previewMarkdown ||
+    `# ${title}\n\n_Documento en cola de renderizado (template **${templateKey}**). La descarga estará disponible en unos segundos._`;
 
   const svcUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const svc = createClient(svcUrl, serviceKey);
 
-  const outputFormats: Array<{ format: string; storage_bucket: string; storage_path: string; file_name: string; mime_type: string; is_primary: boolean }> = [];
-  let primaryPath: string | null = null;
-  let primaryMime: string | null = null;
-  let primaryExt: string | null = null;
-
-  for (const fmt of renderedFormats) {
-    const fileBytes = base64ToUint8Array(fmt.content_base64);
-    const storagePath = `ai-artifacts/${orgId}/${userId}/${artifactId}_${safeTitle}.${fmt.file_ext}`;
-    const { error: uploadErr } = await svc.storage.from(storageBucket).upload(storagePath, fileBytes, {
-      contentType: fmt.mime_type,
-      upsert: false,
-    });
-    if (uploadErr) {
-      console.error(`Kawiil doc upload error (${fmt.format}):`, uploadErr);
-      return JSON.stringify({ error: uploadErr.message, code: "document_upload_failed" });
-    }
-    const isPrimary = fmt.format === primaryFormat;
-    outputFormats.push({
-      format: fmt.format,
-      storage_bucket: storageBucket,
-      storage_path: storagePath,
-      file_name: `${safeTitle}.${fmt.file_ext}`,
-      mime_type: fmt.mime_type,
-      is_primary: isPrimary,
-    });
-    if (isPrimary) {
-      primaryPath = storagePath;
-      primaryMime = fmt.mime_type;
-      primaryExt = fmt.file_ext;
-    }
-  }
-
-  const contentType = primaryFormat === "pdf" ? "pdf" : "office";
-  const previewBody = typeof renderJson.preview_markdown === "string" && renderJson.preview_markdown.trim()
-    ? renderJson.preview_markdown
-    : previewMarkdown || `# ${title}\n\n_Documento generado con template **${templateKey}** (Kawiil AI)._`;
+  // Guardamos branding y formatos solicitados en _render_meta dentro de
+  // template_data para que reconcile-ai-artifact-formats los use sin necesitar
+  // columnas adicionales. El campo _render_meta se extrae antes de pasarlo
+  // a render-ai-document para no contaminar el contenido del template.
+  const templateDataWithMeta: Record<string, unknown> = {
+    ...(input.content as Record<string, unknown>),
+    _render_meta: {
+      requested_formats: requestedFormats,
+      primary_format: primaryFormat,
+      ...(hasOrgBranding ? { branding: brandingForRender } : {}),
+    },
+  };
 
   const { error: insertErr } = await svc.from("ai_artifacts").insert({
     id: artifactId,
@@ -3884,10 +3872,9 @@ async function handleCreateAiDocument(
     content: previewBody,
     content_type: contentType,
     template_key: templateKey,
-    template_data: input.content,
-    output_formats: outputFormats,
+    template_data: templateDataWithMeta,
+    output_formats: [],
     primary_format: primaryFormat,
-    // Rellenamos los campos "legacy" para que UI vieja siga funcionando.
     office_kind: primaryFormat === "docx"
       ? "word_document"
       : primaryFormat === "xlsx"
@@ -3895,10 +3882,11 @@ async function handleCreateAiDocument(
       : primaryFormat === "pptx"
       ? "presentation"
       : null,
-    file_ext: primaryExt,
-    mime_type: primaryMime,
-    storage_bucket: primaryPath ? storageBucket : null,
-    storage_path: primaryPath,
+    file_ext: null,
+    mime_type: null,
+    storage_bucket: null,
+    storage_path: null,
+    render_status: "pending",
   });
   if (insertErr) {
     console.error("AI document artifact insert error:", insertErr);
@@ -3911,8 +3899,9 @@ async function handleCreateAiDocument(
     content_type: contentType,
     template_key: templateKey,
     primary_format: primaryFormat,
-    formats: outputFormats.map((o) => o.format),
-    message: `Documento "${title}" (${templateKey}) generado en ${outputFormats.length} formato(s).`,
+    formats: [primaryFormat],
+    render_status: "pending",
+    message: `Documento "${title}" (${templateKey}) en cola de renderizado. El archivo estará disponible en unos segundos.`,
   });
 }
 
@@ -4470,10 +4459,8 @@ async function handleClaudeChat(
     );
 
     const resp = await anthropicMessagesFetch(apiKey, {
-      model: "claude-sonnet-4-20250514",
-      // 8192 da margen para respuestas largas (p. ej. documentos extensos vía
-      // create_ai_document) sin que Claude termine con stop_reason="max_tokens"
-      // y un bloque de texto vacío.
+      model: "claude-sonnet-4-6",
+      // Tier 2: 90k output tokens/min — 8192 es seguro y da margen para respuestas extensas.
       max_tokens: 8192,
       system: systemWithDeliverable,
       messages: anthropicMsgs,
@@ -4557,12 +4544,13 @@ async function handleClaudeChat(
           const canUpgrade = rawContentType === "markdown" || rawContentType === "html" || rawContentType === "csv";
           if (canUpgrade && mdContent.trim()) {
             const genericContent = markdownToGenericContent(mdContent, inputTitle);
-            // DOCX + PDF de lectura + formatos extra (XLSX/PPTX) si la heurística lo justifica.
+            // Solo DOCX + formatos extra (XLSX/PPTX) si la heurística lo justifica.
+            // No añadimos PDF automáticamente para evitar que el doble render
+            // supere el límite de 150 s del Edge Function.
             const extraFormats = detectExtraFormats(mdContent, genericContent);
             const requestedFormats: KawiilOutputFormat[] = [
               "docx",
-              "pdf",
-              ...extraFormats.filter((f) => f !== "docx" && f !== "pdf"),
+              ...extraFormats.filter((f) => f !== "docx"),
             ];
 
             // 2 reintentos del render completo antes de degradar a markdown plano.
@@ -4694,14 +4682,27 @@ async function handleClaudeChat(
             "tool",
             `Generando documento: ${typeof tu.input?.title === "string" ? tu.input.title : "sin título"} (puede tardar unos segundos)…`,
           );
-          result = await handleCreateAiDocument(
-            tu.input || {},
-            userId,
-            orgId,
-            aiProjectId,
-            authHeader,
-            lastUserPlainText,
-          );
+          try {
+            result = await handleCreateAiDocument(
+              tu.input || {},
+              userId,
+              orgId,
+              aiProjectId,
+              authHeader,
+              lastUserPlainText,
+            );
+          } catch (docErr) {
+            const docErrMsg = docErr instanceof Error ? docErr.message : String(docErr);
+            console.error("create_ai_document tool threw:", docErrMsg);
+            const isTimeout = docErrMsg.includes("AbortError") || docErrMsg.includes("timeout") || docErrMsg.includes("TimeoutError");
+            documentPipelineFailures.push({
+              error: isTimeout
+                ? "La generación del documento tardó demasiado (timeout). Reintenta con un documento más simple."
+                : `Error generando documento: ${docErrMsg.slice(0, 300)}`,
+              code: isTimeout ? "document_render_timeout" : "document_render_throw",
+            });
+            result = JSON.stringify({ error: docErrMsg, code: isTimeout ? "timeout" : "throw" });
+          }
           try {
             const parsed = JSON.parse(result) as {
               artifact_id?: string;
@@ -4796,7 +4797,7 @@ async function handleClaudeChat(
         );
 
         const repairResp = await anthropicMessagesFetch(apiKey, {
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           max_tokens: 8192,
           system: systemWithDeliverable,
           messages: repairCallMsgs,

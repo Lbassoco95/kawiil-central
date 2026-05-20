@@ -37,7 +37,7 @@ function renderOAuthResultPage(opts: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kawiil — Slack</title>
+  <title>Kawiil &mdash; Slack</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
@@ -132,12 +132,12 @@ function renderOAuthResultPage(opts: {
 <body>
   ${boot}
   <div class="card" role="status">
-    <p class="brand">Kawiil · Comunicación</p>
+    <p class="brand">Kawiil &middot; Comunicaci&oacute;n</p>
     <div class="icon-wrap" aria-hidden="true">${iconSvg}</div>
     <h1>${h}</h1>
     ${s ? `<p class="sub">${s}</p>` : ""}
     <div class="foot">
-      <p class="hint">Esta ventana se cerrará sola en unos segundos.</p>
+      <p class="hint">Esta ventana se cerrar&aacute; sola en unos segundos.</p>
       <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
     </div>
   </div>

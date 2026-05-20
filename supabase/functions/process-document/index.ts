@@ -385,7 +385,7 @@ Trabajas para Kawiil, un despacho contable y legal en México. Los datos extraí
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 8192,
       system: systemPrompt,
       messages,
@@ -422,7 +422,7 @@ function mapToolResultToRecord(toolName: string, toolInput: any): Record<string,
     ai_observations: toolInput.observations || [],
     confidence_score: toolInput.confidence_score || null,
     extracted_data: toolInput, // Store the full extraction
-    extraction_model: "claude-sonnet-4-20250514",
+    extraction_model: "claude-sonnet-4-6",
     extraction_status: "completed",
   };
 
