@@ -197,7 +197,7 @@
   transform: translateY(-50%);
   font-size: 9px;
   font-weight: 700;
-  background: linear-gradient(135deg, hsl(280 80% 60%), hsl(217 91% 60%));
+  background: hsl(var(--primary));
   color: #fff;
   padding: 2px 6px;
   border-radius: 4px;
@@ -390,7 +390,7 @@
 .mi-chip.interno { background: hsl(142 71% 45% / 0.15); color: hsl(142 71% 35%); }
 .mi-chip.factura { background: hsl(38 85% 55% / 0.18);  color: hsl(38 85% 40%); }
 .mi-chip.urgente { background: hsl(0 84% 60%); color: #fff; }
-.mi-chip.ai      { background: linear-gradient(135deg, hsl(280 80% 60%), hsl(217 91% 60%)); color: #fff; }
+.mi-chip.ai      { background: hsl(var(--primary)); color: #fff; }
 
 .mi-meta-right {
   display: flex;
@@ -556,8 +556,8 @@
   margin: 14px 22px 0;
   padding: 12px 14px;
   border-radius: 12px;
-  background: linear-gradient(135deg, hsl(280 80% 60% / 0.06), hsl(217 91% 60% / 0.06));
-  border: 1px solid hsl(280 80% 60% / 0.2);
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.06), hsl(var(--primary) / 0.03));
+  border: 1px solid hsl(var(--primary) / 0.2);
   position: relative;
 }
 
@@ -572,7 +572,7 @@
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: linear-gradient(135deg, hsl(280 80% 60%), hsl(217 91% 60%));
+  background: hsl(var(--primary));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -586,7 +586,7 @@
 .mp-ai-title {
   font-size: 12px;
   font-weight: 700;
-  color: hsl(280 80% 40%);
+  color: hsl(var(--primary));
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -604,9 +604,9 @@
 }
 
 .mp-ai-tab.active {
-  background: hsl(280 80% 60%);
+  background: hsl(var(--primary));
   color: #fff;
-  border-color: hsl(280 80% 60%);
+  border-color: hsl(var(--primary));
 }
 
 .mp-ai-body {
@@ -643,13 +643,13 @@
 }
 
 .mp-ai-action:hover {
-  background: hsl(280 80% 60% / 0.1);
-  border-color: hsl(280 80% 60%);
-  color: hsl(280 80% 40%);
+  background: hsl(var(--primary) / 0.1);
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
 }
 
 .mp-ai-action.primary {
-  background: linear-gradient(135deg, hsl(280 80% 60%), hsl(217 91% 60%));
+  background: hsl(var(--primary));
   color: #fff;
   border-color: transparent;
 }
@@ -774,7 +774,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: hsl(280 80% 40%);
+  color: hsl(var(--primary));
   display: flex;
   align-items: center;
   gap: 4px;
@@ -793,8 +793,8 @@
 }
 
 .mp-qr-chip:hover {
-  background: hsl(280 80% 60% / 0.1);
-  border-color: hsl(280 80% 60%);
+  background: hsl(var(--primary) / 0.1);
+  border-color: hsl(var(--primary));
 }
 
 .mp-qr-input {
@@ -1075,7 +1075,7 @@
 .tr-head {
   padding: 16px 22px 14px;
   border-bottom: 1px solid hsl(var(--border));
-  background: linear-gradient(135deg, hsl(280 80% 60% / 0.06), hsl(217 91% 60% / 0.06));
+  background: linear-gradient(135deg, hsl(var(--primary) / 0.06), hsl(var(--primary) / 0.02));
   flex-shrink: 0;
 }
 
@@ -1099,7 +1099,7 @@
   letter-spacing: 0.05em;
   padding: 4px 10px;
   border-radius: 9999px;
-  background: linear-gradient(135deg, hsl(280 80% 60%), hsl(217 91% 60%));
+  background: hsl(var(--primary));
   color: #fff;
 }
 
@@ -1416,7 +1416,7 @@
 .tr-foot { justify-content: space-between; }
 
 .tr-foot-btn.primary {
-  background: linear-gradient(135deg, hsl(280 80% 60%), hsl(217 91% 60%));
+  background: hsl(var(--primary));
   border-color: transparent;
   margin-left: 0;
 }

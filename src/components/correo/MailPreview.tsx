@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Reply,
   ReplyAll,
@@ -25,6 +25,7 @@ import {
   useMarkEmailRead,
   useMarkEmailUnread,
   useReplyEmail,
+  useForwardEmail,
 } from "@/hooks/useMicrosoft";
 import {
   getAvatarGradient,
@@ -57,7 +58,6 @@ interface Props {
 
 // ─── Sanitiza HTML del body para iframe ────────────────────────
 function sanitizeBodyForFrame(html: string): string {
-  // Eliminar scripts y event handlers inline
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, "");
@@ -87,26 +87,156 @@ const QUICK_REPLIES = [
   "Perfecto, quedo pendiente.",
 ];
 
+// ─── Panel de respuesta inline ─────────────────────────────────
+function ReplyPanel({
+  mode,
+  onSend,
+  onCancel,
+  isPending,
+}: {
+  mode: "reply" | "replyAll" | "forward";
+  onSend: (text: string, to?: string) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const [body, setBody] = useState("");
+  const [forwardTo, setForwardTo] = useState("");
+
+  const label = mode === "forward" ? "Reenviar a" : mode === "replyAll" ? "Responder a todos" : "Responder";
+
+  return (
+    <div style={{
+      margin: "0 22px 20px",
+      border: "1px solid hsl(var(--primary) / 0.3)",
+      borderRadius: 12,
+      overflow: "hidden",
+      background: "hsl(var(--card))",
+    }}>
+      <div style={{
+        padding: "8px 14px",
+        borderBottom: "1px solid hsl(var(--border))",
+        background: "hsl(var(--primary) / 0.05)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        fontSize: 12,
+        fontWeight: 700,
+        color: "hsl(var(--primary))",
+      }}>
+        {label}
+        <button onClick={onCancel} style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))" }}>
+          <X size={13} />
+        </button>
+      </div>
+
+      {mode === "forward" && (
+        <div style={{ padding: "8px 14px", borderBottom: "1px solid hsl(var(--border))", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", width: 42, flexShrink: 0 }}>Para</span>
+          <input
+            value={forwardTo}
+            onChange={(e) => setForwardTo(e.target.value)}
+            placeholder="destinatario@empresa.com"
+            style={{ flex: 1, border: 0, background: "transparent", fontSize: 13, fontFamily: "inherit", color: "hsl(var(--foreground))" }}
+          />
+        </div>
+      )}
+
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Escribe tu mensaje…"
+        style={{
+          width: "100%",
+          minHeight: 100,
+          border: 0,
+          padding: "12px 14px",
+          fontSize: 13,
+          fontFamily: "inherit",
+          color: "hsl(var(--foreground))",
+          background: "transparent",
+          resize: "vertical",
+          display: "block",
+          boxSizing: "border-box",
+        }}
+      />
+
+      <div style={{
+        padding: "8px 14px",
+        borderTop: "1px solid hsl(var(--border))",
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: 8,
+      }}>
+        <button onClick={onCancel} style={{ background: "transparent", border: "1px solid hsl(var(--border))", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+          Cancelar
+        </button>
+        <button
+          onClick={() => onSend(body, forwardTo || undefined)}
+          disabled={isPending || !body.trim() || (mode === "forward" && !forwardTo.trim())}
+          style={{
+            background: "hsl(var(--primary))",
+            color: "#fff",
+            border: 0,
+            borderRadius: 7,
+            padding: "6px 14px",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            opacity: isPending ? 0.7 : 1,
+          }}
+        >
+          <Send size={12} />
+          {isPending ? "Enviando…" : "Enviar"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Componente principal ──────────────────────────────────────
 export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTranslate }: Props) {
   const { data: emailDetail, isLoading } = useEmailDetail(emailId);
   const { data: attachments = [] } = useEmailAttachments(emailId ?? undefined);
-  const archiveMut = useArchiveEmail();
-  const deleteMut  = useDeleteEmail();
-  const markRead   = useMarkEmailRead();
-  const markUnread = useMarkEmailUnread();
-  const replyMut   = useReplyEmail();
+  const archiveMut  = useArchiveEmail();
+  const deleteMut   = useDeleteEmail();
+  const markRead    = useMarkEmailRead();
+  const markUnread  = useMarkEmailUnread();
+  const replyMut    = useReplyEmail();
+  const forwardMut  = useForwardEmail();
 
   const detail = emailDetail as EmailDetailShape | null | undefined;
 
   const [showAllRecipients, setShowAllRecipients] = useState(false);
-  const [quickReply, setQuickReply] = useState("");
-  const [aiTab, setAiTab] = useState<"resumen" | "responder" | "tareas">("resumen");
+  const [quickReply, setQuickReply]               = useState("");
+  const [aiTab, setAiTab]                         = useState<"resumen" | "responder" | "tareas">("resumen");
+  const [replyMode, setReplyMode]                 = useState<"reply" | "replyAll" | "forward" | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const senderName = detail?.from?.emailAddress?.name || detail?.from?.emailAddress?.address || "";
+  // ── Marcar como leído automáticamente al abrir (1.2 s de gracia) ──
+  useEffect(() => {
+    if (!detail || detail.isRead) return;
+    const timer = setTimeout(() => {
+      if (detail.id) markRead.mutate(detail.id);
+    }, 1200);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.id, detail?.isRead]);
+
+  // ── Cerrar reply panel al cambiar de correo ────────────────────
+  useEffect(() => {
+    setReplyMode(null);
+    setQuickReply("");
+    setShowAllRecipients(false);
+  }, [emailId]);
+
+  const senderName  = detail?.from?.emailAddress?.name || detail?.from?.emailAddress?.address || "";
   const senderEmail = detail?.from?.emailAddress?.address || "";
-  const avatarBg = getAvatarGradient(senderEmail, senderName);
-  const initials = getInitials(senderName, senderEmail);
+  const avatarBg    = getAvatarGradient(senderEmail, senderName);
+  const initials    = getInitials(senderName, senderEmail);
 
   const chips = useMemo(() => detail ? inferEmailChips({
     from: detail.from,
@@ -125,9 +255,7 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
     const recipients = detail?.toRecipients ?? [];
     if (!recipients.length) return "—";
     const names = recipients.map((r) => r.emailAddress?.name || r.emailAddress?.address || "").filter(Boolean);
-    if (!showAllRecipients && names.length > 2) {
-      return names.slice(0, 2).join(", ");
-    }
+    if (!showAllRecipients && names.length > 2) return names.slice(0, 2).join(", ");
     return names.join(", ");
   }, [detail?.toRecipients, showAllRecipients]);
 
@@ -157,11 +285,48 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
     return URL.createObjectURL(blob);
   }, [bodyHtml]);
 
+  // ── Handlers de acciones ──────────────────────────────────────
+  const handleReply = useCallback((body: string) => {
+    if (!emailId) return;
+    replyMut.mutate({ messageId: emailId, comment: body }, {
+      onSuccess: () => setReplyMode(null),
+    });
+  }, [emailId, replyMut]);
+
+  const handleReplyAll = useCallback((body: string) => {
+    if (!emailId) return;
+    replyMut.mutate({ messageId: emailId, comment: body, replyAll: true }, {
+      onSuccess: () => setReplyMode(null),
+    });
+  }, [emailId, replyMut]);
+
+  const handleForward = useCallback((body: string, to?: string) => {
+    if (!emailId || !to) return;
+    forwardMut.mutate({ messageId: emailId, comment: body, toRecipients: [to] }, {
+      onSuccess: () => setReplyMode(null),
+    });
+  }, [emailId, forwardMut]);
+
   const handleSendQuickReply = useCallback(() => {
     if (!quickReply.trim() || !emailId) return;
-    replyMut.mutate({ messageId: emailId, bodyHtml: `<p>${quickReply}</p>` });
-    setQuickReply("");
+    replyMut.mutate(
+      { messageId: emailId, comment: quickReply },
+      { onSuccess: () => setQuickReply("") }
+    );
   }, [quickReply, emailId, replyMut]);
+
+  const handleArchive = useCallback(() => {
+    if (detail?.id) archiveMut.mutate(detail.id);
+  }, [detail?.id, archiveMut]);
+
+  const handleDelete = useCallback(() => {
+    if (detail?.id) deleteMut.mutate(detail.id);
+  }, [detail?.id, deleteMut]);
+
+  const handleToggleRead = useCallback(() => {
+    if (!detail?.id) return;
+    detail.isRead ? markUnread.mutate(detail.id) : markRead.mutate(detail.id);
+  }, [detail?.id, detail?.isRead, markRead, markUnread]);
 
   // ── Empty state ──────────────────────────────────────────────
   if (!emailId) {
@@ -194,70 +359,88 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   if (!detail) return <div className="mail-preview" />;
 
   const visibleAttachments = attachments.filter((a) => !a.isInline);
+  const isReplying  = replyMut.isPending;
+  const isForwarding = forwardMut.isPending;
 
   return (
     <div className="mail-preview">
-      {/* Toolbar */}
+      {/* ── Toolbar ── */}
       <div className="mp-toolbar">
         <button
           className="mp-btn primary"
-          onClick={() => {}}
+          onClick={() => setReplyMode("reply")}
           title="Responder"
         >
           <Reply size={13} className="ico" /> Responder
         </button>
-        <button className="mp-btn" title="Responder a todos"><ReplyAll size={13} className="ico" /> Todos</button>
-        <button className="mp-btn" title="Reenviar"><Forward size={13} className="ico" /> Reenviar</button>
+        <button
+          className="mp-btn"
+          onClick={() => setReplyMode("replyAll")}
+          title="Responder a todos"
+        >
+          <ReplyAll size={13} className="ico" /> Todos
+        </button>
+        <button
+          className="mp-btn"
+          onClick={() => setReplyMode("forward")}
+          title="Reenviar"
+        >
+          <Forward size={13} className="ico" /> Reenviar
+        </button>
 
         <div className="mp-toolbar-divider" />
 
         <button
           className="mp-btn icon-only"
           title="Archivar"
-          onClick={() => detail.id && archiveMut.mutate(detail.id)}
+          onClick={handleArchive}
+          disabled={archiveMut.isPending}
         >
           <Archive size={14} className="ico" />
         </button>
         <button
           className="mp-btn icon-only"
           title="Eliminar"
-          onClick={() => detail.id && deleteMut.mutate(detail.id)}
+          onClick={handleDelete}
+          disabled={deleteMut.isPending}
         >
           <Trash2 size={14} className="ico" />
         </button>
         <button
           className="mp-btn icon-only"
           title={detail.isRead ? "Marcar como no leído" : "Marcar como leído"}
-          onClick={() => {
-            if (!detail.id) return;
-            detail.isRead
-              ? markUnread.mutate(detail.id)
-              : markRead.mutate(detail.id);
-          }}
+          onClick={handleToggleRead}
         >
-          <CheckCheck size={14} className="ico" />
+          <CheckCheck
+            size={14}
+            className="ico"
+            style={{ color: detail.isRead ? "hsl(var(--primary))" : undefined }}
+          />
         </button>
-        <button className="mp-btn icon-only" title="Destacar"><Star size={14} className="ico" /></button>
+        <button
+          className="mp-btn icon-only"
+          title="Destacar"
+        >
+          <Star
+            size={14}
+            className="ico"
+            style={{ color: detail.flag?.flagStatus === "flagged" ? "hsl(38 85% 50%)" : undefined }}
+          />
+        </button>
         <button className="mp-btn icon-only" title="Marcar"><Flag size={14} className="ico" /></button>
 
         <div className="mp-toolbar-divider" />
 
-        <button
-          className="mp-btn"
-          onClick={() => onCreateTask(detail)}
-        >
+        <button className="mp-btn" onClick={() => onCreateTask(detail)}>
           <Sparkles size={13} className="ico" /> Crear tarea
         </button>
-        <button
-          className="mp-btn"
-          onClick={() => onTranslate(detail)}
-        >
+        <button className="mp-btn" onClick={() => onTranslate(detail)}>
           Traducir
         </button>
         <button className="mp-btn icon-only"><MoreHorizontal size={14} className="ico" /></button>
       </div>
 
-      {/* Scroll principal */}
+      {/* ── Scroll principal ── */}
       <div className="mp-scroll">
         {/* Encabezado */}
         <div className="mp-header">
@@ -321,17 +504,17 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           <div className="mp-ai-body">
             {aiTab === "resumen" && (
               <p style={{ margin: 0, fontStyle: "italic", opacity: 0.7, fontSize: 12 }}>
-                Selecciona "Resumen" para que Kawiil AI analice este correo.
+                Pulsa "Analizar" para que Kawiil AI genere un resumen de este correo.
               </p>
             )}
             {aiTab === "responder" && (
               <p style={{ margin: 0, fontStyle: "italic", opacity: 0.7, fontSize: 12 }}>
-                AI puede redactar una respuesta personalizada basada en el contenido.
+                AI puede redactar una respuesta basada en el contexto del correo.
               </p>
             )}
             {aiTab === "tareas" && (
               <p style={{ margin: 0, fontStyle: "italic", opacity: 0.7, fontSize: 12 }}>
-                AI puede extraer tareas y compromisos de este correo.
+                AI puede extraer compromisos y tareas accionables de este correo.
               </p>
             )}
           </div>
@@ -357,12 +540,7 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
               src={iframeSrc}
               title="Contenido del correo"
               sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-              style={{
-                width: "100%",
-                minHeight: 320,
-                border: 0,
-                display: "block",
-              }}
+              style={{ width: "100%", minHeight: 320, border: 0, display: "block" }}
               onLoad={() => {
                 const iframe = iframeRef.current;
                 if (!iframe) return;
@@ -400,48 +578,64 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           </div>
         )}
 
-        {/* Quick reply */}
-        <div className="mp-quick-reply">
-          <div className="mp-qr-suggestions">
-            <span className="mp-qr-label">
-              <Sparkles size={10} />
-              AI
-            </span>
-            {QUICK_REPLIES.map((qr) => (
+        {/* Panel de respuesta inline */}
+        {replyMode && (
+          <ReplyPanel
+            mode={replyMode}
+            onSend={(body, to) => {
+              if (replyMode === "reply")    handleReply(body);
+              if (replyMode === "replyAll") handleReplyAll(body);
+              if (replyMode === "forward")  handleForward(body, to);
+            }}
+            onCancel={() => setReplyMode(null)}
+            isPending={isReplying || isForwarding}
+          />
+        )}
+
+        {/* Quick reply (solo si no hay panel inline abierto) */}
+        {!replyMode && (
+          <div className="mp-quick-reply">
+            <div className="mp-qr-suggestions">
+              <span className="mp-qr-label">
+                <Sparkles size={10} />
+                AI
+              </span>
+              {QUICK_REPLIES.map((qr) => (
+                <button
+                  key={qr}
+                  className="mp-qr-chip"
+                  onClick={() => setQuickReply(qr)}
+                >
+                  {qr}
+                </button>
+              ))}
+            </div>
+            <div className="mp-qr-input">
+              <input
+                placeholder="Escribe una respuesta rápida…"
+                value={quickReply}
+                onChange={(e) => setQuickReply(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendQuickReply()}
+              />
+              {quickReply && (
+                <button
+                  onClick={() => setQuickReply("")}
+                  style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: "4px" }}
+                >
+                  <X size={12} />
+                </button>
+              )}
               <button
-                key={qr}
-                className="mp-qr-chip"
-                onClick={() => setQuickReply(qr)}
+                className="mp-qr-send"
+                onClick={handleSendQuickReply}
+                disabled={!quickReply.trim() || replyMut.isPending}
               >
-                {qr}
+                <Send size={12} style={{ display: "inline", marginRight: 4 }} />
+                Enviar
               </button>
-            ))}
+            </div>
           </div>
-          <div className="mp-qr-input">
-            <input
-              placeholder="Escribe una respuesta rápida…"
-              value={quickReply}
-              onChange={(e) => setQuickReply(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendQuickReply()}
-            />
-            {quickReply && (
-              <button
-                onClick={() => setQuickReply("")}
-                style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: "4px" }}
-              >
-                <X size={12} />
-              </button>
-            )}
-            <button
-              className="mp-qr-send"
-              onClick={handleSendQuickReply}
-              disabled={!quickReply.trim() || replyMut.isPending}
-            >
-              <Send size={12} style={{ display: "inline", marginRight: 4 }} />
-              Enviar
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
