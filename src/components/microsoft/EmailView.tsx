@@ -2238,7 +2238,7 @@ export function EmailView() {
             : cn(
                 listPaneCollapsed && selectedEmailId
                   ? "pointer-events-none w-0 min-w-0 shrink-0 overflow-hidden border-0 p-0 opacity-0"
-                  : "max-w-[28rem] min-w-[15rem] flex-[0_1_min(28rem,36vw)]",
+                  : "max-w-[36rem] min-w-[18rem] flex-[0_1_min(36rem,42vw)]",
               ),
           selectedEmailId && isMobile && "hidden",
         )}
@@ -2453,11 +2453,7 @@ export function EmailView() {
                           </span>
                           <div className="relative flex shrink-0 items-center justify-end min-h-5 min-w-[4.5rem]">
                             <span
-                              className={cn(
-                                "text-xs text-muted-foreground tabular-nums whitespace-nowrap transition-opacity",
-                                !isActive &&
-                                  "opacity-100 sm:group-hover:pointer-events-none sm:group-hover:opacity-0",
-                              )}
+                              className="text-xs text-foreground/70 tabular-nums whitespace-nowrap"
                             >
                               {formatEmailDate(emailListTimestamp(email))}
                             </span>
@@ -2534,7 +2530,7 @@ export function EmailView() {
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden />
                             )}
                             <p
-                              className="min-w-0 flex-1 truncate text-sm"
+                              className="min-w-0 flex-1 line-clamp-2 text-sm leading-snug"
                               title={subject}
                             >
                               <span className={cn(unread && "font-semibold")}>{subject}</span>
