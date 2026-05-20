@@ -511,13 +511,26 @@ export function CalendarView() {
     }
   }, [viewMode, currentDate]);
 
+  const headerLabelShort = useMemo(() => {
+    switch (viewMode) {
+      case "day": return format(currentDate, "EEE d MMM", { locale: es });
+      case "3days": return `${format(currentDate, "d")} – ${format(addDays(currentDate, 2), "d MMM", { locale: es })}`;
+      case "week": {
+        const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
+        const we = endOfWeek(currentDate, { weekStartsOn: 1 });
+        return `${format(ws, "d")} – ${format(we, "d MMM", { locale: es })}`;
+      }
+      case "month": return format(currentDate, "MMM yyyy", { locale: es });
+    }
+  }, [viewMode, currentDate]);
+
   const colCount = viewMode === "month" ? 7 : viewDays.length;
 
   const getMinWidth = () => {
     switch (viewMode) {
-      case "day": return "min-w-[400px]";
-      case "3days": return "min-w-[600px]";
-      case "week": return "min-w-[820px]";
+      case "day": return "w-full";
+      case "3days": return "min-w-[420px]";
+      case "week": return "min-w-[560px]";
       default: return "";
     }
   };
@@ -610,31 +623,37 @@ export function CalendarView() {
         )}
         {/* Toolbar */}
         <div className="surface-toolbar flex flex-wrap items-center justify-between gap-2 p-3 md:p-4">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={goPrev}>
+          <div className="flex items-center gap-2 min-w-0">
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={goPrev}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" className="h-8" onClick={goToday}>Hoy</Button>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={goNext}>
+            <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={goToday}>Hoy</Button>
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={goNext}>
               <ChevronRight className="h-4 w-4" />
             </Button>
-            <h2 className="text-lg font-semibold capitalize ml-2">{headerLabel}</h2>
-            {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            <h2 className="font-semibold capitalize ml-1 truncate text-sm sm:text-base md:text-lg">
+              <span className="hidden sm:inline">{headerLabel}</span>
+              <span className="sm:hidden">{headerLabelShort}</span>
+            </h2>
+            {isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />}
           </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <div className="flex items-center gap-2 shrink-0">
+            <label className="hidden sm:flex items-center gap-1.5 text-xs cursor-pointer">
               <Switch checked={showKawiilTasks} onCheckedChange={setShowKawiilTasks} className="scale-75" />
               <span className="text-muted-foreground">Tareas Kawiil</span>
             </label>
-            <div className="flex gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 backdrop-blur-sm">
-              {(["day", "3days", "week", "month"] as const).map((v) => (
-                <button key={v} className={`tab-pill ${viewMode === v ? "tab-pill-active" : "tab-pill-inactive"}`} onClick={() => setViewMode(v)}>
-                  {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}
-                </button>
-              ))}
-            </div>
+            {!isMobile && (
+              <div className="flex gap-0.5 rounded-full border border-border/50 bg-background/70 p-0.5 backdrop-blur-sm">
+                {(["day", "3days", "week", "month"] as const).map((v) => (
+                  <button key={v} className={`tab-pill ${viewMode === v ? "tab-pill-active" : "tab-pill-inactive"}`} onClick={() => setViewMode(v)}>
+                    {v === "day" ? "Día" : v === "3days" ? "3 Días" : v === "week" ? "Semana" : "Mes"}
+                  </button>
+                ))}
+              </div>
+            )}
             <Button size="sm" className="h-8 gap-1.5" onClick={() => { setSelectedDate(new Date()); setShowCreate(true); }}>
-              <Plus className="h-4 w-4" /> Evento
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Evento</span>
             </Button>
           </div>
         </div>
@@ -850,8 +869,19 @@ export function CalendarView() {
           <Card className="overflow-hidden">
             <CardContent className="p-0">
               <div className="grid grid-cols-7 border-b border-border">
-                {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
-                  <div key={d} className="p-2 text-xs text-muted-foreground text-center font-medium">{d}</div>
+                {[
+                  { short: "Lun", letter: "L" },
+                  { short: "Mar", letter: "M" },
+                  { short: "Mié", letter: "X" },
+                  { short: "Jue", letter: "J" },
+                  { short: "Vie", letter: "V" },
+                  { short: "Sáb", letter: "S" },
+                  { short: "Dom", letter: "D" },
+                ].map(({ short, letter }) => (
+                  <div key={short} className="py-1.5 px-0.5 text-xs text-muted-foreground text-center font-medium">
+                    <span className="hidden sm:inline">{short}</span>
+                    <span className="sm:hidden">{letter}</span>
+                  </div>
                 ))}
               </div>
               <div className="grid grid-cols-7">
@@ -862,34 +892,34 @@ export function CalendarView() {
                   const allItems = [...dayEvents.slice(0, 2), ...dayTasks.slice(0, 2)];
                   const totalExtra = dayEvents.length + dayTasks.length - allItems.length;
                   return (
-                    <div key={day.toISOString()} className={cn("h-[110px] border-b border-r border-border p-1 cursor-pointer hover:bg-muted/30 transition-colors overflow-hidden",
+                    <div key={day.toISOString()} className={cn("h-[75px] sm:h-[95px] md:h-[110px] border-b border-r border-border p-0.5 sm:p-1 cursor-pointer hover:bg-muted/30 transition-colors overflow-hidden",
                       !inMonth && "bg-muted/15", isToday(day) && "bg-primary/5")}
                       onClick={() => { setSelectedDate(day); setShowCreate(true); }}>
-                      <div className={cn("text-xs mb-1", isToday(day) ? "text-primary font-bold" : inMonth ? "text-foreground" : "text-muted-foreground")}>
+                      <div className={cn("text-[10px] sm:text-xs mb-0.5 sm:mb-1", isToday(day) ? "text-primary font-bold" : inMonth ? "text-foreground" : "text-muted-foreground")}>
                         {format(day, "d")}
                       </div>
                       <div className="space-y-0.5">
-                        {dayEvents.slice(0, 2).map((event: any) => {
+                        {dayEvents.slice(0, isMobile ? 1 : 2).map((event: any) => {
                           const time = event._parsedStart ? formatMX(event._parsedStart, "HH:mm") : "";
                           return (
-                            <div key={event.id} className="bg-primary/15 text-primary rounded px-1 py-0.5 text-[10px] truncate cursor-pointer hover:bg-primary/25 transition-colors"
+                            <div key={event.id} className="bg-primary/15 text-primary rounded px-1 py-0.5 text-[9px] sm:text-[10px] truncate cursor-pointer hover:bg-primary/25 transition-colors"
                               onClick={(e) => { e.stopPropagation(); setSelectedEventId(event.id); }}>
-                              {time && <span className="font-medium mr-1">{time}</span>}{event.subject}
+                              <span className="hidden sm:inline">{time && <span className="font-medium mr-1">{time}</span>}</span>{event.subject}
                             </div>
                           );
                         })}
-                        {dayTasks.slice(0, 2).map((task: any) => (
+                        {!isMobile && dayTasks.slice(0, 2).map((task: any) => (
                           <Link
                             key={task.id}
                             to={taskDetailHref(task.id)}
                             onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-0.5 bg-amber-500/15 text-amber-700 dark:text-amber-300 rounded px-1 py-0.5 text-[10px] truncate hover:bg-amber-500/25 transition-colors underline-offset-1 hover:underline"
+                            className="flex items-center gap-0.5 bg-amber-500/15 text-amber-700 dark:text-amber-300 rounded px-1 py-0.5 text-[9px] sm:text-[10px] truncate hover:bg-amber-500/25 transition-colors underline-offset-1 hover:underline"
                           >
                             <CheckSquare className="h-2.5 w-2.5 shrink-0" />
                             <span className="truncate">{task.title}</span>
                           </Link>
                         ))}
-                        {totalExtra > 0 && <div className="text-[10px] text-muted-foreground pl-1">+{totalExtra} más</div>}
+                        {totalExtra > 0 && <div className="text-[9px] sm:text-[10px] text-muted-foreground pl-0.5 sm:pl-1">+{totalExtra}</div>}
                       </div>
                     </div>
                   );

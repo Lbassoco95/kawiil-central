@@ -2456,7 +2456,7 @@ export function EmailView() {
                               className={cn(
                                 "text-xs text-muted-foreground tabular-nums whitespace-nowrap transition-opacity",
                                 !isActive &&
-                                  "max-md:opacity-100 md:opacity-100 md:group-hover:pointer-events-none md:group-hover:opacity-0",
+                                  "opacity-100 sm:group-hover:pointer-events-none sm:group-hover:opacity-0",
                               )}
                             >
                               {formatEmailDate(emailListTimestamp(email))}
@@ -2466,8 +2466,8 @@ export function EmailView() {
                                 className={cn(
                                   "flex items-center gap-0.5 rounded-sm bg-background/90 dark:bg-background/90 px-0.5",
                                   "opacity-0 group-hover:opacity-100 transition-opacity",
-                                  "max-md:opacity-100 max-md:static max-md:ml-1",
-                                  "md:absolute md:right-0 md:top-1/2 md:-translate-y-1/2",
+                                  "max-sm:hidden",
+                                  "sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2",
                                 )}
                               >
                                 <Tooltip>
@@ -2525,20 +2525,29 @@ export function EmailView() {
                             )}
                           </div>
                         </div>
-                        <div className="mt-0.5 flex min-w-0 items-center gap-1">
-                          {email.hasAttachments && (
-                            <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden />
+                        <div className="mt-0.5 min-w-0">
+                          <div className="flex min-w-0 items-center gap-1">
+                            {email.hasAttachments && (
+                              <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden />
+                            )}
+                            {email.importance === "high" && (
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden />
+                            )}
+                            <p
+                              className="min-w-0 flex-1 truncate text-sm"
+                              title={subject}
+                            >
+                              <span className={cn(unread && "font-semibold")}>{subject}</span>
+                            </p>
+                          </div>
+                          {bodyPreview && bodyPreview !== "…" && (
+                            <p
+                              className="min-w-0 truncate text-xs text-muted-foreground leading-snug mt-0.5"
+                              title={bodyPreview}
+                            >
+                              {bodyPreview}
+                            </p>
                           )}
-                          {email.importance === "high" && (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden />
-                          )}
-                          <p
-                            className="min-w-0 flex-1 truncate text-sm"
-                            title={`${subject} — ${bodyPreview}`}
-                          >
-                            <span className={cn(unread && "font-semibold")}>{subject}</span>
-                            <span className="text-muted-foreground font-normal"> - {bodyPreview}</span>
-                          </p>
                         </div>
                         {(() => {
                           const inferred = inferEmailChips(email);
