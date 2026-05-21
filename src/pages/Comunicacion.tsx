@@ -52,6 +52,7 @@ import { broadcastSlackChannelRead } from "@/lib/slackReadBroadcast";
 import { extractSlackUserIdsFromText } from "@/lib/slackFormatting";
 import { SlackConnectHero } from "@/components/slack/SlackConnectHero";
 import { SlackWorkspaceLayout } from "@/components/slack/SlackWorkspaceLayout";
+import { SlackView } from "@/components/slack/v2/SlackView";
 import { SlackConversationList, type SlackCommPrefRow } from "@/components/slack/SlackConversationList";
 import { SlackStatusPresets } from "@/components/slack/SlackStatusPresets";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
@@ -2391,61 +2392,12 @@ export default function Comunicacion() {
 
   return (
     <AppLayout contentMaxWidth="full">
-      {profile?.organization_id && (
-        <SlackGroupsOrganizerDialog
-          open={groupsDialogOpen}
-          onOpenChange={setGroupsDialogOpen}
-          conversations={conversations}
-          organizationId={profile.organization_id}
-          titleOpts={titleOpts}
-          userMap={userMap}
-        />
-      )}
-      <SlackNewDmDialog
-        open={newDmOpen}
-        onOpenChange={setNewDmOpen}
-        connectionId={connection?.id}
-        slackSelfUserId={connection?.slack_user_id}
-        onChannelReady={(channelId) => selectChannel(channelId)}
-      />
-      <SlackCreateTaskDialog
-        open={!!taskFromSlackMessage}
-        onOpenChange={(open) => {
-          if (!open) setTaskFromSlackMessage(null);
-        }}
-        message={taskFromSlackMessage}
-        channelId={selectedChannel}
-        channelTitle={headerTitle}
-        authorLabel={
-          taskFromSlackMessage?.user
-            ? slackUserDisplayName(taskFromSlackMessage.user, userMap)
-            : taskFromSlackMessage?.bot_id
-              ? "Bot"
-              : "Usuario Slack"
-        }
-      />
-      <div className="flex flex-1 min-h-0 flex-col px-2 pb-2 pt-2 sm:px-3 sm:pt-3 sm:pb-3">
-        <SlackWorkspaceLayout
-          sidebar={sidebar}
-          main={<div className="flex flex-col flex-1 min-h-0 overflow-hidden">{main}</div>}
-          mobileListOpen={mobileListOpen}
-          onMobileListOpenChange={setMobileListOpen}
-          workspaceName="Kawiil"
-          workspaceInitial="K"
-          isConnected={isConnected}
-          connectionLabel={connection?.slack_user_id ? "OAuth ok" : "—"}
-          totalUnread={slackHeaderSummary.totalUnread}
-          unreadBreakdown={slackHeaderSummary.unreadBreakdown}
-          totalConversations={slackHeaderSummary.totalConvs}
-          channelsCount={slackHeaderSummary.channels}
-          directsCount={slackHeaderSummary.directs}
-          onNewMessage={() => setNewDmOpen(true)}
-          onOpenActivity={handleOpenActivityPanel}
-          activityOpen={activityPanelOpen}
-          activityUnread={slackUnreadMentions}
-          onOpenLater={handleOpenLaterPanel}
-          laterOpen={laterPanelOpen}
-          laterCount={savedLaterCount}
+      <div className="h-full min-h-0 min-w-0 w-full" style={{ display: "flex", flexDirection: "column" }}>
+        <SlackView
+          connection={connection!}
+          onRefreshConversations={() => {
+            void conversationsQuery.refetch();
+          }}
         />
       </div>
     </AppLayout>
