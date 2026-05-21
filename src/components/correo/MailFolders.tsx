@@ -22,8 +22,20 @@ import {
   useCreateMailFolder,
 } from "@/hooks/useMicrosoft";
 
-// ─── Iconos por carpeta bien conocida ──────────────────────────
-const FOLDER_ICONS: Record<string, React.ElementType> = {
+// ─── Tipos ────────────────────────────────────────────────────
+type RawFolder = {
+  id: string;
+  displayName: string;
+  wellKnownFolderName?: string;
+  wellKnownName?: string;
+  parentFolderId?: string;
+  unreadItemCount?: number;
+  totalItemCount?: number;
+  childFolderCount?: number;
+};
+
+// ─── Iconos ───────────────────────────────────────────────────
+const WK_ICONS: Record<string, React.ElementType> = {
   inbox:        Inbox,
   sentitems:    Send,
   deleteditems: Trash2,
@@ -34,49 +46,131 @@ const FOLDER_ICONS: Record<string, React.ElementType> = {
   outbox:       Send,
 };
 
-function folderIcon(wellKnownName?: string, displayName?: string) {
-  const key = (wellKnownName || displayName || "").toLowerCase().replace(/\s/g, "");
-  return FOLDER_ICONS[key] ?? FolderOpen;
+function folderIcon(folder: RawFolder): React.ElementType {
+  const wk = String(folder.wellKnownFolderName || folder.wellKnownName || "").toLowerCase();
+  const nameKey = (folder.displayName || "").toLowerCase().replace(/\s/g, "");
+  const key = wk ||
+    (nameKey.includes("bandejadeentrada") || nameKey.includes("inbox") ? "inbox" :
+     nameKey.includes("enviado") || nameKey.includes("sent") ? "sentitems" :
+     nameKey.includes("eliminad") || nameKey.includes("trash") || nameKey.includes("deleted") ? "deleteditems" :
+     nameKey.includes("borrador") || nameKey.includes("draft") ? "drafts" :
+     nameKey.includes("archiv") ? "archive" :
+     nameKey.includes("spam") || nameKey.includes("junk") ? "junkemail" : "");
+  return WK_ICONS[key] ?? FolderOpen;
 }
 
-const FOLDER_ORDER: Record<string, number> = {
-  inbox: 0, starred: 1, drafts: 2, sentitems: 3,
-  archive: 4, junkemail: 5, deleteditems: 6,
-};
-
-type FolderItem = {
-  id: string;
-  displayName: string;
-  wellKnownName?: string;
-  unreadItemCount?: number;
-  totalItemCount?: number;
-  childFolderCount?: number;
-  childFolders?: FolderItem[];
-};
-
-interface Props {
-  selectedFolderId: string;
-  onSelectFolder: (id: string) => void;
-  onCompose: () => void;
+// ─── Nombre localizado ────────────────────────────────────────
+function getFolderLabel(displayName: string): string {
+  const key = displayName.toLowerCase().replace(/\s/g, "");
+  if (key.includes("inbox") || key.includes("bandejadeentrada")) return "Bandeja de entrada";
+  if (key.includes("sentitem") || key.includes("elementosenviados")) return "Enviados";
+  if (key.includes("deleteditem") || key.includes("elementoseliminados")) return "Eliminados";
+  if (key.includes("draft") || key.includes("borrador")) return "Borradores";
+  if (key.includes("junkemail") || key.includes("correonodeseado")) return "Spam";
+  if (key.includes("archiv")) return "Archivo";
+  return displayName;
 }
 
-// ── Fila de carpeta (recursiva para subcarpetas) ──────────────
+// ─── Badge (contador) ────────────────────────────────────────
+function getFolderBadge(folder: RawFolder, inboxUnread: number): number | null {
+  const wk = String(folder.wellKnownFolderName || folder.wellKnownName || "").toLowerCase();
+  const nameKey = (folder.displayName || "").toLowerCase().replace(/\s/g, "");
+  const isInbox = wk === "inbox" || nameKey.includes("inbox") || nameKey.includes("bandejadeentrada");
+  if (isInbox) return inboxUnread > 0 ? inboxUnread : null;
+  const isDrafts = wk === "drafts" || nameKey.includes("draft") || nameKey.includes("borrador");
+  if (isDrafts) { const t = folder.totalItemCount ?? 0; return t > 0 ? t : null; }
+  const isJunk = wk === "junkemail" || nameKey.includes("junk") || nameKey.includes("spam");
+  if (isJunk) { const u = folder.unreadItemCount ?? 0; return u > 0 ? u : null; }
+  const unread = folder.unreadItemCount ?? 0;
+  return unread > 0 ? unread : null;
+}
+
+// ─── Orden well-known ─────────────────────────────────────────
+const WK_ORDER = ["inbox", "sentitems", "drafts", "deleteditems", "junkemail"];
+
+function wellKnownSortIndex(f: RawFolder): number | null {
+  const wk = String(f.wellKnownFolderName || f.wellKnownName || "").toLowerCase();
+  const idx = WK_ORDER.indexOf(wk);
+  if (idx >= 0) return idx;
+  const key = (f.displayName || "").toLowerCase().replace(/\s/g, "");
+  if (key.includes("inbox") || key.includes("bandejadeentrada")) return 0;
+  if (key.includes("enviado") || key.includes("sentitem")) return 1;
+  if (key.includes("borrador") || key.includes("draft")) return 2;
+  if (key.includes("eliminad") || key.includes("deleted")) return 3;
+  if (key.includes("junk") || key.includes("spam")) return 4;
+  return null;
+}
+
+function sortFolders(rows: RawFolder[]): RawFolder[] {
+  return [...rows].sort((a, b) => {
+    const ia = wellKnownSortIndex(a);
+    const ib = wellKnownSortIndex(b);
+    if (ia != null && ib != null && ia !== ib) return ia - ib;
+    if (ia != null && ib == null) return -1;
+    if (ia == null && ib != null) return 1;
+    return (a.displayName || "").localeCompare(b.displayName || "", "es", { sensitivity: "base" });
+  });
+}
+
+// ─── Construir árbol desde lista plana ────────────────────────
+function buildTree(folders: RawFolder[]): {
+  roots: RawFolder[];
+  childrenMap: Map<string, RawFolder[]>;
+} {
+  const byId = new Map<string, RawFolder>();
+  for (const f of folders) byId.set(f.id, f);
+
+  const childrenMap = new Map<string, RawFolder[]>();
+  const roots: RawFolder[] = [];
+
+  for (const f of folders) {
+    const pid = f.parentFolderId;
+    if (pid && byId.has(pid)) {
+      const arr = childrenMap.get(pid) ?? [];
+      arr.push(f);
+      childrenMap.set(pid, arr);
+    } else {
+      roots.push(f);
+    }
+  }
+
+  // Edge case: sin raíces pero hay filas → lista plana
+  if (roots.length === 0 && folders.length > 0) {
+    return { roots: sortFolders(folders), childrenMap: new Map() };
+  }
+
+  // Ordenar cada nivel
+  const sortedRoots = sortFolders(roots);
+  for (const [k, arr] of childrenMap.entries()) {
+    childrenMap.set(k, sortFolders(arr));
+  }
+  return { roots: sortedRoots, childrenMap };
+}
+
+// ─── Fila recursiva de carpeta ────────────────────────────────
 function FolderRow({
   folder,
+  childrenMap,
   selectedFolderId,
   onSelectFolder,
+  inboxUnread,
   depth = 0,
 }: {
-  folder: FolderItem;
+  folder: RawFolder;
+  childrenMap: Map<string, RawFolder[]>;
   selectedFolderId: string;
   onSelectFolder: (id: string) => void;
+  inboxUnread: number;
   depth?: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const Icon = folderIcon(folder.wellKnownName, folder.displayName);
-  const hasChildren = (folder.childFolders?.length ?? 0) > 0;
+  const children = childrenMap.get(folder.id) ?? [];
+  const hasChildren = children.length > 0;
+  // Expandir automáticamente el primer nivel
+  const [expanded, setExpanded] = useState(depth === 0 && hasChildren);
+  const Icon = folderIcon(folder);
   const isActive = selectedFolderId === folder.id;
-  const unread = folder.unreadItemCount ?? 0;
+  const badge = getFolderBadge(folder, inboxUnread);
+  const label = getFolderLabel(folder.displayName);
 
   return (
     <>
@@ -84,37 +178,42 @@ function FolderRow({
         className={[
           "mail-folder",
           isActive ? "active" : "",
-          unread > 0 ? "unread" : "",
+          badge ? "unread" : "",
         ].filter(Boolean).join(" ")}
-        style={{ paddingLeft: depth > 0 ? `${10 + depth * 14}px` : undefined }}
+        style={depth > 0 ? { paddingLeft: `${10 + depth * 14}px` } : undefined}
         onClick={() => onSelectFolder(folder.id)}
       >
-        {/* Chevron para expandir subcarpetas */}
-        {hasChildren && (
+        {/* Chevron expandir */}
+        {hasChildren ? (
           <span
-            style={{ marginLeft: -4, marginRight: 4, cursor: "pointer", opacity: 0.6 }}
+            style={{ marginLeft: -4, marginRight: 2, display: "flex", cursor: "pointer", opacity: 0.55 }}
             onClick={(e) => { e.stopPropagation(); setExpanded((p) => !p); }}
           >
-            {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            {expanded
+              ? <ChevronDown size={11} />
+              : <ChevronRight size={11} />}
           </span>
+        ) : (
+          <span style={{ width: 11, marginLeft: -4, marginRight: 2, flexShrink: 0 }} />
         )}
 
-        <Icon size={15} className="ico" />
+        <Icon size={14} className="ico" />
         <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {folder.displayName}
+          {label}
         </span>
-        {unread > 0 && (
-          <span className="count">{unread > 99 ? "99+" : unread}</span>
+        {badge != null && (
+          <span className="count">{badge > 99 ? "99+" : badge}</span>
         )}
       </button>
 
-      {/* Subcarpetas */}
-      {expanded && hasChildren && folder.childFolders!.map((child) => (
+      {expanded && children.map((child) => (
         <FolderRow
           key={child.id}
           folder={child}
+          childrenMap={childrenMap}
           selectedFolderId={selectedFolderId}
           onSelectFolder={onSelectFolder}
+          inboxUnread={inboxUnread}
           depth={depth + 1}
         />
       ))}
@@ -122,200 +221,132 @@ function FolderRow({
   );
 }
 
-// ── Componente principal ──────────────────────────────────────
+// ─── Componente principal ────────────────────────────────────
+interface Props {
+  selectedFolderId: string;
+  onSelectFolder: (id: string) => void;
+  onCompose: () => void;
+}
+
 export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Props) {
-  const { data: foldersData, isLoading }  = useMailFolders();
-  const { data: unreadData }              = useUnreadEmailCount();
+  const { data: foldersData, isLoading } = useMailFolders();
+  const { data: unreadData }             = useUnreadEmailCount();
   const createFolderMut                  = useCreateMailFolder();
 
-  // Estado del mini-form de nueva carpeta
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const newFolderInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (showNewFolder) newFolderInputRef.current?.focus();
+    if (showNewFolder) inputRef.current?.focus();
   }, [showNewFolder]);
 
-  const { wellKnown, custom } = useMemo(() => {
-    const raw = (foldersData?.folders ?? []) as FolderItem[];
-    const sorted = [...raw].sort((a, b) => {
-      const oa = FOLDER_ORDER[a.wellKnownName?.toLowerCase() ?? ""] ?? 99;
-      const ob = FOLDER_ORDER[b.wellKnownName?.toLowerCase() ?? ""] ?? 99;
-      return oa - ob || a.displayName.localeCompare(b.displayName, "es");
-    });
-    return {
-      wellKnown: sorted.filter((f) => f.wellKnownName),
-      custom:    sorted.filter((f) => !f.wellKnownName),
-    };
+  const inboxUnread =
+    typeof unreadData === "number" ? unreadData : 0;
+
+  // Construir árbol desde lista plana
+  const { roots, childrenMap } = useMemo(() => {
+    const raw = (foldersData?.folders ?? []) as RawFolder[];
+    return buildTree(raw);
   }, [foldersData]);
 
-  // Unread real del inbox
-  const inboxUnread =
-    typeof unreadData === "number"
-      ? unreadData
-      : (wellKnown.find((f) => f.wellKnownName?.toLowerCase() === "inbox")?.unreadItemCount ?? 0);
-
-  // Inyectar unread real al inbox
-  const wellKnownWithUnread = useMemo(() =>
-    wellKnown.map((f) =>
-      f.wellKnownName?.toLowerCase() === "inbox"
-        ? { ...f, unreadItemCount: inboxUnread }
-        : f
-    ), [wellKnown, inboxUnread]);
-
-  const handleCreateFolder = () => {
+  const handleCreate = () => {
     const name = newFolderName.trim();
     if (!name) return;
     createFolderMut.mutate(name, {
-      onSuccess: () => {
-        setNewFolderName("");
-        setShowNewFolder(false);
-      },
+      onSuccess: () => { setNewFolderName(""); setShowNewFolder(false); },
     });
   };
 
-  const handleNewFolderKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleCreateFolder();
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleCreate();
     if (e.key === "Escape") { setShowNewFolder(false); setNewFolderName(""); }
   };
 
   return (
     <aside className="mail-folders">
-      {/* Botón Nuevo correo */}
+      {/* Nuevo correo */}
       <button className="mail-compose-btn" onClick={onCompose}>
-        <Edit3 size={15} />
-        Nuevo correo
+        <Edit3 size={15} /> Nuevo correo
       </button>
 
-      {/* ── Sección: Buzón ── */}
-      <div className="mail-folder-group">
-        Buzón
-      </div>
+      {/* Sección Buzón */}
+      <div className="mail-folder-group">BUZÓN</div>
 
       {isLoading && (
-        <div style={{ padding: "12px 10px", fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-          Cargando carpetas…
+        <div style={{ padding: "10px 12px", fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+          Sincronizando…
         </div>
       )}
 
-      {wellKnownWithUnread.map((folder) => (
+      {roots.map((folder) => (
         <FolderRow
           key={folder.id}
           folder={folder}
+          childrenMap={childrenMap}
           selectedFolderId={selectedFolderId}
           onSelectFolder={onSelectFolder}
+          inboxUnread={inboxUnread}
+          depth={0}
         />
       ))}
 
-      {/* ── Sección: Mis carpetas ── */}
+      {/* Sección Mis carpetas (crear) */}
       <div className="mail-folder-group" style={{ marginTop: 10 }}>
-        Mis carpetas
+        MIS CARPETAS
         <button
           onClick={() => setShowNewFolder((p) => !p)}
-          style={{
-            background: "transparent",
-            border: 0,
-            cursor: "pointer",
-            color: "hsl(var(--muted-foreground))",
-            padding: "2px 4px",
-            borderRadius: 4,
-            display: "flex",
-            alignItems: "center",
-          }}
+          style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: "2px 4px", borderRadius: 4 }}
           title="Nueva carpeta"
         >
           <Plus size={11} />
         </button>
       </div>
 
-      {/* Mini-formulario crear carpeta */}
+      {/* Mini-form crear carpeta */}
       {showNewFolder && (
         <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "6px 10px",
-          background: "hsl(var(--primary) / 0.05)",
-          borderRadius: 8,
-          margin: "2px 4px",
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "6px 10px", background: "hsl(var(--primary) / 0.05)",
+          borderRadius: 8, margin: "2px 4px",
           border: "1px solid hsl(var(--primary) / 0.2)",
         }}>
           <Folder size={13} style={{ color: "hsl(var(--primary))", flexShrink: 0 }} />
           <input
-            ref={newFolderInputRef}
+            ref={inputRef}
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
-            onKeyDown={handleNewFolderKey}
+            onKeyDown={handleKey}
             placeholder="Nombre de carpeta"
             style={{
-              flex: 1,
-              border: 0,
-              background: "transparent",
-              fontSize: 12,
-              color: "hsl(var(--foreground))",
-              fontFamily: "inherit",
-              minWidth: 0,
+              flex: 1, border: 0, background: "transparent",
+              fontSize: 12, color: "hsl(var(--foreground))", fontFamily: "inherit", minWidth: 0,
             }}
           />
           <button
-            onClick={handleCreateFolder}
+            onClick={handleCreate}
             disabled={!newFolderName.trim() || createFolderMut.isPending}
             style={{
-              background: "hsl(var(--primary))",
-              border: 0,
-              borderRadius: 5,
-              width: 22,
-              height: 22,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              color: "#fff",
-              flexShrink: 0,
+              background: "hsl(var(--primary))", border: 0, borderRadius: 5,
+              width: 22, height: 22, display: "flex", alignItems: "center",
+              justifyContent: "center", cursor: "pointer", color: "#fff", flexShrink: 0,
             }}
-            title="Crear"
           >
             <Check size={12} />
           </button>
           <button
             onClick={() => { setShowNewFolder(false); setNewFolderName(""); }}
-            style={{
-              background: "transparent",
-              border: 0,
-              cursor: "pointer",
-              color: "hsl(var(--muted-foreground))",
-              padding: 2,
-              borderRadius: 4,
-              display: "flex",
-              alignItems: "center",
-              flexShrink: 0,
-            }}
-            title="Cancelar"
+            style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: 2 }}
           >
             <X size={12} />
           </button>
         </div>
       )}
 
-      {/* Carpetas personalizadas */}
-      {custom.map((folder) => (
-        <FolderRow
-          key={folder.id}
-          folder={folder}
-          selectedFolderId={selectedFolderId}
-          onSelectFolder={onSelectFolder}
-        />
-      ))}
-
-      {custom.length === 0 && !showNewFolder && (
-        <button
-          className="mail-folder"
-          onClick={() => setShowNewFolder(true)}
-          style={{ opacity: 0.6, fontStyle: "italic" }}
-        >
-          <Plus size={13} className="ico" />
-          Nueva carpeta…
+      {/* Atajo si no hay carpetas personalizadas aún */}
+      {!showNewFolder && roots.length === 0 && !isLoading && (
+        <button className="mail-folder" onClick={() => setShowNewFolder(true)} style={{ opacity: 0.6 }}>
+          <Plus size={13} className="ico" /> Nueva carpeta…
         </button>
       )}
     </aside>
