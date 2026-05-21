@@ -1916,17 +1916,17 @@ export default function Comunicacion() {
           </Button>
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="w-full h-7 text-[10px] text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            className="w-full h-8 text-xs gap-1.5 border-indigo-400/50 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/50 hover:border-indigo-500/70 dark:hover:border-indigo-400/60"
             onClick={() => connect()}
             disabled={isConnecting}
-            title="Vuelve a abrir Slack para aplicar permisos (p. ej. users.profile:write para estado)"
+            title="Vuelve a autorizar Slack para aplicar permisos (channels:write, reactions:write, etc.)"
           >
             {isConnecting ? (
-              <Loader2 className="h-3 w-3 mr-1 animate-spin shrink-0" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
             ) : (
-              <RefreshCw className="h-3 w-3 mr-1 shrink-0" />
+              <RefreshCw className="h-3.5 w-3.5 shrink-0" />
             )}
             Actualizar permisos Slack
           </Button>
