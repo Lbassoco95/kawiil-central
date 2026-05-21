@@ -219,6 +219,7 @@ export function MessageArea({
               userName={uProfile?.display_name || uProfile?.real_name || msg.user}
               avatarUrl={uProfile?.avatar_url}
               isSelf={msg.user === selfUserId}
+              userMap={userMap}
               onOpenThread={onOpenThread}
               onReact={onReact}
               onSaveForLater={onSaveForLater}

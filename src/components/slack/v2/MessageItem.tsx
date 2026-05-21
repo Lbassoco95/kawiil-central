@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import type { SlackMessage } from "@/lib/slackApi";
+import { slackMrkdwnToReact, type FormatContext } from "@/lib/slackFormatting";
+import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 
 // ─── Utilidades ──────────────────────────────────────────────
 function formatTs(ts: string): string {
@@ -24,20 +27,6 @@ function avatarColor(id: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
-function slackTextToHtml(text: string): string {
-  if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*([^*]+)\*/g, "<strong>$1</strong>")
-    .replace(/_([^_]+)_/g, "<em>$1</em>")
-    .replace(/~([^~]+)~/g, "<del>$1</del>")
-    .replace(/<@([A-Z0-9]+)>/g, '<span class="mention">@$1</span>')
-    .replace(/\n/g, "<br/>");
-}
-
 // ─── Componente ──────────────────────────────────────────────
 interface Props {
   message: SlackMessage;
@@ -45,6 +34,7 @@ interface Props {
   userName?: string;
   avatarUrl?: string;
   isSelf?: boolean;
+  userMap?: Record<string, SlackUserProfile | undefined>;
   onOpenThread?: (ts: string) => void;
   onReact?: (ts: string, emoji: string) => void;
   onSaveForLater?: (msg: SlackMessage) => void;
@@ -56,6 +46,7 @@ export function MessageItem({
   userName,
   avatarUrl,
   isSelf = false,
+  userMap,
   onOpenThread,
   onReact,
   onSaveForLater,
@@ -65,6 +56,11 @@ export function MessageItem({
   const color = avatarColor(message.user || message.bot_id || "x");
   const time = formatTs(message.ts ?? "");
   const isBot = !!message.bot_id;
+
+  const formatCtx = useMemo<FormatContext>(
+    () => ({ userMap: userMap ?? {} }),
+    [userMap],
+  );
 
   return (
     <div className={`sl-msg${isCompact ? " compact" : ""}`} data-ts={message.ts}>
@@ -93,10 +89,9 @@ export function MessageItem({
         )}
 
         {/* Texto */}
-        <div
-          className="sl-msg-text"
-          dangerouslySetInnerHTML={{ __html: slackTextToHtml(message.text ?? "") }}
-        />
+        <div className="sl-msg-text">
+          {slackMrkdwnToReact(message.text ?? "", formatCtx)}
+        </div>
 
         {/* Archivos adjuntos */}
         {message.files && message.files.length > 0 && (
