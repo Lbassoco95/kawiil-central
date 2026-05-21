@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import type { SlackConversation } from "@/lib/slackApi";
 
 type TabId = "tasks" | "ai";
 
 interface Props {
   channelId?: string;
   channelName?: string;
+  currentConv?: SlackConversation | null;
   unreadMentions?: number;
   onOpenActivity?: () => void;
 }
@@ -15,6 +17,7 @@ interface Props {
 export function KawiilContextPanel({
   channelId,
   channelName,
+  currentConv,
   unreadMentions = 0,
   onOpenActivity,
 }: Props) {
@@ -159,6 +162,66 @@ export function KawiilContextPanel({
               </div>
             ))}
           </div>
+
+          {/* Info del canal actual */}
+          {currentConv && (
+            <div className="sl-ctx-card" style={{ marginTop: 8 }}>
+              <div className="sl-ctx-card-head">
+                <div className="sl-ctx-card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  Este canal
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "hsl(var(--foreground))", fontWeight: 600 }}>
+                  <span style={{ color: "hsl(var(--muted-foreground))", fontSize: 14 }}>
+                    {currentConv.is_im ? "👤" : currentConv.is_mpim ? "✦" : currentConv.is_private ? "🔒" : "#"}
+                  </span>
+                  <span>{channelName}</span>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  <span style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    padding: "2px 7px",
+                    borderRadius: 9999,
+                    background: "hsl(var(--muted))",
+                    color: "hsl(var(--muted-foreground))",
+                    letterSpacing: "0.03em",
+                  }}>
+                    {currentConv.is_im ? "Mensaje directo" : currentConv.is_mpim ? "Grupo" : currentConv.is_private ? "Privado" : "Público"}
+                  </span>
+
+                  {(currentConv as any).num_members != null && (
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "2px 7px",
+                      borderRadius: 9999,
+                      background: "hsl(var(--muted))",
+                      color: "hsl(var(--muted-foreground))",
+                    }}>
+                      {(currentConv as any).num_members} miembros
+                    </span>
+                  )}
+                </div>
+
+                {(currentConv as any).topic?.value && (
+                  <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: 1.4, margin: 0 }}>
+                    {(currentConv as any).topic.value}
+                  </p>
+                )}
+                {(currentConv as any).purpose?.value && !(currentConv as any).topic?.value && (
+                  <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: 1.4, margin: 0 }}>
+                    {(currentConv as any).purpose.value}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Acceso a actividad */}
           {onOpenActivity && (

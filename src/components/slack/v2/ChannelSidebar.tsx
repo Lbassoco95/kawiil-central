@@ -106,6 +106,13 @@ function ChannelRow({
   );
 }
 
+// ─── Tipo grupo custom ───────────────────────────────────────
+export type CustomGroup = {
+  id: string;
+  title: string;
+  conversations: SlackConversation[];
+};
+
 // ─── Componente principal ────────────────────────────────────
 interface Props {
   workspaceName: string;
@@ -117,6 +124,11 @@ interface Props {
   userMap?: Record<string, { display_name?: string; real_name?: string }>;
   onNewMessage?: () => void;
   onRefresh?: () => void;
+  customGroups?: CustomGroup[];
+  channelsInCustomGroups?: Set<string>;
+  onConnect?: () => void;
+  isConnecting?: boolean;
+  onOpenGroupsDialog?: () => void;
 }
 
 export function ChannelSidebar({
@@ -129,6 +141,11 @@ export function ChannelSidebar({
   userMap = {},
   onNewMessage,
   onRefresh,
+  customGroups = [],
+  channelsInCustomGroups,
+  onConnect,
+  isConnecting,
+  onOpenGroupsDialog,
 }: Props) {
   const [search, setSearch] = useState("");
 
@@ -140,9 +157,17 @@ export function ChannelSidebar({
     );
   }, [conversations, search, userMap]);
 
-  const starred   = filtered.filter((c) => (c as any).is_starred);
-  const channels  = filtered.filter((c) => !c.is_im && !c.is_mpim && !(c as any).is_starred);
-  const dms       = filtered.filter((c) => (c.is_im || c.is_mpim) && !(c as any).is_starred);
+  const starred  = filtered.filter((c) => (c as any).is_starred);
+
+  // Canales no asignados a ningún grupo custom ni destacados
+  const channels = filtered.filter((c) =>
+    !c.is_im &&
+    !c.is_mpim &&
+    !(c as any).is_starred &&
+    !channelsInCustomGroups?.has(c.id)
+  );
+
+  const dms = filtered.filter((c) => (c.is_im || c.is_mpim) && !(c as any).is_starred);
 
   return (
     <div className="sl-channels">
@@ -204,8 +229,34 @@ export function ChannelSidebar({
           </Section>
         )}
 
+        {/* Grupos custom de Supabase */}
+        {customGroups.map((g) => (
+          <Section key={g.id} title={g.title} defaultOpen>
+            {g.conversations.length === 0 ? (
+              <div style={{ padding: "4px 12px 6px", fontSize: 11, color: "hsl(var(--sidebar-foreground) / 0.4)", fontStyle: "italic" }}>
+                Sin canales asignados
+              </div>
+            ) : (
+              g.conversations.map((c) => (
+                <ChannelRow
+                  key={c.id}
+                  conv={c}
+                  isActive={selectedChannel === c.id}
+                  unread={unreadByChannel[c.id] ?? 0}
+                  onClick={() => onSelectChannel(c.id)}
+                  userMap={userMap}
+                />
+              ))
+            )}
+          </Section>
+        ))}
+
         {channels.length > 0 && (
-          <Section title="Canales" defaultOpen>
+          <Section
+            title="Canales"
+            defaultOpen
+            onAdd={onOpenGroupsDialog}
+          >
             {channels.map((c) => (
               <ChannelRow
                 key={c.id}
@@ -233,32 +284,54 @@ export function ChannelSidebar({
             ))}
           </Section>
         )}
+      </div>
 
-        {/* Actualizar */}
+      {/* Botones al pie del sidebar */}
+      <div className="sl-sidebar-footer">
+        {onOpenGroupsDialog && (
+          <button
+            onClick={onOpenGroupsDialog}
+            className="sl-sidebar-footer-btn"
+            title="Crear y organizar secciones de canales"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Organizar secciones
+          </button>
+        )}
+
         {onRefresh && (
-          <div style={{ padding: "8px 8px 0" }}>
-            <button
-              onClick={onRefresh}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                background: "transparent",
-                border: 0,
-                color: "hsl(var(--sidebar-foreground) / 0.5)",
-                fontSize: 11,
-                cursor: "pointer",
-                padding: "4px 8px",
-                borderRadius: 6,
-                width: "100%",
-              }}
-            >
+          <button
+            onClick={onRefresh}
+            className="sl-sidebar-footer-btn"
+            title="Recargar lista de canales"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/>
+            </svg>
+            Actualizar lista
+          </button>
+        )}
+
+        {onConnect && (
+          <button
+            onClick={onConnect}
+            disabled={isConnecting}
+            className="sl-reconnect-btn"
+            title="Vuelve a autorizar Slack para aplicar permisos (channels:write, reactions:write, etc.)"
+          >
+            {isConnecting ? (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: "spin 1s linear infinite" }}>
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              </svg>
+            ) : (
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/>
               </svg>
-              Actualizar lista
-            </button>
-          </div>
+            )}
+            Actualizar permisos Slack
+          </button>
         )}
       </div>
     </div>

@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import {
   invokeSlackApi,
   withHardTimeout,
+  markSlackConversationRead,
+  isSlackMarkReadFatal,
   type SlackConversation,
   type SlackMessage,
 } from "@/lib/slackApi";
@@ -27,6 +29,7 @@ import { MessageArea } from "./MessageArea";
 import { SlackComposerNew } from "./SlackComposerNew";
 import { ThreadPanelNew } from "./ThreadPanelNew";
 import { KawiilContextPanel } from "./KawiilContextPanel";
+import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
 
 // ─── Tipos ───────────────────────────────────────────────────
 type HistoryPage = {
@@ -34,10 +37,19 @@ type HistoryPage = {
   nextCursor?: string;
 };
 
-const HISTORY_FIRST_MS  = 110_000;
+type RawSidebarGroup = {
+  id: string;
+  title: string;
+  sort_order: number;
+  slack_sidebar_group_channels: { channel_id: string; sort_order: number }[];
+};
+
+const HISTORY_FIRST_MS   = 110_000;
 const HISTORY_FIRST_HARD = 118_000;
-const HISTORY_NEXT_MS   = 55_000;
-const HISTORY_NEXT_HARD = 62_000;
+const HISTORY_NEXT_MS    = 55_000;
+const HISTORY_NEXT_HARD  = 62_000;
+
+const SLACK_PERMISSION_TOAST_MS = 14_000;
 
 // ─── Props ───────────────────────────────────────────────────
 interface Connection {
@@ -49,10 +61,12 @@ interface Connection {
 interface Props {
   connection: Connection;
   onRefreshConversations?: () => void;
+  onConnect?: () => void;
+  isConnecting?: boolean;
 }
 
 // ─── Componente ──────────────────────────────────────────────
-export function SlackView({ connection, onRefreshConversations }: Props) {
+export function SlackView({ connection, onRefreshConversations, onConnect, isConnecting }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -60,7 +74,9 @@ export function SlackView({ connection, onRefreshConversations }: Props) {
   const channelFromUrl = searchParams.get("channel") || "";
   const [selectedChannel, setSelectedChannel] = useState<string>(channelFromUrl);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
+  const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
   const slackConvGenRef = useRef(0);
+  const slackReconnectToastAtRef = useRef(0);
 
   // Sincronizar con URL
   useEffect(() => {
@@ -112,11 +128,62 @@ export function SlackView({ connection, onRefreshConversations }: Props) {
 
   const conversations: SlackConversation[] = conversationsQuery.data ?? [];
 
+  // ─── Organización del usuario ────────────────────────────
+  const { data: orgId } = useQuery({
+    queryKey: ["user-org-id", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return (data?.organization_id as string | null) ?? null;
+    },
+    enabled: !!user?.id,
+    staleTime: 30 * 60_000,
+  });
+
+  // ─── Grupos custom de Supabase ───────────────────────────
+  const { data: sidebarGroupsRaw = [] } = useQuery({
+    queryKey: ["slack-sidebar-groups", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("slack_sidebar_groups")
+        .select("id, title, sort_order, slack_sidebar_group_channels(channel_id, sort_order)")
+        .eq("user_id", user!.id)
+        .order("sort_order");
+      if (error) throw error;
+      return (data || []) as RawSidebarGroup[];
+    },
+    enabled: !!user?.id,
+  });
+
+  const customGroupsVm = useMemo(() => {
+    const sortedG = [...sidebarGroupsRaw].sort((a, b) => a.sort_order - b.sort_order);
+    return sortedG.map((g) => {
+      const ch = [...(g.slack_sidebar_group_channels || [])].sort((a, b) => a.sort_order - b.sort_order);
+      const convs = ch
+        .map((r) => conversations.find((c) => c.id === r.channel_id))
+        .filter(Boolean) as SlackConversation[];
+      return { id: g.id, title: g.title, conversations: convs };
+    });
+  }, [sidebarGroupsRaw, conversations]);
+
+  const channelsInCustomGroups = useMemo(() => {
+    const s = new Set<string>();
+    for (const g of sidebarGroupsRaw) {
+      for (const ch of g.slack_sidebar_group_channels || []) {
+        s.add(ch.channel_id);
+      }
+    }
+    return s;
+  }, [sidebarGroupsRaw]);
+
   // ─── Historial de mensajes ───────────────────────────────
   const historyQuery = useInfiniteQuery({
     queryKey: ["slack-history-v2", selectedChannel],
     initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam, signal }): Promise<HistoryPage> => {
+    queryFn: async ({ pageParam }): Promise<HistoryPage> => {
       if (!selectedChannel) return { messages: [] };
       const base = { action: "conversations.history" as const, channel: selectedChannel, limit: 50 };
       const payload = pageParam ? { ...base, cursor: pageParam } : base;
@@ -143,6 +210,24 @@ export function SlackView({ connection, onRefreshConversations }: Props) {
     () => historyQuery.data?.pages.flatMap((p) => p.messages) ?? [],
     [historyQuery.data],
   );
+
+  // ─── Mark as read ────────────────────────────────────────
+  useEffect(() => {
+    if (!selectedChannel || !messages.length || historyQuery.isLoading) return;
+    const ts = messages[messages.length - 1]?.ts;
+    void markSlackConversationRead(selectedChannel, ts).catch((err) => {
+      if (isSlackMarkReadFatal(err)) {
+        const now = Date.now();
+        if (now - slackReconnectToastAtRef.current > 60_000) {
+          slackReconnectToastAtRef.current = now;
+          toast.error(
+            "Tu sesión de Slack no permite marcar mensajes como leídos. Pulsa «Actualizar permisos Slack» en la barra lateral.",
+            { duration: SLACK_PERMISSION_TOAST_MS },
+          );
+        }
+      }
+    });
+  }, [selectedChannel, messages, historyQuery.isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Hilo (replies) ─────────────────────────────────────
   const threadQuery = useQuery({
@@ -267,6 +352,11 @@ export function SlackView({ connection, onRefreshConversations }: Props) {
         unreadByChannel={unreadBadges}
         userMap={userMap}
         onNewMessage={() => {}}
+        customGroups={customGroupsVm}
+        channelsInCustomGroups={channelsInCustomGroups}
+        onConnect={onConnect}
+        isConnecting={isConnecting}
+        onOpenGroupsDialog={() => setGroupsDialogOpen(true)}
         onRefresh={() => {
           void conversationsQuery.refetch();
           onRefreshConversations?.();
@@ -315,9 +405,21 @@ export function SlackView({ connection, onRefreshConversations }: Props) {
       <KawiilContextPanel
         channelId={selectedChannel}
         channelName={channelName}
+        currentConv={currentConv}
         unreadMentions={unreadMentions}
         onOpenActivity={() => {}}
       />
+
+      {/* Diálogo organizar secciones */}
+      {orgId && (
+        <SlackGroupsOrganizerDialog
+          open={groupsDialogOpen}
+          onOpenChange={setGroupsDialogOpen}
+          conversations={conversations}
+          organizationId={orgId}
+          userMap={userMap}
+        />
+      )}
     </div>
   );
 }

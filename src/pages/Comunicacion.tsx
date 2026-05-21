@@ -2398,6 +2398,8 @@ export default function Comunicacion() {
           onRefreshConversations={() => {
             void conversationsQuery.refetch();
           }}
+          onConnect={connect}
+          isConnecting={isConnecting}
         />
       </div>
     </AppLayout>
