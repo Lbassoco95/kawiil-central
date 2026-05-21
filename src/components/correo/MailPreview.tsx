@@ -218,7 +218,7 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
 
   // ── Marcar como leído automáticamente al abrir (1.2 s de gracia) ──
   useEffect(() => {
-    if (!detail || detail.isRead) return;
+    if (!detail || detail.isRead || markRead.isPending) return;
     const timer = setTimeout(() => {
       if (detail.id) markRead.mutate(detail.id);
     }, 1200);

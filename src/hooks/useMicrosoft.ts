@@ -1247,6 +1247,7 @@ export function useMarkEmailRead() {
     onMutate: async (messageId) => {
       await queryClient.cancelQueries({ queryKey: ["outlook-emails"] });
       await queryClient.cancelQueries({ queryKey: INBOX_UNREAD_QUERY_KEY });
+      await queryClient.cancelQueries({ queryKey: ["email-detail", messageId] });
 
       let wasUnread = false;
       queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
@@ -1264,20 +1265,27 @@ export function useMarkEmailRead() {
         };
       });
 
+      // Actualizar optimisticamente el detalle del correo
+      queryClient.setQueryData(["email-detail", messageId], (old: any) =>
+        old ? { ...old, isRead: true } : old
+      );
+
       if (wasUnread) {
         queryClient.setQueryData(INBOX_UNREAD_QUERY_KEY, (old: any) =>
           typeof old === "number" && old > 0 ? old - 1 : 0
         );
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, messageId) => {
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+        queryClient.invalidateQueries({ queryKey: ["email-detail", messageId] });
         invalidateInboxUnreadAndMailFolders(queryClient);
       }, 2000);
     },
-    onError: (err: Error) => {
+    onError: (err: Error, messageId) => {
       queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+      queryClient.invalidateQueries({ queryKey: ["email-detail", messageId] });
       invalidateInboxUnreadAndMailFolders(queryClient);
       toast.error("Error al marcar correo como leído: " + err.message);
     },

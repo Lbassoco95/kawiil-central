@@ -15,7 +15,10 @@ import {
   Check,
   X,
   Folder,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useMailFolders,
   useUnreadEmailCount,
@@ -232,9 +235,11 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
   const { data: foldersData, isLoading } = useMailFolders();
   const { data: unreadData }             = useUnreadEmailCount();
   const createFolderMut                  = useCreateMailFolder();
+  const queryClient                      = useQueryClient();
 
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const [isRefreshing,  setIsRefreshing]  = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -250,6 +255,31 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
     return buildTree(raw);
   }, [foldersData]);
 
+  // Separar carpetas del buzón (well-known) de las personalizadas
+  const { wellKnownRoots, customRoots } = useMemo(() => {
+    const wellKnownRoots: RawFolder[] = [];
+    const customRoots: RawFolder[] = [];
+    for (const f of roots) {
+      const wk = String(f.wellKnownFolderName || f.wellKnownName || "").toLowerCase();
+      const nameKey = (f.displayName || "").toLowerCase().replace(/\s/g, "");
+      const isWellKnown =
+        wk.length > 0 ||
+        nameKey.includes("inbox") || nameKey.includes("bandejadeentrada") ||
+        nameKey.includes("enviado") || nameKey.includes("sentitem") ||
+        nameKey.includes("eliminad") || nameKey.includes("deleted") ||
+        nameKey.includes("borrador") || nameKey.includes("draft") ||
+        nameKey.includes("junkemail") || nameKey.includes("spam") ||
+        nameKey.includes("archiv") || nameKey.includes("correonodeseado") ||
+        nameKey.includes("bandejadesalida") || nameKey.includes("outbox");
+      if (isWellKnown) {
+        wellKnownRoots.push(f);
+      } else {
+        customRoots.push(f);
+      }
+    }
+    return { wellKnownRoots, customRoots };
+  }, [roots]);
+
   const handleCreate = () => {
     const name = newFolderName.trim();
     if (!name) return;
@@ -263,6 +293,14 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
     if (e.key === "Escape") { setShowNewFolder(false); setNewFolderName(""); }
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await queryClient.invalidateQueries({ queryKey: ["mail-folders"] });
+    setIsRefreshing(false);
+  };
+
+  const isTruncated = !!(foldersData as any)?.mailFoldersMeta?.truncated;
+
   return (
     <aside className="mail-folders">
       {/* Nuevo correo */}
@@ -270,7 +308,7 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
         <Edit3 size={15} /> Nuevo correo
       </button>
 
-      {/* Sección Buzón */}
+      {/* Sección Buzón — carpetas del sistema */}
       <div className="mail-folder-group">BUZÓN</div>
 
       {isLoading && (
@@ -279,7 +317,7 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
         </div>
       )}
 
-      {roots.map((folder) => (
+      {wellKnownRoots.map((folder) => (
         <FolderRow
           key={folder.id}
           folder={folder}
@@ -291,17 +329,55 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
         />
       ))}
 
-      {/* Sección Mis carpetas (crear) */}
+      {/* Sección Mis carpetas — carpetas personalizadas */}
       <div className="mail-folder-group" style={{ marginTop: 10 }}>
         MIS CARPETAS
-        <button
-          onClick={() => setShowNewFolder((p) => !p)}
-          style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: "2px 4px", borderRadius: 4 }}
-          title="Nueva carpeta"
-        >
-          <Plus size={11} />
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: "auto" }}>
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing || isLoading}
+            style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: "2px 4px", borderRadius: 4, display: "flex", alignItems: "center" }}
+            title="Actualizar carpetas"
+          >
+            <RefreshCw size={11} style={{ animation: isRefreshing ? "spin 1s linear infinite" : undefined }} />
+          </button>
+          <button
+            onClick={() => setShowNewFolder((p) => !p)}
+            style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))", padding: "2px 4px", borderRadius: 4 }}
+            title="Nueva carpeta"
+          >
+            <Plus size={11} />
+          </button>
+        </div>
       </div>
+
+      {/* Aviso de truncado */}
+      {isTruncated && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 6,
+          padding: "6px 10px", background: "hsl(38 92% 50% / 0.08)",
+          borderRadius: 8, margin: "2px 4px",
+          border: "1px solid hsl(38 92% 50% / 0.25)",
+          fontSize: 11, color: "hsl(38 60% 35%)",
+          lineHeight: 1.4,
+        }}>
+          <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 1, color: "hsl(38 92% 45%)" }} />
+          <span>Algunas carpetas no se cargaron. Usa <strong>Actualizar</strong> para reintentar.</span>
+        </div>
+      )}
+
+      {/* Carpetas personalizadas */}
+      {customRoots.map((folder) => (
+        <FolderRow
+          key={folder.id}
+          folder={folder}
+          childrenMap={childrenMap}
+          selectedFolderId={selectedFolderId}
+          onSelectFolder={onSelectFolder}
+          inboxUnread={inboxUnread}
+          depth={0}
+        />
+      ))}
 
       {/* Mini-form crear carpeta */}
       {showNewFolder && (
@@ -344,7 +420,7 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
       )}
 
       {/* Atajo si no hay carpetas personalizadas aún */}
-      {!showNewFolder && roots.length === 0 && !isLoading && (
+      {!showNewFolder && customRoots.length === 0 && !isLoading && (
         <button className="mail-folder" onClick={() => setShowNewFolder(true)} style={{ opacity: 0.6 }}>
           <Plus size={13} className="ico" /> Nueva carpeta…
         </button>

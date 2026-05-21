@@ -45,8 +45,8 @@ export function CorreoView() {
   }, []);
 
   return (
-    <>
-      <div className="mail-layout">
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <div className="mail-layout" style={{ flex: 1, minHeight: 0 }}>
         {/* Columna 1 — Carpetas */}
         <MailFolders
           selectedFolderId={selectedFolderId}
@@ -87,6 +87,6 @@ export function CorreoView() {
         email={translateEmail}
         onClose={() => setTranslateEmail(null)}
       />
-    </>
+    </div>
   );
 }
