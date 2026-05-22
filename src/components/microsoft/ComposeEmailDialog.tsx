@@ -11,8 +11,9 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/microsoft/RichTextEditor";
 import { useSendNewEmail, useOutlookComposeSignature, useMicrosoftConnection } from "@/hooks/useMicrosoft";
-import { useOrgUsers, type OrgUser } from "@/hooks/useOrgUsers";
-import { useMailDirectoryContacts, useSyncMailDirectory, type MailDirectoryContact } from "@/hooks/useMailDirectory";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { useMailDirectoryContacts, useSyncMailDirectory } from "@/hooks/useMailDirectory";
+import { ComposeRecipientInput } from "@/components/microsoft/ComposeRecipientInput";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Loader2,
@@ -63,127 +64,6 @@ interface ComposeEmailDialogProps {
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   /** Muestra el selector de plantillas del área contable. Por defecto true. */
   showAccountingTemplates?: boolean;
-}
-
-function ComposeRecipientInput({
-  value,
-  onChange,
-  placeholder,
-  id,
-  orgUsers,
-  mailContacts,
-  teamEmailLowerSet,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  id?: string;
-  orgUsers: OrgUser[];
-  mailContacts: MailDirectoryContact[];
-  teamEmailLowerSet: Set<string>;
-}) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const parts = value.split(",");
-  const lastQuery = (parts[parts.length - 1] ?? "").trim().toLowerCase();
-
-  const teamSuggestions = useMemo(
-    () =>
-      orgUsers
-        .map((u) => ({
-          user_id: u.user_id,
-          email: u.email || "",
-          full_name: u.full_name || u.email || "",
-        }))
-        .filter((u) => u.email),
-    [orgUsers]
-  );
-
-  const filteredTeam = useMemo(() => {
-    if (!lastQuery) return [];
-    return teamSuggestions
-      .filter(
-        (u) =>
-          u.email.toLowerCase().includes(lastQuery) || u.full_name.toLowerCase().includes(lastQuery)
-      )
-      .slice(0, 8);
-  }, [teamSuggestions, lastQuery]);
-
-  const filteredMailbox = useMemo(() => {
-    if (!lastQuery) return [];
-    return mailContacts
-      .filter((c) => {
-        if (teamEmailLowerSet.has(c.email.toLowerCase())) return false;
-        const name = (c.display_name || "").toLowerCase();
-        return c.email.includes(lastQuery) || name.includes(lastQuery);
-      })
-      .slice(0, 8);
-  }, [mailContacts, lastQuery, teamEmailLowerSet]);
-
-  const showList =
-    menuOpen && lastQuery.length >= 1 && (filteredTeam.length > 0 || filteredMailbox.length > 0);
-
-  const pick = (email: string) => {
-    const before = parts.slice(0, -1).join(",").trim();
-    const next = before ? `${before}, ${email}` : email;
-    onChange(next);
-    setMenuOpen(false);
-  };
-
-  return (
-    <div className="relative flex-1 min-w-0">
-      <Input
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full"
-        onFocus={() => setMenuOpen(true)}
-        onBlur={() => setTimeout(() => setMenuOpen(false), 200)}
-      />
-      {showList && (
-        <div className="absolute z-50 top-full mt-1 w-full max-h-52 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md">
-          {filteredTeam.length > 0 ? (
-            <div className="py-1">
-              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Equipo
-              </div>
-              {filteredTeam.map((u) => (
-                <button
-                  key={u.user_id}
-                  type="button"
-                  className="flex w-full flex-col gap-0 px-3 py-2 text-left text-sm hover:bg-accent"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pick(u.email)}
-                >
-                  <span className="font-medium truncate">{u.full_name}</span>
-                  <span className="text-xs text-muted-foreground truncate">{u.email}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {filteredMailbox.length > 0 ? (
-            <div className={`py-1 ${filteredTeam.length > 0 ? "border-t border-border" : ""}`}>
-              <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Buzón
-              </div>
-              {filteredMailbox.map((c) => (
-                <button
-                  key={c.email}
-                  type="button"
-                  className="flex w-full flex-col gap-0 px-3 py-2 text-left text-sm hover:bg-accent"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pick(c.email)}
-                >
-                  <span className="font-medium truncate">{c.display_name || c.email}</span>
-                  <span className="text-xs text-muted-foreground truncate">{c.email}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function ComposeEmailDialog({

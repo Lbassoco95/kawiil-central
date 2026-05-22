@@ -937,8 +937,10 @@
   flex-shrink: 0;
 }
 
-.mc-field input {
+.mc-field input,
+.mc-field-input {
   flex: 1;
+  width: 100%;
   border: 0;
   background: transparent;
   font-size: 13px;
@@ -946,9 +948,77 @@
   font-family: inherit;
 }
 
-.mc-field input:focus { outline: none; }
+.mc-field input:focus,
+.mc-field-input:focus { outline: none; }
 
-.mc-field input::placeholder { color: hsl(var(--muted-foreground)); }
+.mc-field input::placeholder,
+.mc-field-input::placeholder { color: hsl(var(--muted-foreground)); }
+
+/* ─── Dropdown de autocompletado de destinatarios ─────────────── */
+.cri-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 300;
+  width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  box-shadow: 0 8px 24px hsl(var(--foreground) / 0.12);
+}
+
+.cri-section {
+  padding: 4px 0;
+}
+
+.cri-section--bordered {
+  border-top: 1px solid hsl(var(--border));
+}
+
+.cri-section-label {
+  padding: 5px 12px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(var(--muted-foreground));
+}
+
+.cri-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+  padding: 7px 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+
+.cri-item:hover {
+  background: hsl(var(--accent));
+}
+
+.cri-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cri-item-email {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .mc-chip {
   background: hsl(var(--primary) / 0.1);

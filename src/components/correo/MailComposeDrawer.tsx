@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   X,
   Minimize2,
@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { useSendNewEmail } from "@/hooks/useMicrosoft";
 import { QUICK_DRAFT_TEMPLATES } from "@/components/microsoft/emailComposeAiShared";
+import { ComposeRecipientInput } from "@/components/microsoft/ComposeRecipientInput";
+import { useOrgUsers } from "@/hooks/useOrgUsers";
+import { useMailDirectoryContacts, useSyncMailDirectory } from "@/hooks/useMailDirectory";
 
 interface Props {
   open: boolean;
@@ -36,6 +39,21 @@ export function MailComposeDrawer({
   const [showCc, setShowCc] = useState(false);
   const sendMut             = useSendNewEmail();
   const bodyRef             = useRef<HTMLTextAreaElement>(null);
+
+  const { data: orgUsers = [] }     = useOrgUsers();
+  const { data: mailContacts = [] } = useMailDirectoryContacts(open);
+  const syncDir                     = useSyncMailDirectory();
+
+  const teamEmailLowerSet = useMemo(
+    () => new Set(orgUsers.map((u) => (u.email || "").toLowerCase())),
+    [orgUsers]
+  );
+
+  // Sincronizar directorio en silencio cada vez que se abre el drawer
+  useEffect(() => {
+    if (open) syncDir.mutate({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleSend = () => {
     if (!to.trim() || !subject.trim()) return;
@@ -77,15 +95,18 @@ export function MailComposeDrawer({
         <div className="mc-fields">
           <div className="mc-field">
             <span className="mc-field-label">Para</span>
-            <input
-              placeholder="destinatario@empresa.com"
+            <ComposeRecipientInput
               value={to}
-              onChange={(e) => setTo(e.target.value)}
-              autoFocus={open}
+              onChange={setTo}
+              placeholder="destinatario@empresa.com"
+              orgUsers={orgUsers}
+              mailContacts={mailContacts}
+              teamEmailLowerSet={teamEmailLowerSet}
+              inputClassName="mc-field-input"
             />
             <button
               onClick={() => setShowCc((p) => !p)}
-              style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", background: "transparent", border: 0, cursor: "pointer" }}
+              style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", background: "transparent", border: 0, cursor: "pointer", flexShrink: 0 }}
             >
               CC
             </button>
@@ -94,10 +115,14 @@ export function MailComposeDrawer({
           {showCc && (
             <div className="mc-field">
               <span className="mc-field-label">CC</span>
-              <input
-                placeholder="copia@empresa.com"
+              <ComposeRecipientInput
                 value={cc}
-                onChange={(e) => setCc(e.target.value)}
+                onChange={setCc}
+                placeholder="copia@empresa.com"
+                orgUsers={orgUsers}
+                mailContacts={mailContacts}
+                teamEmailLowerSet={teamEmailLowerSet}
+                inputClassName="mc-field-input"
               />
             </div>
           )}
@@ -139,7 +164,7 @@ export function MailComposeDrawer({
           <button className="mc-fmt-btn" title="Enlace"><Link size={13} /></button>
           <button className="mc-fmt-btn" title="Lista"><List size={13} /></button>
           <button className="mc-fmt-btn" title="Adjuntar"><Paperclip size={13} /></button>
-          <button className="mc-fmt-btn" title="Mejorar con AI" style={{ color: "hsl(280 80% 55%)" }}>
+          <button className="mc-fmt-btn" title="Mejorar con AI" style={{ color: "hsl(var(--primary))" }}>
             <Sparkles size={13} />
           </button>
 

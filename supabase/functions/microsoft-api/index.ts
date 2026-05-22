@@ -189,20 +189,20 @@ function normalizeMailFolderDisplayName(s: string): string {
 
 const MAIL_FOLDER_LIST_SELECT =
   "id,displayName,parentFolderId,wellKnownFolderName,unreadItemCount,totalItemCount,childFolderCount";
-/** Raíz: incluye carpetas ocultas (paridad con Outlook). */
+/** Raíz: incluye carpetas ocultas (paridad con Outlook). Graph soporta $top=1000 en mailFolders. */
 const MAIL_FOLDER_ROOT_LIST_QUERY =
-  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
+  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`;
 /** Hijos: mismo flag que la raíz; sin él Graph puede omitir subcarpetas que el usuario sí ve en Outlook. */
 const MAIL_FOLDER_CHILD_LIST_QUERY =
-  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100&includeHiddenFolders=true`;
+  `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000&includeHiddenFolders=true`;
 /** Algunos tenants devuelven 400 al combinar $select + includeHiddenFolders en raíz o en `childFolders`; se reintenta sin el flag. */
-const MAIL_FOLDER_ROOT_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100`;
-const MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=100`;
+const MAIL_FOLDER_ROOT_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
+const MAIL_FOLDER_CHILD_LIST_QUERY_PLAIN = `?$select=${MAIL_FOLDER_LIST_SELECT}&$top=1000`;
 
 /** Listado plano solo nivel raíz (fallback si el recursivo falla o devuelve vacío por error Graph). */
 async function listMailFoldersRootOnlyLegacy(accessToken: string): Promise<unknown[]> {
   const all: unknown[] = [];
-  let path = "/me/mailFolders?$top=100";
+  let path = "/me/mailFolders?$top=1000";
   const maxPages = 25;
   for (let page = 0; page < maxPages; page++) {
     const data = (await graphRequest(accessToken, path)) as {

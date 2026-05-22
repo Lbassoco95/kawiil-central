@@ -299,7 +299,7 @@ export function MailFolders({ selectedFolderId, onSelectFolder, onCompose }: Pro
     setIsRefreshing(false);
   };
 
-  const isTruncated = !!(foldersData as any)?.mailFoldersMeta?.truncated;
+  const isTruncated = !!foldersData?.meta?.truncated;
 
   return (
     <aside className="mail-folders">
