@@ -293,11 +293,18 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   // ─── Perfiles de usuarios ────────────────────────────────
   const userIds = useMemo(() => {
     const ids = new Set<string>();
+    // Autores del canal visible + participantes de hilos
     for (const m of messages) {
       if (m.user) ids.add(m.user);
+      if (m.reply_users) m.reply_users.forEach((u) => ids.add(u));
     }
+    // Solo los primeros 50 DMs del sidebar (nombres/avatares en lista)
+    let dmCount = 0;
     for (const c of conversations) {
-      if (c.is_im && c.user) ids.add(c.user);
+      if (c.is_im && c.user && dmCount < 50) {
+        ids.add(c.user);
+        dmCount++;
+      }
     }
     return [...ids];
   }, [messages, conversations]);

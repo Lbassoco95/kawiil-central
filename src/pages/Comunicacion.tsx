@@ -677,7 +677,7 @@ export default function Comunicacion() {
       return { messages: chrono, nextCursor };
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
-    enabled: isConnected && !!selectedChannel,
+    enabled: false, // SlackView maneja el historial directamente; evita petición duplicada
     retry(failureCount, err) {
       const msg = err instanceof Error ? err.message : "";
       if (msg.includes("tardó demasiado")) return false;
@@ -747,12 +747,12 @@ export default function Comunicacion() {
   slackLatestMessageTsRef.current = lastMessageTs;
 
   const slackUnreadSnapshotQuery = useSlackUnreadSync({
-    enabled: isConnected,
+    enabled: false, // SlackView gestiona badges via useSlackChannelNotificationBadges; evita hasta 24× history cada 30s
     userId: user?.id,
     selectedChannel,
     localUnreadByChannel: slackUnreadByChannel,
     pollChannelIds: slackPollChannelIds,
-    holdUnreadSnapshot: !!selectedChannel && historyInfinite.isFetching && historyInfinite.data === undefined,
+    holdUnreadSnapshot: false,
   });
   const displayUnreadByChannel = useMemo(() => {
     const snapshot = slackUnreadSnapshotQuery.data ?? EMPTY_SLACK_UNREAD_SNAPSHOT;
