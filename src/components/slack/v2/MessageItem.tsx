@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { SlackMessage } from "@/lib/slackApi";
-import { slackMrkdwnToReact, type FormatContext } from "@/lib/slackFormatting";
+import { slackMrkdwnToReact, slackEmojiAliasToChar, type FormatContext } from "@/lib/slackFormatting";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 
 // ─── Utilidades ──────────────────────────────────────────────
@@ -128,7 +128,7 @@ export function MessageItem({
                 className="sl-react-pill"
                 onClick={() => onReact?.(message.ts ?? "", r.name)}
               >
-                {r.name.includes(":") ? r.name : `:${r.name}:`} {r.count}
+                {slackEmojiAliasToChar(r.name)} {r.count}
               </button>
             ))}
           </div>

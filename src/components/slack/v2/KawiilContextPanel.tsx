@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import type { SlackConversation } from "@/lib/slackApi";
+import { invokeSlackApi, type SlackConversation } from "@/lib/slackApi";
+import { useSlackUserProfiles, type SlackUserProfile } from "@/hooks/useSlackUserProfiles";
 
 type TabId = "tasks" | "ai";
 
@@ -10,14 +11,60 @@ interface Props {
   channelId?: string;
   channelName?: string;
   currentConv?: SlackConversation | null;
+  userMap?: Record<string, SlackUserProfile | undefined>;
   unreadMentions?: number;
   onOpenActivity?: () => void;
+}
+
+// ─── Avatar helper ────────────────────────────────────────────
+const AV_COLORS = [
+  "#5865F2","#57F287","#FEE75C","#EB459E","#ED4245",
+  "#7289DA","#43B581","#FAA61A","#F47FFF","#1abc9c",
+];
+function avColor(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return AV_COLORS[h % AV_COLORS.length];
+}
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.substring(0, 2).toUpperCase() || "??";
+}
+function MemberAvatar({ uid, profile, size = 32 }: { uid: string; profile?: SlackUserProfile; size?: number }) {
+  const name = profile?.display_name || profile?.real_name || uid;
+  const bg = avColor(uid);
+  return (
+    <div
+      title={name}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: profile?.avatar_url ? "transparent" : bg,
+        flexShrink: 0,
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: size * 0.38,
+        fontWeight: 700,
+        color: "#fff",
+        border: "2px solid hsl(var(--background))",
+      }}
+    >
+      {profile?.avatar_url
+        ? <img src={profile.avatar_url} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        : initials(name)}
+    </div>
+  );
 }
 
 export function KawiilContextPanel({
   channelId,
   channelName,
   currentConv,
+  userMap = {},
   unreadMentions = 0,
   onOpenActivity,
 }: Props) {
@@ -41,6 +88,25 @@ export function KawiilContextPanel({
     enabled: !!user,
     staleTime: 60_000,
   });
+
+  // Miembros del canal (solo DMs y grupos pequeños)
+  const isSmallConv = !!(currentConv?.is_im || currentConv?.is_mpim);
+  const membersQuery = useQuery({
+    queryKey: ["slack-chan-members", channelId],
+    queryFn: async () => {
+      const d = await invokeSlackApi<{ ok: boolean; members: string[] }>(
+        { action: "conversations.members", channel: channelId },
+      );
+      return d.ok ? d.members : [];
+    },
+    enabled: !!channelId && isSmallConv,
+    staleTime: 5 * 60_000,
+  });
+  const memberIds = membersQuery.data ?? [];
+
+  // Perfiles de miembros (cae en el userMap global si ya se cargaron)
+  const memberProfilesQuery = useSlackUserProfiles(memberIds);
+  const memberProfiles = { ...userMap, ...(memberProfilesQuery.data ?? {}) };
 
   const tasks = tasksQuery.data ?? [];
 
@@ -174,52 +240,132 @@ export function KawiilContextPanel({
                   Este canal
                 </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "hsl(var(--foreground))", fontWeight: 600 }}>
-                  <span style={{ color: "hsl(var(--muted-foreground))", fontSize: 14 }}>
-                    {currentConv.is_im ? "👤" : currentConv.is_mpim ? "✦" : currentConv.is_private ? "🔒" : "#"}
-                  </span>
-                  <span>{channelName}</span>
-                </div>
 
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    padding: "2px 7px",
-                    borderRadius: 9999,
-                    background: "hsl(var(--muted))",
-                    color: "hsl(var(--muted-foreground))",
-                    letterSpacing: "0.03em",
-                  }}>
-                    {currentConv.is_im ? "Mensaje directo" : currentConv.is_mpim ? "Grupo" : currentConv.is_private ? "Privado" : "Público"}
-                  </span>
+              {/* DM individual */}
+              {currentConv.is_im && currentConv.user && (() => {
+                const p = memberProfiles[currentConv.user];
+                const name = p?.display_name || p?.real_name || channelName || currentConv.user;
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "8px 0 4px" }}>
+                    <MemberAvatar uid={currentConv.user} profile={p} size={48} />
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "hsl(var(--foreground))" }}>{name}</div>
+                      <div style={{ fontSize: 10, color: "hsl(var(--muted-foreground))", marginTop: 2 }}>Mensaje directo</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
-                  {(currentConv as any).num_members != null && (
-                    <span style={{
-                      fontSize: 10,
-                      fontWeight: 600,
-                      padding: "2px 7px",
-                      borderRadius: 9999,
-                      background: "hsl(var(--muted))",
-                      color: "hsl(var(--muted-foreground))",
-                    }}>
-                      {(currentConv as any).num_members} miembros
-                    </span>
+              {/* Grupo MPIM */}
+              {currentConv.is_mpim && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 4 }}>
+                  {memberIds.length > 0 ? (
+                    <>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {memberIds.slice(0, 6).map((uid) => (
+                          <MemberAvatar key={uid} uid={uid} profile={memberProfiles[uid]} size={30} />
+                        ))}
+                        {memberIds.length > 6 && (
+                          <div style={{
+                            width: 30, height: 30, borderRadius: "50%",
+                            background: "hsl(var(--muted))",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, fontWeight: 700, color: "hsl(var(--muted-foreground))",
+                            border: "2px solid hsl(var(--background))",
+                          }}>
+                            +{memberIds.length - 6}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {memberIds.slice(0, 4).map((uid) => {
+                          const p = memberProfiles[uid];
+                          const n = p?.display_name || p?.real_name;
+                          return n ? (
+                            <span key={uid} style={{
+                              fontSize: 10, background: "hsl(var(--muted))",
+                              color: "hsl(var(--foreground))", padding: "1px 7px",
+                              borderRadius: 9999, fontWeight: 500,
+                            }}>
+                              {n.split(" ")[0]}
+                            </span>
+                          ) : null;
+                        })}
+                        {memberIds.length > 4 && (
+                          <span style={{
+                            fontSize: 10, color: "hsl(var(--muted-foreground))",
+                            padding: "1px 5px", alignSelf: "center",
+                          }}>
+                            y {memberIds.length - 4} más
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 9999, background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
+                        Grupo
+                      </span>
+                      {(currentConv as any).num_members != null && (
+                        <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 9999, background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }}>
+                          {(currentConv as any).num_members} miembros
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
+              )}
 
-                {(currentConv as any).topic?.value && (
-                  <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: 1.4, margin: 0 }}>
-                    {(currentConv as any).topic.value}
-                  </p>
-                )}
-                {(currentConv as any).purpose?.value && !(currentConv as any).topic?.value && (
-                  <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: 1.4, margin: 0 }}>
-                    {(currentConv as any).purpose.value}
-                  </p>
-                )}
-              </div>
+              {/* Canal público/privado */}
+              {!currentConv.is_im && !currentConv.is_mpim && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "hsl(var(--foreground))" }}>
+                    <span style={{ fontSize: 16 }}>
+                      {currentConv.is_private ? "🔒" : "#"}
+                    </span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {channelName}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 9999,
+                      background: currentConv.is_private
+                        ? "hsl(239 84% 67% / 0.12)"
+                        : "hsl(142 71% 45% / 0.12)",
+                      color: currentConv.is_private
+                        ? "hsl(239 84% 72%)"
+                        : "hsl(142 71% 35%)",
+                    }}>
+                      {currentConv.is_private ? "Privado" : "Público"}
+                    </span>
+                    {(currentConv as any).num_members != null && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 9999,
+                        background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))",
+                        display: "flex", alignItems: "center", gap: 4,
+                      }}>
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                        {(currentConv as any).num_members} miembros
+                      </span>
+                    )}
+                  </div>
+
+                  {(currentConv as any).topic?.value && (
+                    <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: 1.4, margin: 0, borderLeft: "2px solid hsl(var(--border))", paddingLeft: 6 }}>
+                      {(currentConv as any).topic.value}
+                    </p>
+                  )}
+                  {!(currentConv as any).topic?.value && (currentConv as any).purpose?.value && (
+                    <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: 1.4, margin: 0, borderLeft: "2px solid hsl(var(--border))", paddingLeft: 6 }}>
+                      {(currentConv as any).purpose.value}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

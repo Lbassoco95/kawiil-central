@@ -406,6 +406,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         channelId={selectedChannel}
         channelName={channelName}
         currentConv={currentConv}
+        userMap={userMap}
         unreadMentions={unreadMentions}
         onOpenActivity={() => {}}
       />
