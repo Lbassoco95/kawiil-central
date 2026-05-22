@@ -1678,6 +1678,18 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "flag-email": {
+        const messageId = normalizeGraphMessageOrAttachmentId(params?.messageId);
+        const flagStatus = params?.flagStatus ?? "flagged"; // "flagged" | "notFlagged"
+        if (!messageId) throw new Error("messageId required");
+        result = await graphRequest(accessToken, `/me/messages/${messageId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...GRAPH_MAIL_PREFER_IMMUTABLE },
+          body: JSON.stringify({ flag: { flagStatus } }),
+        });
+        break;
+      }
+
       case "delete-email": {
         const messageId = params?.messageId;
         if (!messageId) throw new Error("messageId required");

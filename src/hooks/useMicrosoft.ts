@@ -1629,3 +1629,47 @@ export function useCancelScheduledMailJob() {
   });
 }
 
+export function useFlagEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      messageId,
+      flagStatus,
+    }: {
+      messageId: string;
+      flagStatus: "flagged" | "notFlagged";
+    }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "flag-email", params: { messageId, flagStatus } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onMutate: async ({ messageId, flagStatus }) => {
+      await queryClient.cancelQueries({ queryKey: ["email-detail", messageId] });
+      queryClient.setQueryData(["email-detail", messageId], (old: any) =>
+        old ? { ...old, flag: { flagStatus } } : old
+      );
+      queryClient.setQueriesData({ queryKey: ["outlook-emails"] }, (old: any) => {
+        if (!old?.pages) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page: any) => ({
+            ...page,
+            emails: page.emails.map((e: any) =>
+              e.id === messageId ? { ...e, flag: { flagStatus } } : e
+            ),
+          })),
+        };
+      });
+    },
+    onSuccess: (_data, { messageId }) => {
+      queryClient.invalidateQueries({ queryKey: ["email-detail", messageId] });
+      queryClient.invalidateQueries({ queryKey: ["outlook-emails"] });
+    },
+    onError: (err: Error) => toast.error("Error al destacar el correo: " + err.message),
+  });
+}
+

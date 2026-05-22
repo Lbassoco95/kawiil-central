@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useSendNewEmail } from "@/hooks/useMicrosoft";
+import { QUICK_DRAFT_TEMPLATES } from "@/components/microsoft/emailComposeAiShared";
 
 interface Props {
   open: boolean;
@@ -113,6 +114,15 @@ export function MailComposeDrawer({
 
         {/* Cuerpo */}
         <div className="mc-body">
+          {/* Chips de plantillas AI */}
+          <div className="mp-reply-templates">
+            <span className="mp-tpl-label">Plantillas:</span>
+            {QUICK_DRAFT_TEMPLATES.map((tpl) => (
+              <button key={tpl.id} className="mp-tpl-chip" onClick={() => setBody(tpl.instruction)}>
+                <tpl.icon size={10} /> {tpl.label}
+              </button>
+            ))}
+          </div>
           <textarea
             ref={bodyRef}
             placeholder="Escribe tu mensaje aquí…"

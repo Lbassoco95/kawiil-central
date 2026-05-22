@@ -14,9 +14,12 @@ import {
   ChevronDown,
   Flag,
   CheckCheck,
+  Loader2,
+  FolderInput,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
 import {
   useEmailDetail,
   useEmailAttachments,
@@ -26,12 +29,16 @@ import {
   useMarkEmailUnread,
   useReplyEmail,
   useForwardEmail,
+  useFlagEmail,
+  useMoveEmail,
+  useMailFolders,
 } from "@/hooks/useMicrosoft";
 import {
   getAvatarGradient,
   getInitials,
   inferEmailChips,
 } from "@/lib/emailChips";
+import { QUICK_DRAFT_TEMPLATES } from "@/components/microsoft/emailComposeAiShared";
 
 // ─── Tipos locales ──────────────────────────────────────────────
 interface EmailDetailShape {
@@ -141,6 +148,16 @@ function ReplyPanel({
         </div>
       )}
 
+      {/* Chips de plantillas AI */}
+      <div className="mp-reply-templates">
+        <span className="mp-tpl-label">Plantillas:</span>
+        {QUICK_DRAFT_TEMPLATES.map((tpl) => (
+          <button key={tpl.id} className="mp-tpl-chip" onClick={() => setBody(tpl.instruction)}>
+            <tpl.icon size={10} /> {tpl.label}
+          </button>
+        ))}
+      </div>
+
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
@@ -207,6 +224,9 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   const markUnread  = useMarkEmailUnread();
   const replyMut    = useReplyEmail();
   const forwardMut  = useForwardEmail();
+  const flagMut     = useFlagEmail();
+  const moveMut     = useMoveEmail();
+  const { data: foldersData } = useMailFolders();
 
   const detail = emailDetail as EmailDetailShape | null | undefined;
 
@@ -214,6 +234,9 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   const [quickReply, setQuickReply]               = useState("");
   const [aiTab, setAiTab]                         = useState<"resumen" | "responder" | "tareas">("resumen");
   const [replyMode, setReplyMode]                 = useState<"reply" | "replyAll" | "forward" | null>(null);
+  const [moveOpen, setMoveOpen]                   = useState(false);
+  const [aiResult, setAiResult]                   = useState<string | null>(null);
+  const [aiLoading, setAiLoading]                 = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // ── Marcar como leído automáticamente al abrir (1.2 s de gracia) ──
@@ -226,11 +249,14 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.id, detail?.isRead]);
 
-  // ── Cerrar reply panel al cambiar de correo ────────────────────
+  // ── Cerrar reply panel y resetear AI al cambiar de correo ──────
   useEffect(() => {
     setReplyMode(null);
     setQuickReply("");
     setShowAllRecipients(false);
+    setAiResult(null);
+    setAiLoading(false);
+    setMoveOpen(false);
   }, [emailId]);
 
   const senderName  = detail?.from?.emailAddress?.name || detail?.from?.emailAddress?.address || "";
@@ -328,6 +354,36 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
     detail.isRead ? markUnread.mutate(detail.id) : markRead.mutate(detail.id);
   }, [detail?.id, detail?.isRead, markRead, markUnread]);
 
+  const handleToggleFlag = useCallback(() => {
+    if (!detail?.id) return;
+    const next = detail.flag?.flagStatus === "flagged" ? "notFlagged" : "flagged";
+    flagMut.mutate({ messageId: detail.id, flagStatus: next });
+  }, [detail?.id, detail?.flag?.flagStatus, flagMut]);
+
+  const handleAnalyze = useCallback(async () => {
+    if (!detail || aiLoading) return;
+    setAiLoading(true);
+    setAiResult(null);
+    try {
+      const rawHtml = detail.body?.content ?? detail.bodyPreview ?? "";
+      const bodyText = rawHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 3000);
+      const prompt =
+        aiTab === "resumen"
+          ? `Resume brevemente este correo en 3-5 puntos clave:\n\n${bodyText}`
+          : aiTab === "responder"
+          ? `Redacta un borrador de respuesta profesional y concisa para este correo:\n\n${bodyText}`
+          : `Extrae los compromisos y tareas accionables de este correo en lista:\n\n${bodyText}`;
+      const { data } = await supabase.functions.invoke("ai-chat", {
+        body: { message: prompt, context: "email" },
+      });
+      setAiResult(data?.response ?? data?.content ?? data?.message ?? "Sin respuesta.");
+    } catch {
+      setAiResult("Error al analizar el correo. Intenta de nuevo.");
+    } finally {
+      setAiLoading(false);
+    }
+  }, [detail, aiLoading, aiTab]);
+
   // ── Empty state ──────────────────────────────────────────────
   if (!emailId) {
     return (
@@ -419,12 +475,17 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
         </button>
         <button
           className="mp-btn icon-only"
-          title="Destacar"
+          title={detail.flag?.flagStatus === "flagged" ? "Quitar destacado" : "Destacar"}
+          onClick={handleToggleFlag}
+          disabled={flagMut.isPending}
         >
           <Star
             size={14}
             className="ico"
-            style={{ color: detail.flag?.flagStatus === "flagged" ? "hsl(38 85% 50%)" : undefined }}
+            style={{
+              color: detail.flag?.flagStatus === "flagged" ? "hsl(38 85% 50%)" : undefined,
+              fill: detail.flag?.flagStatus === "flagged" ? "hsl(38 85% 50%)" : "none",
+            }}
           />
         </button>
         <button className="mp-btn icon-only" title="Marcar"><Flag size={14} className="ico" /></button>
@@ -437,7 +498,40 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
         <button className="mp-btn" onClick={() => onTranslate(detail)}>
           Traducir
         </button>
-        <button className="mp-btn icon-only"><MoreHorizontal size={14} className="ico" /></button>
+
+        {/* Menú "más opciones" → Mover a carpeta */}
+        <div style={{ position: "relative" }}>
+          <button
+            className="mp-btn icon-only"
+            title="Más opciones"
+            onClick={() => setMoveOpen((p) => !p)}
+          >
+            <MoreHorizontal size={14} className="ico" />
+          </button>
+          {moveOpen && (
+            <div className="mp-move-popover">
+              <div className="mp-move-title">
+                <FolderInput size={12} /> Mover a carpeta
+              </div>
+              <div className="mp-move-list">
+                {(foldersData?.folders ?? [])
+                  .filter((f: any) => f.id !== (emailDetail as any)?.parentFolderId)
+                  .map((f: any) => (
+                    <button
+                      key={f.id}
+                      className="mp-move-item"
+                      onClick={() => {
+                        if (detail?.id) moveMut.mutate({ messageId: detail.id, destinationId: f.id });
+                        setMoveOpen(false);
+                      }}
+                    >
+                      {f.displayName}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Scroll principal ── */}
@@ -493,7 +587,7 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
                 <button
                   key={tab}
                   className={`mp-ai-tab ${aiTab === tab ? "active" : ""}`}
-                  onClick={() => setAiTab(tab)}
+                  onClick={() => { setAiTab(tab); setAiResult(null); }}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
@@ -502,26 +596,32 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           </div>
 
           <div className="mp-ai-body">
-            {aiTab === "resumen" && (
+            {aiLoading ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
+                <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
+                Analizando con Kawiil AI…
+              </div>
+            ) : aiResult ? (
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{aiResult}</p>
+            ) : (
               <p style={{ margin: 0, fontStyle: "italic", opacity: 0.7, fontSize: 12 }}>
-                Pulsa "Analizar" para que Kawiil AI genere un resumen de este correo.
-              </p>
-            )}
-            {aiTab === "responder" && (
-              <p style={{ margin: 0, fontStyle: "italic", opacity: 0.7, fontSize: 12 }}>
-                AI puede redactar una respuesta basada en el contexto del correo.
-              </p>
-            )}
-            {aiTab === "tareas" && (
-              <p style={{ margin: 0, fontStyle: "italic", opacity: 0.7, fontSize: 12 }}>
-                AI puede extraer compromisos y tareas accionables de este correo.
+                {aiTab === "resumen" && 'Pulsa "Analizar" para que Kawiil AI genere un resumen de este correo.'}
+                {aiTab === "responder" && 'Pulsa "Analizar" para que AI redacte un borrador de respuesta.'}
+                {aiTab === "tareas" && 'Pulsa "Analizar" para que AI extraiga compromisos y tareas accionables.'}
               </p>
             )}
           </div>
 
           <div className="mp-ai-actions">
-            <button className="mp-ai-action primary">
-              <Sparkles size={11} /> Analizar
+            <button
+              className="mp-ai-action primary"
+              onClick={() => void handleAnalyze()}
+              disabled={aiLoading}
+            >
+              {aiLoading
+                ? <><Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} /> Analizando…</>
+                : <><Sparkles size={11} /> Analizar</>
+              }
             </button>
             <button className="mp-ai-action" onClick={() => onCreateTask(detail)}>
               Crear tarea

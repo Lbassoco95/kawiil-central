@@ -1420,3 +1420,97 @@
   border-color: transparent;
   margin-left: 0;
 }
+
+/* ─── Popover: mover a carpeta ────────────────────────────────── */
+.mp-move-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 200;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  box-shadow: 0 8px 24px hsl(var(--foreground) / 0.12);
+  min-width: 200px;
+  max-width: 280px;
+  padding: 6px 0;
+  overflow: hidden;
+}
+
+.mp-move-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(var(--muted-foreground));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.mp-move-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.mp-move-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  color: hsl(var(--foreground));
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.mp-move-item:hover {
+  background: hsl(var(--accent));
+}
+
+/* ─── Chips de plantillas AI en ReplyPanel y MailComposeDrawer ── */
+.mp-reply-templates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px 6px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.mp-tpl-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(var(--muted-foreground));
+  margin-right: 2px;
+}
+
+.mp-tpl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+  border: 1px solid hsl(var(--primary) / 0.25);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mp-tpl-chip:hover {
+  background: hsl(var(--primary) / 0.16);
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
