@@ -237,7 +237,15 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   const [moveOpen, setMoveOpen]                   = useState(false);
   const [aiResult, setAiResult]                   = useState<string | null>(null);
   const [aiLoading, setAiLoading]                 = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeRef     = useRef<HTMLIFrameElement>(null);
+  const replyPanelRef = useRef<HTMLDivElement>(null);
+
+  // ── Auto-scroll al panel de respuesta cuando se abre ──────────
+  useEffect(() => {
+    if (replyMode && replyPanelRef.current) {
+      replyPanelRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [replyMode]);
 
   // ── Marcar como leído automáticamente al abrir (1.2 s de gracia) ──
   useEffect(() => {
@@ -424,22 +432,25 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
       <div className="mp-toolbar">
         <button
           className="mp-btn primary"
-          onClick={() => setReplyMode("reply")}
+          onClick={() => setReplyMode(replyMode === "reply" ? null : "reply")}
           title="Responder"
+          style={replyMode === "reply" ? { background: "hsl(var(--primary) / 0.18)", outline: "1px solid hsl(var(--primary) / 0.5)" } : undefined}
         >
           <Reply size={13} className="ico" /> Responder
         </button>
         <button
           className="mp-btn"
-          onClick={() => setReplyMode("replyAll")}
+          onClick={() => setReplyMode(replyMode === "replyAll" ? null : "replyAll")}
           title="Responder a todos"
+          style={replyMode === "replyAll" ? { background: "hsl(var(--primary) / 0.12)", outline: "1px solid hsl(var(--primary) / 0.4)" } : undefined}
         >
           <ReplyAll size={13} className="ico" /> Todos
         </button>
         <button
           className="mp-btn"
-          onClick={() => setReplyMode("forward")}
+          onClick={() => setReplyMode(replyMode === "forward" ? null : "forward")}
           title="Reenviar"
+          style={replyMode === "forward" ? { background: "hsl(var(--primary) / 0.12)", outline: "1px solid hsl(var(--primary) / 0.4)" } : undefined}
         >
           <Forward size={13} className="ico" /> Reenviar
         </button>
@@ -632,6 +643,22 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           </div>
         </div>
 
+        {/* Panel de respuesta inline — justo antes del cuerpo para visibilidad inmediata */}
+        <div ref={replyPanelRef}>
+          {replyMode && (
+            <ReplyPanel
+              mode={replyMode}
+              onSend={(body, to) => {
+                if (replyMode === "reply")    handleReply(body);
+                if (replyMode === "replyAll") handleReplyAll(body);
+                if (replyMode === "forward")  handleForward(body, to);
+              }}
+              onCancel={() => setReplyMode(null)}
+              isPending={isReplying || isForwarding}
+            />
+          )}
+        </div>
+
         {/* Body del correo */}
         {iframeSrc ? (
           <div style={{ padding: "18px 22px 8px" }}>
@@ -676,20 +703,6 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
               );
             })}
           </div>
-        )}
-
-        {/* Panel de respuesta inline */}
-        {replyMode && (
-          <ReplyPanel
-            mode={replyMode}
-            onSend={(body, to) => {
-              if (replyMode === "reply")    handleReply(body);
-              if (replyMode === "replyAll") handleReplyAll(body);
-              if (replyMode === "forward")  handleForward(body, to);
-            }}
-            onCancel={() => setReplyMode(null)}
-            isPending={isReplying || isForwarding}
-          />
         )}
 
         {/* Quick reply (solo si no hay panel inline abierto) */}
