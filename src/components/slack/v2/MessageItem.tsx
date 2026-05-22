@@ -1,7 +1,8 @@
-import { useMemo } from "react";
-import type { SlackMessage } from "@/lib/slackApi";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { fetchSlackPrivateFileBlob, type SlackMessage, type SlackFile } from "@/lib/slackApi";
 import { slackMrkdwnToReact, slackEmojiAliasToChar, type FormatContext } from "@/lib/slackFormatting";
 import type { SlackUserProfile } from "@/hooks/useSlackUserProfiles";
+import { SlackAttachmentPreviewDialog } from "@/components/slack/SlackAttachmentPreviewDialog";
 
 // ─── Utilidades ──────────────────────────────────────────────
 function formatTs(ts: string): string {
@@ -25,6 +26,205 @@ function avatarColor(id: string): string {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+// ─── FileCard ────────────────────────────────────────────────
+function formatFileSize(size?: number): string {
+  if (!size || !Number.isFinite(size)) return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isImageFile(f: SlackFile): boolean {
+  if (f.mimetype?.startsWith("image/")) return true;
+  const ext = (f.filetype || (f.name?.split(".").pop() ?? "")).toLowerCase();
+  return ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"].includes(ext);
+}
+
+function FileCard({ f, onPreview }: { f: SlackFile; onPreview: (f: SlackFile) => void }) {
+  const isImg = isImageFile(f);
+  const privateUrl = f.url_private_download || f.url_private || "";
+  const label = f.title || f.name || "Adjunto";
+  const sizeLabel = formatFileSize(f.size);
+
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const objectUrlRef = useRef<string | null>(null);
+
+  // Cleanup blob URL al desmontar
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
+  }, []);
+
+  // IntersectionObserver: solo activa la carga cuando la imagen es visible
+  useEffect(() => {
+    if (!isImg || !privateUrl) return;
+    const el = wrapperRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) { setIsVisible(true); obs.disconnect(); break; }
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [isImg, privateUrl]);
+
+  // Cargar blob cuando visible
+  useEffect(() => {
+    if (!isImg || !privateUrl || !isVisible || resolvedUrl) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchSlackPrivateFileBlob(privateUrl)
+      .then((blob) => {
+        if (cancelled) return;
+        if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        setResolvedUrl(url);
+      })
+      .catch(() => { /* ignorar silenciosamente */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [isImg, privateUrl, isVisible, resolvedUrl]);
+
+  const handleOpen = useCallback(() => onPreview(f), [f, onPreview]);
+
+  if (isImg) {
+    return (
+      <div ref={wrapperRef}>
+        <button
+          type="button"
+          onClick={handleOpen}
+          title="Ver imagen"
+          style={{
+            display: "block",
+            padding: 0,
+            border: "1px solid hsl(var(--border) / 0.6)",
+            borderRadius: 8,
+            overflow: "hidden",
+            cursor: "pointer",
+            background: "transparent",
+            maxWidth: 280,
+          }}
+        >
+          {resolvedUrl ? (
+            <img
+              src={resolvedUrl}
+              alt={label}
+              loading="lazy"
+              decoding="async"
+              style={{ display: "block", maxHeight: 220, maxWidth: 280, objectFit: "cover" }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 200,
+                height: 120,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "hsl(var(--muted) / 0.5)",
+              }}
+            >
+              {loading ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "spin 1s linear infinite" }}>
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4 }}>
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+                </svg>
+              )}
+            </div>
+          )}
+          <div style={{ padding: "4px 8px 6px", fontSize: 11, color: "hsl(var(--muted-foreground))", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {label}{sizeLabel ? ` · ${sizeLabel}` : ""}
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  // Tarjeta para documentos y otros tipos
+  const ext = (f.filetype || (f.name?.split(".").pop() ?? "")).toLowerCase();
+  const isPdf = f.mimetype === "application/pdf" || ext === "pdf";
+  const isOffice = ["xlsx","xls","docx","doc","pptx","ppt"].includes(ext);
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        border: "1px solid hsl(var(--border) / 0.7)",
+        borderRadius: 8,
+        padding: "7px 10px",
+        background: "hsl(var(--muted) / 0.3)",
+        maxWidth: 320,
+      }}
+    >
+      {/* Icono según tipo */}
+      <div style={{ flexShrink: 0, color: isPdf ? "#e74c3c" : isOffice ? "#27ae60" : "hsl(var(--muted-foreground))" }}>
+        {isPdf ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+          </svg>
+        ) : isOffice ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/>
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+        )}
+      </div>
+
+      {/* Nombre y tamaño */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "hsl(var(--foreground))", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {label}
+        </div>
+        {sizeLabel && (
+          <div style={{ fontSize: 10, color: "hsl(var(--muted-foreground))", marginTop: 1 }}>{sizeLabel}</div>
+        )}
+      </div>
+
+      {/* Botón abrir */}
+      <button
+        type="button"
+        onClick={handleOpen}
+        style={{
+          flexShrink: 0,
+          fontSize: 11,
+          fontWeight: 600,
+          color: "hsl(var(--primary))",
+          background: "transparent",
+          border: "1px solid hsl(var(--primary) / 0.35)",
+          borderRadius: 6,
+          padding: "3px 8px",
+          cursor: "pointer",
+          transition: "background 0.15s",
+        }}
+      >
+        Abrir
+      </button>
+    </div>
+  );
 }
 
 // ─── Componente ──────────────────────────────────────────────
@@ -62,6 +262,8 @@ export function MessageItem({
     [userMap],
   );
 
+  const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
+
   return (
     <div className={`sl-msg${isCompact ? " compact" : ""}`} data-ts={message.ts}>
       {/* Avatar */}
@@ -95,29 +297,18 @@ export function MessageItem({
 
         {/* Archivos adjuntos */}
         {message.files && message.files.length > 0 && (
-          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-            {message.files.map((f: any) => (
-              <a
-                key={f.id}
-                href={f.url_private || f.permalink}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  fontSize: 12,
-                  color: "hsl(var(--primary))",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                </svg>
-                {f.name || "adjunto"}
-              </a>
+          <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {message.files.map((f: SlackFile) => (
+              <FileCard key={f.id || f.name} f={f} onPreview={setPreviewFile} />
             ))}
           </div>
         )}
+
+        <SlackAttachmentPreviewDialog
+          file={previewFile}
+          open={previewFile !== null}
+          onOpenChange={(open) => { if (!open) setPreviewFile(null); }}
+        />
 
         {/* Reacciones */}
         {message.reactions && message.reactions.length > 0 && (
