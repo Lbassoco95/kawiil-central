@@ -23,22 +23,23 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   useEmailDetail,
   useEmailAttachments,
+  useEmailConversation,
   useArchiveEmail,
   useDeleteEmail,
   useMarkEmailRead,
   useMarkEmailUnread,
   useReplyEmail,
-  useForwardEmail,
   useFlagEmail,
   useMoveEmail,
   useMailFolders,
 } from "@/hooks/useMicrosoft";
+import { useReplyForwardCompose } from "@/hooks/useReplyForwardCompose";
+import { ReplyForwardDialog } from "@/components/microsoft/ReplyForwardDialog";
 import {
   getAvatarGradient,
   getInitials,
   inferEmailChips,
 } from "@/lib/emailChips";
-import { QUICK_DRAFT_TEMPLATES } from "@/components/microsoft/emailComposeAiShared";
 
 // ─── Tipos locales ──────────────────────────────────────────────
 interface EmailDetailShape {
@@ -94,126 +95,6 @@ const QUICK_REPLIES = [
   "Perfecto, quedo pendiente.",
 ];
 
-// ─── Panel de respuesta inline ─────────────────────────────────
-function ReplyPanel({
-  mode,
-  onSend,
-  onCancel,
-  isPending,
-}: {
-  mode: "reply" | "replyAll" | "forward";
-  onSend: (text: string, to?: string) => void;
-  onCancel: () => void;
-  isPending: boolean;
-}) {
-  const [body, setBody] = useState("");
-  const [forwardTo, setForwardTo] = useState("");
-
-  const label = mode === "forward" ? "Reenviar a" : mode === "replyAll" ? "Responder a todos" : "Responder";
-
-  return (
-    <div style={{
-      margin: "0 22px 20px",
-      border: "1px solid hsl(var(--primary) / 0.3)",
-      borderRadius: 12,
-      overflow: "hidden",
-      background: "hsl(var(--card))",
-    }}>
-      <div style={{
-        padding: "8px 14px",
-        borderBottom: "1px solid hsl(var(--border))",
-        background: "hsl(var(--primary) / 0.05)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        fontSize: 12,
-        fontWeight: 700,
-        color: "hsl(var(--primary))",
-      }}>
-        {label}
-        <button onClick={onCancel} style={{ background: "transparent", border: 0, cursor: "pointer", color: "hsl(var(--muted-foreground))" }}>
-          <X size={13} />
-        </button>
-      </div>
-
-      {mode === "forward" && (
-        <div style={{ padding: "8px 14px", borderBottom: "1px solid hsl(var(--border))", display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", width: 42, flexShrink: 0 }}>Para</span>
-          <input
-            value={forwardTo}
-            onChange={(e) => setForwardTo(e.target.value)}
-            placeholder="destinatario@empresa.com"
-            style={{ flex: 1, border: 0, background: "transparent", fontSize: 13, fontFamily: "inherit", color: "hsl(var(--foreground))" }}
-          />
-        </div>
-      )}
-
-      {/* Chips de plantillas AI */}
-      <div className="mp-reply-templates">
-        <span className="mp-tpl-label">Plantillas:</span>
-        {QUICK_DRAFT_TEMPLATES.map((tpl) => (
-          <button key={tpl.id} className="mp-tpl-chip" onClick={() => setBody(tpl.instruction)}>
-            <tpl.icon size={10} /> {tpl.label}
-          </button>
-        ))}
-      </div>
-
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Escribe tu mensaje…"
-        style={{
-          width: "100%",
-          minHeight: 100,
-          border: 0,
-          padding: "12px 14px",
-          fontSize: 13,
-          fontFamily: "inherit",
-          color: "hsl(var(--foreground))",
-          background: "transparent",
-          resize: "vertical",
-          display: "block",
-          boxSizing: "border-box",
-        }}
-      />
-
-      <div style={{
-        padding: "8px 14px",
-        borderTop: "1px solid hsl(var(--border))",
-        display: "flex",
-        justifyContent: "flex-end",
-        gap: 8,
-      }}>
-        <button onClick={onCancel} style={{ background: "transparent", border: "1px solid hsl(var(--border))", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
-          Cancelar
-        </button>
-        <button
-          onClick={() => onSend(body, forwardTo || undefined)}
-          disabled={isPending || !body.trim() || (mode === "forward" && !forwardTo.trim())}
-          style={{
-            background: "hsl(var(--primary))",
-            color: "#fff",
-            border: 0,
-            borderRadius: 7,
-            padding: "6px 14px",
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            opacity: isPending ? 0.7 : 1,
-          }}
-        >
-          <Send size={12} />
-          {isPending ? "Enviando…" : "Enviar"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Componente principal ──────────────────────────────────────
 export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTranslate }: Props) {
   const { data: emailDetail, isLoading } = useEmailDetail(emailId);
@@ -223,29 +104,28 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   const markRead    = useMarkEmailRead();
   const markUnread  = useMarkEmailUnread();
   const replyMut    = useReplyEmail();
-  const forwardMut  = useForwardEmail();
   const flagMut     = useFlagEmail();
   const moveMut     = useMoveEmail();
   const { data: foldersData } = useMailFolders();
 
   const detail = emailDetail as EmailDetailShape | null | undefined;
+  const conversationId =
+    typeof detail?.conversationId === "string" ? detail.conversationId : null;
+  const { data: threadEmails = [] } = useEmailConversation(conversationId);
+
+  const replyForward = useReplyForwardCompose({
+    messageId: emailId,
+    emailDetail: detail as Record<string, unknown> | null | undefined,
+    threadEmails: threadEmails as Record<string, unknown>[],
+  });
 
   const [showAllRecipients, setShowAllRecipients] = useState(false);
   const [quickReply, setQuickReply]               = useState("");
   const [aiTab, setAiTab]                         = useState<"resumen" | "responder" | "tareas">("resumen");
-  const [replyMode, setReplyMode]                 = useState<"reply" | "replyAll" | "forward" | null>(null);
   const [moveOpen, setMoveOpen]                   = useState(false);
   const [aiResult, setAiResult]                   = useState<string | null>(null);
   const [aiLoading, setAiLoading]                 = useState(false);
   const iframeRef     = useRef<HTMLIFrameElement>(null);
-  const replyPanelRef = useRef<HTMLDivElement>(null);
-
-  // ── Auto-scroll al panel de respuesta cuando se abre ──────────
-  useEffect(() => {
-    if (replyMode && replyPanelRef.current) {
-      replyPanelRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [replyMode]);
 
   // ── Marcar como leído automáticamente al abrir (1.2 s de gracia) ──
   useEffect(() => {
@@ -257,9 +137,8 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.id, detail?.isRead]);
 
-  // ── Cerrar reply panel y resetear AI al cambiar de correo ──────
+  // ── Reset AI al cambiar de correo ──────
   useEffect(() => {
-    setReplyMode(null);
     setQuickReply("");
     setShowAllRecipients(false);
     setAiResult(null);
@@ -318,28 +197,6 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
     );
     return URL.createObjectURL(blob);
   }, [bodyHtml]);
-
-  // ── Handlers de acciones ──────────────────────────────────────
-  const handleReply = useCallback((body: string) => {
-    if (!emailId) return;
-    replyMut.mutate({ messageId: emailId, comment: body }, {
-      onSuccess: () => setReplyMode(null),
-    });
-  }, [emailId, replyMut]);
-
-  const handleReplyAll = useCallback((body: string) => {
-    if (!emailId) return;
-    replyMut.mutate({ messageId: emailId, comment: body, replyAll: true }, {
-      onSuccess: () => setReplyMode(null),
-    });
-  }, [emailId, replyMut]);
-
-  const handleForward = useCallback((body: string, to?: string) => {
-    if (!emailId || !to) return;
-    forwardMut.mutate({ messageId: emailId, comment: body, toRecipients: [to] }, {
-      onSuccess: () => setReplyMode(null),
-    });
-  }, [emailId, forwardMut]);
 
   const handleSendQuickReply = useCallback(() => {
     if (!quickReply.trim() || !emailId) return;
@@ -423,8 +280,7 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
   if (!detail) return <div className="mail-preview" />;
 
   const visibleAttachments = attachments.filter((a) => !a.isInline);
-  const isReplying  = replyMut.isPending;
-  const isForwarding = forwardMut.isPending;
+  const { emailAction, toggleReply } = replyForward;
 
   return (
     <div className="mail-preview">
@@ -432,25 +288,25 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
       <div className="mp-toolbar">
         <button
           className="mp-btn primary"
-          onClick={() => setReplyMode(replyMode === "reply" ? null : "reply")}
+          onClick={() => toggleReply("reply")}
           title="Responder"
-          style={replyMode === "reply" ? { background: "hsl(var(--primary) / 0.18)", outline: "1px solid hsl(var(--primary) / 0.5)" } : undefined}
+          style={emailAction === "reply" ? { background: "hsl(var(--primary) / 0.18)", outline: "1px solid hsl(var(--primary) / 0.5)" } : undefined}
         >
           <Reply size={13} className="ico" /> Responder
         </button>
         <button
           className="mp-btn"
-          onClick={() => setReplyMode(replyMode === "replyAll" ? null : "replyAll")}
+          onClick={() => toggleReply("reply-all")}
           title="Responder a todos"
-          style={replyMode === "replyAll" ? { background: "hsl(var(--primary) / 0.12)", outline: "1px solid hsl(var(--primary) / 0.4)" } : undefined}
+          style={emailAction === "reply-all" ? { background: "hsl(var(--primary) / 0.12)", outline: "1px solid hsl(var(--primary) / 0.4)" } : undefined}
         >
           <ReplyAll size={13} className="ico" /> Todos
         </button>
         <button
           className="mp-btn"
-          onClick={() => setReplyMode(replyMode === "forward" ? null : "forward")}
+          onClick={() => toggleReply("forward")}
           title="Reenviar"
-          style={replyMode === "forward" ? { background: "hsl(var(--primary) / 0.12)", outline: "1px solid hsl(var(--primary) / 0.4)" } : undefined}
+          style={emailAction === "forward" ? { background: "hsl(var(--primary) / 0.12)", outline: "1px solid hsl(var(--primary) / 0.4)" } : undefined}
         >
           <Forward size={13} className="ico" /> Reenviar
         </button>
@@ -643,22 +499,6 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           </div>
         </div>
 
-        {/* Panel de respuesta inline — justo antes del cuerpo para visibilidad inmediata */}
-        <div ref={replyPanelRef}>
-          {replyMode && (
-            <ReplyPanel
-              mode={replyMode}
-              onSend={(body, to) => {
-                if (replyMode === "reply")    handleReply(body);
-                if (replyMode === "replyAll") handleReplyAll(body);
-                if (replyMode === "forward")  handleForward(body, to);
-              }}
-              onCancel={() => setReplyMode(null)}
-              isPending={isReplying || isForwarding}
-            />
-          )}
-        </div>
-
         {/* Body del correo */}
         {iframeSrc ? (
           <div style={{ padding: "18px 22px 8px" }}>
@@ -705,8 +545,8 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           </div>
         )}
 
-        {/* Quick reply (solo si no hay panel inline abierto) */}
-        {!replyMode && (
+        {/* Quick reply (solo si no hay diálogo de respuesta abierto) */}
+        {!emailAction && (
           <div className="mp-quick-reply">
             <div className="mp-qr-suggestions">
               <span className="mp-qr-label">
@@ -750,6 +590,46 @@ export function MailPreview({ emailId, onCompose: _onCompose, onCreateTask, onTr
           </div>
         )}
       </div>
+
+      {emailAction && emailId && (
+        <ReplyForwardDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) replyForward.resetAction();
+          }}
+          action={emailAction}
+          emailDetail={detail as Record<string, unknown>}
+          threadContextForAi={replyForward.threadContextForAi}
+          draftId={replyForward.draftId}
+          draftHtml={replyForward.draftHtml}
+          setDraftHtml={replyForward.setDraftHtml}
+          forwardTo={replyForward.forwardTo}
+          setForwardTo={replyForward.setForwardTo}
+          forwardCc={replyForward.forwardCc}
+          setForwardCc={replyForward.setForwardCc}
+          forwardBcc={replyForward.forwardBcc}
+          setForwardBcc={replyForward.setForwardBcc}
+          replyTo={replyForward.replyTo}
+          setReplyTo={replyForward.setReplyTo}
+          replyCc={replyForward.replyCc}
+          setReplyCc={replyForward.setReplyCc}
+          replyBcc={replyForward.replyBcc}
+          setReplyBcc={replyForward.setReplyBcc}
+          replyFiles={replyForward.replyFiles}
+          onReplyFilesChange={replyForward.setReplyFiles}
+          createReplyDraftPending={replyForward.createReplyDraftPending}
+          createForwardDraftPending={replyForward.createForwardDraftPending}
+          isSending={replyForward.isSending}
+          onCancel={replyForward.resetAction}
+          onSend={() => void replyForward.handleSendReply()}
+          requestDeliveryReceipt={replyForward.requestDeliveryReceipt}
+          requestReadReceipt={replyForward.requestReadReceipt}
+          onRequestDeliveryReceiptChange={replyForward.setRequestDeliveryReceipt}
+          onRequestReadReceiptChange={replyForward.setRequestReadReceipt}
+          receiptsDisabled={!replyForward.draftId}
+          showAccountingTemplates
+        />
+      )}
     </div>
   );
 }

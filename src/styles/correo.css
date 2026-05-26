@@ -858,103 +858,7 @@
 
 /* ═══════════ DRAWER COMÚN ═══════════ */
 
-/* ── Compose (bottom sheet) ── */
-.mail-compose-backdrop {
-  position: fixed;
-  inset: 0;
-  background: hsl(0 0% 0% / 0.3);
-  backdrop-filter: blur(2px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
-  z-index: 98;
-}
-
-.mail-compose-backdrop.open { opacity: 1; pointer-events: all; }
-
-.mail-compose {
-  position: fixed;
-  bottom: 0;
-  right: 24px;
-  width: 640px;
-  max-width: calc(100vw - 48px);
-  height: 560px;
-  max-height: calc(100vh - 80px);
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-bottom: 0;
-  border-radius: 14px 14px 0 0;
-  box-shadow: 0 -12px 40px hsl(0 0% 0% / 0.18);
-  transform: translateY(calc(100% + 20px));
-  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
-  z-index: 99;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.mail-compose.open { transform: translateY(0); }
-
-.mc-head {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, hsl(217 91% 22%), hsl(280 65% 28%));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.mc-title { font-size: 14px; font-weight: 700; flex: 1; }
-
-.mc-head-btn {
-  background: transparent;
-  border: 0;
-  color: #fff;
-  cursor: pointer;
-  opacity: 0.75;
-  padding: 4px;
-  border-radius: 4px;
-}
-
-.mc-head-btn:hover { opacity: 1; background: hsl(0 0% 100% / 0.1); }
-
-.mc-fields { padding: 0 16px; }
-
-.mc-field {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid hsl(var(--border));
-}
-
-.mc-field-label {
-  font-size: 12px;
-  color: hsl(var(--muted-foreground));
-  width: 50px;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-.mc-field input,
-.mc-field-input {
-  flex: 1;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  font-size: 13px;
-  color: hsl(var(--foreground));
-  font-family: inherit;
-}
-
-.mc-field input:focus,
-.mc-field-input:focus { outline: none; }
-
-.mc-field input::placeholder,
-.mc-field-input::placeholder { color: hsl(var(--muted-foreground)); }
-
-/* ─── Dropdown de autocompletado de destinatarios ─────────────── */
+/* ─── Dropdown de autocompletado de destinatarios (ComposeRecipientInput) ── */
 .cri-dropdown {
   position: absolute;
   top: calc(100% + 4px);
@@ -1019,87 +923,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.mc-chip {
-  background: hsl(var(--primary) / 0.1);
-  color: hsl(var(--primary));
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.mc-body {
-  flex: 1;
-  padding: 14px 16px;
-  overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.6;
-  color: hsl(var(--foreground));
-}
-
-.mc-body textarea {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  font-size: 13px;
-  color: hsl(var(--foreground));
-  font-family: inherit;
-  line-height: 1.6;
-  resize: none;
-}
-
-.mc-body textarea:focus { outline: none; }
-
-.mc-toolbar {
-  border-top: 1px solid hsl(var(--border));
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: hsl(var(--muted) / 0.3);
-  flex-shrink: 0;
-}
-
-.mc-fmt-btn {
-  background: transparent;
-  border: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  cursor: pointer;
-  color: hsl(var(--muted-foreground));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.mc-fmt-btn:hover { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
-
-.mc-send-row { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-
-.mc-send-btn {
-  background: hsl(var(--primary));
-  color: #fff;
-  border: 0;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: inherit;
-}
-
-.mc-send-btn:hover { background: hsl(var(--primary) / 0.9); }
 
 /* ── Task / Translate drawers (side) ── */
 .mt-drawer-backdrop,
@@ -1543,7 +1366,7 @@
   background: hsl(var(--accent));
 }
 
-/* ─── Chips de plantillas AI en ReplyPanel y MailComposeDrawer ── */
+/* ─── Chips de plantillas AI en quick reply ── */
 .mp-reply-templates {
   display: flex;
   flex-wrap: wrap;

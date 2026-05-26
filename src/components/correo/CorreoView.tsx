@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { MailFolders }         from "./MailFolders";
 import { MailList }            from "./MailList";
 import { MailPreview }         from "./MailPreview";
-import { MailComposeDrawer }   from "./MailComposeDrawer";
+import { ComposeEmailDialog } from "@/components/microsoft/ComposeEmailDialog";
 import { MailTaskDrawer }      from "./MailTaskDrawer";
 import { MailTranslateDrawer } from "./MailTranslateDrawer";
 
@@ -71,9 +71,10 @@ export function CorreoView() {
       </div>
 
       {/* Drawers (fuera del grid para no romper layout) */}
-      <MailComposeDrawer
+      <ComposeEmailDialog
         open={composeOpen}
-        onClose={() => setComposeOpen(false)}
+        onOpenChange={setComposeOpen}
+        showAccountingTemplates
       />
 
       <MailTaskDrawer
