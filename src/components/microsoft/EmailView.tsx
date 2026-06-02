@@ -806,6 +806,7 @@ export function EmailView() {
   const [replyCc, setReplyCc] = useState("");
   const [replyBcc, setReplyBcc] = useState("");
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [quickTaskEmail, setQuickTaskEmail] = useState<{ id: string; subject?: string; senderName?: string; senderEmail?: string; bodyPreview?: string; receivedDateTime?: string } | null>(null);
   const [sendToSlackOpen, setSendToSlackOpen] = useState(false);
   const [emailAiSummary, setEmailAiSummary] = useState<{
     summary: string;
@@ -846,6 +847,7 @@ export function EmailView() {
   /** Orden manual de carpetas por padre (localStorage); no se sincroniza con Outlook. */
   const [folderOrderByParent, setFolderOrderByParent] = useState<Record<string, string[]>>({});
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [lastBulkSelectedIdx, setLastBulkSelectedIdx] = useState<number>(-1);
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   const [bulkMoveFolderSearch, setBulkMoveFolderSearch] = useState("");
   const [now, setNow] = useState<Date>(() => new Date());
@@ -1584,15 +1586,29 @@ export function EmailView() {
     deleteEmail.mutate(emailId);
   }, [deleteEmail, allEmails, selectedEmailId, resetAction]);
 
-  const toggleBulkSelect = useCallback((emailId: string, e: { stopPropagation(): void }) => {
+  const toggleBulkSelect = useCallback((emailId: string, e: { stopPropagation(): void; shiftKey?: boolean }) => {
     e.stopPropagation();
-    setBulkSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(emailId)) next.delete(emailId);
-      else next.add(emailId);
-      return next;
-    });
-  }, []);
+    const idx = allEmails.findIndex((em: any) => em.id === emailId);
+    if (e.shiftKey && lastBulkSelectedIdx >= 0 && idx >= 0) {
+      const from = Math.min(lastBulkSelectedIdx, idx);
+      const to = Math.max(lastBulkSelectedIdx, idx);
+      setBulkSelectedIds(prev => {
+        const next = new Set(prev);
+        for (let i = from; i <= to; i++) {
+          next.add((allEmails[i] as any).id);
+        }
+        return next;
+      });
+    } else {
+      setLastBulkSelectedIdx(idx);
+      setBulkSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(emailId)) next.delete(emailId);
+        else next.add(emailId);
+        return next;
+      });
+    }
+  }, [allEmails, lastBulkSelectedIdx]);
 
   const handleBulkArchive = useCallback(async () => {
     const ids = [...bulkSelectedIds];
@@ -1761,6 +1777,24 @@ export function EmailView() {
       } else if (e.key === "#" && selectedEmailId && !emailAction) {
         e.preventDefault();
         handleDelete(selectedEmailId);
+      } else if (e.key === "x" && selectedEmailId && !emailAction) {
+        e.preventDefault();
+        toggleBulkSelect(selectedEmailId, { stopPropagation: () => {} });
+      } else if (e.key === "t" && selectedEmailId && !emailAction) {
+        e.preventDefault();
+        const em = allEmails.find((em: any) => em.id === selectedEmailId) as any;
+        if (em) {
+          setQuickTaskEmail({
+            id: em.id,
+            subject: em.subject,
+            senderName: em.from?.emailAddress?.name,
+            senderEmail: em.from?.emailAddress?.address,
+            bodyPreview: em.bodyPreview,
+            receivedDateTime: em.receivedDateTime,
+          });
+        } else {
+          setCreateTaskOpen(true);
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -1780,6 +1814,7 @@ export function EmailView() {
     handleStartReply,
     markUnread,
     resetAction,
+    toggleBulkSelect,
   ]);
 
   useEffect(() => {
@@ -2644,206 +2679,164 @@ export function EmailView() {
                     draggable
                     onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
-                      "group flex min-w-0 w-full max-w-full cursor-pointer transition-colors border-b border-border/40 px-4 py-2.5",
-                      isActive && !bulkSelectedIds.has(email.id) && "bg-accent border-l-2 border-l-blue-500",
-                      unread && !isActive && !bulkSelectedIds.has(email.id) && "bg-blue-50/50 dark:bg-blue-950/20",
-                      !isActive && !bulkSelectedIds.has(email.id) && "hover:bg-muted/50",
-                      bulkSelectedIds.has(email.id) && "bg-primary/8 border-l-2 border-l-primary",
+                      "group relative flex min-w-0 w-full cursor-pointer select-none transition-colors border-b border-border/20 px-3 py-1.5",
+                      isActive && !bulkSelectedIds.has(email.id) && "bg-accent/70 border-l-2 border-l-blue-500 pl-[10px]",
+                      unread && !isActive && !bulkSelectedIds.has(email.id) && "bg-blue-50/30 dark:bg-blue-950/10",
+                      !isActive && !bulkSelectedIds.has(email.id) && "hover:bg-muted/40",
+                      bulkSelectedIds.has(email.id) && "bg-primary/5 border-l-2 border-l-primary pl-[10px]",
                     )}
-                    onClick={() => bulkSelectedIds.size > 0 ? toggleBulkSelect(email.id, { stopPropagation: () => {} } as any) : handleOpenEmail(email)}
+                    onClick={(ev) => bulkSelectedIds.size > 0 ? toggleBulkSelect(email.id, ev) : handleOpenEmail(email)}
                   >
-                    <div className="flex gap-2.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 shrink-0 self-start">
-                        {/* Unread dot + checkbox — el checkbox aparece al hover o cuando hay selección activa */}
-                        <div
-                          className="relative flex h-5 w-5 shrink-0 items-center justify-center"
-                          onClick={(e) => toggleBulkSelect(email.id, e)}
-                        >
-                          <div
-                            className={cn(
-                              "absolute inset-0 flex items-center justify-center rounded border transition-all",
-                              bulkSelectedIds.has(email.id)
-                                ? "border-primary bg-primary opacity-100"
-                                : "border-border/70 bg-background opacity-0 group-hover:opacity-100",
-                              bulkSelectedIds.size > 0 && "opacity-100",
-                            )}
-                          >
-                            {bulkSelectedIds.has(email.id) && (
-                              <Check className="h-3 w-3 text-primary-foreground" />
-                            )}
-                          </div>
-                          <div
-                            className={cn(
-                              "h-2 w-2 rounded-full transition-opacity",
-                              unread ? "bg-blue-500" : "bg-transparent",
-                              "group-hover:opacity-0",
-                              (bulkSelectedIds.size > 0 || bulkSelectedIds.has(email.id)) && "opacity-0",
-                            )}
-                            aria-hidden
-                          />
-                        </div>
-                        <div
-                          className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-semibold shrink-0 shadow-sm ring-1 ring-black/5 dark:ring-white/5"
-                          style={{ background: getAvatarGradient(senderEmail, senderName) }}
-                        >
-                          {getInitials(senderName, senderEmail)}
-                        </div>
+                    {/* Left: checkbox + unread dot */}
+                    <div
+                      className="relative mr-2 flex h-4 w-4 shrink-0 items-center justify-center self-center"
+                      onClick={(e) => toggleBulkSelect(email.id, e)}
+                    >
+                      <div
+                        className={cn(
+                          "absolute inset-0 flex items-center justify-center rounded border transition-all",
+                          bulkSelectedIds.has(email.id)
+                            ? "border-primary bg-primary opacity-100"
+                            : "border-border/60 bg-background opacity-0 group-hover:opacity-100",
+                          bulkSelectedIds.size > 0 && "opacity-100",
+                        )}
+                      >
+                        {bulkSelectedIds.has(email.id) && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                       </div>
+                      <div
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full transition-opacity",
+                          unread ? "bg-blue-500" : "bg-transparent",
+                          "group-hover:opacity-0",
+                          (bulkSelectedIds.size > 0 || bulkSelectedIds.has(email.id)) && "opacity-0",
+                        )}
+                        aria-hidden
+                      />
+                    </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 min-w-0">
-                          <span
-                            title={senderName}
-                            className={cn(
-                              "min-w-0 flex-1 truncate text-sm text-foreground",
-                              unread ? "font-bold" : "font-normal text-foreground/85",
-                            )}
-                          >
-                            {senderName}
-                          </span>
-                          <div className="relative flex shrink-0 items-center justify-end min-h-5 min-w-[4.5rem]">
-                            <span
-                              className="text-xs text-foreground/70 tabular-nums whitespace-nowrap"
-                            >
-                              {formatEmailDate(emailListTimestamp(email))}
-                            </span>
-                            {!isActive && (
-                              <div
+                    {/* Main content — one line layout */}
+                    <div className="flex min-w-0 flex-1 items-baseline gap-2">
+                      {/* Sender — fixed width */}
+                      <span
+                        className={cn(
+                          "w-32 shrink-0 truncate text-[13px] leading-5",
+                          unread ? "font-semibold text-foreground" : "text-foreground/75",
+                        )}
+                        title={senderName}
+                      >
+                        {senderName}
+                      </span>
+
+                      {/* Subject + preview — flex-1 */}
+                      <span className="min-w-0 flex-1 truncate text-[13px] leading-5">
+                        {email.importance === "high" && (
+                          <span className="mr-1 inline-block h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full bg-destructive align-middle" aria-hidden />
+                        )}
+                        {email.hasAttachments && (
+                          <Paperclip className="mr-1 inline-block h-3 w-3 shrink-0 translate-y-[-1px] text-muted-foreground/60 align-middle" aria-hidden />
+                        )}
+                        <span className={cn(unread ? "font-medium text-foreground" : "text-foreground/80")}>
+                          {subject}
+                        </span>
+                        {bodyPreview && bodyPreview !== "…" && (
+                          <span className="text-muted-foreground/60"> — {bodyPreview}</span>
+                        )}
+                      </span>
+
+                      {/* Chips (only when not collapsed) */}
+                      {(() => {
+                        const inferred = inferEmailChips(email);
+                        if (inferred.length === 0) return null;
+                        return (
+                          <span className="hidden sm:flex shrink-0 items-center gap-1">
+                            {inferred.slice(0, 2).map((chip) => (
+                              <span
+                                key={`inf-${chip.tone}`}
                                 className={cn(
-                                  "flex items-center gap-0.5 rounded-sm bg-background/90 dark:bg-background/90 px-0.5",
-                                  "opacity-0 group-hover:opacity-100 transition-opacity",
-                                  "max-sm:hidden",
-                                  "sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2",
+                                  "inline-flex items-center rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide",
+                                  INFERRED_CHIP_STYLES[chip.tone],
                                 )}
                               >
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
-                                      onClick={(e) => { e.stopPropagation(); handleArchive(email.id); }}
-                                    >
-                                      <Archive className="h-3.5 w-3.5" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive"
-                                      onClick={(e) => { e.stopPropagation(); handleDelete(email.id); }}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="bottom" className="text-xs">Eliminar (#)</TooltipContent>
-                                </Tooltip>
-                                {email.isRead ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
-                                        onClick={(e) => { e.stopPropagation(); markUnread.mutate(email.id); }}
-                                      >
-                                        <Mail className="h-3.5 w-3.5" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom" className="text-xs">Marcar no leído (u)</TooltipContent>
-                                  </Tooltip>
-                                ) : (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
-                                        onClick={(e) => { e.stopPropagation(); markRead.mutate(email.id); }}
-                                      >
-                                        <MailOpen className="h-3.5 w-3.5" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom" className="text-xs">Marcar leído</TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-0.5 min-w-0">
-                          <div className="flex min-w-0 items-center gap-1">
-                            {email.hasAttachments && (
-                              <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden />
-                            )}
-                            {email.importance === "high" && (
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-destructive" aria-hidden />
-                            )}
-                            <p
-                              className="min-w-0 flex-1 line-clamp-2 text-sm leading-snug"
-                              title={subject}
+                                {chip.label}
+                              </span>
+                            ))}
+                          </span>
+                        );
+                      })()}
+
+                      {/* Hover actions */}
+                      <div
+                        className={cn(
+                          "shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity max-sm:hidden",
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                setQuickTaskEmail({
+                                  id: email.id,
+                                  subject: email.subject,
+                                  senderName: email.from?.emailAddress?.name,
+                                  senderEmail: email.from?.emailAddress?.address,
+                                  bodyPreview: email.bodyPreview,
+                                  receivedDateTime: email.receivedDateTime,
+                                });
+                              }}
                             >
-                              <span className={cn(unread && "font-semibold")}>{subject}</span>
-                            </p>
-                          </div>
-                          {bodyPreview && bodyPreview !== "…" && (
-                            <p
-                              className="min-w-0 truncate text-xs text-muted-foreground leading-snug mt-0.5"
-                              title={bodyPreview}
+                              <ListTodo className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">Crear tarea (t)</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                              onClick={() => handleArchive(email.id)}
                             >
-                              {bodyPreview}
-                            </p>
-                          )}
-                        </div>
-                        {(() => {
-                          const inferred = inferEmailChips(email);
-                          const cats: string[] = Array.isArray(email.categories) ? email.categories : [];
-                          if (inferred.length === 0 && cats.length === 0) return null;
-                          return (
-                            <div className="mt-1 flex flex-wrap items-center gap-1">
-                              {inferred.map((chip) => (
-                                <span
-                                  key={`inf-${chip.tone}`}
-                                  className={cn(
-                                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                                    INFERRED_CHIP_STYLES[chip.tone],
-                                  )}
-                                >
-                                  {chip.label}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                        {Array.isArray(email.categories) && email.categories.length > 0 && (
-                          <div className="mt-1 flex flex-wrap items-center gap-1">
-                            {email.categories.slice(0, 3).map((cat: string) => {
-                              const c = categoryColorMap.get(cat) || "hsl(var(--primary))";
-                              return (
-                                <span
-                                  key={cat}
-                                  className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium border"
-                                  style={{
-                                    background: `${c.replace(")", " / 0.12)")}`,
-                                    color: c,
-                                    borderColor: `${c.replace(")", " / 0.3)")}`,
-                                  }}
-                                  title={cat}
-                                >
-                                  <span
-                                    className="inline-block h-1.5 w-1.5 rounded-full"
-                                    style={{ background: c }}
-                                  />
-                                  <span className="truncate max-w-[120px]">{cat}</span>
-                                </span>
-                              );
-                            })}
-                            {email.categories.length > 3 && (
-                              <span className="text-[10px] text-muted-foreground">+{email.categories.length - 3}</span>
-                            )}
-                          </div>
+                              <Archive className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">Archivar (e)</TooltipContent>
+                        </Tooltip>
+                        {email.isRead ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                                onClick={() => markUnread.mutate(email.id)}
+                              >
+                                <Mail className="h-3.5 w-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">No leído (u)</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                                onClick={() => markRead.mutate(email.id)}
+                              >
+                                <MailOpen className="h-3.5 w-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">Leído</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
+
+                      {/* Timestamp */}
+                      <span className="shrink-0 text-[11px] text-muted-foreground/70 tabular-nums whitespace-nowrap group-hover:hidden">
+                        {formatEmailDate(emailListTimestamp(email))}
+                      </span>
                     </div>
                   </div>
                   </div>
@@ -2902,6 +2895,8 @@ export function EmailView() {
               <p className="text-base font-semibold text-foreground/80 mb-2">Selecciona un correo</p>
               <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">j</kbd><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">k</kbd> navegar</span>
+                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">x</kbd> seleccionar</span>
+                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">t</kbd> crear tarea</span>
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">c</kbd> redactar</span>
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">r</kbd> responder</span>
                 <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">e</kbd> archivar</span>
@@ -3693,6 +3688,19 @@ export function EmailView() {
         aiSummary={emailAiSummary?.summary ?? null}
         aiSuggestedAction={emailAiSummary?.suggestedAction ?? null}
       />
+
+      {/* Quick task creation from email list (without opening the email) */}
+      <CreateTaskFromEmailDialog
+        open={!!quickTaskEmail}
+        onOpenChange={(o) => { if (!o) setQuickTaskEmail(null); }}
+        emailSubject={quickTaskEmail?.subject}
+        senderName={quickTaskEmail?.senderName}
+        senderEmail={quickTaskEmail?.senderEmail}
+        bodyPreview={quickTaskEmail?.bodyPreview}
+        receivedDate={quickTaskEmail?.receivedDateTime ? formatDistanceToNow(parseISO(quickTaskEmail.receivedDateTime), { addSuffix: true, locale: es }) : undefined}
+        receivedAtISO={quickTaskEmail?.receivedDateTime ?? undefined}
+      />
+
       {emailAction && selectedEmailId && (
         <ReplyForwardDialog
           open
