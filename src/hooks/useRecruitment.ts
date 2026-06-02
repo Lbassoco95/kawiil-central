@@ -12,6 +12,7 @@ import {
   type Candidate,
   type CandidateActivity,
   type CandidateScore,
+  type EmailTemplate,
   type RecruitmentCriterion,
   type RecruitmentProcess,
   type RecruitmentStage,
@@ -581,6 +582,94 @@ export function useLogCandidateEmail() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-candidate-activities", vars.candidate.id] });
     },
+  });
+}
+
+/* ---------------- Nombre de la organización (para variables) ---------------- */
+export function useOrgName() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["org-name"],
+    queryFn: async (): Promise<string> => {
+      const orgId = await getMyOrgId(user!.id);
+      const { data } = await db.from("organizations").select("name").eq("id", orgId).single();
+      return (data?.name as string) ?? "";
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/* ---------------- Plantillas de email ---------------- */
+export function useEmailTemplates() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-email-templates"],
+    queryFn: async (): Promise<EmailTemplate[]> => {
+      const { data, error } = await db
+        .from("rh_email_templates")
+        .select("*")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return (data as EmailTemplate[]) ?? [];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useCreateEmailTemplate() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { name: string; subject: string; body: string }) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { error } = await db.from("rh_email_templates").insert({
+        organization_id: orgId,
+        name: input.name,
+        subject: input.subject,
+        body: input.body,
+        created_by: user!.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-email-templates"] });
+      toast.success("Plantilla creada");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo crear la plantilla"),
+  });
+}
+
+export function useUpdateEmailTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name, subject, body }: { id: string; name: string; subject: string; body: string }) => {
+      const { error } = await db
+        .from("rh_email_templates")
+        .update({ name, subject, body, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-email-templates"] });
+      toast.success("Plantilla actualizada");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo actualizar la plantilla"),
+  });
+}
+
+export function useDeleteEmailTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await db.from("rh_email_templates").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-email-templates"] });
+      toast.success("Plantilla eliminada");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo eliminar la plantilla"),
   });
 }
 

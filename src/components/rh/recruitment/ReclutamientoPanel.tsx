@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -53,6 +53,7 @@ import {
   useCandidates,
   useCreateCandidate,
   useMoveCandidateStage,
+  useOrgName,
   uploadCandidateCvByIds,
 } from "@/hooks/useRecruitment";
 import { useCelulas } from "@/hooks/useCatalogs";
@@ -61,6 +62,7 @@ import { CandidateDetailDialog } from "./CandidateDetailDialog";
 import { StageManagerDialog } from "./StageManagerDialog";
 import { StateManagerDialog } from "./StateManagerDialog";
 import { CriteriaManagerDialog } from "./CriteriaManagerDialog";
+import { EmailTemplateManagerDialog } from "./EmailTemplateManagerDialog";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
 
@@ -191,6 +193,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const { data: criteria = [] } = useProcessCriteria(process.id);
   const { data: candidates = [], isLoading } = useCandidates(process.id);
   const { data: celulas = [] } = useCelulas();
+  const { data: orgName = "" } = useOrgName();
   const celulaName = celulas.find((c) => c.id === process.celula_id)?.name ?? null;
   const updateStatus = useUpdateProcessStatus();
   const moveStage = useMoveCandidateStage();
@@ -198,6 +201,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const [stagesOpen, setStagesOpen] = useState(false);
   const [statesOpen, setStatesOpen] = useState(false);
   const [criteriaOpen, setCriteriaOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -254,6 +258,9 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         <Button size="sm" variant="outline" onClick={() => setCriteriaOpen(true)}>
           <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Rúbrica
         </Button>
+        <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
+          <Mail className="mr-1.5 h-3.5 w-3.5" /> Plantillas
+        </Button>
         <Button size="sm" onClick={() => setAddOpen(true)}>
           <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Candidato
         </Button>
@@ -295,11 +302,14 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
       <StageManagerDialog open={stagesOpen} onOpenChange={setStagesOpen} processId={process.id} stages={stages} />
       <StateManagerDialog open={statesOpen} onOpenChange={setStatesOpen} processId={process.id} states={states} />
       <CriteriaManagerDialog open={criteriaOpen} onOpenChange={setCriteriaOpen} processId={process.id} criteria={criteria} />
+      <EmailTemplateManagerDialog open={templatesOpen} onOpenChange={setTemplatesOpen} />
       <CandidateDetailDialog
         candidate={detailLive}
         stages={stages}
         states={states}
         criteria={criteria}
+        processTitle={process.title}
+        orgName={orgName}
         onOpenChange={(v) => !v && setDetail(null)}
       />
     </section>

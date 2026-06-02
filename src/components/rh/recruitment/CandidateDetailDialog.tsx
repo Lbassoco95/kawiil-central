@@ -29,6 +29,7 @@ import {
   STATE_COLOR_STYLE,
   SEMAPHORE_DOT,
   SEMAPHORE_TEXT,
+  renderTemplate,
   scoreSemaphore,
   weightedScore,
   type Candidate,
@@ -40,6 +41,7 @@ import {
 import {
   useCandidateActivities,
   useCandidateScores,
+  useEmailTemplates,
   useAddCandidateNote,
   useMoveCandidateStage,
   useSetCandidateState,
@@ -63,10 +65,12 @@ interface Props {
   stages: RecruitmentStage[];
   states: RecruitmentState[];
   criteria: RecruitmentCriterion[];
+  processTitle: string;
+  orgName: string;
   onOpenChange: (v: boolean) => void;
 }
 
-export function CandidateDetailDialog({ candidate, stages, states, criteria, onOpenChange }: Props) {
+export function CandidateDetailDialog({ candidate, stages, states, criteria, processTitle, orgName, onOpenChange }: Props) {
   const open = !!candidate;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -78,6 +82,8 @@ export function CandidateDetailDialog({ candidate, stages, states, criteria, onO
             stages={stages}
             states={states}
             criteria={criteria}
+            processTitle={processTitle}
+            orgName={orgName}
           />
         )}
       </DialogContent>
@@ -90,14 +96,19 @@ function CandidateDetailInner({
   stages,
   states,
   criteria,
+  processTitle,
+  orgName,
 }: {
   candidate: Candidate;
   stages: RecruitmentStage[];
   states: RecruitmentState[];
   criteria: RecruitmentCriterion[];
+  processTitle: string;
+  orgName: string;
 }) {
   const { data: activities = [] } = useCandidateActivities(candidate.id);
   const { data: scores = [] } = useCandidateScores(candidate.id);
+  const { data: templates = [] } = useEmailTemplates();
   const addNote = useAddCandidateNote();
   const moveStage = useMoveCandidateStage();
   const setState = useSetCandidateState();
@@ -128,6 +139,21 @@ function CandidateDetailInner({
   });
 
   const currentState = states.find((s) => s.id === candidate.state_id);
+  const currentStageName = stages.find((s) => s.id === candidate.stage_id)?.name ?? "";
+  const templateVars: Record<string, string> = {
+    nombre: candidate.full_name.split(" ")[0],
+    nombre_completo: candidate.full_name,
+    vacante: processTitle,
+    empresa: orgName,
+    fase: currentStageName,
+    correo: candidate.email ?? "",
+  };
+  function applyTemplate(id: string) {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    setSubject(renderTemplate(t.subject, templateVars));
+    setEmailBody(renderTemplate(t.body, templateVars));
+  }
   const scoreById = new Map(scores.map((s) => [s.criterion_id, s.score]));
   const avg = weightedScore(criteria, scores);
   const sem = scoreSemaphore(avg);
@@ -366,6 +392,14 @@ function CandidateDetailInner({
 
           {emailOpen && (
             <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+              {templates.length > 0 && (
+                <Select onValueChange={applyTemplate}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Usar plantilla…" /></SelectTrigger>
+                  <SelectContent>
+                    {templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
               <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Asunto" className="h-8 text-sm" />
               <Textarea value={emailBody} onChange={(e) => setEmailBody(e.target.value)} placeholder={`Hola ${candidate.full_name.split(" ")[0]},`} rows={5} className="text-sm" />
               <div className="flex justify-end">
