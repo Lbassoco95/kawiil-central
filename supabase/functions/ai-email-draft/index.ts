@@ -30,6 +30,7 @@ type RequestBody = {
   emailBody?: string;
   emailSubject?: string;
   targetLanguage?: string;
+  folderList?: string;
 };
 
 function formatContext(ctx: RequestBody["context"]): string {
@@ -209,6 +210,39 @@ ${instruction}`;
           JSON.stringify({ error: "Error al traducir", message: msg.slice(0, 500) }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
+      }
+    }
+
+    if (action === "suggest-folder") {
+      const emailSubject = (body.emailSubject || "").trim();
+      const emailBody = (body.emailBody || "").trim();
+      const folderList = (body.folderList || "").trim();
+      if (!folderList) {
+        return new Response(JSON.stringify({ folderId: null }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const userMessage = `Dado el siguiente correo electrónico, indica cuál carpeta es más apropiada para archivarlo.
+Asunto: ${emailSubject || "(sin asunto)"}
+Cuerpo (extracto): ${emailBody.slice(0, 600) || "(sin cuerpo)"}
+
+Lista de carpetas disponibles (formato: id|||nombre):
+${folderList}
+
+Responde ÚNICAMENTE con el id de la carpeta más apropiada (el texto antes de |||). No expliques nada más, solo el id exacto.`;
+
+      try {
+        const system = "Eres un asistente organizador de correo. Tu tarea es seleccionar la carpeta más apropiada para un correo dado. Responde solo con el ID de la carpeta.";
+        const raw = await callAnthropic(ANTHROPIC_API_KEY, system, userMessage, 128);
+        // Extract the folder ID: it's the text before "|||" if the AI included it, or just the raw text
+        const folderId = raw.split("|||")[0].trim().split("\n")[0].trim();
+        return new Response(JSON.stringify({ folderId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ folderId: null }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 

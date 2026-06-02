@@ -823,6 +823,8 @@ export function EmailView() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
   const [moveFolderSearch, setMoveFolderSearch] = useState("");
+  const [aiSuggestedFolderId, setAiSuggestedFolderId] = useState<string | null>(null);
+  const [aiSuggestingFolder, setAiSuggestingFolder] = useState(false);
   const [movePopoverCreateOpen, setMovePopoverCreateOpen] = useState(false);
   const [moveFolderCreateName, setMoveFolderCreateName] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
@@ -843,6 +845,9 @@ export function EmailView() {
   const [folderRailPickerQuery, setFolderRailPickerQuery] = useState("");
   /** Orden manual de carpetas por padre (localStorage); no se sincroniza con Outlook. */
   const [folderOrderByParent, setFolderOrderByParent] = useState<Record<string, string[]>>({});
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkMoveFolderSearch, setBulkMoveFolderSearch] = useState("");
   const [now, setNow] = useState<Date>(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -1579,6 +1584,41 @@ export function EmailView() {
     deleteEmail.mutate(emailId);
   }, [deleteEmail, allEmails, selectedEmailId, resetAction]);
 
+  const toggleBulkSelect = useCallback((emailId: string, e: { stopPropagation(): void }) => {
+    e.stopPropagation();
+    setBulkSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(emailId)) next.delete(emailId);
+      else next.add(emailId);
+      return next;
+    });
+  }, []);
+
+  const handleBulkArchive = useCallback(async () => {
+    const ids = [...bulkSelectedIds];
+    setBulkSelectedIds(new Set());
+    for (const id of ids) {
+      archiveEmail.mutate(id);
+    }
+    toast.success(`${ids.length} ${ids.length === 1 ? 'correo archivado' : 'correos archivados'}`);
+  }, [archiveEmail, bulkSelectedIds]);
+
+  const handleBulkMove = useCallback((destinationId: string) => {
+    const ids = [...bulkSelectedIds];
+    setBulkSelectedIds(new Set());
+    setBulkMoveOpen(false);
+    for (const id of ids) {
+      moveEmail.mutate({ messageId: id, destinationId });
+    }
+    toast.success(`${ids.length} ${ids.length === 1 ? 'correo movido' : 'correos movidos'}`);
+  }, [moveEmail, bulkSelectedIds]);
+
+  const handleBulkMarkRead = useCallback(async () => {
+    const ids = [...bulkSelectedIds];
+    for (const id of ids) markRead.mutate(id);
+    setBulkSelectedIds(new Set());
+  }, [markRead, bulkSelectedIds]);
+
   const closeDetailAiPanel = useCallback(() => {
     setDetailAiPanel(null);
     setDetailAiLoading(false);
@@ -1742,6 +1782,97 @@ export function EmailView() {
     resetAction,
   ]);
 
+  useEffect(() => {
+    if (!movePopoverOpen || !emailDetail || folders.length === 0) {
+      setAiSuggestedFolderId(null);
+      return;
+    }
+    const subject = (emailDetail as any)?.subject || "";
+    const bodyPlain = emailBodyToPlain((emailDetail as any)?.body?.content || "", (emailDetail as any)?.body?.contentType);
+    if (!subject && !bodyPlain) return;
+
+    setAiSuggestingFolder(true);
+    const folderList = folders
+      .filter((f: any) => f.displayName)
+      .map((f: any) => `${f.id}|||${getFolderLabel(f.displayName as string)}`)
+      .join("\n");
+
+    supabase.functions.invoke("ai-email-draft", {
+      body: {
+        action: "suggest-folder",
+        emailSubject: subject,
+        emailBody: bodyPlain.slice(0, 800),
+        folderList,
+      },
+    }).then(({ data, error }) => {
+      if (error || !data?.folderId) return;
+      setAiSuggestedFolderId(data.folderId as string);
+    }).catch(() => {}).finally(() => {
+      setAiSuggestingFolder(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movePopoverOpen]);
+
+  const handleAfterSendTemplate = useCallback(async (info: { templateCategory?: string; clientId?: string; clientName?: string }) => {
+    const declarationCategories = ["pagos_provisionales", "declaracion_ceros", "envio_anuales", "previos_provisionales", "isn_imss", "envio_nominas"];
+    if (!info.templateCategory || !declarationCategories.includes(info.templateCategory)) return;
+    if (!info.clientId) return;
+
+    try {
+      const { data: projects } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("client_id", info.clientId);
+
+      if (!projects?.length) return;
+
+      const now = new Date();
+      for (const project of projects) {
+        const { data: period } = await supabase
+          .from("accounting_periods")
+          .select("id, steps")
+          .eq("project_id", project.id)
+          .eq("year", now.getFullYear())
+          .eq("month", now.getMonth() + 1)
+          .maybeSingle();
+
+        if (!period) continue;
+
+        const steps = period.steps as Array<{ key: string; completed: boolean; label: string }>;
+        const step = steps.find((s) => s.key === "envio_acuses");
+        if (!step || step.completed) continue;
+
+        toast.success(
+          `Plantilla enviada a ${info.clientName || "cliente"}. ¿Marcar "${step.label}" como completado?`,
+          {
+            action: {
+              label: "Marcar completo",
+              onClick: async () => {
+                const updatedSteps = steps.map((s) =>
+                  s.key === "envio_acuses"
+                    ? { ...s, completed: true, completed_at: new Date().toISOString(), completed_by: user?.id, step_status: "completado" }
+                    : s,
+                );
+                const { error } = await supabase
+                  .from("accounting_periods")
+                  .update({ steps: updatedSteps as any })
+                  .eq("id", period.id);
+                if (!error) {
+                  queryClient.invalidateQueries({ queryKey: ["accounting-periods", project.id] });
+                  toast.success("Paso marcado como completado");
+                }
+              },
+            },
+            duration: 10000,
+          },
+        );
+        break;
+      }
+    } catch {
+      // silent fail - no interrumpir el flujo de correo
+    }
+  }, [user?.id, queryClient]);
+
   const isSending =
     replyEmail.isPending ||
     forwardEmail.isPending ||
@@ -1799,6 +1930,7 @@ export function EmailView() {
       setSelectedFolderId(folder.id);
       setSelectedEmailId(null);
       resetAction();
+      setBulkSelectedIds(new Set());
       if (isMobile) setShowFolders(false);
     };
     return { Icon, label, isActive, folderBadge, dragHandlers, onSelect };
@@ -1808,6 +1940,7 @@ export function EmailView() {
     setSelectedFolderId(folder.id);
     setSelectedEmailId(null);
     resetAction();
+    setBulkSelectedIds(new Set());
     setFolderRailPickerOpen(false);
     setFolderRailPickerQuery("");
     if (isMobile) setShowFolders(false);
@@ -2337,6 +2470,101 @@ export function EmailView() {
           </div>
         </div>
 
+        {/* Barra de acciones masivas — solo visible cuando hay correos seleccionados */}
+        {bulkSelectedIds.size > 0 && (
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/20 bg-primary/5 px-3 py-1.5">
+            <span className="text-xs font-medium text-primary tabular-nums">
+              {bulkSelectedIds.size} {bulkSelectedIds.size === 1 ? "seleccionado" : "seleccionados"}
+            </span>
+            <div className="flex-1" />
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 gap-1 text-xs"
+                    onClick={() => void handleBulkArchive()}
+                    disabled={archiveEmail.isPending}
+                  >
+                    <Archive className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Archivar</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">Archivar seleccionados</TooltipContent>
+              </Tooltip>
+              <Popover open={bulkMoveOpen} onOpenChange={setBulkMoveOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-xs">
+                    <FolderInput className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Mover a</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" side="bottom" sideOffset={4} className="w-64 p-2 space-y-1">
+                  <p className="px-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                    Mover {bulkSelectedIds.size} correo{bulkSelectedIds.size > 1 ? "s" : ""} a
+                  </p>
+                  <Input
+                    value={bulkMoveFolderSearch}
+                    onChange={(e) => setBulkMoveFolderSearch(e.target.value)}
+                    placeholder="Buscar carpeta…"
+                    className="h-8 text-xs mb-1"
+                    autoFocus
+                  />
+                  <div className="max-h-52 overflow-y-auto space-y-0.5">
+                    {folders
+                      .filter((f: any) => {
+                        if (!bulkMoveFolderSearch.trim()) return true;
+                        return getFolderLabel(String(f.displayName || "")).toLowerCase().includes(bulkMoveFolderSearch.toLowerCase());
+                      })
+                      .map((f: any) => {
+                        const FIcon = getFolderIcon(String(f.displayName || ""));
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent transition-colors"
+                            onClick={() => handleBulkMove(f.id)}
+                          >
+                            <FIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            <span className="min-w-0 truncate">{getFolderLabel(String(f.displayName || ""))}</span>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 gap-1 text-xs"
+                    onClick={() => void handleBulkMarkRead()}
+                  >
+                    <MailOpen className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Leídos</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">Marcar como leídos</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-muted-foreground"
+                    onClick={() => setBulkSelectedIds(new Set())}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">Deseleccionar todo</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
+
         {/* Lista con scroll + pie fijo para «más correos» (siempre visible) */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <ScrollArea className="min-h-0 min-w-0 flex-1 px-0" ref={listRef}>
@@ -2417,21 +2645,43 @@ export function EmailView() {
                     onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
                       "group flex min-w-0 w-full max-w-full cursor-pointer transition-colors border-b border-border/40 px-4 py-2.5",
-                      isActive && "bg-accent border-l-2 border-l-blue-500",
-                      unread && !isActive && "bg-blue-50/50 dark:bg-blue-950/20",
-                      !isActive && "hover:bg-muted/50",
+                      isActive && !bulkSelectedIds.has(email.id) && "bg-accent border-l-2 border-l-blue-500",
+                      unread && !isActive && !bulkSelectedIds.has(email.id) && "bg-blue-50/50 dark:bg-blue-950/20",
+                      !isActive && !bulkSelectedIds.has(email.id) && "hover:bg-muted/50",
+                      bulkSelectedIds.has(email.id) && "bg-primary/8 border-l-2 border-l-primary",
                     )}
-                    onClick={() => handleOpenEmail(email)}
+                    onClick={() => bulkSelectedIds.size > 0 ? toggleBulkSelect(email.id, { stopPropagation: () => {} } as any) : handleOpenEmail(email)}
                   >
                     <div className="flex gap-2.5 min-w-0 flex-1">
                       <div className="flex items-center gap-2 shrink-0 self-start">
+                        {/* Unread dot + checkbox — el checkbox aparece al hover o cuando hay selección activa */}
                         <div
-                          className={cn(
-                            "w-2 h-2 rounded-full shrink-0",
-                            unread ? "bg-blue-500" : "bg-transparent",
-                          )}
-                          aria-hidden
-                        />
+                          className="relative flex h-5 w-5 shrink-0 items-center justify-center"
+                          onClick={(e) => toggleBulkSelect(email.id, e)}
+                        >
+                          <div
+                            className={cn(
+                              "absolute inset-0 flex items-center justify-center rounded border transition-all",
+                              bulkSelectedIds.has(email.id)
+                                ? "border-primary bg-primary opacity-100"
+                                : "border-border/70 bg-background opacity-0 group-hover:opacity-100",
+                              bulkSelectedIds.size > 0 && "opacity-100",
+                            )}
+                          >
+                            {bulkSelectedIds.has(email.id) && (
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            )}
+                          </div>
+                          <div
+                            className={cn(
+                              "h-2 w-2 rounded-full transition-opacity",
+                              unread ? "bg-blue-500" : "bg-transparent",
+                              "group-hover:opacity-0",
+                              (bulkSelectedIds.size > 0 || bulkSelectedIds.has(email.id)) && "opacity-0",
+                            )}
+                            aria-hidden
+                          />
+                        </div>
                         <div
                           className="h-8 w-8 rounded-full flex items-center justify-center text-white text-[11px] font-semibold shrink-0 shadow-sm ring-1 ring-black/5 dark:ring-white/5"
                           style={{ background: getAvatarGradient(senderEmail, senderName) }}
@@ -2890,6 +3140,43 @@ export function EmailView() {
                     </div>
                     <ScrollArea className="max-h-72">
                       <div className="flex flex-col gap-0.5 p-2 pr-2">
+                        {/* Sugerencia de IA */}
+                        {(aiSuggestingFolder || aiSuggestedFolderId) && (
+                          <div className="mb-1 pb-1.5 border-b border-border/40">
+                            <p className="flex items-center gap-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                              <Sparkles className="h-3 w-3 text-blue-500" />
+                              Sugerida por IA
+                            </p>
+                            {aiSuggestingFolder ? (
+                              <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Analizando correo…
+                              </div>
+                            ) : aiSuggestedFolderId && folderById.get(aiSuggestedFolderId) ? (
+                              <button
+                                type="button"
+                                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors bg-blue-50/60 ring-1 ring-blue-200/60 hover:bg-blue-100/60 dark:bg-blue-950/20 dark:ring-blue-900/40 dark:hover:bg-blue-950/40"
+                                onClick={() => {
+                                  if (selectedEmailId) handleMoveEmail(selectedEmailId, aiSuggestedFolderId);
+                                }}
+                              >
+                                {(() => {
+                                  const sf = folderById.get(aiSuggestedFolderId)!;
+                                  const SIcon = getFolderIcon(String(sf.displayName || ""));
+                                  return (
+                                    <>
+                                      <SIcon className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                                      <span className="min-w-0 flex-1 truncate font-medium text-blue-800 dark:text-blue-200">
+                                        {getFolderLabel(String(sf.displayName || ""))}
+                                      </span>
+                                      <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-blue-400" />
+                                    </>
+                                  );
+                                })()}
+                              </button>
+                            ) : null}
+                          </div>
+                        )}
                         {foldersForMoveListFiltered.length === 0 ? (
                           <div className="space-y-2 px-1 py-2">
                             <p className="text-center text-xs text-muted-foreground">
@@ -3446,7 +3733,7 @@ export function EmailView() {
           receiptsDisabled={!draftId}
         />
       )}
-      <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} />
+      <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} onAfterSend={handleAfterSendTemplate} />
     </>
   );
 }
