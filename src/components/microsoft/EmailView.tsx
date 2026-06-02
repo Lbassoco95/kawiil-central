@@ -1637,6 +1637,13 @@ export function EmailView() {
     setBulkSelectedIds(new Set());
   }, [markRead, bulkSelectedIds]);
 
+  const handleBulkDelete = useCallback(() => {
+    const ids = [...bulkSelectedIds];
+    setBulkSelectedIds(new Set());
+    for (const id of ids) deleteEmail.mutate(id);
+    toast.success(`${ids.length} ${ids.length === 1 ? "correo eliminado" : "correos eliminados"}`);
+  }, [deleteEmail, bulkSelectedIds]);
+
   const closeDetailAiPanel = useCallback(() => {
     setDetailAiPanel(null);
     setDetailAiLoading(false);
@@ -2160,7 +2167,7 @@ export function EmailView() {
                   </Tooltip>
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
-                  <div className="flex flex-col items-center gap-0.5 py-1 pl-0.5 pr-1">
+                  <div className="flex flex-col items-center gap-0.5 py-1 px-1">
                     {orderedFolderRoots.map((folder: any) => {
                       const { Icon, label, folderBadge, dragHandlers, onSelect } = folderRow(folder);
                       const railActive = folderRailRootIsActive(folder.id, selectedFolderId, folderById);
@@ -2168,10 +2175,11 @@ export function EmailView() {
                       return (
                         <Tooltip key={folder.id}>
                           <TooltipTrigger asChild>
+                            <div className="relative">
                             <button
                               type="button"
                               className={cn(
-                                "relative flex h-10 w-10 shrink-0 items-center justify-center overflow-visible rounded-md transition-colors hover:bg-accent/60",
+                                "flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-accent/60",
                                 railActive && "bg-accent text-accent-foreground ring-1 ring-primary",
                                 dragOverFolderId === folder.id && "bg-primary/20 ring-1 ring-primary",
                               )}
@@ -2179,12 +2187,13 @@ export function EmailView() {
                               {...dragHandlers}
                             >
                               <Icon className="h-4 w-4 text-muted-foreground" />
+                            </button>
                               {folderBadge != null && folderBadge > 0 && (
-                                <span className="absolute right-0 top-0 flex h-4 min-w-[1.125rem] translate-x-0.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold tabular-nums text-primary-foreground">
-                                  {folderBadge > 9 ? "9+" : folderBadge}
+                                <span className="pointer-events-none absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-bold tabular-nums text-primary-foreground z-10">
+                                  {folderBadge > 99 ? "99+" : folderBadge > 9 ? "9+" : folderBadge}
                                 </span>
                               )}
-                            </button>
+                            </div>
                           </TooltipTrigger>
                           <TooltipContent side="right" className="max-w-[14rem]">
                             <span className="block font-medium">{label}</span>
@@ -2405,13 +2414,9 @@ export function EmailView() {
           "relative z-[2] flex min-h-0 flex-col overflow-hidden border-r border-border bg-background transition-all duration-200 ease-out",
           isMobile
             ? "min-w-0 flex-1"
-            : cn(
-                listPaneCollapsed && selectedEmailId
-                  ? "pointer-events-none w-0 min-w-0 shrink-0 overflow-hidden border-0 p-0 opacity-0"
-                  : selectedEmailId
-                    ? "w-[280px] shrink-0"
-                    : "min-w-[22rem] flex-[0_1_min(44rem,52vw)]",
-              ),
+            : selectedEmailId
+              ? "pointer-events-none w-0 min-w-0 shrink-0 overflow-hidden border-0 p-0 opacity-0"
+              : "min-w-[22rem] flex-[0_1_min(44rem,52vw)]",
           selectedEmailId && isMobile && "hidden",
         )}
       >
@@ -2524,6 +2529,16 @@ export function EmailView() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent className="text-xs">Marcar como leídos</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm"
+                      className="h-6 px-1.5 gap-1 text-[11px] shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleBulkDelete()}>
+                      <Trash2 className="h-3 w-3" />Eliminar
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">Eliminar seleccionados</TooltipContent>
                 </Tooltip>
                 <button type="button" onClick={() => setBulkSelectedIds(new Set())}
                   className="ml-auto p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted shrink-0">
@@ -2905,22 +2920,19 @@ export function EmailView() {
             data-email-layout={EMAIL_VIEW_LAYOUT_VERSION}
           >
             {/* Detail header */}
-            <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-border/50 shrink-0 bg-background/80 backdrop-blur-sm shadow-sm">
-              {(isMobile || (!isMobile && listPaneCollapsed)) && (
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  {!isMobile && listPaneCollapsed && (
-                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setListPaneCollapsed(false)}>
-                      <List className="h-3.5 w-3.5" />
-                      Mostrar lista
-                    </Button>
-                  )}
-                  {isMobile && (
-                    <Button variant="ghost" size="sm" className="-ml-2 text-xs" onClick={() => setSelectedEmailId(null)}>
-                      <ChevronRight className="mr-1 h-3.5 w-3.5 rotate-180" /> Volver
-                    </Button>
-                  )}
-                </div>
-              )}
+            <div className="px-3 sm:px-4 py-2 border-b border-border/50 shrink-0 bg-background/80 backdrop-blur-sm shadow-sm">
+              {/* Back to list — always visible */}
+              <div className="mb-1.5 flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-1.5 h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setSelectedEmailId(null)}
+                >
+                  <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                  Lista
+                </Button>
+              </div>
               <div className="flex items-start justify-between gap-3 mb-1">
                 <h2
                   className="text-base font-semibold text-foreground leading-tight line-clamp-2 break-words flex-1 min-w-0"
