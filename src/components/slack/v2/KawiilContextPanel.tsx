@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -71,6 +71,14 @@ export function KawiilContextPanel({
   const [tab, setTab] = useState<TabId>("tasks");
   const { user } = useAuth();
 
+  // Retrasa la carga de miembros 3s para no competir con conversations.history
+  const [membersChannelId, setMembersChannelId] = useState<string | undefined>();
+  useEffect(() => {
+    if (!channelId) { setMembersChannelId(undefined); return; }
+    const t = setTimeout(() => setMembersChannelId(channelId), 3_000);
+    return () => clearTimeout(t);
+  }, [channelId]);
+
   // Tareas pendientes del usuario
   const tasksQuery = useQuery({
     queryKey: ["context-panel-tasks", user?.id],
@@ -89,20 +97,19 @@ export function KawiilContextPanel({
     staleTime: 60_000,
   });
 
-  // Miembros del canal (solo DMs y grupos pequeños)
-  const isSmallConv = !!(currentConv?.is_im || currentConv?.is_mpim || currentConv?.is_private);
+  // Miembros del canal — carga diferida 3s para no bloquear el historial
   const membersQuery = useQuery({
-    queryKey: ["slack-chan-members", channelId],
+    queryKey: ["slack-chan-members", membersChannelId],
     queryFn: async () => {
       const d = await invokeSlackApi<{ ok: boolean; members: string[] }>(
-        { action: "conversations.members", channel: channelId },
+        { action: "conversations.members", channel: membersChannelId },
       );
       return d.ok ? d.members : [];
     },
-    enabled: !!channelId && isSmallConv,
+    enabled: !!membersChannelId,
     staleTime: 5 * 60_000,
   });
-  const memberIds = membersQuery.data ?? [];
+  const memberIds = (membersQuery.data ?? []).slice(0, 50);
 
   // Perfiles de miembros (cae en el userMap global si ya se cargaron)
   const memberProfilesQuery = useSlackUserProfiles(memberIds);
@@ -318,7 +325,7 @@ export function KawiilContextPanel({
 
               {/* Canal público/privado */}
               {!currentConv.is_im && !currentConv.is_mpim && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, color: "hsl(var(--foreground))" }}>
                     <span style={{ fontSize: 16 }}>
                       {currentConv.is_private ? "🔒" : "#"}
@@ -363,6 +370,35 @@ export function KawiilContextPanel({
                     <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", lineHeight: 1.4, margin: 0, borderLeft: "2px solid hsl(var(--border))", paddingLeft: 6 }}>
                       {(currentConv as any).purpose.value}
                     </p>
+                  )}
+
+                  {/* Lista de participantes */}
+                  {membersQuery.isLoading && !membersQuery.data && (
+                    <p style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", margin: 0 }}>Cargando participantes…</p>
+                  )}
+                  {memberIds.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 2 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "hsl(var(--muted-foreground))", marginBottom: 2 }}>
+                        Participantes
+                      </div>
+                      {memberIds.map((uid) => {
+                        const p = memberProfiles[uid];
+                        const name = p?.display_name || p?.real_name || uid;
+                        return (
+                          <div key={uid} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <MemberAvatar uid={uid} profile={p} size={26} />
+                            <span style={{ fontSize: 12, color: "hsl(var(--foreground))", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                              {name}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {memberIds.length > 20 && (
+                        <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>
+                          y {memberIds.length - 20} más…
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
