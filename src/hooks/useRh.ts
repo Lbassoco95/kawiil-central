@@ -687,7 +687,11 @@ export function useDecideAbsenceRequest() {
   });
 }
 
-/** Solicitudes aprobables por un G4 (todas las de la org salvo las propias). */
+/**
+ * Solicitudes que me toca aprobar: las asignadas a mí (responsable de la célula
+ * del solicitante o aprobador por defecto) más las que quedaron sin asignar
+ * (red de seguridad para G4). Nunca las propias.
+ */
 export function useApprovableAbsenceRequests() {
   const { user } = useAuth();
   return useQuery({
@@ -697,6 +701,7 @@ export function useApprovableAbsenceRequests() {
         .from("rh_absence_requests")
         .select("*")
         .neq("user_id", user!.id)
+        .or(`assigned_approver_user_id.eq.${user!.id},assigned_approver_user_id.is.null`)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data as RhAbsenceRequest[]) ?? [];

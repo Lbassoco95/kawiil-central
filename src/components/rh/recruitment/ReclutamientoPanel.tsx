@@ -38,6 +38,7 @@ import {
   useCandidates,
   useCreateCandidate,
 } from "@/hooks/useRecruitment";
+import { useCelulas } from "@/hooks/useCatalogs";
 import { CandidateDetailDialog } from "./CandidateDetailDialog";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
@@ -54,6 +55,8 @@ export function ReclutamientoPanel() {
 /* ---------------- Lista de vacantes ---------------- */
 function ProcessList({ onOpen }: { onOpen: (p: RecruitmentProcess) => void }) {
   const { data: processes = [], isLoading } = useRecruitmentProcesses();
+  const { data: celulas = [] } = useCelulas();
+  const celulaName = (id: string | null) => celulas.find((c) => c.id === id)?.name ?? "Sin célula";
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
@@ -91,7 +94,7 @@ function ProcessList({ onOpen }: { onOpen: (p: RecruitmentProcess) => void }) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-muted-foreground">
-                  {p.area || "Sin área"}
+                  {celulaName(p.celula_id)}
                 </CardContent>
               </Card>
             </button>
@@ -106,13 +109,14 @@ function ProcessList({ onOpen }: { onOpen: (p: RecruitmentProcess) => void }) {
 
 function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const create = useCreateProcess();
+  const { data: celulas = [] } = useCelulas();
   const [title, setTitle] = useState("");
-  const [area, setArea] = useState("");
+  const [celulaId, setCelulaId] = useState("");
   const [description, setDescription] = useState("");
 
   function reset() {
     setTitle("");
-    setArea("");
+    setCelulaId("");
     setDescription("");
   }
 
@@ -126,8 +130,15 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Contador junior" />
           </div>
           <div className="space-y-1.5">
-            <Label>Área (opcional)</Label>
-            <Input value={area} onChange={(e) => setArea(e.target.value)} placeholder="Contabilidad" />
+            <Label>Célula</Label>
+            <Select value={celulaId} onValueChange={setCelulaId}>
+              <SelectTrigger><SelectValue placeholder="Selecciona la célula" /></SelectTrigger>
+              <SelectContent>
+                {celulas.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Descripción (opcional)</Label>
@@ -137,9 +148,9 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button
-            disabled={!title.trim() || create.isPending}
+            disabled={!title.trim() || !celulaId || create.isPending}
             onClick={() => create.mutate(
-              { title: title.trim(), area: area.trim() || null, description: description.trim() || null },
+              { title: title.trim(), celula_id: celulaId, description: description.trim() || null },
               { onSuccess: () => { onOpenChange(false); reset(); } },
             )}
           >
@@ -156,6 +167,8 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack: () => void }) {
   const { data: stages = [] } = useProcessStages(process.id);
   const { data: candidates = [], isLoading } = useCandidates(process.id);
+  const { data: celulas = [] } = useCelulas();
+  const celulaName = celulas.find((c) => c.id === process.celula_id)?.name ?? null;
   const updateStatus = useUpdateProcessStatus();
   const [addOpen, setAddOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
@@ -185,7 +198,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         </Button>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-base font-semibold">{process.title}</h3>
-          {process.area && <p className="text-xs text-muted-foreground">{process.area}</p>}
+          {celulaName && <p className="text-xs text-muted-foreground">{celulaName}</p>}
         </div>
         <Select value={process.status} onValueChange={(v) => updateStatus.mutate({ id: process.id, status: v as RhProcessStatus })}>
           <SelectTrigger className="h-8 w-[140px]"><SelectValue /></SelectTrigger>
