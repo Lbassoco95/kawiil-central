@@ -286,11 +286,16 @@ export function useJornada() {
     onError: (e: Error) => toast.error(e.message || "No se pudo registrar el evento"),
   });
 
-  const summary = summarizeJornada(events);
+  // Acota los eventos a la jornada (sesión) actual: si hoy se inició una
+  // nueva jornada tras cerrar la anterior, solo cuenta la más reciente.
+  const sessionEvents = session
+    ? events.filter((e) => e.attendance_id === session.id)
+    : [];
+  const summary = summarizeJornada(sessionEvents);
 
   return {
     session: session ?? null,
-    events,
+    events: sessionEvents,
     schedule: schedule ?? null,
     summary,
     isPending: mutation.isPending,

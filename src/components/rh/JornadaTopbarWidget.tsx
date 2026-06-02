@@ -34,37 +34,37 @@ export function JornadaTopbarWidget() {
   const { schedule, summary, isPending, act } = useJornada();
   const plannedMode = plannedModeForToday(schedule);
 
-  // Sin iniciar: botón "Iniciar" con menú para elegir modalidad.
-  if (summary.state === "none") {
+  // Sin iniciar o jornada cerrada: botón "Iniciar" con menú para elegir modalidad.
+  if (summary.state === "none" || summary.state === "done") {
+    const done = summary.state === "done";
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" className="h-8 gap-1.5" disabled={isPending}>
-            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">Iniciar jornada</span>
-            <ChevronDown className="h-3 w-3 opacity-70" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuLabel>Iniciar desde…</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {WORK_MODES.map((mode) => (
-            <DropdownMenuItem key={mode} onClick={() => act({ type: "check_in", workMode: mode })}>
-              <span className="mr-2">{WORK_MODE_EMOJI[mode]}</span>
-              {WORK_MODE_LABEL[mode]}
-              {plannedMode === mode && <span className="ml-auto text-[10px] text-muted-foreground">turno</span>}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  }
-
-  if (summary.state === "done") {
-    return (
-      <div className="hidden items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground sm:flex">
-        <Clock className="h-3.5 w-3.5" />
-        {formatDuration(summary.workedMs)} hoy
+      <div className="flex items-center gap-2">
+        {done && (
+          <span className="hidden items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground sm:flex">
+            <Clock className="h-3.5 w-3.5" />
+            {formatDuration(summary.workedMs)} hoy
+          </span>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" className="h-8 gap-1.5" disabled={isPending}>
+              {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{done ? "Iniciar otra" : "Iniciar jornada"}</span>
+              <ChevronDown className="h-3 w-3 opacity-70" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuLabel>Iniciar desde…</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {WORK_MODES.map((mode) => (
+              <DropdownMenuItem key={mode} onClick={() => act({ type: "check_in", workMode: mode })}>
+                <span className="mr-2">{WORK_MODE_EMOJI[mode]}</span>
+                {WORK_MODE_LABEL[mode]}
+                {plannedMode === mode && <span className="ml-auto text-[10px] text-muted-foreground">turno</span>}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   }

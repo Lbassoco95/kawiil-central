@@ -110,11 +110,21 @@ export function JornadaCard() {
           </p>
         )}
 
-        {/* ---- Estado: sin iniciar ---- */}
-        {summary.state === "none" && (
+        {/* ---- Estado: sin iniciar o jornada cerrada (permite iniciar otra) ---- */}
+        {(summary.state === "none" || summary.state === "done") && (
           <>
+            {summary.state === "done" && session && (
+              <div className="space-y-2">
+                <Compliance session={session} />
+                <p className="text-center text-sm text-muted-foreground">
+                  Trabajaste {formatDuration(summary.workedMs)} en esta jornada.
+                </p>
+              </div>
+            )}
             <div>
-              <p className="mb-2 text-sm font-medium">¿Desde dónde trabajas hoy?</p>
+              <p className="mb-2 text-sm font-medium">
+                {summary.state === "done" ? "¿Inicias otra jornada?" : "¿Desde dónde trabajas hoy?"}
+              </p>
               <div className="grid grid-cols-3 gap-2">
                 {WORK_MODES.map((mode) => {
                   const active = selectedMode === mode;
@@ -151,7 +161,7 @@ export function JornadaCard() {
               onClick={() => act({ type: "check_in", workMode: selectedMode })}
             >
               {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
-              Iniciar jornada
+              {summary.state === "done" ? "Iniciar otra jornada" : "Iniciar jornada"}
             </Button>
           </>
         )}
@@ -212,15 +222,6 @@ export function JornadaCard() {
           </Button>
         )}
 
-        {/* ---- Estado: cerrada ---- */}
-        {summary.state === "done" && session && (
-          <div className="space-y-2">
-            <Compliance session={session} />
-            <p className="text-center text-sm text-muted-foreground">
-              Trabajaste {formatDuration(summary.workedMs)} hoy. ¡Buen descanso!
-            </p>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
