@@ -27,7 +27,10 @@ import {
   X,
   Wand2,
   Wand,
+  CalendarClock,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -111,6 +114,9 @@ export function ComposeEmailDialog({
   const [keepZips, setKeepZips] = useState(true);
   const [requestDeliveryReceipt, setRequestDeliveryReceipt] = useState(false);
   const [requestReadReceipt, setRequestReadReceipt] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState<Date | null>(null);
+  const [scheduleDateInput, setScheduleDateInput] = useState("");
+  const [schedulePickerOpen, setSchedulePickerOpen] = useState(false);
   const [appliedTemplateInfo, setAppliedTemplateInfo] = useState<{
     templateCategory?: string;
     clientId?: string;
@@ -121,6 +127,7 @@ export function ComposeEmailDialog({
   const editorRef = useRef<RichTextEditorHandle>(null);
   const signatureAppliedRef = useRef(false);
   const directorySyncRef = useRef(false);
+  const { user } = useAuth();
   const sendEmail = useSendNewEmail();
   const { data: orgUsers = [] } = useOrgUsers();
   const { isConnected } = useMicrosoftConnection();
@@ -182,6 +189,9 @@ export function ComposeEmailDialog({
       setKeepZips(true);
       setRequestDeliveryReceipt(false);
       setRequestReadReceipt(false);
+      setScheduleDate(null);
+      setScheduleDateInput("");
+      setSchedulePickerOpen(false);
       setAppliedTemplateInfo(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -288,6 +298,39 @@ export function ComposeEmailDialog({
       onAfterSend(appliedTemplateInfo);
     }
     setAppliedTemplateInfo(null);
+  };
+
+  const handleScheduleSend = async (when: Date) => {
+    const toList = parseRecipients(to);
+    if (!toList.length) { toast.error("Añade al menos un destinatario"); return; }
+    if (!user) { toast.error("No autenticado"); return; }
+    let attachments: ComposerAttachment[] = [];
+    if (pendingFiles.length > 0) {
+      try { attachments = await filesToComposerAttachments(pendingFiles); }
+      catch (error) { toast.error(error instanceof Error ? error.message : "Error con adjuntos"); return; }
+    }
+    try {
+      const { error } = await supabase.from("scheduled_mail_jobs").insert({
+        user_id: user.id,
+        scheduled_at: when.toISOString(),
+        kind: "send_new",
+        payload: {
+          body_html: bodyRef.current || "<p></p>",
+          subject: subject || "(Sin asunto)",
+          is_delivery_receipt_requested: requestDeliveryReceipt,
+          is_read_receipt_requested: requestReadReceipt,
+          to_recipients: toList.map(e => ({ emailAddress: { address: e } })),
+          cc_recipients: parseRecipients(cc).map(e => ({ emailAddress: { address: e } })),
+          bcc_recipients: parseRecipients(bcc).map(e => ({ emailAddress: { address: e } })),
+          ...(attachments.length ? { attachments } : {}),
+        },
+      });
+      if (error) throw error;
+      toast.success(`Correo programado para ${when.toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}`);
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Error al programar envío");
+    }
   };
 
   const runImproveBody = useCallback(
@@ -426,7 +469,7 @@ export function ComposeEmailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[92vh] w-[min(100vw-1.5rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl rounded-2xl border-sky-200/40 dark:border-sky-900/40 [&>button.absolute]:hidden"
+        className="flex max-h-[92vh] w-[min(100vw-1rem,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl rounded-xl border-border/60 [&>button.absolute]:hidden"
       >
         <header
           className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 py-3 text-white"
@@ -763,31 +806,6 @@ export function ComposeEmailDialog({
                 toolbarEndSlot={iaToolbarButton}
               />
 
-              <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5 space-y-2 shrink-0">
-                <p className="text-[11px] font-medium text-muted-foreground">Confirmaciones (como en Outlook)</p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                    <Switch
-                      checked={requestDeliveryReceipt}
-                      onCheckedChange={setRequestDeliveryReceipt}
-                      aria-label="Solicitar confirmación de entrega"
-                    />
-                    <span>Solicitar confirmación de entrega (acuse de recibo)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-                    <Switch
-                      checked={requestReadReceipt}
-                      onCheckedChange={setRequestReadReceipt}
-                      aria-label="Solicitar confirmación de lectura"
-                    />
-                    <span>Solicitar confirmación de lectura</span>
-                  </label>
-                </div>
-                <p className="text-[10px] text-muted-foreground leading-snug">
-                  El servidor o el destinatario pueden no enviar confirmaciones; es el mismo comportamiento que en Outlook.
-                </p>
-              </div>
-
               <div className="space-y-2 shrink-0">
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
@@ -832,15 +850,35 @@ export function ComposeEmailDialog({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-3 sm:px-6">
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-muted-foreground">
-            Cancelar
-          </Button>
-          <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-4 py-2.5 sm:px-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-muted-foreground shrink-0">
+              Cancelar
+            </Button>
+            <label className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none shrink-0">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 rounded accent-primary"
+                checked={requestReadReceipt}
+                onChange={e => setRequestReadReceipt(e.target.checked)}
+              />
+              Acuse de lectura
+            </label>
+            <label className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none shrink-0">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 rounded accent-primary"
+                checked={requestDeliveryReceipt}
+                onChange={e => setRequestDeliveryReceipt(e.target.checked)}
+              />
+              Acuse de entrega
+            </label>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               type="button"
               size="sm"
-              className="gap-1.5 text-white shadow-sm hover:opacity-90 disabled:opacity-60"
+              className="gap-1.5 text-white shadow-sm hover:opacity-90 disabled:opacity-60 hidden sm:inline-flex"
               style={{ background: KAWIIL_AI_GRADIENT }}
               disabled={!!improveBusy || aiLoading}
               onClick={() => void runImproveBody("improve")}
@@ -853,14 +891,64 @@ export function ComposeEmailDialog({
               )}
               Mejorar con AI
             </Button>
-            <Button onClick={() => void handleSend()} disabled={sendEmail.isPending || !to.trim()}>
-              {sendEmail.isPending ? (
-                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4 mr-1.5" />
-              )}
-              Enviar
-            </Button>
+            <div className="flex items-center">
+              <Button
+                onClick={() => void handleSend()}
+                disabled={sendEmail.isPending || !to.trim()}
+                size="sm"
+                className="rounded-r-none"
+              >
+                {sendEmail.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1.5" />
+                )}
+                Enviar
+              </Button>
+              <DropdownMenu open={schedulePickerOpen} onOpenChange={setSchedulePickerOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="rounded-l-none border-l border-primary-foreground/20 px-2"
+                    disabled={sendEmail.isPending || !to.trim()}
+                    aria-label="Programar envío"
+                  >
+                    <CalendarClock className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  {[
+                    { label: "Esta tarde (17:00)", hours: 17, today: true },
+                    { label: "Mañana por la mañana (09:00)", hours: 9, today: false },
+                    { label: "Mañana al mediodía (13:00)", hours: 13, today: false },
+                  ].map(opt => {
+                    const d = new Date();
+                    if (!opt.today) d.setDate(d.getDate() + 1);
+                    d.setHours(opt.hours, 0, 0, 0);
+                    return (
+                      <DropdownMenuItem key={opt.label} onClick={() => { setSchedulePickerOpen(false); void handleScheduleSend(d); }}>
+                        <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                        {opt.label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSchedulePickerOpen(false);
+                      const input = window.prompt("Fecha y hora de envío (ej. 2026-06-05 09:00):");
+                      if (!input) return;
+                      const d = new Date(input);
+                      if (isNaN(d.getTime())) { toast.error("Fecha inválida"); return; }
+                      void handleScheduleSend(d);
+                    }}
+                  >
+                    <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                    Otra fecha y hora…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </DialogContent>
