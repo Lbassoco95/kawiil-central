@@ -2921,54 +2921,89 @@ export function EmailView() {
                   )}
                 </div>
               )}
-              <h2
-                className="text-lg font-semibold text-foreground leading-tight mb-3 line-clamp-2 break-words"
-                title={emailDetail.subject || "(sin asunto)"}
-              >
-                {emailDetail.subject || "(sin asunto)"}
-              </h2>
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:gap-3">
-                <div className="flex min-w-0 flex-1 items-start gap-3">
-                  <div className={cn(
-                    "h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0",
-                    getAvatarColor(emailDetail.from?.emailAddress?.address)
-                  )}>
-                    {getInitials(emailDetail.from?.emailAddress?.name, emailDetail.from?.emailAddress?.address)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{emailDetail.from?.emailAddress?.name}</span>
-                      <span className="text-xs text-muted-foreground hidden sm:inline">&lt;{emailDetail.from?.emailAddress?.address}&gt;</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      Para:{" "}
-                      {emailDetail.toRecipients?.map((r: any) => recipientToFieldDisplay(r)).filter(Boolean).join(", ") ||
-                        "—"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex w-full shrink-0 flex-col items-start gap-1.5 border-t border-border/40 pt-2 text-left lg:w-auto lg:border-0 lg:items-end lg:pt-0.5 lg:text-right">
-                  {import.meta.env.DEV && (
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/10 text-primary tracking-tight"
-                      title="Si no ves esta etiqueta, el navegador o Lovable están sirviendo un bundle antiguo."
-                    >
-                      {EMAIL_VIEW_LAYOUT_VERSION}
-                    </Badge>
-                  )}
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {emailDetail.receivedDateTime
-                      ? format(parseISO(emailDetail.receivedDateTime), "d MMM yyyy, HH:mm", { locale: es })
-                      : ""}
-                  </span>
-                </div>
+              <div className="flex items-start justify-between gap-3 mb-1">
+                <h2
+                  className="text-base font-semibold text-foreground leading-tight line-clamp-2 break-words flex-1 min-w-0"
+                  title={emailDetail.subject || "(sin asunto)"}
+                >
+                  {emailDetail.subject || "(sin asunto)"}
+                </h2>
+                <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 pt-0.5">
+                  {emailDetail.receivedDateTime
+                    ? format(parseISO(emailDetail.receivedDateTime), "d MMM yyyy, HH:mm", { locale: es })
+                    : ""}
+                </span>
               </div>
+
+              {/* Sender + recipients block */}
+              {(() => {
+                const toList = (emailDetail.toRecipients || []) as any[];
+                const ccList = (emailDetail.ccRecipients || []) as any[];
+                const bccList = (emailDetail.bccRecipients || []) as any[];
+                const hasExtra = ccList.length > 0 || bccList.length > 0;
+                return (
+                  <div className="flex items-start gap-2.5">
+                    <div className={cn(
+                      "h-9 w-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0 mt-0.5",
+                      getAvatarColor(emailDetail.from?.emailAddress?.address)
+                    )}>
+                      {getInitials(emailDetail.from?.emailAddress?.name, emailDetail.from?.emailAddress?.address)}
+                    </div>
+                    <div className="min-w-0 flex-1 text-xs">
+                      {/* De */}
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="text-muted-foreground/60 shrink-0 w-6">De</span>
+                        <span className="font-medium text-foreground">
+                          {emailDetail.from?.emailAddress?.name || emailDetail.from?.emailAddress?.address}
+                        </span>
+                        {emailDetail.from?.emailAddress?.name && (
+                          <span className="text-muted-foreground/70 truncate">
+                            &lt;{emailDetail.from?.emailAddress?.address}&gt;
+                          </span>
+                        )}
+                      </div>
+                      {/* Para */}
+                      {toList.length > 0 && (
+                        <div className="flex items-baseline gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-muted-foreground/60 shrink-0 w-6">Para</span>
+                          <span className="text-foreground/80 min-w-0">
+                            {toList.map((r: any) => recipientToFieldDisplay(r)).filter(Boolean).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      {/* CC */}
+                      {ccList.length > 0 && (
+                        <div className="flex items-baseline gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-muted-foreground/60 shrink-0 w-6">CC</span>
+                          <span className="text-foreground/80 min-w-0">
+                            {ccList.map((r: any) => recipientToFieldDisplay(r)).filter(Boolean).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      {/* BCC */}
+                      {bccList.length > 0 && (
+                        <div className="flex items-baseline gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-muted-foreground/60 shrink-0 w-6">CCO</span>
+                          <span className="text-foreground/80 min-w-0">
+                            {bccList.map((r: any) => recipientToFieldDisplay(r)).filter(Boolean).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {import.meta.env.DEV && (
+                <Badge variant="outline" className="mt-1 text-[10px] font-semibold px-2 py-0.5 border-primary/40 bg-primary/10 text-primary tracking-tight">
+                  {EMAIL_VIEW_LAYOUT_VERSION}
+                </Badge>
+              )}
             </div>
 
-            {/* Action bar: solo iconos + tooltips, sin scroll horizontal (flex-wrap) */}
+            {/* Action bar: una sola fila, scroll horizontal si no cabe */}
             <TooltipProvider delayDuration={200}>
-              <div className="flex flex-wrap items-center gap-1 px-2 sm:px-4 py-1.5 border-b border-border/50 shrink-0 bg-muted/20 min-w-0">
+              <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/50 shrink-0 bg-muted/20 overflow-x-auto scrollbar-none min-w-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -3274,10 +3309,7 @@ export function EmailView() {
                   </TooltipContent>
                 </Tooltip>
 
-                <div
-                  className="ml-0 mt-1 flex w-full shrink-0 flex-wrap items-center justify-end gap-0.5 sm:ml-auto sm:mt-0 sm:w-auto"
-                  aria-label="Acciones inteligentes"
-                >
+                <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1" aria-label="Acciones inteligentes">
                   {/* Kawiil AI panel toggle */}
                   <Tooltip>
                     <TooltipTrigger asChild>
