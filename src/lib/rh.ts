@@ -486,6 +486,12 @@ export const REQUEST_STATUS_LABEL: Record<RhRequestStatus, string> = {
   cancelled: "Cancelada",
 };
 
+/** Fecha local en formato YYYY-MM-DD. */
+export function ymd(date = new Date()): string {
+  const off = date.getTimezoneOffset();
+  return new Date(date.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
 export interface RhAbsenceRequest {
   id: string;
   organization_id: string;
@@ -502,6 +508,11 @@ export interface RhAbsenceRequest {
   decision_note: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** ¿La ausencia cubre la fecha dada (YYYY-MM-DD)? */
+export function absenceCoversDate(req: RhAbsenceRequest, dateYmd: string): boolean {
+  return req.start_date <= dateYmd && dateYmd <= req.end_date;
 }
 
 /** Duración legible entre check-in y check-out (o ahora). */
