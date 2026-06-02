@@ -1712,7 +1712,7 @@ export function useCreateMailRule() {
           combined.includes("permisos necesarios") ||
           combined.includes("insufficient")
         ) {
-          throw new Error("Permisos insuficientes. Para crear reglas reconecta tu cuenta de Microsoft: ve a Configuración → Integraciones y vuelve a conectar.");
+          throw new Error("Permisos insuficientes. Usa el botón \"Actualizar permisos\" en la barra superior del módulo de Correo para re-autorizar Microsoft.");
         }
         // Extract friendly message from JSON body (must parse OUTSIDE the try so the throw propagates)
         let friendlyMsg: string | null = null;
