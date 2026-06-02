@@ -153,6 +153,33 @@ export const SEMAPHORE_TEXT: Record<"green" | "amber" | "red" | "none", string> 
   none: "text-muted-foreground",
 };
 
+/** Plantillas de email (Fase C) */
+export interface EmailTemplate {
+  id: string;
+  organization_id: string;
+  name: string;
+  subject: string;
+  body: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Variables disponibles para las plantillas (clave → descripción de ayuda). */
+export const TEMPLATE_VARIABLES: { key: string; help: string }[] = [
+  { key: "{{nombre}}", help: "Primer nombre del candidato" },
+  { key: "{{nombre_completo}}", help: "Nombre completo" },
+  { key: "{{vacante}}", help: "Título de la vacante" },
+  { key: "{{empresa}}", help: "Nombre de la organización" },
+  { key: "{{fase}}", help: "Fase actual del candidato" },
+  { key: "{{correo}}", help: "Correo del candidato" },
+];
+
+/** Sustituye las variables {{clave}} por sus valores. Las desconocidas quedan vacías. */
+export function renderTemplate(text: string, vars: Record<string, string>): string {
+  return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => vars[key] ?? "");
+}
+
 export interface CandidateActivity {
   id: string;
   organization_id: string;
