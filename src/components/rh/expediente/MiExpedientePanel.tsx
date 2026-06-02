@@ -22,6 +22,7 @@ import {
   useDeleteEmployeeDocument,
   getExpedienteSignedUrl,
 } from "@/hooks/useExpediente";
+import { WelcomeChecklist } from "./WelcomeChecklist";
 import { toast } from "sonner";
 
 const EMPTY = {
@@ -93,6 +94,14 @@ export function MiExpedientePanel() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Lista de bienvenida */}
+      {user?.id && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Mi lista de bienvenida</CardTitle></CardHeader>
+          <CardContent><WelcomeChecklist userId={user.id} /></CardContent>
+        </Card>
+      )}
 
       {/* Datos fiscales y personales */}
       <Card>

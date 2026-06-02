@@ -18,6 +18,7 @@ import {
   useVerifyDocument,
   getExpedienteSignedUrl,
 } from "@/hooks/useExpediente";
+import { WelcomeChecklist } from "./WelcomeChecklist";
 
 interface Props {
   userId: string | null;
@@ -72,6 +73,12 @@ export function EmployeeExpedienteDialog({ userId, userName, onOpenChange }: Pro
           {EXPEDIENTE_DOC_TYPES.map((t) => (
             <VerifyRow key={t.key} label={t.label} doc={docByType.get(t.key)} />
           ))}
+        </div>
+
+        {/* Bienvenida */}
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Lista de bienvenida</p>
+          {userId && <WelcomeChecklist userId={userId} showStart />}
         </div>
       </DialogContent>
     </Dialog>
