@@ -1,5 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive, ClipboardList, BarChart3 } from "lucide-react";
+import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive, ClipboardList, BarChart3, LayoutDashboard } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCanAccessRecruitment } from "@/hooks/useRecruitment";
 import { ReclutamientoPanel } from "./recruitment/ReclutamientoPanel";
@@ -7,6 +7,7 @@ import { MiExpedientePanel } from "./expediente/MiExpedientePanel";
 import { ExpedientesEquipoPanel } from "./expediente/ExpedientesEquipoPanel";
 import { CuestionariosPanel } from "./cuestionarios/CuestionariosPanel";
 import { ResultadosRHPanel } from "./cuestionarios/ResultadosRHPanel";
+import { TableroRHPanel } from "./tablero/TableroRHPanel";
 import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { SolicitudesPanel } from "./SolicitudesPanel";
@@ -52,6 +53,10 @@ export function RecursosHumanosPanel() {
           </TabsTrigger>
           {isTransformador && (
             <>
+              <TabsTrigger value="tablero-rh">
+                <LayoutDashboard className="mr-1.5 h-4 w-4" />
+                Tablero RH
+              </TabsTrigger>
               <TabsTrigger value="equipo">
                 <Users className="mr-1.5 h-4 w-4" />
                 Equipo
@@ -105,6 +110,9 @@ export function RecursosHumanosPanel() {
 
         {isTransformador && (
           <>
+            <TabsContent value="tablero-rh" className="mt-5">
+              <TableroRHPanel />
+            </TabsContent>
             <TabsContent value="equipo" className="mt-5">
               <div className="grid gap-5">
                 <div className="grid gap-5 lg:grid-cols-2">

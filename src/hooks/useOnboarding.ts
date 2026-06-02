@@ -146,6 +146,19 @@ export function useStartOnboarding() {
   });
 }
 
+/** Todos los checklists de la org (G4) para el tablero. */
+export function useOnboardingOverview(enabled: boolean) {
+  return useQuery({
+    queryKey: ["rh-onboarding-overview"],
+    queryFn: async (): Promise<OnboardingItem[]> => {
+      const { data, error } = await db.from("rh_onboarding_items").select("*");
+      if (error) throw error;
+      return (data as OnboardingItem[]) ?? [];
+    },
+    enabled,
+  });
+}
+
 /* ---------------- Conversión candidato → colaborador ---------------- */
 export function useConvertCandidate() {
   const { user } = useAuth();

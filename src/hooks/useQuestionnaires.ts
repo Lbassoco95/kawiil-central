@@ -130,6 +130,19 @@ export function useResponseCount(questionnaireId: string | null, enabled: boolea
   });
 }
 
+/** Encabezados de respuestas de toda la org (G4): quién respondió qué. */
+export function useAllResponses(enabled: boolean) {
+  return useQuery({
+    queryKey: ["rh-all-responses"],
+    queryFn: async (): Promise<{ questionnaire_id: string; user_id: string }[]> => {
+      const { data, error } = await db.from("rh_survey_responses").select("questionnaire_id, user_id");
+      if (error) throw error;
+      return (data as { questionnaire_id: string; user_id: string }[]) ?? [];
+    },
+    enabled,
+  });
+}
+
 /* ---------------- Edición de cuestionarios (solo G4) ---------------- */
 export function useUpdateQuestionnaire() {
   const qc = useQueryClient();
