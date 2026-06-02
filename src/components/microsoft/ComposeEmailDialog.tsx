@@ -64,6 +64,8 @@ interface ComposeEmailDialogProps {
   defaultTemplateContext?: ComposeDefaultTemplateContext;
   /** Muestra el selector de plantillas del área contable. Por defecto true. */
   showAccountingTemplates?: boolean;
+  /** Callback fired after a successful send, with info about the applied template (if any). */
+  onAfterSend?: (info: { templateCategory?: string; clientId?: string; clientName?: string }) => void;
 }
 
 export function ComposeEmailDialog({
@@ -74,6 +76,7 @@ export function ComposeEmailDialog({
   initialBodyHtml,
   defaultTemplateContext,
   showAccountingTemplates = true,
+  onAfterSend,
 }: ComposeEmailDialogProps) {
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
@@ -92,6 +95,11 @@ export function ComposeEmailDialog({
   const [keepZips, setKeepZips] = useState(true);
   const [requestDeliveryReceipt, setRequestDeliveryReceipt] = useState(false);
   const [requestReadReceipt, setRequestReadReceipt] = useState(false);
+  const [appliedTemplateInfo, setAppliedTemplateInfo] = useState<{
+    templateCategory?: string;
+    clientId?: string;
+    clientName?: string;
+  } | null>(null);
   const lastInstructionRef = useRef("");
   const bodyRef = useRef("");
   const editorRef = useRef<RichTextEditorHandle>(null);
@@ -158,6 +166,7 @@ export function ComposeEmailDialog({
       setKeepZips(true);
       setRequestDeliveryReceipt(false);
       setRequestReadReceipt(false);
+      setAppliedTemplateInfo(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -256,6 +265,10 @@ export function ComposeEmailDialog({
     });
 
     onOpenChange(false);
+    if (appliedTemplateInfo?.templateCategory && onAfterSend) {
+      onAfterSend(appliedTemplateInfo);
+    }
+    setAppliedTemplateInfo(null);
   };
 
   const runImproveBody = useCallback(
@@ -341,11 +354,15 @@ export function ComposeEmailDialog({
   }, [subject, to]);
 
   const applyAccountingTemplate = useCallback(
-    (result: { subject: string; bodyHtml: string }) => {
+    (result: import("@/components/accounting/AccountingTemplatePicker").AccountingTemplatePickerApplied) => {
       setSubject(result.subject);
       editorRef.current?.setHtml(result.bodyHtml);
       bodyRef.current = result.bodyHtml;
       signatureAppliedRef.current = true;
+      setAppliedTemplateInfo((prev) => ({
+        ...prev,
+        templateCategory: result.template.category ?? undefined,
+      }));
     },
     [],
   );
@@ -359,6 +376,11 @@ export function ComposeEmailDialog({
             defaults={defaultTemplateContext as Record<string, string> | undefined}
             onClientSelected={(client) => {
               if (!to.trim() && client.email) setTo(client.email);
+              setAppliedTemplateInfo((prev) => ({
+                ...prev,
+                clientId: client.id,
+                clientName: client.name,
+              }));
             }}
           />
         </TemplatePickerBoundary>
