@@ -4,7 +4,14 @@ import { EmailView } from "@/components/microsoft/EmailView";
 import { MicrosoftConnectCard } from "@/components/microsoft/MicrosoftConnectCard";
 import { useMicrosoftConnection } from "@/hooks/useMicrosoft";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
-import { Mail } from "lucide-react";
+import { Mail, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const Microsoft365Correo = () => {
   const { isConnected, isLoading, connect, isConnecting, profile } = useMicrosoftConnection();
@@ -33,6 +40,27 @@ const Microsoft365Correo = () => {
                 )}
               </p>
             </div>
+            {isConnected && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+                      onClick={() => connect()}
+                      disabled={isConnecting}
+                    >
+                      <RefreshCw className={`h-3 w-3 ${isConnecting ? "animate-spin" : ""}`} />
+                      Actualizar permisos
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-xs">
+                    Vuelve a autorizar Microsoft para obtener permisos nuevos (reglas de correo, etc.)
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         </div>
 
