@@ -291,7 +291,7 @@
   color: #fff; font-size: 13px; font-weight: 800; flex-shrink: 0;
   letter-spacing: -0.02em;
 }
-.sl-msg-body { min-width: 0; }
+.sl-msg-body { min-width: 0; grid-column: 2; }
 .sl-msg-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .sl-msg-name { font-size: 14px; font-weight: 800; color: hsl(var(--foreground)); letter-spacing: -0.005em; }
 .sl-msg-badge { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 3px; }
