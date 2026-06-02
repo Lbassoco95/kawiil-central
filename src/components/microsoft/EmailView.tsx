@@ -2862,11 +2862,11 @@ export function EmailView() {
         </div>
       </div>
 
-      {/* Detail panel — borde izquierdo de acento: visible incluso si el HTML del correo es plano */}
+      {/* Detail panel — oculto hasta que el usuario seleccione un correo */}
       <div
         className={cn(
           "relative z-[3] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background border-l border-border/40",
-          !selectedEmailId && isMobile && "hidden",
+          !selectedEmailId && "hidden",
         )}
       >
         {!selectedEmailId ? (
