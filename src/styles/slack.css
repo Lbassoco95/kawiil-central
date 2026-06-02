@@ -327,6 +327,8 @@
 .sl-msg-action:hover { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
 .sl-msg-action.ai { color: hsl(var(--primary)); }
 .sl-msg-action.ai:hover { background: hsl(var(--primary) / 0.12); }
+.sl-quick-react { font-size: 14px; width: auto; min-width: 30px; padding: 0 4px; }
+.sl-quick-react.active { background: hsl(var(--primary) / 0.12); color: hsl(var(--primary)); }
 
 /* Reacciones */
 .sl-reactions { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
@@ -1489,6 +1491,17 @@
   /* Agrandar botones táctiles */
   .sl-msg-action {
     width: 32px; height: 32px;
+  }
+  .sl-quick-react {
+    width: auto; min-width: 40px; height: 36px;
+    font-size: 18px; padding: 0 8px;
+    border-radius: 8px;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+  }
+  .sl-quick-react.active {
+    border-color: hsl(var(--primary) / 0.5);
+    background: hsl(var(--primary) / 0.12);
   }
   .sl-ch {
     padding: 8px 12px;
