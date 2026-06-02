@@ -1,14 +1,24 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+
+interface UserSuggestion {
+  id: string;
+  display_name: string | null;
+  real_name: string | null;
+  avatar_url?: string | null;
+}
 
 interface Props {
   channelName?: string;
   isSending?: boolean;
   onSend: (text: string, files?: File[]) => void;
   disabled?: boolean;
+  userMap?: Record<string, UserSuggestion | undefined>;
 }
 
-export function SlackComposerNew({ channelName, isSending, onSend, disabled }: Props) {
+export function SlackComposerNew({ channelName, isSending, onSend, disabled, userMap = {} }: Props) {
   const [text, setText] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const inputRef = useRef<HTMLDivElement>(null);
 
   const handleSend = useCallback(() => {
@@ -17,9 +27,84 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled }: P
     onSend(val);
     setText("");
     if (inputRef.current) inputRef.current.innerText = "";
+    setMentionQuery(null);
   }, [text, isSending, disabled, onSend]);
 
+  // Detectar @menciones mientras escribe
+  const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
+    const raw = (e.target as HTMLDivElement).innerText;
+    setText(raw);
+
+    // Detectar si el cursor está justo después de un '@'
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) { setMentionQuery(null); return; }
+    const range = sel.getRangeAt(0);
+    const text = range.startContainer.textContent ?? "";
+    const pos = range.startOffset;
+    const before = text.slice(0, pos);
+    const atIdx = before.lastIndexOf("@");
+    if (atIdx === -1) { setMentionQuery(null); return; }
+    const query = before.slice(atIdx + 1);
+    // Cerrar si hay espacio después de @
+    if (query.includes(" ")) { setMentionQuery(null); return; }
+    setMentionQuery(query);
+    setMentionIndex(0);
+  }, []);
+
+  // Filtrar usuarios según el query
+  const suggestions = mentionQuery !== null
+    ? Object.entries(userMap)
+        .filter(([, p]) => {
+          if (!p) return false;
+          const name = (p.display_name || p.real_name || "").toLowerCase();
+          return name.includes(mentionQuery.toLowerCase());
+        })
+        .slice(0, 6)
+        .map(([id, p]) => ({ id, ...(p as UserSuggestion) }))
+    : [];
+
+  const insertMention = useCallback((user: UserSuggestion & { id: string }) => {
+    const label = user.display_name || user.real_name || user.id;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !inputRef.current) return;
+
+    const range = sel.getRangeAt(0);
+    const node = range.startContainer;
+    const offset = range.startOffset;
+    const rawText = node.textContent ?? "";
+    const atIdx = rawText.lastIndexOf("@", offset - 1);
+
+    if (atIdx !== -1 && node.nodeType === Node.TEXT_NODE) {
+      // Reemplazar "@query" con "@label"
+      const before = rawText.slice(0, atIdx);
+      const after = rawText.slice(offset);
+      const newText = `${before}@${label} ${after}`;
+      node.textContent = newText;
+
+      // Mover cursor al final de la mención
+      const newRange = document.createRange();
+      newRange.setStart(node, atIdx + label.length + 2);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+    setMentionQuery(null);
+    setText(inputRef.current.innerText);
+    inputRef.current.focus();
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (suggestions.length > 0) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex((i) => (i + 1) % suggestions.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex((i) => (i - 1 + suggestions.length) % suggestions.length); return; }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const s = suggestions[mentionIndex];
+        if (s) insertMention(s);
+        return;
+      }
+      if (e.key === "Escape") { setMentionQuery(null); return; }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -31,7 +116,32 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled }: P
     : "Escribe un mensaje…";
 
   return (
-    <div className="sl-compose">
+    <div className="sl-compose" style={{ position: "relative" }}>
+      {/* Popup de autocompletado @menciones */}
+      {suggestions.length > 0 && (
+        <div className="sl-mention-popup">
+          {suggestions.map((s, i) => {
+            const name = s.display_name || s.real_name || s.id;
+            return (
+              <button
+                key={s.id}
+                className={`sl-mention-item${i === mentionIndex ? " active" : ""}`}
+                onMouseDown={(e) => { e.preventDefault(); insertMention(s); }}
+              >
+                {s.avatar_url ? (
+                  <img src={s.avatar_url} alt={name} className="sl-mention-av" />
+                ) : (
+                  <span className="sl-mention-av sl-mention-av--initials">
+                    {name.substring(0, 2).toUpperCase()}
+                  </span>
+                )}
+                <span className="sl-mention-name">{name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="sl-compose-box">
         {/* Barra de formato */}
         <div className="sl-compose-fmt">
@@ -72,7 +182,7 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled }: P
           suppressContentEditableWarning
           data-placeholder={placeholder}
           onKeyDown={handleKeyDown}
-          onInput={(e) => setText((e.target as HTMLDivElement).innerText)}
+          onInput={handleInput}
         />
 
         {/* Pie: adjuntos + enviar */}

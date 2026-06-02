@@ -25,10 +25,12 @@ interface Props {
   onOpenThread?: (ts: string) => void;
   onReact?: (ts: string, emoji: string) => void;
   onSaveForLater?: (msg: SlackMessage) => void;
+  onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
   selfUserId?: string;
   onOpenActivity?: () => void;
   onOpenAi?: () => void;
+  onBack?: () => void;
   isFetchingNextPage?: boolean;
 }
 
@@ -42,10 +44,12 @@ export function MessageArea({
   onOpenThread,
   onReact,
   onSaveForLater,
+  onCreateTask,
   userMap = {},
   selfUserId,
   onOpenActivity,
   onOpenAi,
+  onBack,
   isFetchingNextPage,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -114,6 +118,17 @@ export function MessageArea({
       <div className="sl-msgs-head">
         <div className="sl-msgs-title">
           <div className="sl-msgs-name">
+            {onBack && (
+              <button
+                className="sl-back-btn"
+                onClick={onBack}
+                title="Volver a canales"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="m15 18-6-6 6-6"/>
+                </svg>
+              </button>
+            )}
             {!channel?.is_im && !channel?.is_mpim && (
               <span className="hash">#</span>
             )}
@@ -223,6 +238,7 @@ export function MessageArea({
               onOpenThread={onOpenThread}
               onReact={onReact}
               onSaveForLater={onSaveForLater}
+              onCreateTask={onCreateTask}
             />
           );
         })}

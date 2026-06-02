@@ -129,6 +129,7 @@ interface Props {
   onConnect?: () => void;
   isConnecting?: boolean;
   onOpenGroupsDialog?: () => void;
+  mobileHidden?: boolean;
 }
 
 export function ChannelSidebar({
@@ -146,6 +147,7 @@ export function ChannelSidebar({
   onConnect,
   isConnecting,
   onOpenGroupsDialog,
+  mobileHidden = false,
 }: Props) {
   const [search, setSearch] = useState("");
 
@@ -170,7 +172,7 @@ export function ChannelSidebar({
   const dms = filtered.filter((c) => (c.is_im || c.is_mpim) && !(c as any).is_starred);
 
   return (
-    <div className="sl-channels">
+    <div className={`sl-channels${mobileHidden ? " sl-channels--mobile-hidden" : ""}`}>
       {/* Cabecera workspace */}
       <div className="sl-head">
         <div className="sl-head-top">
