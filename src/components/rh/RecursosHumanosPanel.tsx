@@ -1,10 +1,12 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive } from "lucide-react";
+import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive, ClipboardList, BarChart3 } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCanAccessRecruitment } from "@/hooks/useRecruitment";
 import { ReclutamientoPanel } from "./recruitment/ReclutamientoPanel";
 import { MiExpedientePanel } from "./expediente/MiExpedientePanel";
 import { ExpedientesEquipoPanel } from "./expediente/ExpedientesEquipoPanel";
+import { CuestionariosPanel } from "./cuestionarios/CuestionariosPanel";
+import { ResultadosRHPanel } from "./cuestionarios/ResultadosRHPanel";
 import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { SolicitudesPanel } from "./SolicitudesPanel";
@@ -44,6 +46,10 @@ export function RecursosHumanosPanel() {
             <FolderArchive className="mr-1.5 h-4 w-4" />
             Mi expediente
           </TabsTrigger>
+          <TabsTrigger value="cuestionarios">
+            <ClipboardList className="mr-1.5 h-4 w-4" />
+            Cuestionarios
+          </TabsTrigger>
           {isTransformador && (
             <>
               <TabsTrigger value="equipo">
@@ -57,6 +63,10 @@ export function RecursosHumanosPanel() {
               <TabsTrigger value="expedientes">
                 <FolderArchive className="mr-1.5 h-4 w-4" />
                 Expedientes
+              </TabsTrigger>
+              <TabsTrigger value="resultados-rh">
+                <BarChart3 className="mr-1.5 h-4 w-4" />
+                Resultados RH
               </TabsTrigger>
             </>
           )}
@@ -81,6 +91,10 @@ export function RecursosHumanosPanel() {
 
         <TabsContent value="expediente" className="mt-5">
           <MiExpedientePanel />
+        </TabsContent>
+
+        <TabsContent value="cuestionarios" className="mt-5">
+          <CuestionariosPanel />
         </TabsContent>
 
         {canRecruit && (
@@ -109,6 +123,9 @@ export function RecursosHumanosPanel() {
             </TabsContent>
             <TabsContent value="expedientes" className="mt-5">
               <ExpedientesEquipoPanel />
+            </TabsContent>
+            <TabsContent value="resultados-rh" className="mt-5">
+              <ResultadosRHPanel />
             </TabsContent>
           </>
         )}
