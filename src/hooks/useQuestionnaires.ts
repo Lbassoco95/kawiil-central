@@ -130,6 +130,24 @@ export function useResponseCount(questionnaireId: string | null, enabled: boolea
   });
 }
 
+/** Nº de cuestionarios abiertos que el usuario actual aún no responde. */
+export function useMyPendingQuestionnaires(): number {
+  const { user } = useAuth();
+  const { data: all = [] } = useQuestionnaires();
+  const { data: mine = [] } = useQuery({
+    queryKey: ["rh-my-responses", user?.id],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await db
+        .from("rh_survey_responses").select("questionnaire_id").eq("user_id", user!.id);
+      if (error) return [];
+      return ((data as { questionnaire_id: string }[]) ?? []).map((r) => r.questionnaire_id);
+    },
+    enabled: !!user,
+  });
+  const answered = new Set(mine);
+  return all.filter((q) => q.active && !answered.has(q.id)).length;
+}
+
 /** Encabezados de respuestas de toda la org (G4): quién respondió qué. */
 export function useAllResponses(enabled: boolean) {
   return useQuery({

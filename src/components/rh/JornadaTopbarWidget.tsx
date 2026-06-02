@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,6 +14,10 @@ import {
   Coffee,
   Utensils,
   Car,
+  CalendarPlus,
+  Wind,
+  FolderArchive,
+  ClipboardList,
   LogIn,
   LogOut,
   ChevronDown,
@@ -25,8 +30,14 @@ import {
   WORK_MODE_LABEL,
   formatDuration,
   plannedModeForToday,
+  type RhAbsenceType,
 } from "@/lib/rh";
 import { useJornada, useTransitStatus } from "@/hooks/useRh";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEmployeeDocuments } from "@/hooks/useExpediente";
+import { useMyPendingQuestionnaires } from "@/hooks/useQuestionnaires";
+import { EXPEDIENTE_DOC_TYPES, expedienteProgress } from "@/lib/expediente";
+import { AbsenceRequestDialog } from "./AbsenceRequestDialog";
 
 /**
  * Widget compacto de jornada para la barra superior.
@@ -36,7 +47,15 @@ export function JornadaTopbarWidget() {
   const { session, schedule, summary, isPending, act } = useJornada();
   const plannedMode = plannedModeForToday(schedule);
   const transit = useTransitStatus();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { data: docs = [] } = useEmployeeDocuments(user?.id ?? null);
+  const pendingQ = useMyPendingQuestionnaires();
   const [inTransit, setInTransit] = useState(false);
+  const [absOpen, setAbsOpen] = useState(false);
+  const [absType, setAbsType] = useState<RhAbsenceType | undefined>(undefined);
+
+  const expedientePending = expedienteProgress(docs).uploaded < EXPEDIENTE_DOC_TYPES.length;
 
   // Sin iniciar o jornada cerrada: botón "Iniciar" con menú para elegir modalidad.
   if (summary.state === "none" || summary.state === "done") {
@@ -95,6 +114,7 @@ export function JornadaTopbarWidget() {
 
   // Trabajando: pill con tiempo + menú de acciones
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -143,6 +163,33 @@ export function JornadaTopbarWidget() {
           <Car className="mr-2 h-4 w-4" />
           {inTransit ? "Llegué (salir de trayecto)" : "En trayecto"}
         </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+          Solicitar
+        </DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => { setAbsType(undefined); setAbsOpen(true); }}>
+          <CalendarPlus className="mr-2 h-4 w-4" />
+          Solicitar día / permiso
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => { setAbsType("burnout"); setAbsOpen(true); }}>
+          <Wind className="mr-2 h-4 w-4" />
+          Día de burnout
+        </DropdownMenuItem>
+        {expedientePending && (
+          <DropdownMenuItem onClick={() => navigate("/hub?tab=rh&rh=expediente")}>
+            <FolderArchive className="mr-2 h-4 w-4" />
+            Completar expediente
+          </DropdownMenuItem>
+        )}
+        {pendingQ > 0 && (
+          <DropdownMenuItem onClick={() => navigate("/hub?tab=rh&rh=cuestionarios")}>
+            <ClipboardList className="mr-2 h-4 w-4" />
+            Responder cuestionario
+            <span className="ml-auto rounded-full bg-amber-500 px-1.5 text-[10px] font-medium text-white">{pendingQ}</span>
+          </DropdownMenuItem>
+        )}
+
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-red-600 focus:text-red-600"
@@ -153,5 +200,7 @@ export function JornadaTopbarWidget() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <AbsenceRequestDialog open={absOpen} onOpenChange={setAbsOpen} defaultType={absType} />
+    </>
   );
 }

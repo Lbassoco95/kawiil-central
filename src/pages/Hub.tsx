@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,11 +44,23 @@ import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
 import { toast } from "sonner";
 
+const HUB_TABS = ["procedimientos", "comunicados", "biblioteca", "rh", "admin"] as const;
+type HubTab = (typeof HUB_TABS)[number];
+
 export default function Hub() {
   const { isAdminOrManager } = useUserRole();
-  const [tab, setTab] = useState<"procedimientos" | "comunicados" | "biblioteca" | "rh" | "admin">(
-    "procedimientos",
-  );
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<HubTab>(() => {
+    const t = searchParams.get("tab");
+    return (HUB_TABS as readonly string[]).includes(t ?? "") ? (t as HubTab) : "procedimientos";
+  });
+
+  // Permite abrir una pestaña por URL (p. ej. atajos: /hub?tab=rh).
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t && (HUB_TABS as readonly string[]).includes(t) && t !== tab) setTab(t as HubTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [librarySearch, setLibrarySearch] = useState("");
   const [procedureDialogOpen, setProcedureDialogOpen] = useState(false);
   const [comunicadoDialogOpen, setComunicadoDialogOpen] = useState(false);
