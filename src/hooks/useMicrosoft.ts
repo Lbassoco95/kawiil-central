@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import {
   useQuery,
   useInfiniteQuery,
@@ -1197,12 +1197,37 @@ export function useEmailDetail(messageId: string | null) {
       return data;
     },
     enabled: !!user && !!messageId,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     retry: (count, err) => {
       const m = String((err as Error)?.message ?? "");
       if (m === EMAIL_DETAIL_NOT_FOUND_MSG) return false;
       return count < 2;
     },
   });
+}
+
+export function useEmailDetailPrefetch() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useCallback(
+    (messageId: string) => {
+      if (!user || !messageId) return;
+      queryClient.prefetchQuery({
+        queryKey: ["email-detail", messageId],
+        queryFn: async () => {
+          const { data, error } = await supabase.functions.invoke("microsoft-api", {
+            body: { action: "email-detail", params: { messageId } },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+          return data;
+        },
+        staleTime: 10 * 60 * 1000,
+      });
+    },
+    [user, queryClient],
+  );
 }
 
 export function useReplyEmail() {

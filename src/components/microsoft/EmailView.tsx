@@ -50,6 +50,7 @@ import {
   useEmailAttachments,
   useUnreadEmailCount,
   useOutlookCategories,
+  useEmailDetailPrefetch,
   INBOX_UNREAD_QUERY_KEY,
   SCHEDULED_MAIL_JOBS_QUERY_KEY,
   mailFoldersRootFallbackUserMessage,
@@ -959,6 +960,7 @@ export function EmailView() {
   } = useEmailConversation(emailDetail?.conversationId || null);
   const replyEmail = useReplyEmail();
   const forwardEmail = useForwardEmail();
+  const prefetchEmailDetail = useEmailDetailPrefetch();
   const markRead = useMarkEmailRead();
   const markUnread = useMarkEmailUnread();
   const archiveEmail = useArchiveEmail();
@@ -2677,10 +2679,11 @@ export function EmailView() {
                   )}
                   <div
                     draggable
+                    onMouseEnter={() => prefetchEmailDetail(email.id)}
                     onDragStart={(e) => { e.dataTransfer.setData("text/email-id", email.id); e.dataTransfer.effectAllowed = "move"; }}
                     className={cn(
                       "group relative flex min-w-0 w-full cursor-pointer select-none transition-colors border-b border-border/20 px-3 py-1.5",
-                      isActive && !bulkSelectedIds.has(email.id) && "bg-accent/70 border-l-2 border-l-blue-500 pl-[10px]",
+                      isActive && !bulkSelectedIds.has(email.id) && "bg-accent/60 border-l-2 border-l-foreground/30 pl-[10px]",
                       unread && !isActive && !bulkSelectedIds.has(email.id) && "bg-blue-50/30 dark:bg-blue-950/10",
                       !isActive && !bulkSelectedIds.has(email.id) && "hover:bg-muted/40",
                       bulkSelectedIds.has(email.id) && "bg-primary/5 border-l-2 border-l-primary pl-[10px]",
@@ -2881,8 +2884,7 @@ export function EmailView() {
       {/* Detail panel — borde izquierdo de acento: visible incluso si el HTML del correo es plano */}
       <div
         className={cn(
-          "relative z-[3] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
-          selectedEmailId && "border-l-4 border-l-primary shadow-[4px_0_24px_-8px_hsl(var(--primary)/0.35)]",
+          "relative z-[3] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background border-l border-border/40",
           !selectedEmailId && isMobile && "hidden",
         )}
       >
@@ -3392,10 +3394,10 @@ export function EmailView() {
 
             {detailAiPanel && (
               <div className="px-3 sm:px-6 py-3 border-b border-border/50 shrink-0">
-                <div className="rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/30 p-4 space-y-3 shadow-sm">
+                <div className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-3 shadow-sm">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/80">
                         {detailAiPanel === "summarize" ? (
                           <>
                             <Sparkles className="h-3.5 w-3.5" aria-hidden />
@@ -3411,7 +3413,7 @@ export function EmailView() {
                       {detailAiPanel === "translate" && detailAiTranslateTarget && (
                         <Badge
                           variant="outline"
-                          className="text-[10px] font-semibold tracking-wide border-blue-300/70 bg-blue-100/70 text-blue-700 dark:border-blue-700/60 dark:bg-blue-900/40 dark:text-blue-200"
+                          className="text-[10px] font-semibold tracking-wide"
                         >
                           {detailAiTranslateTarget === "en" ? "ES → EN" : "EN → ES"}
                         </Badge>
@@ -3441,14 +3443,14 @@ export function EmailView() {
                     </div>
                   </div>
                   {detailAiLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 py-2">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                       <Loader2 className="h-4 w-4 animate-spin shrink-0" />
                       <span>
                         {detailAiPanel === "summarize" ? "Resumiendo…" : "Traduciendo…"}
                       </span>
                     </div>
                   ) : (
-                    <div className="max-h-[40vh] overflow-y-auto pr-1 rounded-md bg-background/40 dark:bg-background/20 border border-blue-100/70 dark:border-blue-900/30 p-3">
+                    <div className="max-h-[40vh] overflow-y-auto pr-1 rounded-md bg-background border border-border/40 p-3">
                       {detailAiText?.trim() ? (
                         <KawiilAiMarkdown>{detailAiText}</KawiilAiMarkdown>
                       ) : (
