@@ -202,9 +202,10 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const historyQuery = useInfiniteQuery({
     queryKey: ["slack-history-v2", selectedChannel],
     initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam }): Promise<HistoryPage> => {
-      if (!selectedChannel) return { messages: [] };
-      const base = { action: "conversations.history" as const, channel: selectedChannel, limit: 50 };
+    queryFn: async ({ pageParam, queryKey }): Promise<HistoryPage> => {
+      const channelId = queryKey[1] as string;
+      if (!channelId) return { messages: [] };
+      const base = { action: "conversations.history" as const, channel: channelId, limit: 50 };
       const payload = pageParam ? { ...base, cursor: pageParam } : base;
       const isFirst = pageParam == null;
       let data: { ok: boolean; messages?: SlackMessage[]; response_metadata?: { next_cursor?: string } };
@@ -221,7 +222,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     },
     getNextPageParam: (first) => first.nextCursor,
     enabled: !!selectedChannel,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,   // 5 minutos — evita re-fetch al volver a canales recientes
+    gcTime: 2 * 60 * 60_000, // 2 horas en memoria
     refetchOnWindowFocus: false,
     // Polling fallback para canales donde el webhook Slack Events puede no estar configurado
     refetchInterval: (query) => {
@@ -286,12 +288,44 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
             type?: string;
           };
           if (row.entity_type !== "slack") return;
-          if (!row.entity_ref?.startsWith(`${channelId}|`)) return;
           if (row.type !== "slack_message" && row.type !== "slack_mention") return;
-          // Mensaje nuevo en el canal abierto: mostrar y limpiar badge
-          void historyQuery.refetch();
-          void markSlackChannelNotificationsRead(uid, channelId);
+
+          // Identificar el canal de la notificación
+          const pipe = (row.entity_ref || "").indexOf("|");
+          const notifChannel = pipe > 0 ? row.entity_ref!.slice(0, pipe) : "";
+          if (!notifChannel) return;
+
+          // Siempre actualizar badges
           void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] });
+
+          if (notifChannel === channelId) {
+            // Canal abierto: mostrar mensaje y marcar leído
+            void historyQuery.refetch();
+            void markSlackChannelNotificationsRead(uid, channelId);
+          } else {
+            // Otro canal: pre-cargar en background para que esté listo al hacer clic
+            void qc.prefetchInfiniteQuery({
+              queryKey: ["slack-history-v2", notifChannel],
+              initialPageParam: undefined as string | undefined,
+              queryFn: async ({ pageParam, queryKey }) => {
+                const ch2 = queryKey[1] as string;
+                if (!ch2) return { messages: [] as SlackMessage[], nextCursor: undefined };
+                const base = { action: "conversations.history" as const, channel: ch2, limit: 50 };
+                const p = pageParam ? { ...base, cursor: pageParam as string } : base;
+                try {
+                  const data = await withHardTimeout(
+                    invokeSlackApi<{ ok: boolean; messages?: SlackMessage[]; response_metadata?: { next_cursor?: string } }>(p, HISTORY_FIRST_MS),
+                    HISTORY_FIRST_HARD,
+                  );
+                  return { messages: (data.messages ?? []).slice().reverse(), nextCursor: data.response_metadata?.next_cursor };
+                } catch {
+                  return { messages: [] as SlackMessage[], nextCursor: undefined };
+                }
+              },
+              getNextPageParam: (first: HistoryPage) => first.nextCursor,
+              pages: 1,
+            } as Parameters<typeof qc.prefetchInfiniteQuery>[0]);
+          }
         },
       )
       .subscribe();

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import type { SlackMessage, SlackConversation } from "@/lib/slackApi";
 import { MessageItem } from "./MessageItem";
 
@@ -54,6 +54,14 @@ export function MessageArea({
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
+  const [slowLoad, setSlowLoad] = useState(false);
+
+  // Indicador de carga lenta — aparece tras 8s si sigue sin mensajes
+  useEffect(() => {
+    if (!isLoading) { setSlowLoad(false); return; }
+    const t = setTimeout(() => setSlowLoad(true), 8_000);
+    return () => clearTimeout(t);
+  }, [isLoading, channelId]);
 
   const channelName =
     channel?.name ||
@@ -199,8 +207,16 @@ export function MessageArea({
         )}
 
         {isLoading && messages.length === 0 && (
-          <div style={{ padding: "24px", textAlign: "center", color: "hsl(var(--muted-foreground))", fontSize: 13 }}>
-            Cargando mensajes…
+          <div style={{ padding: "32px 24px", textAlign: "center", color: "hsl(var(--muted-foreground))", fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "spin 1s linear infinite", flexShrink: 0 }}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+            <span>Cargando mensajes…</span>
+            {slowLoad && (
+              <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground) / 0.7)", maxWidth: 260 }}>
+                Primera carga del canal — puede tardar unos segundos más.
+              </span>
+            )}
           </div>
         )}
 
