@@ -43,14 +43,9 @@ function useTicker(active: boolean) {
 export function JornadaCard() {
   const { session, schedule, summary, isPending, act } = useJornada();
   const transit = useTransitStatus();
-  const [inTransit, setInTransit] = useState(false);
+  const inTransit = !!session?.in_transit;
   const plannedMode = plannedModeForToday(schedule);
   const [selectedMode, setSelectedMode] = useState<RhWorkMode>(plannedMode ?? "office");
-
-  // Al salir del estado "trabajando" (comida, descanso, fin de jornada), apaga el trayecto.
-  useEffect(() => {
-    if (summary.state !== "working" && inTransit) setInTransit(false);
-  }, [summary.state, inTransit]);
 
   useEffect(() => {
     if (plannedMode) setSelectedMode(plannedMode);
@@ -207,11 +202,7 @@ export function JornadaCard() {
               variant={inTransit ? "default" : "outline"}
               className="col-span-2"
               disabled={transit.isPending}
-              onClick={() => {
-                const next = !inTransit;
-                setInTransit(next);
-                transit.mutate({ on: next, workMode: session?.work_mode ?? "office", attendanceId: session?.id ?? null });
-              }}
+              onClick={() => transit.mutate({ on: !inTransit, workMode: session?.work_mode ?? "office", attendanceId: session?.id ?? null })}
               title="Refleja en Slack que vas en trayecto (sigues trabajando)"
             >
               <Car className="mr-2 h-4 w-4" />

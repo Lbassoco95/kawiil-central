@@ -72,6 +72,7 @@ export interface RhAttendance {
   check_out_lng: number | null;
   notes: string | null;
   is_additional_shift: boolean;
+  in_transit: boolean;
   created_at: string;
   updated_at: string;
 }

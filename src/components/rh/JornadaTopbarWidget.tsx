@@ -51,7 +51,7 @@ export function JornadaTopbarWidget() {
   const { user } = useAuth();
   const { data: docs = [] } = useEmployeeDocuments(user?.id ?? null);
   const pendingQ = useMyPendingQuestionnaires();
-  const [inTransit, setInTransit] = useState(false);
+  const inTransit = !!session?.in_transit;
   const [absOpen, setAbsOpen] = useState(false);
   const [absType, setAbsType] = useState<RhAbsenceType | undefined>(undefined);
 
@@ -154,11 +154,7 @@ export function JornadaTopbarWidget() {
           )}
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => {
-            const next = !inTransit;
-            setInTransit(next);
-            transit.mutate({ on: next, workMode: session?.work_mode ?? "office", attendanceId: session?.id ?? null });
-          }}
+          onClick={() => transit.mutate({ on: !inTransit, workMode: session?.work_mode ?? "office", attendanceId: session?.id ?? null })}
         >
           <Car className="mr-2 h-4 w-4" />
           {inTransit ? "Llegué (salir de trayecto)" : "En trayecto"}
