@@ -6,6 +6,7 @@ import { invokeSlackApi } from "@/lib/slackApi";
 import {
   WORK_MODE_SLACK_STATUS,
   PAUSE_SLACK_STATUS,
+  TRANSIT_SLACK_STATUS,
   getCurrentPosition,
   matchOffice,
   plannedModeForToday,
@@ -332,6 +333,20 @@ export function useJornada() {
     isPending: mutation.isPending,
     act: mutation.mutate,
   };
+}
+
+/**
+ * Estado "en trayecto" (🚗): no es una pausa de la jornada, solo refleja en
+ * Slack que la persona va en movimiento. Al apagarlo, restaura el estado de
+ * la modalidad actual.
+ */
+export function useTransitStatus() {
+  return useMutation({
+    mutationFn: async ({ on, workMode }: { on: boolean; workMode: RhWorkMode }) => {
+      await syncSlackStatus(on ? TRANSIT_SLACK_STATUS : WORK_MODE_SLACK_STATUS[workMode]);
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo actualizar el estado"),
+  });
 }
 
 /* ============================================================

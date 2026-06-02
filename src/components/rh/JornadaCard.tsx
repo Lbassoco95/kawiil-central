@@ -9,6 +9,7 @@ import {
   LogOut,
   Coffee,
   Utensils,
+  Car,
   MapPin,
   Loader2,
   CheckCircle2,
@@ -27,7 +28,7 @@ import {
   plannedModeForToday,
   type RhWorkMode,
 } from "@/lib/rh";
-import { useJornada } from "@/hooks/useRh";
+import { useJornada, useTransitStatus } from "@/hooks/useRh";
 
 /** Re-render periódico para que los contadores avancen. */
 function useTicker(active: boolean) {
@@ -41,8 +42,15 @@ function useTicker(active: boolean) {
 
 export function JornadaCard() {
   const { session, schedule, summary, isPending, act } = useJornada();
+  const transit = useTransitStatus();
+  const [inTransit, setInTransit] = useState(false);
   const plannedMode = plannedModeForToday(schedule);
   const [selectedMode, setSelectedMode] = useState<RhWorkMode>(plannedMode ?? "office");
+
+  // Al salir del estado "trabajando" (comida, descanso, fin de jornada), apaga el trayecto.
+  useEffect(() => {
+    if (summary.state !== "working" && inTransit) setInTransit(false);
+  }, [summary.state, inTransit]);
 
   useEffect(() => {
     if (plannedMode) setSelectedMode(plannedMode);
@@ -194,6 +202,20 @@ export function JornadaCard() {
             >
               <Coffee className="mr-2 h-4 w-4" />
               Descanso
+            </Button>
+            <Button
+              variant={inTransit ? "default" : "outline"}
+              className="col-span-2"
+              disabled={transit.isPending}
+              onClick={() => {
+                const next = !inTransit;
+                setInTransit(next);
+                transit.mutate({ on: next, workMode: session?.work_mode ?? "office" });
+              }}
+              title="Refleja en Slack que vas en trayecto (sigues trabajando)"
+            >
+              <Car className="mr-2 h-4 w-4" />
+              {inTransit ? "Llegué (salir de trayecto)" : "En trayecto"}
             </Button>
             <Button
               variant="destructive"
