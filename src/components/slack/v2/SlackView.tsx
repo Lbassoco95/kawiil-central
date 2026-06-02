@@ -22,6 +22,7 @@ import {
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useSlackChannelNotificationBadges, markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 import { useSlackUnreadMentionsCount } from "@/hooks/useSlackActivityFeed";
+import { useSlackTyping } from "@/hooks/useSlackTyping";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -30,6 +31,7 @@ import { MessageArea } from "./MessageArea";
 import { SlackComposerNew } from "./SlackComposerNew";
 import { ThreadPanelNew } from "./ThreadPanelNew";
 import { KawiilContextPanel } from "./KawiilContextPanel";
+import { TypingIndicator } from "./TypingIndicator";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
 import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 
@@ -347,6 +349,25 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     return currentConv.name || selectedChannel;
   }, [currentConv, selectedChannel, userMap]);
 
+  // ─── Nombre del usuario actual (para typing indicator) ─────
+  const currentUserName = useMemo(() => {
+    if (!connection.slack_user_id) return "Tú";
+    const p = userMap[connection.slack_user_id];
+    return p?.display_name || p?.real_name || "Tú";
+  }, [connection.slack_user_id, userMap]);
+
+  const currentUserAvatar = useMemo(() => {
+    if (!connection.slack_user_id) return undefined;
+    return userMap[connection.slack_user_id]?.avatar_url ?? undefined;
+  }, [connection.slack_user_id, userMap]);
+
+  // ─── Typing indicator ────────────────────────────────────
+  const { typingUsers, onTyping, onStopTyping } = useSlackTyping(
+    selectedChannel || null,
+    currentUserName,
+    currentUserAvatar,
+  );
+
   // ─── Workspace switcher ──────────────────────────────────
   const workspaces = useMemo(() => [{
     id: "kawiil",
@@ -418,12 +439,17 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           onCreateTask={handleCreateTask}
           onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
         />
+        <TypingIndicator typingUsers={typingUsers} />
         <SlackComposerNew
           channelName={channelName}
           isSending={sendMutation.isPending}
-          onSend={(text) => sendMutation.mutate(text)}
+          onSend={(text) => {
+            sendMutation.mutate(text);
+            onStopTyping();
+          }}
           disabled={!selectedChannel}
           userMap={userMap}
+          onTyping={onTyping}
         />
 
         {/* Panel de hilo sobre los mensajes */}

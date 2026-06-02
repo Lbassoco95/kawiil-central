@@ -13,9 +13,10 @@ interface Props {
   onSend: (text: string, files?: File[]) => void;
   disabled?: boolean;
   userMap?: Record<string, UserSuggestion | undefined>;
+  onTyping?: () => void;
 }
 
-export function SlackComposerNew({ channelName, isSending, onSend, disabled, userMap = {} }: Props) {
+export function SlackComposerNew({ channelName, isSending, onSend, disabled, userMap = {}, onTyping }: Props) {
   const [text, setText] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -34,6 +35,8 @@ export function SlackComposerNew({ channelName, isSending, onSend, disabled, use
   const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
     const raw = (e.target as HTMLDivElement).innerText;
     setText(raw);
+    // Emitir evento de escritura al hook de typing
+    if (raw.trim()) onTyping?.();
 
     // Detectar si el cursor está justo después de un '@'
     const sel = window.getSelection();
