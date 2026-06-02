@@ -679,9 +679,28 @@ export function useDecideAbsenceRequest() {
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-celula-absences"] });
+      qc.invalidateQueries({ queryKey: ["rh-approvable-absences"] });
       qc.invalidateQueries({ queryKey: ["rh-my-absences"] });
       toast.success(vars.decision === "approved" ? "Solicitud aprobada" : "Solicitud rechazada");
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo registrar la decisión"),
+  });
+}
+
+/** Solicitudes aprobables por un G4 (todas las de la org salvo las propias). */
+export function useApprovableAbsenceRequests() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-approvable-absences", user?.id],
+    queryFn: async (): Promise<RhAbsenceRequest[]> => {
+      const { data, error } = await db
+        .from("rh_absence_requests")
+        .select("*")
+        .neq("user_id", user!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data as RhAbsenceRequest[]) ?? [];
+    },
+    enabled: !!user,
   });
 }

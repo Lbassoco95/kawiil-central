@@ -16,10 +16,10 @@ import {
 import {
   useMyAbsenceRequests,
   useCancelAbsenceRequest,
-  useMyResponsibleCelulas,
-  useCelulaAbsenceRequests,
+  useApprovableAbsenceRequests,
   useDecideAbsenceRequest,
 } from "@/hooks/useRh";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { AbsenceRequestDialog } from "./AbsenceRequestDialog";
 
@@ -39,8 +39,7 @@ export function SolicitudesPanel() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: myRequests = [], isLoading } = useMyAbsenceRequests();
   const cancel = useCancelAbsenceRequest();
-  const { data: responsibleCelulas = [] } = useMyResponsibleCelulas();
-  const isApprover = responsibleCelulas.length > 0;
+  const { isTransformador } = useUserRole();
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
@@ -96,15 +95,15 @@ export function SolicitudesPanel() {
         </CardContent>
       </Card>
 
-      {isApprover && <ApprovalsCard celulaIds={responsibleCelulas.map((c) => c.id)} />}
+      {isTransformador && <ApprovalsCard />}
 
       <AbsenceRequestDialog open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
   );
 }
 
-function ApprovalsCard({ celulaIds }: { celulaIds: string[] }) {
-  const { data: requests = [], isLoading } = useCelulaAbsenceRequests(celulaIds);
+function ApprovalsCard() {
+  const { data: requests = [], isLoading } = useApprovableAbsenceRequests();
   const { data: users = [] } = useOrgUsers();
   const decide = useDecideAbsenceRequest();
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -123,7 +122,7 @@ function ApprovalsCard({ celulaIds }: { celulaIds: string[] }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Inbox className="h-4 w-4 text-primary" />
-          Por aprobar (mi célula)
+          Por aprobar
           {pending.length > 0 && <Badge variant="secondary" className="ml-1">{pending.length}</Badge>}
         </CardTitle>
       </CardHeader>
@@ -148,12 +147,12 @@ function ApprovalsCard({ celulaIds }: { celulaIds: string[] }) {
                   </div>
                 </div>
                 {r.reason && <p className="mt-2 text-xs text-muted-foreground">"{r.reason}"</p>}
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Input
                     value={notes[r.id] ?? ""}
                     onChange={(e) => setNotes((n) => ({ ...n, [r.id]: e.target.value }))}
                     placeholder="Nota (opcional)"
-                    className="h-8 flex-1 text-xs"
+                    className="h-8 min-w-[140px] flex-1 text-xs"
                   />
                   <Button
                     size="sm"
