@@ -1654,6 +1654,79 @@ export function useCancelScheduledMailJob() {
   });
 }
 
+export type EmailInboxRule = {
+  id: string;
+  user_id: string;
+  rule_name: string;
+  sender_email: string;
+  move_to_folder_id: string | null;
+  move_to_folder_name: string | null;
+  mark_as_read: boolean;
+  is_enabled: boolean;
+  created_at: string;
+};
+
+export function useListMailRules() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["email-inbox-rules", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("email_inbox_rules")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as EmailInboxRule[];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCreateMailRule() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      displayName,
+      senderEmail,
+      moveToFolderId,
+      moveToFolderName,
+      markAsRead,
+    }: {
+      displayName?: string;
+      senderEmail: string;
+      moveToFolderId?: string;
+      moveToFolderName?: string;
+      markAsRead?: boolean;
+    }) => {
+      const { data, error } = await supabase
+        .from("email_inbox_rules")
+        .insert({
+          user_id: user!.id,
+          rule_name: displayName || `Regla: ${senderEmail}`,
+          sender_email: senderEmail.trim().toLowerCase(),
+          move_to_folder_id: moveToFolderId ?? null,
+          move_to_folder_name: moveToFolderName ?? null,
+          mark_as_read: markAsRead ?? false,
+          is_enabled: true,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as EmailInboxRule;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["email-inbox-rules", user?.id] });
+      toast.success("Regla creada");
+    },
+    onError: (err: Error) => toast.error("Error al crear la regla: " + err.message),
+  });
+}
+
+
 export function useFlagEmail() {
   const queryClient = useQueryClient();
 
