@@ -16,6 +16,14 @@ BEGIN
   END IF;
 END$$;
 
+-- Tipo de contratación
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'rh_employment_type') THEN
+    CREATE TYPE public.rh_employment_type AS ENUM ('full_time', 'part_time');
+  END IF;
+END$$;
+
 -- -------------------------------------------------------------
 -- Ubicaciones de oficina (geocerca). Configuradas por G4.
 -- -------------------------------------------------------------
@@ -46,6 +54,7 @@ CREATE TABLE IF NOT EXISTS public.rh_work_schedules (
   organization_id   uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   user_id           uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   shift_label       text NOT NULL DEFAULT 'Turno general',
+  employment_type   public.rh_employment_type NOT NULL DEFAULT 'full_time',
   start_time        time NOT NULL DEFAULT '09:00',
   end_time          time NOT NULL DEFAULT '18:00',
   timezone          text NOT NULL DEFAULT 'America/Mexico_City',
@@ -174,13 +183,7 @@ CREATE POLICY "Update own attendance" ON public.rh_attendance
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
--- =============================================================
--- Seed de permiso de módulo 'rh' para toda la organización
--- (todos hacen check-in; las vistas de administración se gatean
---  dentro de la app por el grado G4 / transformador).
--- =============================================================
-INSERT INTO public.user_module_permissions (user_id, organization_id, module_key, enabled)
-SELECT p.user_id, p.organization_id, 'rh', true
-FROM public.profiles p
-WHERE p.is_active = true
-ON CONFLICT (user_id, module_key) DO NOTHING;
+-- Nota: RH vive dentro del módulo Hub (no requiere permiso de módulo propio).
+-- Todos los Kawiilers con acceso a Hub pueden registrar su jornada; las
+-- vistas de administración (turnos, asistencia del equipo, oficinas) se
+-- gatean dentro de la app por el grado G4 (transformador).

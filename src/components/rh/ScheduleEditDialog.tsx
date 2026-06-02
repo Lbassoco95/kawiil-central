@@ -21,10 +21,13 @@ import {
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  EMPLOYMENT_TYPES,
+  EMPLOYMENT_TYPE_LABEL,
   ISO_WEEKDAYS,
   WORK_MODES,
   WORK_MODE_EMOJI,
   WORK_MODE_LABEL,
+  type RhEmploymentType,
   type RhWeeklyPlan,
   type RhWorkMode,
   type RhWorkSchedule,
@@ -63,6 +66,7 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
   const { data: offices = [] } = useOfficeLocations();
 
   const [shiftLabel, setShiftLabel] = useState("Turno general");
+  const [employmentType, setEmploymentType] = useState<RhEmploymentType>("full_time");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("18:00");
   const [defaultMode, setDefaultMode] = useState<RhWorkMode>("office");
@@ -74,6 +78,7 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
     if (!open) return;
     if (existing) {
       setShiftLabel(existing.shift_label);
+      setEmploymentType(existing.employment_type ?? "full_time");
       setStartTime(existing.start_time.slice(0, 5));
       setEndTime(existing.end_time.slice(0, 5));
       setDefaultMode(existing.default_work_mode);
@@ -87,6 +92,7 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
       setPlan(p);
     } else {
       setShiftLabel("Turno general");
+      setEmploymentType("full_time");
       setStartTime("09:00");
       setEndTime("18:00");
       setDefaultMode("office");
@@ -106,6 +112,7 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
       {
         user_id: userId,
         shift_label: shiftLabel.trim() || "Turno general",
+        employment_type: employmentType,
         start_time: startTime,
         end_time: endTime,
         default_work_mode: defaultMode,
@@ -128,9 +135,26 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>Nombre del turno</Label>
-            <Input value={shiftLabel} onChange={(e) => setShiftLabel(e.target.value)} placeholder="Matutino" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Nombre del turno</Label>
+              <Input value={shiftLabel} onChange={(e) => setShiftLabel(e.target.value)} placeholder="Matutino" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tipo de jornada</Label>
+              <Select value={employmentType} onValueChange={(v) => setEmploymentType(v as RhEmploymentType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EMPLOYMENT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {EMPLOYMENT_TYPE_LABEL[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -6,6 +6,7 @@ import { invokeSlackApi } from "@/lib/slackApi";
 import {
   WORK_MODE_SLACK_STATUS,
   type RhAttendance,
+  type RhEmploymentType,
   type RhOfficeLocation,
   type RhWeeklyPlan,
   type RhWorkMode,
@@ -286,6 +287,7 @@ export function useOrgSchedules() {
 export interface ScheduleInput {
   user_id: string;
   shift_label: string;
+  employment_type: RhEmploymentType;
   start_time: string;
   end_time: string;
   timezone?: string;
@@ -306,6 +308,7 @@ export function useSaveSchedule() {
           organization_id: orgId,
           user_id: input.user_id,
           shift_label: input.shift_label,
+          employment_type: input.employment_type,
           start_time: input.start_time,
           end_time: input.end_time,
           timezone: input.timezone ?? "America/Mexico_City",

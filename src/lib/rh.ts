@@ -8,6 +8,15 @@ export type RhWorkMode = "office" | "home_office" | "commission";
 
 export const WORK_MODES: RhWorkMode[] = ["office", "home_office", "commission"];
 
+export type RhEmploymentType = "full_time" | "part_time";
+
+export const EMPLOYMENT_TYPES: RhEmploymentType[] = ["full_time", "part_time"];
+
+export const EMPLOYMENT_TYPE_LABEL: Record<RhEmploymentType, string> = {
+  full_time: "Tiempo completo",
+  part_time: "Medio tiempo",
+};
+
 export interface RhOfficeLocation {
   id: string;
   organization_id: string;
@@ -30,6 +39,7 @@ export interface RhWorkSchedule {
   organization_id: string;
   user_id: string;
   shift_label: string;
+  employment_type: RhEmploymentType;
   start_time: string; // "HH:MM:SS"
   end_time: string;
   timezone: string;

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, CalendarClock, Pencil } from "lucide-react";
 import {
+  EMPLOYMENT_TYPE_LABEL,
   ISO_WEEKDAYS,
   WORK_MODE_EMOJI,
   formatTime,
@@ -50,7 +51,7 @@ export function TeamScheduleManager() {
                     {sched ? (
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                         <span>
-                          {sched.shift_label} · {formatTime(sched.start_time)}–{formatTime(sched.end_time)}
+                          {sched.shift_label} · {EMPLOYMENT_TYPE_LABEL[sched.employment_type ?? "full_time"]} · {formatTime(sched.start_time)}–{formatTime(sched.end_time)}
                         </span>
                         <span className="flex gap-0.5">
                           {ISO_WEEKDAYS.map(({ key, short }) => {

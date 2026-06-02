@@ -14,6 +14,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import {
+  EMPLOYMENT_TYPE_LABEL,
   WORK_MODES,
   WORK_MODE_EMOJI,
   WORK_MODE_LABEL,
@@ -193,7 +194,12 @@ export function CheckInCard() {
       <CardContent className="space-y-4">
         {schedule ? (
           <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-            <div className="font-medium">{schedule.shift_label}</div>
+            <div className="font-medium">
+              {schedule.shift_label}
+              <span className="ml-2 font-normal text-muted-foreground">
+                · {EMPLOYMENT_TYPE_LABEL[schedule.employment_type ?? "full_time"]}
+              </span>
+            </div>
             <div className="text-muted-foreground">
               {formatTime(schedule.start_time)}–{formatTime(schedule.end_time)}
               {plannedMode

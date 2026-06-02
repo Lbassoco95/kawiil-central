@@ -20,6 +20,7 @@ import {
   useDeleteInternalComunicado,
 } from "@/hooks/useInternalDespacho";
 import { ProcedureDetailDialog } from "@/components/hub/ProcedureDetailDialog";
+import { RecursosHumanosPanel } from "@/components/rh/RecursosHumanosPanel";
 import { useUserRole } from "@/hooks/useUserRole";
 import { formatMX } from "@/lib/dateUtils";
 import {
@@ -33,6 +34,7 @@ import {
   Library,
   Shield,
   Search,
+  UserCog,
 } from "lucide-react";
 import { PageHeader, type PageHeaderStat } from "@/components/shared/PageHeader";
 import { FileDropzone } from "@/components/shared/FileDropzone";
@@ -43,7 +45,7 @@ import { toast } from "sonner";
 
 export default function Hub() {
   const { isAdminOrManager } = useUserRole();
-  const [tab, setTab] = useState<"procedimientos" | "comunicados" | "biblioteca" | "admin">(
+  const [tab, setTab] = useState<"procedimientos" | "comunicados" | "biblioteca" | "rh" | "admin">(
     "procedimientos",
   );
   const [librarySearch, setLibrarySearch] = useState("");
@@ -161,6 +163,7 @@ export default function Hub() {
             { key: "procedimientos" as const, label: "Procedimientos", icon: FileText },
             { key: "comunicados" as const, label: "Comunicados", icon: Megaphone },
             { key: "biblioteca" as const, label: "Mi biblioteca", icon: Library },
+            { key: "rh" as const, label: "Recursos Humanos", icon: UserCog },
             ...(isAdminOrManager
               ? [{ key: "admin" as const, label: "Admin", icon: Shield }]
               : []),
@@ -365,6 +368,8 @@ export default function Hub() {
             })()}
           </section>
         )}
+
+        {tab === "rh" && <RecursosHumanosPanel />}
 
         {tab === "admin" && isAdminOrManager && (
           <section className="space-y-4">
