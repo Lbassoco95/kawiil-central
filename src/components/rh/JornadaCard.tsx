@@ -210,7 +210,7 @@ export function JornadaCard() {
               onClick={() => {
                 const next = !inTransit;
                 setInTransit(next);
-                transit.mutate({ on: next, workMode: session?.work_mode ?? "office" });
+                transit.mutate({ on: next, workMode: session?.work_mode ?? "office", attendanceId: session?.id ?? null });
               }}
               title="Refleja en Slack que vas en trayecto (sigues trabajando)"
             >

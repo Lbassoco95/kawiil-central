@@ -341,8 +341,13 @@ export function useJornada() {
  * la modalidad actual.
  */
 export function useTransitStatus() {
+  const { user } = useAuth();
   return useMutation({
-    mutationFn: async ({ on, workMode }: { on: boolean; workMode: RhWorkMode }) => {
+    mutationFn: async ({ on, workMode, attendanceId }: { on: boolean; workMode: RhWorkMode; attendanceId?: string | null }) => {
+      // Persiste la señal para que la sincronización automática respete el trayecto.
+      if (attendanceId) {
+        await db.from("rh_attendance").update({ in_transit: on }).eq("id", attendanceId).eq("user_id", user!.id);
+      }
       await syncSlackStatus(on ? TRANSIT_SLACK_STATUS : WORK_MODE_SLACK_STATUS[workMode]);
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo actualizar el estado"),

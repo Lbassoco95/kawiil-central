@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive, ClipboardList, BarChart3, LayoutDashboard } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive, ClipboardList, BarChart3, LayoutDashboard, BookOpen } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { GuiaRHDialog } from "./tablero/GuiaRHDialog";
 import { useCanAccessRecruitment } from "@/hooks/useRecruitment";
 import { ReclutamientoPanel } from "./recruitment/ReclutamientoPanel";
 import { MiExpedientePanel } from "./expediente/MiExpedientePanel";
@@ -25,13 +28,20 @@ import { OfficeLocationsManager } from "./OfficeLocationsManager";
 export function RecursosHumanosPanel() {
   const { isTransformador } = useUserRole();
   const canRecruit = useCanAccessRecruitment();
+  const [guiaOpen, setGuiaOpen] = useState(false);
 
   return (
     <section className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Registra tu jornada y modalidad (oficina, home office o de comisión).
-        {isTransformador && " Como G4, administra turnos, horarios y asistencia del equipo."}
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Registra tu jornada y modalidad (oficina, home office o de comisión).
+          {isTransformador && " Como G4, administra turnos, horarios y asistencia del equipo."}
+        </p>
+        <Button size="sm" variant="ghost" className="shrink-0" onClick={() => setGuiaOpen(true)}>
+          <BookOpen className="mr-1.5 h-3.5 w-3.5" /> Guía
+        </Button>
+      </div>
+      <GuiaRHDialog open={guiaOpen} onOpenChange={setGuiaOpen} isG4={isTransformador} />
 
       <Tabs defaultValue="jornada">
         {/* Barra en una sola fila con scroll horizontal; agrupada por bloques. */}
