@@ -1,17 +1,20 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, ChevronRight, ListChecks } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { useExpedientesOverview } from "@/hooks/useExpediente";
 import { expedienteProgress, type EmployeeDocument } from "@/lib/expediente";
 import { EmployeeExpedienteDialog } from "./EmployeeExpedienteDialog";
+import { OnboardingTemplateDialog } from "./OnboardingTemplateDialog";
 
 export function ExpedientesEquipoPanel() {
   const { data: users = [], isLoading } = useOrgUsers();
   const { data: docs = [] } = useExpedientesOverview(true);
   const [selected, setSelected] = useState<{ id: string; name: string } | null>(null);
+  const [tplOpen, setTplOpen] = useState(false);
 
   const docsByUser = useMemo(() => {
     const m = new Map<string, EmployeeDocument[]>();
@@ -26,9 +29,14 @@ export function ExpedientesEquipoPanel() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Expedientes del equipo. Abre uno para revisar datos y verificar documentos.
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Expedientes del equipo. Abre uno para revisar datos y verificar documentos.
+        </p>
+        <Button size="sm" variant="outline" onClick={() => setTplOpen(true)}>
+          <ListChecks className="mr-1.5 h-3.5 w-3.5" /> Plantilla de bienvenida
+        </Button>
+      </div>
 
       {isLoading ? (
         <div className="flex h-32 items-center justify-center">
@@ -82,6 +90,7 @@ export function ExpedientesEquipoPanel() {
         userName={selected?.name ?? ""}
         onOpenChange={(v) => !v && setSelected(null)}
       />
+      <OnboardingTemplateDialog open={tplOpen} onOpenChange={setTplOpen} />
     </div>
   );
 }

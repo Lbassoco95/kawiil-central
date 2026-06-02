@@ -18,10 +18,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Mail, StickyNote, Send, FileText, Upload } from "lucide-react";
+import { Loader2, Mail, StickyNote, Send, FileText, Upload, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useConvertCandidate } from "@/hooks/useOnboarding";
+import { CONVERT_ROLES } from "@/lib/onboarding";
 import {
   ACTIVITY_LABEL,
   EDUCATION_STATUSES,
@@ -113,6 +116,8 @@ function CandidateDetailInner({
   const { data: activities = [] } = useCandidateActivities(candidate.id);
   const { data: scores = [] } = useCandidateScores(candidate.id);
   const { data: templates = [] } = useEmailTemplates();
+  const { isTransformador } = useUserRole();
+  const convert = useConvertCandidate();
   const addNote = useAddCandidateNote();
   const moveStage = useMoveCandidateStage();
   const setState = useSetCandidateState();
@@ -128,6 +133,8 @@ function CandidateDetailInner({
   const [subject, setSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [openingCv, setOpeningCv] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertRole, setConvertRole] = useState("ejecutor");
 
   // Borrador editable de la ficha (se inicializa una vez por candidato).
   const [form, setForm] = useState({
@@ -235,6 +242,46 @@ function CandidateDetailInner({
             {candidate.phone && <div className="text-muted-foreground">📞 {candidate.phone}</div>}
             {candidate.source && <div className="text-muted-foreground">🔗 {candidate.source}</div>}
           </div>
+
+          {/* Conversión a colaborador (solo G4) */}
+          {isTransformador && (
+            candidate.status === "hired" ? (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-2.5 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
+                <UserCheck className="h-4 w-4" /> Contratado · ya es colaborador
+              </div>
+            ) : !convertOpen ? (
+              <Button size="sm" variant="outline" onClick={() => setConvertOpen(true)}>
+                <UserCheck className="mr-1.5 h-3.5 w-3.5" /> Convertir a colaborador
+              </Button>
+            ) : (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">
+                  Se creará la cuenta de <strong>{candidate.full_name}</strong> ({candidate.email ?? "sin correo"}),
+                  se enviará el correo de acceso y se iniciará su lista de bienvenida.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Select value={convertRole} onValueChange={setConvertRole}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CONVERT_ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="ghost" onClick={() => setConvertOpen(false)}>Cancelar</Button>
+                  <Button
+                    size="sm"
+                    disabled={!candidate.email || convert.isPending}
+                    onClick={() => convert.mutate(
+                      { candidate, role: convertRole },
+                      { onSuccess: () => setConvertOpen(false) },
+                    )}
+                  >
+                    {convert.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    Confirmar
+                  </Button>
+                </div>
+              </div>
+            )
+          )}
 
           {/* CV */}
           <div className="flex items-center gap-2">
