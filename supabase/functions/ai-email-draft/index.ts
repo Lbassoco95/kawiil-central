@@ -11,7 +11,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-6";
+const MODEL = Deno.env.get("KAWIIL_AI_MODEL")?.trim() || Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || "claude-haiku-4-5";
 
 const SYSTEM_DRAFT =
   "Eres un asistente de redacción de correos profesionales en español para Kawiil, un despacho de servicios legales y contables. Redacta correos claros, concisos y profesionales. Responde SOLO con el cuerpo del correo, sin saludos iniciales duplicados ni firmas.";

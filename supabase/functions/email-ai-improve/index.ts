@@ -25,7 +25,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
  */
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MODEL = Deno.env.get("KAWIIL_AI_MODEL")?.trim() || Deno.env.get("KAWIIL_AI_FAST_MODEL")?.trim() || "claude-haiku-4-5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
