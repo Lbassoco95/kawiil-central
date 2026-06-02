@@ -1,4 +1,13 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,15 +28,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
-  CANDIDATE_STATUS_LABEL,
-  CANDIDATE_STATUS_STYLE,
   PROCESS_STATUS_LABEL,
   PROCESS_STATUS_STYLE,
+  STATE_COLOR_STYLE,
   type Candidate,
   type RecruitmentProcess,
+  type RecruitmentStage,
+  type RecruitmentState,
   type RhProcessStatus,
 } from "@/lib/recruitment";
 import {
@@ -35,11 +46,17 @@ import {
   useCreateProcess,
   useUpdateProcessStatus,
   useProcessStages,
+  useProcessStates,
   useCandidates,
   useCreateCandidate,
+  useMoveCandidateStage,
+  uploadCandidateCvByIds,
 } from "@/hooks/useRecruitment";
 import { useCelulas } from "@/hooks/useCatalogs";
+import { useQueryClient } from "@tanstack/react-query";
 import { CandidateDetailDialog } from "./CandidateDetailDialog";
+import { StageManagerDialog } from "./StageManagerDialog";
+import { StateManagerDialog } from "./StateManagerDialog";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
 
@@ -166,33 +183,47 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 /* ---------------- Tablero del proceso ---------------- */
 function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack: () => void }) {
   const { data: stages = [] } = useProcessStages(process.id);
+  const { data: states = [] } = useProcessStates(process.id);
   const { data: candidates = [], isLoading } = useCandidates(process.id);
   const { data: celulas = [] } = useCelulas();
   const celulaName = celulas.find((c) => c.id === process.celula_id)?.name ?? null;
   const updateStatus = useUpdateProcessStatus();
+  const moveStage = useMoveCandidateStage();
   const [addOpen, setAddOpen] = useState(false);
+  const [stagesOpen, setStagesOpen] = useState(false);
+  const [statesOpen, setStatesOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
 
-  // Mantiene el candidato seleccionado sincronizado con los datos frescos.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
   const detailLive = useMemo(
     () => (detail ? candidates.find((c) => c.id === detail.id) ?? null : null),
     [detail, candidates],
   );
 
+  const stateById = useMemo(() => new Map(states.map((s) => [s.id, s])), [states]);
+
   const byStage = useMemo(() => {
     const m = new Map<string, Candidate[]>();
     for (const s of stages) m.set(s.id, []);
-    const noStage: Candidate[] = [];
     for (const c of candidates) {
       if (c.stage_id && m.has(c.stage_id)) m.get(c.stage_id)!.push(c);
-      else noStage.push(c);
     }
-    return { m, noStage };
+    return m;
   }, [stages, candidates]);
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over) return;
+    const cand = candidates.find((c) => c.id === active.id);
+    const stage = stages.find((s) => s.id === over.id);
+    if (!cand || !stage || cand.stage_id === stage.id) return;
+    moveStage.mutate({ candidate: cand, stageId: stage.id, stageName: stage.name });
+  };
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" onClick={onBack} className="px-2">
           <ArrowLeft className="mr-1 h-4 w-4" /> Vacantes
         </Button>
@@ -201,13 +232,19 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
           {celulaName && <p className="text-xs text-muted-foreground">{celulaName}</p>}
         </div>
         <Select value={process.status} onValueChange={(v) => updateStatus.mutate({ id: process.id, status: v as RhProcessStatus })}>
-          <SelectTrigger className="h-8 w-[140px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             {PROCESS_STATUSES.map((s) => (
               <SelectItem key={s} value={s}>{PROCESS_STATUS_LABEL[s]}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <Button size="sm" variant="outline" onClick={() => setStagesOpen(true)}>
+          <Columns3 className="mr-1.5 h-3.5 w-3.5" /> Fases
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setStatesOpen(true)}>
+          <Tag className="mr-1.5 h-3.5 w-3.5" /> Estados
+        </Button>
         <Button size="sm" onClick={() => setAddOpen(true)}>
           <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Candidato
         </Button>
@@ -218,85 +255,165 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {stages.map((s) => {
-            const list = byStage.m.get(s.id) ?? [];
-            return (
-              <div key={s.id} className="w-64 shrink-0">
-                <div className="mb-2 flex items-center justify-between px-1">
-                  <span className="text-sm font-medium">{s.name}</span>
-                  <Badge variant="secondary" className="text-[10px]">{list.length}</Badge>
-                </div>
-                <div className="space-y-2">
-                  {list.map((c) => (
-                    <CandidateCard key={c.id} candidate={c} onClick={() => setDetail(c)} />
-                  ))}
-                  {list.length === 0 && (
-                    <div className="rounded-lg border border-dashed py-6 text-center text-xs text-muted-foreground">
-                      Vacío
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {stages.map((s) => (
+              <DroppableColumn key={s.id} stage={s} count={(byStage.get(s.id) ?? []).length}>
+                {(byStage.get(s.id) ?? []).map((c) => (
+                  <DraggableCard
+                    key={c.id}
+                    candidate={c}
+                    state={c.state_id ? stateById.get(c.state_id) : undefined}
+                    onClick={() => setDetail(c)}
+                  />
+                ))}
+              </DroppableColumn>
+            ))}
+            {stages.length === 0 && (
+              <p className="text-sm text-muted-foreground">Aún no hay fases. Crea las columnas en “Fases”.</p>
+            )}
+          </div>
+        </DndContext>
       )}
 
       <NewCandidateDialog
         open={addOpen}
         onOpenChange={setAddOpen}
-        processId={process.id}
+        process={process}
         firstStageId={stages[0]?.id ?? null}
+        defaultStateId={states.find((s) => s.is_default)?.id ?? states[0]?.id ?? null}
       />
+      <StageManagerDialog open={stagesOpen} onOpenChange={setStagesOpen} processId={process.id} stages={stages} />
+      <StateManagerDialog open={statesOpen} onOpenChange={setStatesOpen} processId={process.id} states={states} />
       <CandidateDetailDialog
         candidate={detailLive}
         stages={stages}
+        states={states}
         onOpenChange={(v) => !v && setDetail(null)}
       />
     </section>
   );
 }
 
-function CandidateCard({ candidate, onClick }: { candidate: Candidate; onClick: () => void }) {
+function DroppableColumn({ stage, count, children }: { stage: RecruitmentStage; count: number; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
-    <button type="button" onClick={onClick} className="w-full text-left">
+    <div className="w-64 shrink-0">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <span className="text-sm font-medium">{stage.name}</span>
+        <Badge variant="secondary" className="text-[10px]">{count}</Badge>
+      </div>
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "min-h-[80px] space-y-2 rounded-lg p-1 transition-colors",
+          isOver && "bg-muted/60 ring-2 ring-primary/30",
+        )}
+      >
+        {count === 0 ? (
+          <div className="rounded-lg border border-dashed py-6 text-center text-xs text-muted-foreground">
+            Vacío
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DraggableCard({
+  candidate,
+  state,
+  onClick,
+}: {
+  candidate: Candidate;
+  state: RecruitmentState | undefined;
+  onClick: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: candidate.id });
+  const style = transform
+    ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 }
+    : undefined;
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={onClick}
+      className={cn("cursor-grab touch-none active:cursor-grabbing", isDragging && "opacity-50")}
+    >
       <Card className="transition-colors hover:bg-muted/50">
         <CardContent className="space-y-1 p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="min-w-0 truncate text-sm font-medium">{candidate.full_name}</span>
-            {candidate.status !== "active" && (
-              <Badge variant="outline" className={cn("shrink-0 text-[10px]", CANDIDATE_STATUS_STYLE[candidate.status])}>
-                {CANDIDATE_STATUS_LABEL[candidate.status]}
+            {state && (
+              <Badge variant="outline" className={cn("shrink-0 text-[10px]", STATE_COLOR_STYLE[state.color] ?? STATE_COLOR_STYLE.slate)}>
+                {state.name}
               </Badge>
             )}
           </div>
-          {candidate.email && <p className="truncate text-xs text-muted-foreground">{candidate.email}</p>}
+          <div className="flex items-center gap-2">
+            {candidate.email && <p className="min-w-0 truncate text-xs text-muted-foreground">{candidate.email}</p>}
+            {candidate.resume_url && <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />}
+          </div>
         </CardContent>
       </Card>
-    </button>
+    </div>
   );
 }
 
 function NewCandidateDialog({
   open,
   onOpenChange,
-  processId,
+  process,
   firstStageId,
+  defaultStateId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  processId: string;
+  process: RecruitmentProcess;
   firstStageId: string | null;
+  defaultStateId: string | null;
 }) {
   const create = useCreateCandidate();
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState("");
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
 
   function reset() {
-    setFullName(""); setEmail(""); setPhone(""); setSource("");
+    setFullName(""); setEmail(""); setPhone(""); setSource(""); setCvFile(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const id = await create.mutateAsync({
+        process_id: process.id,
+        stage_id: firstStageId,
+        state_id: defaultStateId,
+        full_name: fullName.trim(),
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        source: source.trim() || null,
+      });
+      if (cvFile) {
+        await uploadCandidateCvByIds(process.organization_id, id, cvFile);
+        qc.invalidateQueries({ queryKey: ["rh-candidates", process.id] });
+      }
+      onOpenChange(false);
+      reset();
+    } catch (e) {
+      toast.error((e as Error).message || "No se pudo guardar");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -322,24 +439,29 @@ function NewCandidateDialog({
             <Label>Fuente (opcional)</Label>
             <Input value={source} onChange={(e) => setSource(e.target.value)} placeholder="LinkedIn, referido…" />
           </div>
+          <div className="space-y-1.5">
+            <Label>CV (opcional)</Label>
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+                <Upload className="mr-1.5 h-3.5 w-3.5" /> Elegir archivo
+              </Button>
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {cvFile ? cvFile.name : "PDF o Word"}
+              </span>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf,.doc,.docx,application/pdf"
+                className="hidden"
+                onChange={(e) => setCvFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button
-            disabled={!fullName.trim() || create.isPending}
-            onClick={() => create.mutate(
-              {
-                process_id: processId,
-                stage_id: firstStageId,
-                full_name: fullName.trim(),
-                email: email.trim() || null,
-                phone: phone.trim() || null,
-                source: source.trim() || null,
-              },
-              { onSuccess: () => { onOpenChange(false); reset(); } },
-            )}
-          >
-            {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button disabled={!fullName.trim() || saving} onClick={handleSave}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Agregar
           </Button>
         </DialogFooter>

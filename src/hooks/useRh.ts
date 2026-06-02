@@ -625,9 +625,14 @@ export function useCreateAbsenceRequest() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-my-absences"] });
-      toast.success("Solicitud enviada para aprobación");
+      qc.invalidateQueries({ queryKey: ["rh-approved-absences"] });
+      if (vars.absence_type === "burnout") {
+        toast.success("Día de burnout aprobado al instante");
+      } else {
+        toast.success("Solicitud enviada para aprobación");
+      }
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo enviar la solicitud"),
   });
