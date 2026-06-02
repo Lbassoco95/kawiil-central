@@ -286,12 +286,11 @@ export function EmailKawiilCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-sky-200/60 bg-gradient-to-br from-sky-50 via-white to-blue-50 shadow-sm",
-        "dark:border-sky-900/40 dark:from-sky-950/30 dark:via-background dark:to-blue-950/20",
+        "rounded-xl border border-border/60 bg-card shadow-sm",
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-sky-200/50 px-3 py-2 dark:border-sky-900/30">
+      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
             className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ring-1 ring-sky-300/40"
@@ -331,7 +330,7 @@ export function EmailKawiilCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 border-b border-sky-200/40 px-3 pt-2 dark:border-sky-900/30">
+      <div className="flex items-center gap-1 border-b border-border/30 px-3 pt-2">
         {TAB_DEFS.map((t) => {
           const active = tab === t.id;
           const Icon = t.icon;
@@ -344,7 +343,7 @@ export function EmailKawiilCard({
               className={cn(
                 "flex items-center gap-1.5 rounded-t-md border-b-2 px-2 py-1.5 text-[11px] font-medium transition-colors",
                 active
-                  ? "border-sky-500 text-sky-700 dark:text-sky-300"
+                  ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground",
                 !summary && (t.id === "keyPoints" || t.id === "action") && "opacity-40 cursor-not-allowed hover:text-muted-foreground",
               )}
@@ -401,7 +400,7 @@ export function EmailKawiilCard({
             <ul className="space-y-1.5">
               {summary.keyPoints.map((kp, idx) => (
                 <li key={idx} className="flex gap-2 text-[13px] leading-relaxed">
-                  <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
+                  <span className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary/60" />
                   <span>{kp}</span>
                 </li>
               ))}
@@ -431,7 +430,7 @@ export function EmailKawiilCard({
         )}
       </div>
 
-      <div className="border-t border-sky-200/40 px-3 py-2.5 dark:border-sky-900/30">
+      <div className="border-t border-border/30 px-3 py-2.5">
         <div className="mb-1.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Respuesta rápida

@@ -2944,13 +2944,9 @@ export function EmailView() {
           </div>
         ) : emailDetail ? (
           <div
-            className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-muted/25 via-background to-background"
+            className="flex-1 flex flex-col overflow-hidden bg-background"
             data-email-layout={EMAIL_VIEW_LAYOUT_VERSION}
           >
-            <div
-              className="h-2.5 shrink-0 bg-gradient-to-r from-primary via-blue-500 to-sky-400"
-              aria-hidden
-            />
             {/* Detail header */}
             <div className="px-3 sm:px-6 py-3 sm:py-4 border-b border-border/50 shrink-0 bg-background/80 backdrop-blur-sm shadow-sm">
               {(isMobile || (!isMobile && listPaneCollapsed)) && (
@@ -3526,7 +3522,7 @@ export function EmailView() {
                 )}
 
                 {!threadHistoryLoading && hasPriorMessages && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border border-border/60 bg-gradient-to-b from-muted/30 to-background/30 p-4 sm:p-5 space-y-3">
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-xl border border-border/50 bg-muted/20 p-4 sm:p-5 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-foreground flex items-center gap-2">
