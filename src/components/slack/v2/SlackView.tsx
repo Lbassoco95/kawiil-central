@@ -103,7 +103,9 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         setSearchParams({ channel: id });
         // Limpiar badges de notificaciones inmediatamente al entrar al canal
         if (user?.id) {
-          void markSlackChannelNotificationsRead(user.id, id);
+          void markSlackChannelNotificationsRead(user.id, id).then(() => {
+            void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+          });
         }
       }
       // En móvil, navegar a la vista de mensajes
@@ -241,6 +243,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   useEffect(() => {
     if (!selectedChannel || !messages.length || historyQuery.isLoading) return;
     const ts = messages[messages.length - 1]?.ts;
+    // Marcar leído en Slack y en Supabase al mismo tiempo
     void markSlackConversationRead(selectedChannel, ts).catch((err) => {
       if (isSlackMarkReadFatal(err)) {
         const now = Date.now();
@@ -253,6 +256,11 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         }
       }
     });
+    if (user?.id) {
+      void markSlackChannelNotificationsRead(user.id, selectedChannel).then(() => {
+        void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", user.id] });
+      });
+    }
   }, [selectedChannel, messages, historyQuery.isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Realtime: nuevos mensajes de Slack → refrescar historial ──
