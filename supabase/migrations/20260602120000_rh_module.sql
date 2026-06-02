@@ -104,6 +104,15 @@ CREATE INDEX IF NOT EXISTS idx_rh_attendance_org_date
   ON public.rh_attendance(organization_id, work_date DESC);
 
 -- -------------------------------------------------------------
+-- Asegura columnas añadidas posteriormente (idempotente, por si una
+-- corrida previa creó las tablas sin estas columnas).
+-- -------------------------------------------------------------
+ALTER TABLE public.rh_work_schedules
+  ADD COLUMN IF NOT EXISTS employment_type public.rh_employment_type NOT NULL DEFAULT 'full_time';
+ALTER TABLE public.rh_attendance
+  ADD COLUMN IF NOT EXISTS expected_work_mode public.rh_work_mode;
+
+-- -------------------------------------------------------------
 -- Triggers updated_at (reutiliza helper existente)
 -- -------------------------------------------------------------
 DROP TRIGGER IF EXISTS set_updated_at_rh_office_locations ON public.rh_office_locations;
@@ -129,10 +138,12 @@ ALTER TABLE public.rh_work_schedules  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rh_attendance      ENABLE ROW LEVEL SECURITY;
 
 -- ---- Office locations: todos en la org leen; solo G4 administra ----
+DROP POLICY IF EXISTS "Org reads office locations" ON public.rh_office_locations;
 CREATE POLICY "Org reads office locations" ON public.rh_office_locations
   FOR SELECT TO authenticated
   USING (organization_id = public.get_user_org_id(auth.uid()));
 
+DROP POLICY IF EXISTS "G4 manage office locations" ON public.rh_office_locations;
 CREATE POLICY "G4 manage office locations" ON public.rh_office_locations
   FOR ALL TO authenticated
   USING (
@@ -145,6 +156,7 @@ CREATE POLICY "G4 manage office locations" ON public.rh_office_locations
   );
 
 -- ---- Work schedules: empleado ve el suyo; G4 ve y administra toda la org ----
+DROP POLICY IF EXISTS "Read own or G4 reads org schedules" ON public.rh_work_schedules;
 CREATE POLICY "Read own or G4 reads org schedules" ON public.rh_work_schedules
   FOR SELECT TO authenticated
   USING (
@@ -152,6 +164,7 @@ CREATE POLICY "Read own or G4 reads org schedules" ON public.rh_work_schedules
     AND (user_id = auth.uid() OR public.has_role(auth.uid(), 'transformador'))
   );
 
+DROP POLICY IF EXISTS "G4 manage schedules" ON public.rh_work_schedules;
 CREATE POLICY "G4 manage schedules" ON public.rh_work_schedules
   FOR ALL TO authenticated
   USING (
@@ -164,6 +177,7 @@ CREATE POLICY "G4 manage schedules" ON public.rh_work_schedules
   );
 
 -- ---- Attendance: empleado ve/crea/cierra el suyo; G4 ve toda la org ----
+DROP POLICY IF EXISTS "Read own or G4 reads org attendance" ON public.rh_attendance;
 CREATE POLICY "Read own or G4 reads org attendance" ON public.rh_attendance
   FOR SELECT TO authenticated
   USING (
@@ -171,6 +185,7 @@ CREATE POLICY "Read own or G4 reads org attendance" ON public.rh_attendance
     AND (user_id = auth.uid() OR public.has_role(auth.uid(), 'transformador'))
   );
 
+DROP POLICY IF EXISTS "Insert own attendance" ON public.rh_attendance;
 CREATE POLICY "Insert own attendance" ON public.rh_attendance
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -178,6 +193,7 @@ CREATE POLICY "Insert own attendance" ON public.rh_attendance
     AND organization_id = public.get_user_org_id(auth.uid())
   );
 
+DROP POLICY IF EXISTS "Update own attendance" ON public.rh_attendance;
 CREATE POLICY "Update own attendance" ON public.rh_attendance
   FOR UPDATE TO authenticated
   USING (user_id = auth.uid())
