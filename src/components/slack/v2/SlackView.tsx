@@ -22,6 +22,7 @@ import {
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
 import { useSlackChannelNotificationBadges, markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 import { useSlackUnreadMentionsCount } from "@/hooks/useSlackActivityFeed";
+import { useSlackUnreadSync } from "@/hooks/useSlackUnreadSync";
 import { useSlackTyping } from "@/hooks/useSlackTyping";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -400,6 +401,26 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   // ─── Badges no leídos ───────────────────────────────────
   const unreadBadges = useSlackChannelNotificationBadges(user?.id);
+
+  // Canales con badge para sincronizar contra Slack (máx 18, priorizando mayor conteo)
+  const syncChannelIds = useMemo(() => {
+    const CAP = 18;
+    return Object.entries(unreadBadges)
+      .filter(([, n]) => n > 0)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, CAP)
+      .map(([id]) => id);
+  }, [unreadBadges]);
+
+  // ─── Sincronización Slack→Kawiil: limpiar badges de canales leídos en la app nativa ──
+  useSlackUnreadSync({
+    enabled: true,
+    userId: user?.id,
+    selectedChannel,
+    localUnreadByChannel: unreadBadges,
+    pollChannelIds: syncChannelIds,
+    holdUnreadSnapshot: historyQuery.isLoading,
+  });
 
   // ─── Menciones no leídas ────────────────────────────────
   const unreadMentions = useSlackUnreadMentionsCount();
