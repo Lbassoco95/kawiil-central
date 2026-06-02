@@ -1584,7 +1584,7 @@ export function EmailView() {
     deleteEmail.mutate(emailId);
   }, [deleteEmail, allEmails, selectedEmailId, resetAction]);
 
-  const toggleBulkSelect = useCallback((emailId: string, e: React.MouseEvent) => {
+  const toggleBulkSelect = useCallback((emailId: string, e: { stopPropagation(): void }) => {
     e.stopPropagation();
     setBulkSelectedIds(prev => {
       const next = new Set(prev);
