@@ -220,6 +220,15 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     enabled: !!selectedChannel,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    // Polling fallback para canales donde el webhook Slack Events puede no estar configurado
+    refetchInterval: (query) => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return false;
+      if (query.state.fetchStatus === "fetching") return false;
+      const pages = query.state.data?.pages?.length ?? 0;
+      if (pages !== 1) return false; // no re-paginar si hay múltiples páginas
+      return 60_000;
+    },
+    refetchIntervalInBackground: false,
   });
 
   const messages = useMemo(
@@ -244,6 +253,42 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
       }
     });
   }, [selectedChannel, messages, historyQuery.isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Realtime: nuevos mensajes de Slack → refrescar historial ──
+  useEffect(() => {
+    if (!user?.id || !selectedChannel) return;
+    const uid = user.id;
+    const channelId = selectedChannel;
+
+    const ch = supabase
+      .channel(`slack-live-${uid}-${channelId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${uid}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            entity_type?: string;
+            entity_ref?: string;
+            type?: string;
+          };
+          if (row.entity_type !== "slack") return;
+          if (!row.entity_ref?.startsWith(`${channelId}|`)) return;
+          if (row.type !== "slack_message" && row.type !== "slack_mention") return;
+          // Mensaje nuevo en el canal abierto: mostrar y limpiar badge
+          void historyQuery.refetch();
+          void markSlackChannelNotificationsRead(uid, channelId);
+          void qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", uid] });
+        },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id, selectedChannel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Hilo (replies) ─────────────────────────────────────
   const threadQuery = useQuery({
