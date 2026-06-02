@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive, ClipboardList, BarChart3, LayoutDashboard, BookOpen } from "lucide-react";
@@ -25,10 +26,15 @@ import { OfficeLocationsManager } from "./OfficeLocationsManager";
  * - "Mi jornada": disponible para todo el equipo (check-in/out con geolocalización).
  * - "Equipo" y "Turnos": solo para G4 (transformador).
  */
+const RH_TABS = ["jornada", "solicitudes", "expediente", "cuestionarios", "reclutamiento", "tablero-rh", "equipo", "turnos", "expedientes", "resultados-rh"];
+
 export function RecursosHumanosPanel() {
   const { isTransformador } = useUserRole();
   const canRecruit = useCanAccessRecruitment();
   const [guiaOpen, setGuiaOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const rhParam = searchParams.get("rh");
+  const initialTab = rhParam && RH_TABS.includes(rhParam) ? rhParam : "jornada";
 
   return (
     <section className="space-y-4">
@@ -43,7 +49,7 @@ export function RecursosHumanosPanel() {
       </div>
       <GuiaRHDialog open={guiaOpen} onOpenChange={setGuiaOpen} isG4={isTransformador} />
 
-      <Tabs defaultValue="jornada">
+      <Tabs defaultValue={initialTab}>
         {/* Barra en una sola fila con scroll horizontal; agrupada por bloques. */}
         <div className="-mx-1 overflow-x-auto px-1 pb-1">
           <TabsList className="inline-flex w-max justify-start gap-0.5">

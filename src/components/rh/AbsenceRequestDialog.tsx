@@ -36,13 +36,15 @@ import { useCreateAbsenceRequest, useMyCelulas } from "@/hooks/useRh";
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  /** Tipo de ausencia preseleccionado al abrir (p. ej. "burnout" desde un atajo). */
+  defaultType?: RhAbsenceType;
 }
 
-export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
+export function AbsenceRequestDialog({ open, onOpenChange, defaultType }: Props) {
   const create = useCreateAbsenceRequest();
   const { data: celulas = [] } = useMyCelulas();
 
-  const [absenceType, setAbsenceType] = useState<RhAbsenceType>("vacaciones");
+  const [absenceType, setAbsenceType] = useState<RhAbsenceType>(defaultType ?? "vacaciones");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [dayPart, setDayPart] = useState<RhDayPart>("full_day");
@@ -56,7 +58,7 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setAbsenceType("vacaciones");
+    setAbsenceType(defaultType ?? "vacaciones");
     setStartDate("");
     setEndDate("");
     setDayPart("full_day");
@@ -65,7 +67,7 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
     // varias, se prioriza la que tenga responsable asignado.
     const withResponsible = celulas.find((c) => c.responsible_user_id);
     setCelulaId((withResponsible ?? celulas[0])?.id ?? "");
-  }, [open, celulas]);
+  }, [open, celulas, defaultType]);
 
   // Si el tipo/fechas no admiten medio día, volver a día completo.
   useEffect(() => {
