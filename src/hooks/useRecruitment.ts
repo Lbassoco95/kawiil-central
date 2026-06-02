@@ -585,6 +585,68 @@ export function useLogCandidateEmail() {
   });
 }
 
+/* ---------------- Importación masiva de candidatos (CSV/Excel) ---------------- */
+export type ImportCandidateRow = Partial<
+  Pick<
+    Candidate,
+    | "full_name" | "email" | "phone" | "source"
+    | "university" | "degree" | "education_status" | "skills"
+    | "years_experience" | "salary_expectation" | "available_from"
+    | "linkedin_url" | "portfolio_url"
+  >
+>;
+
+export function useImportCandidates() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      processId,
+      stageId,
+      stateId,
+      rows,
+    }: {
+      processId: string;
+      stageId: string | null;
+      stateId: string | null;
+      rows: ImportCandidateRow[];
+    }): Promise<number> => {
+      const orgId = await getMyOrgId(user!.id);
+      const payload = rows
+        .filter((r) => (r.full_name ?? "").trim().length > 0)
+        .map((r) => ({
+          organization_id: orgId,
+          process_id: processId,
+          stage_id: stageId,
+          state_id: stateId,
+          created_by: user!.id,
+          full_name: r.full_name!.trim(),
+          email: r.email ?? null,
+          phone: r.phone ?? null,
+          source: r.source ?? null,
+          university: r.university ?? null,
+          degree: r.degree ?? null,
+          education_status: r.education_status ?? null,
+          skills: r.skills ?? [],
+          years_experience: r.years_experience ?? null,
+          salary_expectation: r.salary_expectation ?? null,
+          available_from: r.available_from ?? null,
+          linkedin_url: r.linkedin_url ?? null,
+          portfolio_url: r.portfolio_url ?? null,
+        }));
+      if (payload.length === 0) throw new Error("No hay filas con nombre para importar.");
+      const { error } = await db.from("rh_candidates").insert(payload);
+      if (error) throw error;
+      return payload.length;
+    },
+    onSuccess: (count, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.processId] });
+      toast.success(`${count} candidato(s) importado(s)`);
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo importar"),
+  });
+}
+
 /* ---------------- Nombre de la organización (para variables) ---------------- */
 export function useOrgName() {
   const { user } = useAuth();
