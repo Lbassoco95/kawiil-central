@@ -2864,10 +2864,8 @@ export function EmailView() {
 
       {/* Detail panel — oculto hasta que el usuario seleccione un correo */}
       <div
-        className={cn(
-          "relative z-[3] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background border-l border-border/40",
-          !selectedEmailId && "hidden",
-        )}
+        style={!selectedEmailId ? { display: "none" } : undefined}
+        className="relative z-[3] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background border-l border-border/40"
       >
         {!selectedEmailId ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-6 select-none">
