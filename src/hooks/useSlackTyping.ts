@@ -12,6 +12,8 @@ export type TypingUser = {
   userName: string;
   avatarUrl?: string;
   expiresAt: number;
+  /** true = viene de la app nativa de Slack vía Socket Mode bridge */
+  fromSlack?: boolean;
 };
 
 interface BroadcastPayload {
@@ -20,6 +22,8 @@ interface BroadcastPayload {
   avatar_url?: string;
   channel_id: string;
   is_typing: boolean;
+  /** "slack" cuando viene del bridge de Socket Mode; ausente si es Kawiil → Kawiil */
+  source?: "slack" | "kawiil";
 }
 
 /**
@@ -66,6 +70,7 @@ export function useSlackTyping(
             userName: p.user_name,
             avatarUrl: p.avatar_url,
             expiresAt: Date.now() + TYPING_EXPIRE_MS,
+            fromSlack: p.source === "slack",
           },
         ];
       });
