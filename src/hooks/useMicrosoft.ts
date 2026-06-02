@@ -1704,26 +1704,31 @@ export function useCreateMailRule() {
       const errBody = await readSupabaseFunctionErrorBody(error);
       if (error) {
         const combined = [errBody, (error as Error)?.message ?? ""].join(" ");
+        // Permission errors → guide user to reconnect
         if (
           combined.includes("PERMISSION_REQUIRED") ||
           combined.includes("MICROSOFT_PERMISSION_REQUIRED") ||
           combined.includes("MailboxSettings") ||
           combined.includes("permisos necesarios") ||
-          combined.includes("insufficient") ||
-          errBody.includes("403")
+          combined.includes("insufficient")
         ) {
-          throw new Error("Permisos insuficientes. Para crear reglas es necesario reconectar tu cuenta de Microsoft: ve a Configuración → Integraciones y vuelve a conectar Microsoft.");
+          throw new Error("Permisos insuficientes. Para crear reglas reconecta tu cuenta de Microsoft: ve a Configuración → Integraciones y vuelve a conectar.");
         }
-        // Try to surface the message from the JSON body
+        // Extract friendly message from JSON body (must parse OUTSIDE the try so the throw propagates)
+        let friendlyMsg: string | null = null;
         try {
-          const parsed = JSON.parse(errBody) as { error?: string; message?: string };
-          if (parsed?.error || parsed?.message) {
-            throw new Error(parsed.message || parsed.error || "Error desconocido");
+          const parsed = JSON.parse(errBody) as { error?: string; message?: string; code?: string };
+          if (parsed.code === "UNKNOWN_ACTION") {
+            friendlyMsg = "La función no está desplegada con soporte de reglas. Pide al equipo que ejecute: supabase functions deploy microsoft-api";
+          } else {
+            friendlyMsg = parsed.message || parsed.error || null;
           }
-        } catch { /* ignore parse errors */ }
-        throw error;
+        } catch { /* not JSON */ }
+        if (friendlyMsg) throw new Error(friendlyMsg);
+        // Generic fallback — any FunctionsHttpError from this mutation
+        throw new Error("No se pudo crear la regla. Si el problema persiste, reconecta Microsoft desde Configuración → Integraciones.");
       }
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) throw new Error(String(data.error));
       return data as MailRule;
     },
     onSuccess: () => {
