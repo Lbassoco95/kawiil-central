@@ -1,4 +1,8 @@
 import { useEffect, useRef, useLayoutEffect, useCallback, createElement } from "react";
+
+// Singleton: persists across AppLayout remounts (page navigation) so the same
+// notification ID is never toasted twice within TOAST_DEDUPE_MS.
+const _toastDedupeIds = new Set<string>();
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -139,7 +143,7 @@ export function useNotificationDelivery() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const prefsRef = useRef<NotificationDeliveryPrefs | undefined>(undefined);
-  const toastDedupeIdsRef = useRef<Set<string>>(new Set());
+  const toastDedupeIdsRef = useRef<Set<string>>(_toastDedupeIds);
   const pollCursorIsoRef = useRef<string | null>(null);
   const rtSubscribedRef = useRef(false);
 

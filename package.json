@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "workspaces": ["services/slack-socket-bridge"],
+  "trustedDependencies": [],
   "scripts": {
     "dev": "vite",
     "build": "vite build",

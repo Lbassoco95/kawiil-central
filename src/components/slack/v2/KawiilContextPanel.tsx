@@ -90,7 +90,7 @@ export function KawiilContextPanel({
   });
 
   // Miembros del canal (solo DMs y grupos pequeños)
-  const isSmallConv = !!(currentConv?.is_im || currentConv?.is_mpim);
+  const isSmallConv = !!(currentConv?.is_im || currentConv?.is_mpim || currentConv?.is_private);
   const membersQuery = useQuery({
     queryKey: ["slack-chan-members", channelId],
     queryFn: async () => {
