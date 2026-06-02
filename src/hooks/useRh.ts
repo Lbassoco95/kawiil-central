@@ -704,3 +704,22 @@ export function useApprovableAbsenceRequests() {
     enabled: !!user,
   });
 }
+
+/** Ausencias aprobadas visibles (G4: toda la org; otros: propias) — para calendario y "ausentes hoy". */
+export function useApprovedAbsences() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-approved-absences", user?.id],
+    queryFn: async (): Promise<RhAbsenceRequest[]> => {
+      const { data, error } = await db
+        .from("rh_absence_requests")
+        .select("*")
+        .eq("status", "approved")
+        .order("start_date", { ascending: true });
+      if (error) throw error;
+      return (data as RhAbsenceRequest[]) ?? [];
+    },
+    enabled: !!user,
+    staleTime: 2 * 60 * 1000,
+  });
+}

@@ -7,6 +7,7 @@ import { SolicitudesPanel } from "./SolicitudesPanel";
 import { TeamScheduleManager } from "./TeamScheduleManager";
 import { TeamAttendanceBoard } from "./TeamAttendanceBoard";
 import { TeamLivePresence } from "./TeamLivePresence";
+import { TeamAbsencesToday, TeamAbsenceCalendar } from "./TeamAbsences";
 import { OfficeLocationsManager } from "./OfficeLocationsManager";
 
 /**
@@ -63,7 +64,11 @@ export function RecursosHumanosPanel() {
           <>
             <TabsContent value="equipo" className="mt-5">
               <div className="grid gap-5">
-                <TeamLivePresence />
+                <div className="grid gap-5 lg:grid-cols-2">
+                  <TeamLivePresence />
+                  <TeamAbsencesToday />
+                </div>
+                <TeamAbsenceCalendar />
                 <TeamAttendanceBoard />
               </div>
             </TabsContent>
