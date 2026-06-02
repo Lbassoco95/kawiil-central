@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, Users, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QuestionnaireEditorDialog } from "./QuestionnaireEditorDialog";
 import {
   bandFor,
   BAND_COLOR_STYLE,
@@ -40,6 +43,7 @@ function ResultCard({ q }: { q: Questionnaire }) {
   const toggle = useToggleQuestionnaireActive();
   const { data: count = 0 } = useResponseCount(q.id, true);
   const { data: results } = useQuestionnaireResults(q.id, true);
+  const [editing, setEditing] = useState(false);
 
   const band = q.bands?.length && results ? bandFor(q.bands, results.total_avg) : null;
 
@@ -49,11 +53,19 @@ function ResultCard({ q }: { q: Questionnaire }) {
         <CardTitle className="flex items-center justify-between gap-2 text-sm">
           <span className="min-w-0 truncate">{q.title}</span>
           <span className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditing(true)}>
+              <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+            </Button>
             {q.active ? "Abierto" : "Cerrado"}
             <Switch checked={q.active} onCheckedChange={(v) => toggle.mutate({ id: q.id, active: v })} />
           </span>
         </CardTitle>
       </CardHeader>
+      <QuestionnaireEditorDialog
+        questionnaire={editing ? q : null}
+        hasResponses={count > 0}
+        onOpenChange={(v) => !v && setEditing(false)}
+      />
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Users className="h-3.5 w-3.5" /> {count} respuesta(s)
