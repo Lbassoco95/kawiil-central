@@ -11,6 +11,9 @@ import {
   plannedModeForToday,
   summarizeJornada,
   type SlackStatus,
+  type RhAbsenceRequest,
+  type RhAbsenceType,
+  type RhDayPart,
   type RhAttendance,
   type RhAttendanceEvent,
   type RhEmploymentType,
@@ -506,5 +509,179 @@ export function useOrgAttendance(workDate?: string) {
       return (data as RhAttendance[]) ?? [];
     },
     enabled: !!user,
+  });
+}
+
+/* ============================================================
+ * Células y solicitudes de ausencias (Entrega 3)
+ * ========================================================== */
+export interface Celula {
+  id: string;
+  name: string;
+  slug: string;
+  responsible_user_id: string | null;
+}
+
+/** Células a las que pertenece el usuario actual. */
+export function useMyCelulas() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-my-celulas", user?.id],
+    queryFn: async (): Promise<Celula[]> => {
+      const { data, error } = await db
+        .from("user_celulas")
+        .select("celula:celulas(id, name, slug, responsible_user_id)")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[]).map((r) => r.celula).filter(Boolean) as Celula[];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Células de las que el usuario actual es responsable (G4 líder). */
+export function useMyResponsibleCelulas() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-responsible-celulas", user?.id],
+    queryFn: async (): Promise<Celula[]> => {
+      const { data, error } = await db
+        .from("celulas")
+        .select("id, name, slug, responsible_user_id")
+        .eq("responsible_user_id", user!.id)
+        .eq("is_active", true);
+      if (error) throw error;
+      return (data as Celula[]) ?? [];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useMyAbsenceRequests() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-my-absences", user?.id],
+    queryFn: async (): Promise<RhAbsenceRequest[]> => {
+      const { data, error } = await db
+        .from("rh_absence_requests")
+        .select("*")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data as RhAbsenceRequest[]) ?? [];
+    },
+    enabled: !!user,
+  });
+}
+
+/** Solicitudes de las células que el usuario aprueba (responsable). */
+export function useCelulaAbsenceRequests(celulaIds: string[]) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-celula-absences", celulaIds.slice().sort().join(",")],
+    queryFn: async (): Promise<RhAbsenceRequest[]> => {
+      if (celulaIds.length === 0) return [];
+      const { data, error } = await db
+        .from("rh_absence_requests")
+        .select("*")
+        .in("celula_id", celulaIds)
+        .neq("user_id", user!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data as RhAbsenceRequest[]) ?? [];
+    },
+    enabled: !!user && celulaIds.length > 0,
+  });
+}
+
+export interface AbsenceRequestInput {
+  absence_type: RhAbsenceType;
+  start_date: string;
+  end_date: string;
+  day_part: RhDayPart;
+  celula_id: string | null;
+  reason?: string | null;
+}
+
+export function useCreateAbsenceRequest() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: AbsenceRequestInput) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { error } = await db.from("rh_absence_requests").insert({
+        user_id: user!.id,
+        organization_id: orgId,
+        celula_id: input.celula_id,
+        absence_type: input.absence_type,
+        start_date: input.start_date,
+        end_date: input.end_date,
+        day_part: input.day_part,
+        reason: input.reason ?? null,
+        status: "pending",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-my-absences"] });
+      toast.success("Solicitud enviada para aprobación");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo enviar la solicitud"),
+  });
+}
+
+export function useCancelAbsenceRequest() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db
+        .from("rh_absence_requests")
+        .update({ status: "cancelled" })
+        .eq("id", id)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-my-absences"] });
+      toast.success("Solicitud cancelada");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo cancelar"),
+  });
+}
+
+export function useDecideAbsenceRequest() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      decision,
+      note,
+    }: {
+      id: string;
+      decision: "approved" | "rejected";
+      note?: string | null;
+    }) => {
+      const { error } = await db
+        .from("rh_absence_requests")
+        .update({
+          status: decision,
+          approver_user_id: user!.id,
+          decided_at: new Date().toISOString(),
+          decision_note: note ?? null,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-celula-absences"] });
+      qc.invalidateQueries({ queryKey: ["rh-my-absences"] });
+      toast.success(vars.decision === "approved" ? "Solicitud aprobada" : "Solicitud rechazada");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo registrar la decisión"),
   });
 }
