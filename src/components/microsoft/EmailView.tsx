@@ -600,11 +600,13 @@ function readExpandedFolderIds(): Set<string> {
 }
 
 function readFoldersCollapsedPref(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(LS_EMAIL_FOLDERS_COLLAPSED) === "1";
+    const stored = window.localStorage.getItem(LS_EMAIL_FOLDERS_COLLAPSED);
+    // default collapsed (Superhuman style) unless user explicitly expanded
+    return stored === null ? true : stored === "1";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -1100,16 +1102,11 @@ export function EmailView() {
     }
     if (m.truncated) {
       toast.warning(
-        "La lista de carpetas puede estar incompleta por límites del servidor. Si faltan muchas, contacta a soporte.",
-        { id: "mail-folders-truncated", duration: 8_000 },
+        "La lista de carpetas puede estar incompleta por límites del servidor.",
+        { id: "mail-folders-truncated", duration: 6_000 },
       );
     }
-    if (m.partialChildErrors && m.partialChildErrors > 0) {
-      toast.info(
-        `No se pudieron cargar algunas subcarpetas (${m.partialChildErrors}). El resto debería mostrarse bien.`,
-        { id: "mail-folders-partial", duration: 7_000 },
-      );
-    }
+    // partialChildErrors is minor and non-actionable — suppress silently
   }, [
     mailFoldersData?.meta?.usedRootOnlyFallback,
     mailFoldersData?.meta?.rootOnlyFallbackReason,
@@ -2399,91 +2396,75 @@ export function EmailView() {
         )}
       </div>
 
-      {/* Email list panel — escritorio: base min(28rem,36vw), puede encoger para no exprimir el lector */}
+      {/* Email list panel — estrecho cuando hay email abierto (Superhuman) */}
       <div
         className={cn(
-          "relative z-[2] flex min-h-0 flex-col overflow-hidden border-r border-border bg-background transition-[width,opacity] duration-200 ease-out",
+          "relative z-[2] flex min-h-0 flex-col overflow-hidden border-r border-border bg-background transition-all duration-200 ease-out",
           isMobile
             ? "min-w-0 flex-1"
             : cn(
                 listPaneCollapsed && selectedEmailId
                   ? "pointer-events-none w-0 min-w-0 shrink-0 overflow-hidden border-0 p-0 opacity-0"
-                  : "max-w-[36rem] min-w-[18rem] flex-[0_1_min(36rem,42vw)]",
+                  : selectedEmailId
+                    ? "w-[280px] shrink-0"
+                    : "min-w-[22rem] flex-[0_1_min(44rem,52vw)]",
               ),
           selectedEmailId && isMobile && "hidden",
         )}
       >
         {/* Search & compose toolbar */}
-        <div className="space-y-2 border-b border-border/50 p-3">
+        {/* Superhuman-style toolbar: compact single row */}
+        <div className="shrink-0 border-b border-border/40 px-2 py-1.5">
           <TooltipProvider delayDuration={250}>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               {isMobile && (
-                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setShowFolders(true)}>
+                <button type="button" className="p-1.5 rounded hover:bg-muted text-muted-foreground" onClick={() => setShowFolders(true)}>
                   <FolderOpen className="h-4 w-4" />
-                </Button>
+                </button>
               )}
+              {/* Search — expands to fill, minimal style */}
               <div className="relative min-w-0 flex-1">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
                 <Input
-                  placeholder="Buscar en todo el buzón…"
-                  className="h-9 border-0 bg-muted/40 pl-9 text-sm focus-visible:ring-1"
+                  placeholder="Buscar…"
+                  className="h-7 border-0 bg-transparent pl-7 text-[13px] focus-visible:ring-0 focus-visible:bg-muted/30 placeholder:text-muted-foreground/40"
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
                 />
               </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 shrink-0"
-                    onClick={() => void handleRefreshEmails()}
-                    disabled={emailsQuery.isRefetching}
-                    aria-label="Actualizar correos"
-                  >
-                    <RefreshCw className={cn("h-4 w-4", emailsQuery.isRefetching && "animate-spin")} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Actualizar correos</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={aiInboxOpen ? "default" : "outline"}
-                    size="icon"
-                    className={cn(
-                      "h-9 w-9 shrink-0",
-                      !aiInboxOpen && "border-primary/30 text-primary hover:bg-primary/10",
-                    )}
-                    onClick={() => setAiInboxOpen((v) => !v)}
-                    aria-label="Triaje IA del inbox"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  {aiInboxOpen ? "Cerrar triaje IA" : "Triaje IA del inbox"}
-                </TooltipContent>
-              </Tooltip>
-              <Button
-                size="sm"
-                className="h-9 shrink-0 gap-2 px-4 text-white shadow-md hover:shadow-lg border-0"
-                style={{
-                  background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))",
-                }}
+              <button
+                type="button"
+                className="p-1.5 rounded hover:bg-muted text-muted-foreground"
+                onClick={() => void handleRefreshEmails()}
+                disabled={emailsQuery.isRefetching}
+                title="Actualizar"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", emailsQuery.isRefetching && "animate-spin")} />
+              </button>
+              <button
+                type="button"
+                className={cn("p-1.5 rounded text-muted-foreground", aiInboxOpen ? "bg-primary/10 text-primary" : "hover:bg-muted")}
+                onClick={() => setAiInboxOpen((v) => !v)}
+                title={aiInboxOpen ? "Cerrar triaje IA" : "Triaje IA"}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:opacity-90"
                 onClick={() => setComposeOpen(true)}
               >
-                <Send className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Redactar</span>
-              </Button>
+                <Send className="h-3 w-3" />
+                <span className={cn(selectedEmailId && !isMobile ? "hidden" : "hidden sm:inline")}>Redactar</span>
+              </button>
             </div>
           </TooltipProvider>
-          {/* Filter chips (mock v2.4) */}
-          <div className="-mb-1 flex flex-wrap items-center gap-1.5">
+          {/* Filter tabs — very minimal */}
+          <div className="flex items-center gap-0 mt-1 -mx-1">
             {([
-              { id: "all", label: "Todos" },
+              { id: "all", label: "Todo" },
               { id: "unread", label: "No leídos" },
-              { id: "attachments", label: "Con adjuntos" },
+              { id: "attachments", label: "Adjuntos" },
               { id: "sat", label: "SAT" },
               { id: "facturas", label: "Facturas" },
             ] as const).map((f) => {
@@ -2494,10 +2475,10 @@ export function EmailView() {
                   type="button"
                   onClick={() => setListFilter(f.id)}
                   className={cn(
-                    "h-6 rounded-full border px-2.5 text-[11px] font-medium transition-colors",
+                    "px-2 py-0.5 text-[11px] rounded transition-colors",
                     active
-                      ? "border-primary/40 bg-primary/15 text-primary shadow-[0_0_0_1px_hsl(var(--primary)/0.2)_inset]"
-                      : "border-border/60 bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      ? "font-semibold text-foreground"
+                      : "text-muted-foreground/60 hover:text-muted-foreground",
                   )}
                 >
                   {f.label}
@@ -2889,25 +2870,29 @@ export function EmailView() {
         )}
       >
         {!selectedEmailId ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="max-w-md text-center px-2">
-              <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-primary/10 ring-1 ring-primary/20 mb-4">
-                <Mail className="h-9 w-9 text-primary/60" />
-              </div>
-              <p className="text-base font-semibold text-foreground/80 mb-2">Selecciona un correo</p>
-              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground/50">
-                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">j</kbd><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">k</kbd> navegar</span>
-                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">x</kbd> seleccionar</span>
-                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">t</kbd> crear tarea</span>
-                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">c</kbd> redactar</span>
-                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">r</kbd> responder</span>
-                <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">e</kbd> archivar</span>
-              </div>
-              {!isMobile && (
-                <p className="mt-4 max-w-sm text-center text-[11px] leading-relaxed text-muted-foreground/70">
-                  Puedes contraer el panel de carpetas (««) o, al abrir un mensaje, ampliar el lector para ocultar la lista.
-                </p>
-              )}
+          <div className="flex-1 flex flex-col items-center justify-center gap-6 select-none">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <Mail className="h-10 w-10 text-muted-foreground/20" strokeWidth={1} />
+              <p className="text-sm text-muted-foreground/40 font-medium tracking-wide">Ningún correo seleccionado</p>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              {[
+                [["j", "k"], "navegar"],
+                [["c"], "redactar"],
+                [["r"], "responder"],
+                [["e"], "archivar"],
+                [["x"], "seleccionar"],
+                [["t"], "crear tarea"],
+              ].map(([keys, label]) => (
+                <div key={String(label)} className="flex items-center gap-2 text-[11px] text-muted-foreground/35">
+                  <span className="flex items-center gap-0.5">
+                    {(keys as string[]).map(k => (
+                      <kbd key={k} className="px-1 py-px bg-muted/50 rounded text-[10px] font-mono">{k}</kbd>
+                    ))}
+                  </span>
+                  <span>{label}</span>
+                </div>
+              ))}
             </div>
           </div>
         ) : detailLoading ? (
