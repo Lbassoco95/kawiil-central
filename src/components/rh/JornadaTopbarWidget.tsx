@@ -31,7 +31,7 @@ import { useJornada } from "@/hooks/useRh";
  * Siempre visible: muestra el estado y el siguiente paso de la jornada.
  */
 export function JornadaTopbarWidget() {
-  const { schedule, summary, isPending, act } = useJornada();
+  const { session, schedule, summary, isPending, act } = useJornada();
   const plannedMode = plannedModeForToday(schedule);
 
   // Sin iniciar o jornada cerrada: botón "Iniciar" con menú para elegir modalidad.
@@ -111,10 +111,12 @@ export function JornadaTopbarWidget() {
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuLabel>En jornada · {formatDuration(summary.workedMs)}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => act({ type: "lunch_start" })}>
-          <Utensils className="mr-2 h-4 w-4" />
-          Ir a comer
-        </DropdownMenuItem>
+        {!session?.is_additional_shift && (
+          <DropdownMenuItem onClick={() => act({ type: "lunch_start" })}>
+            <Utensils className="mr-2 h-4 w-4" />
+            Ir a comer
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           disabled={!summary.canBreak}
           onClick={() => act({ type: "break_start" })}

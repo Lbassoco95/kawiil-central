@@ -5,10 +5,12 @@ import { toast } from "sonner";
 import { invokeSlackApi } from "@/lib/slackApi";
 import {
   WORK_MODE_SLACK_STATUS,
+  PAUSE_SLACK_STATUS,
   getCurrentPosition,
   matchOffice,
   plannedModeForToday,
   summarizeJornada,
+  type SlackStatus,
   type RhAttendance,
   type RhAttendanceEvent,
   type RhEmploymentType,
@@ -47,21 +49,20 @@ const todayKey = () => {
  * Refleja la modalidad de trabajo como estado de Slack del propio usuario.
  * Best-effort: si Slack no está conectado o falla, no interrumpe el check-in.
  */
-async function syncSlackStatus(mode: RhWorkMode | null): Promise<void> {
+async function syncSlackStatus(status: SlackStatus | null): Promise<void> {
   try {
-    if (mode === null) {
+    if (status === null) {
       await invokeSlackApi({ action: "users.profile.set", clear_status: true });
       return;
     }
-    const s = WORK_MODE_SLACK_STATUS[mode];
     // Expira al final del día (medianoche local) para no dejar el estado pegado.
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 0, 0);
     await invokeSlackApi({
       action: "users.profile.set",
       profile: {
-        status_text: s.text,
-        status_emoji: s.emoji,
+        status_text: status.text,
+        status_emoji: status.emoji,
         status_expiration: Math.floor(endOfDay.getTime() / 1000),
       },
     });
@@ -225,6 +226,13 @@ export function useJornada() {
 
       if (action.type === "check_in") {
         const expected = plannedModeForToday(schedule);
+        // ¿Ya hubo una jornada hoy? Entonces este es un turno adicional (sin comida).
+        const { count } = await db
+          .from("rh_attendance")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user!.id)
+          .eq("work_date", todayKey());
+        const isAdditional = (count ?? 0) > 0;
         const { data, error } = await db
           .from("rh_attendance")
           .insert({
@@ -239,6 +247,7 @@ export function useJornada() {
             check_in_accuracy_m: geo.fix?.accuracy ?? null,
             within_geofence: geo.withinGeofence,
             office_location_id: geo.officeLocationId,
+            is_additional_shift: isAdditional,
           })
           .select("id")
           .single();
@@ -272,10 +281,29 @@ export function useJornada() {
           })
           .eq("id", attendanceId)
           .eq("user_id", user!.id);
-        await syncSlackStatus(null);
-      } else if (action.type === "check_in") {
-        await syncSlackStatus(action.workMode);
       }
+
+      // Refleja el estado en Slack según la acción (no bloqueante).
+      let slack: SlackStatus | null;
+      switch (action.type) {
+        case "check_in":
+          slack = WORK_MODE_SLACK_STATUS[action.workMode];
+          break;
+        case "lunch_start":
+          slack = PAUSE_SLACK_STATUS.lunch;
+          break;
+        case "break_start":
+          slack = PAUSE_SLACK_STATUS.break;
+          break;
+        case "lunch_end":
+        case "break_end":
+          slack = WORK_MODE_SLACK_STATUS[workMode];
+          break;
+        case "check_out":
+        default:
+          slack = null;
+      }
+      await syncSlackStatus(slack);
 
       return action.type;
     },
@@ -444,6 +472,25 @@ export function useSaveSchedule() {
 /* ============================================================
  * Asistencia del equipo (G4)
  * ========================================================== */
+/** Eventos de jornada de toda la organización para hoy (solo G4 por RLS). */
+export function useOrgEventsToday() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-org-events", todayKey()],
+    queryFn: async (): Promise<RhAttendanceEvent[]> => {
+      const { data, error } = await db
+        .from("rh_attendance_events")
+        .select("*")
+        .gte("event_at", startOfTodayISO())
+        .order("event_at", { ascending: true });
+      if (error) throw error;
+      return (data as RhAttendanceEvent[]) ?? [];
+    },
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useOrgAttendance(workDate?: string) {
   const { user } = useAuth();
   const date = workDate ?? todayKey();
