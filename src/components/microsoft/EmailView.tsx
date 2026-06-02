@@ -813,6 +813,7 @@ export function EmailView() {
   const [quickTaskEmail, setQuickTaskEmail] = useState<{ id: string; subject?: string; senderName?: string; senderEmail?: string; bodyPreview?: string; receivedDateTime?: string } | null>(null);
   const [sendToSlackOpen, setSendToSlackOpen] = useState(false);
   const [mailRuleDialogOpen, setMailRuleDialogOpen] = useState(false);
+  const [aiCardOpen, setAiCardOpen] = useState(false);
   const [emailAiSummary, setEmailAiSummary] = useState<{
     summary: string;
     suggestedAction: string | null;
@@ -2461,129 +2462,98 @@ export function EmailView() {
               </button>
             </div>
           </TooltipProvider>
-          {/* Filter tabs — very minimal */}
-          <div className="flex items-center gap-0 mt-1 -mx-1">
-            {([
-              { id: "all", label: "Todo" },
-              { id: "unread", label: "No leídos" },
-              { id: "attachments", label: "Adjuntos" },
-              { id: "sat", label: "SAT" },
-              { id: "facturas", label: "Facturas" },
-            ] as const).map((f) => {
-              const active = listFilter === f.id;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setListFilter(f.id)}
-                  className={cn(
-                    "px-2 py-0.5 text-[11px] rounded transition-colors",
-                    active
-                      ? "font-semibold text-foreground"
-                      : "text-muted-foreground/60 hover:text-muted-foreground",
-                  )}
-                >
-                  {f.label}
+          {/* Filter tabs / bulk actions — same row, no layout shift */}
+          {bulkSelectedIds.size > 0 ? (
+            <div className="flex items-center gap-1 mt-1 -mx-1 min-w-0">
+              <span className="text-[11px] font-semibold text-primary tabular-nums px-1.5 shrink-0">
+                {bulkSelectedIds.size} sel.
+              </span>
+              <div className="h-3.5 w-px bg-border/60 shrink-0" />
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 px-1.5 gap-1 text-[11px] shrink-0"
+                      onClick={() => void handleBulkArchive()} disabled={archiveEmail.isPending}>
+                      <Archive className="h-3 w-3" />Archivar
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">Archivar seleccionados</TooltipContent>
+                </Tooltip>
+                <Popover open={bulkMoveOpen} onOpenChange={setBulkMoveOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 px-1.5 gap-1 text-[11px] shrink-0">
+                      <FolderInput className="h-3 w-3" />Mover
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" side="bottom" sideOffset={4} className="w-64 p-2 space-y-1">
+                    <p className="px-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                      Mover {bulkSelectedIds.size} correo{bulkSelectedIds.size > 1 ? "s" : ""} a
+                    </p>
+                    <Input
+                      value={bulkMoveFolderSearch}
+                      onChange={(e) => setBulkMoveFolderSearch(e.target.value)}
+                      placeholder="Buscar carpeta…"
+                      className="h-8 text-xs mb-1"
+                      autoFocus
+                    />
+                    <div className="max-h-52 overflow-y-auto space-y-0.5">
+                      {folders
+                        .filter((f: any) => {
+                          if (!bulkMoveFolderSearch.trim()) return true;
+                          return getFolderLabel(String(f.displayName || "")).toLowerCase().includes(bulkMoveFolderSearch.toLowerCase());
+                        })
+                        .map((f: any) => {
+                          const FIcon = getFolderIcon(String(f.displayName || ""));
+                          return (
+                            <button key={f.id} type="button"
+                              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent transition-colors"
+                              onClick={() => handleBulkMove(f.id)}>
+                              <FIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0 truncate">{getFolderLabel(String(f.displayName || ""))}</span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 px-1.5 gap-1 text-[11px] shrink-0"
+                      onClick={() => void handleBulkMarkRead()}>
+                      <MailOpen className="h-3 w-3" />Leídos
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">Marcar como leídos</TooltipContent>
+                </Tooltip>
+                <button type="button" onClick={() => setBulkSelectedIds(new Set())}
+                  className="ml-auto p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted shrink-0">
+                  <X className="h-3 w-3" />
                 </button>
-              );
-            })}
-          </div>
+              </TooltipProvider>
+            </div>
+          ) : (
+            <div className="flex items-center gap-0 mt-1 -mx-1">
+              {([
+                { id: "all", label: "Todo" },
+                { id: "unread", label: "No leídos" },
+                { id: "attachments", label: "Adjuntos" },
+                { id: "sat", label: "SAT" },
+                { id: "facturas", label: "Facturas" },
+              ] as const).map((f) => {
+                const active = listFilter === f.id;
+                return (
+                  <button key={f.id} type="button" onClick={() => setListFilter(f.id)}
+                    className={cn(
+                      "px-2 py-0.5 text-[11px] rounded transition-colors",
+                      active ? "font-semibold text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground",
+                    )}>
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
-
-        {/* Barra de acciones masivas — solo visible cuando hay correos seleccionados */}
-        {bulkSelectedIds.size > 0 && (
-          <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/20 bg-primary/5 px-3 py-1.5">
-            <span className="text-xs font-medium text-primary tabular-nums">
-              {bulkSelectedIds.size} {bulkSelectedIds.size === 1 ? "seleccionado" : "seleccionados"}
-            </span>
-            <div className="flex-1" />
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 gap-1 text-xs"
-                    onClick={() => void handleBulkArchive()}
-                    disabled={archiveEmail.isPending}
-                  >
-                    <Archive className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Archivar</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">Archivar seleccionados</TooltipContent>
-              </Tooltip>
-              <Popover open={bulkMoveOpen} onOpenChange={setBulkMoveOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-xs">
-                    <FolderInput className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Mover a</span>
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="start" side="bottom" sideOffset={4} className="w-64 p-2 space-y-1">
-                  <p className="px-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                    Mover {bulkSelectedIds.size} correo{bulkSelectedIds.size > 1 ? "s" : ""} a
-                  </p>
-                  <Input
-                    value={bulkMoveFolderSearch}
-                    onChange={(e) => setBulkMoveFolderSearch(e.target.value)}
-                    placeholder="Buscar carpeta…"
-                    className="h-8 text-xs mb-1"
-                    autoFocus
-                  />
-                  <div className="max-h-52 overflow-y-auto space-y-0.5">
-                    {folders
-                      .filter((f: any) => {
-                        if (!bulkMoveFolderSearch.trim()) return true;
-                        return getFolderLabel(String(f.displayName || "")).toLowerCase().includes(bulkMoveFolderSearch.toLowerCase());
-                      })
-                      .map((f: any) => {
-                        const FIcon = getFolderIcon(String(f.displayName || ""));
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent transition-colors"
-                            onClick={() => handleBulkMove(f.id)}
-                          >
-                            <FIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                            <span className="min-w-0 truncate">{getFolderLabel(String(f.displayName || ""))}</span>
-                          </button>
-                        );
-                      })}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 gap-1 text-xs"
-                    onClick={() => void handleBulkMarkRead()}
-                  >
-                    <MailOpen className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Leídos</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">Marcar como leídos</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-muted-foreground"
-                    onClick={() => setBulkSelectedIds(new Set())}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs">Deseleccionar todo</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
 
         {/* Lista con scroll + pie fijo para «más correos» (siempre visible) */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -3305,90 +3275,102 @@ export function EmailView() {
                 </Tooltip>
 
                 <div
-                  className="ml-0 mt-1 flex w-full shrink-0 flex-wrap items-center justify-end gap-0.5 rounded-md bg-primary/5 px-1 py-0.5 ring-1 ring-primary/10 sm:ml-auto sm:mt-0 sm:w-auto"
+                  className="ml-0 mt-1 flex w-full shrink-0 flex-wrap items-center justify-end gap-0.5 sm:ml-auto sm:mt-0 sm:w-auto"
                   aria-label="Acciones inteligentes"
                 >
+                  {/* Kawiil AI panel toggle */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={aiCardOpen ? "secondary" : "outline"}
+                        size="sm"
+                        className={cn(
+                          "h-7 px-2 gap-1.5 text-xs font-medium shrink-0",
+                          aiCardOpen
+                            ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        onClick={() => setAiCardOpen((v) => !v)}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Kawiil AI
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      {aiCardOpen ? "Cerrar panel IA" : "Abrir panel IA (resumen, respuestas, tareas)"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <div className="h-4 w-px bg-border/60 shrink-0 mx-0.5" />
+
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => void runDetailSummarize()}
                         disabled={detailAiLoading}
                       >
-                        <Sparkles className="h-4 w-4" />
+                        <Sparkles className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      Resumir con IA
-                    </TooltipContent>
+                    <TooltipContent side="bottom" className="text-xs">Resumir con IA</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => void runDetailTranslate()}
                         disabled={detailAiLoading}
                       >
-                        <Languages className="h-4 w-4" />
+                        <Languages className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      Traducir con IA
-                    </TooltipContent>
+                    <TooltipContent side="bottom" className="text-xs">Traducir con IA</TooltipContent>
                   </Tooltip>
-
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => setCreateTaskOpen(true)}
                       >
-                        <ListTodo className="h-4 w-4" />
+                        <ListTodo className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      Crear tarea desde el correo
-                    </TooltipContent>
+                    <TooltipContent side="bottom" className="text-xs">Crear tarea</TooltipContent>
                   </Tooltip>
-
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => setSendToSlackOpen(true)}
                         disabled={!emailDetail}
                       >
-                        <MessageSquare className="h-4 w-4" />
+                        <MessageSquare className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      Enviar a Slack
-                    </TooltipContent>
+                    <TooltipContent side="bottom" className="text-xs">Enviar a Slack</TooltipContent>
                   </Tooltip>
-
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => setMailRuleDialogOpen(true)}
                         disabled={!emailDetail}
                       >
-                        <ShieldCheck className="h-4 w-4" />
+                        <ShieldCheck className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="text-xs">
-                      Crear regla para este remitente
-                    </TooltipContent>
+                    <TooltipContent side="bottom" className="text-xs">Crear regla</TooltipContent>
                   </Tooltip>
                 </div>
               </div>
@@ -3479,8 +3461,9 @@ export function EmailView() {
               </div>
             )}
 
-            {/* Email body + thread — email body FIRST, AI card and thread below */}
-            <ScrollArea className="flex-1">
+            {/* Email body + AI side panel */}
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+            <ScrollArea className="flex-1 min-w-0">
               <div className="px-3 sm:px-6 py-4 sm:py-6 space-y-4">
                 <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border-2 border-primary/15 bg-card/95 shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08] overflow-hidden">
                   <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
@@ -3548,28 +3531,45 @@ export function EmailView() {
                   </div>
                 )}
 
-                {/* Kawiil AI card — at the bottom, out of the way */}
-                {selectedEmailId && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full">
-                    <EmailKawiilCard
-                      emailId={selectedEmailId}
-                      subject={emailDetail.subject || ""}
-                      senderName={emailDetail.from?.emailAddress?.name}
-                      senderEmail={emailDetail.from?.emailAddress?.address}
-                      body={emailDetail.body?.content || ""}
-                      thread={threadContextForAi || undefined}
-                      onUseReply={(text) => {
-                        if (emailAction !== "reply") handleStartReply("reply");
-                        const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
-                        setDraftHtml(safe);
-                      }}
-                      onCreateTask={() => setCreateTaskOpen(true)}
-                      onSummaryReady={(s) => setEmailAiSummary({ summary: s.summary, suggestedAction: s.suggestedAction })}
-                    />
-                  </div>
-                )}
               </div>
             </ScrollArea>
+
+            {/* Kawiil AI right panel — visible when aiCardOpen */}
+            {aiCardOpen && selectedEmailId && (
+              <div className="w-[320px] shrink-0 border-l border-border/40 overflow-y-auto bg-muted/10">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 sticky top-0 bg-background/80 backdrop-blur-sm z-10">
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground/80">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    Kawiil AI
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAiCardOpen(false)}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="p-3">
+                  <EmailKawiilCard
+                    emailId={selectedEmailId}
+                    subject={emailDetail.subject || ""}
+                    senderName={emailDetail.from?.emailAddress?.name}
+                    senderEmail={emailDetail.from?.emailAddress?.address}
+                    body={emailDetail.body?.content || ""}
+                    thread={threadContextForAi || undefined}
+                    onUseReply={(text) => {
+                      if (emailAction !== "reply") handleStartReply("reply");
+                      const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+                      setDraftHtml(safe);
+                    }}
+                    onCreateTask={() => setCreateTaskOpen(true)}
+                    onSummaryReady={(s) => setEmailAiSummary({ summary: s.summary, suggestedAction: s.suggestedAction })}
+                  />
+                </div>
+              </div>
+            )}
+            </div>
 
           </div>
         ) : (
