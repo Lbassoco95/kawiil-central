@@ -12,6 +12,7 @@ export const MODULE_KEYS = [
   "hub",
   "admin",
   "pipeline",
+  "rh",
 ] as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[number];
@@ -26,6 +27,7 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   hub: "Hub",
   admin: "Administración",
   pipeline: "Pipeline",
+  rh: "Recursos Humanos",
 };
 
 export function useModulePermissions() {
