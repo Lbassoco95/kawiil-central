@@ -69,6 +69,8 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
   const [employmentType, setEmploymentType] = useState<RhEmploymentType>("full_time");
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("18:00");
+  const [lunchStart, setLunchStart] = useState("14:00");
+  const [lunchEnd, setLunchEnd] = useState("15:00");
   const [defaultMode, setDefaultMode] = useState<RhWorkMode>("office");
   const [officeId, setOfficeId] = useState<string>("none");
   const [notes, setNotes] = useState("");
@@ -81,6 +83,8 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
       setEmploymentType(existing.employment_type ?? "full_time");
       setStartTime(existing.start_time.slice(0, 5));
       setEndTime(existing.end_time.slice(0, 5));
+      setLunchStart((existing.lunch_start ?? "14:00").slice(0, 5));
+      setLunchEnd((existing.lunch_end ?? "15:00").slice(0, 5));
       setDefaultMode(existing.default_work_mode);
       setOfficeId(existing.office_location_id ?? "none");
       setNotes(existing.notes ?? "");
@@ -95,6 +99,8 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
       setEmploymentType("full_time");
       setStartTime("09:00");
       setEndTime("18:00");
+      setLunchStart("14:00");
+      setLunchEnd("15:00");
       setDefaultMode("office");
       setOfficeId("none");
       setNotes("");
@@ -115,6 +121,8 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
         employment_type: employmentType,
         start_time: startTime,
         end_time: endTime,
+        lunch_start: lunchStart,
+        lunch_end: lunchEnd,
         default_work_mode: defaultMode,
         weekly_plan,
         office_location_id: officeId === "none" ? null : officeId,
@@ -167,6 +175,21 @@ export function ScheduleEditDialog({ open, onOpenChange, userId, userName, exist
               <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Comida (inicio ref.)</Label>
+              <Input type="time" value={lunchStart} onChange={(e) => setLunchStart(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Comida (fin ref.)</Label>
+              <Input type="time" value={lunchEnd} onChange={(e) => setLunchEnd(e.target.value)} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            La comida es flexible (referencia ~1h). Los descansos cortos de {""}
+            20 min están disponibles cada 2 horas.
+          </p>
 
           <div className="space-y-1.5">
             <Label>Modalidad por defecto</Label>

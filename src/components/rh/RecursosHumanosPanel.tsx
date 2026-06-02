@@ -1,7 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Clock, Users, CalendarClock } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
-import { CheckInCard } from "./CheckInCard";
+import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { TeamScheduleManager } from "./TeamScheduleManager";
 import { TeamAttendanceBoard } from "./TeamAttendanceBoard";
@@ -44,7 +44,7 @@ export function RecursosHumanosPanel() {
 
         <TabsContent value="jornada" className="mt-5">
           <div className="grid gap-5 lg:grid-cols-2">
-            <CheckInCard />
+            <JornadaCard />
             <MyAttendanceList />
           </div>
         </TabsContent>
