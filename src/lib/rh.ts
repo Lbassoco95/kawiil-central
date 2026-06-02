@@ -146,6 +146,9 @@ export const PAUSE_SLACK_STATUS: Record<"lunch" | "break", SlackStatus> = {
   break: { emoji: ":coffee:", text: "En un descanso" },
 };
 
+/** Estado de Slack al ir en trayecto (sigues trabajando, pero en movimiento). */
+export const TRANSIT_SLACK_STATUS: SlackStatus = { emoji: ":car:", text: "En trayecto" };
+
 /** Etiquetas ISO weekday: 1=Lunes ... 7=Domingo */
 export const ISO_WEEKDAYS: { key: string; short: string; long: string }[] = [
   { key: "1", short: "Lun", long: "Lunes" },
