@@ -34,54 +34,56 @@ export function RecursosHumanosPanel() {
       </p>
 
       <Tabs defaultValue="jornada">
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="jornada">
-            <Clock className="mr-1.5 h-4 w-4" />
-            Mi jornada
-          </TabsTrigger>
-          <TabsTrigger value="solicitudes">
-            <CalendarDays className="mr-1.5 h-4 w-4" />
-            Solicitudes
-          </TabsTrigger>
-          <TabsTrigger value="expediente">
-            <FolderArchive className="mr-1.5 h-4 w-4" />
-            Mi expediente
-          </TabsTrigger>
-          <TabsTrigger value="cuestionarios">
-            <ClipboardList className="mr-1.5 h-4 w-4" />
-            Cuestionarios
-          </TabsTrigger>
-          {isTransformador && (
-            <>
-              <TabsTrigger value="tablero-rh">
-                <LayoutDashboard className="mr-1.5 h-4 w-4" />
-                Tablero RH
-              </TabsTrigger>
-              <TabsTrigger value="equipo">
-                <Users className="mr-1.5 h-4 w-4" />
-                Equipo
-              </TabsTrigger>
-              <TabsTrigger value="turnos">
-                <CalendarClock className="mr-1.5 h-4 w-4" />
-                Turnos y horarios
-              </TabsTrigger>
-              <TabsTrigger value="expedientes">
-                <FolderArchive className="mr-1.5 h-4 w-4" />
-                Expedientes
-              </TabsTrigger>
-              <TabsTrigger value="resultados-rh">
-                <BarChart3 className="mr-1.5 h-4 w-4" />
-                Resultados RH
-              </TabsTrigger>
-            </>
-          )}
-          {canRecruit && (
-            <TabsTrigger value="reclutamiento">
-              <Briefcase className="mr-1.5 h-4 w-4" />
-              Reclutamiento
+        {/* Barra en una sola fila con scroll horizontal; agrupada por bloques. */}
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <TabsList className="inline-flex w-max justify-start gap-0.5">
+            {/* Personal (todos) */}
+            <TabsTrigger value="jornada" className="px-2.5">
+              <Clock className="mr-1.5 h-4 w-4" /> Mi jornada
             </TabsTrigger>
-          )}
-        </TabsList>
+            <TabsTrigger value="solicitudes" className="px-2.5">
+              <CalendarDays className="mr-1.5 h-4 w-4" /> Solicitudes
+            </TabsTrigger>
+            <TabsTrigger value="expediente" className="px-2.5">
+              <FolderArchive className="mr-1.5 h-4 w-4" /> Mi expediente
+            </TabsTrigger>
+            <TabsTrigger value="cuestionarios" className="px-2.5">
+              <ClipboardList className="mr-1.5 h-4 w-4" /> Cuestionarios
+            </TabsTrigger>
+
+            {/* Reclutamiento (reclutadores y G4) */}
+            {canRecruit && (
+              <>
+                <span aria-hidden className="mx-1 h-5 w-px shrink-0 self-center bg-border" />
+                <TabsTrigger value="reclutamiento" className="px-2.5">
+                  <Briefcase className="mr-1.5 h-4 w-4" /> Reclutamiento
+                </TabsTrigger>
+              </>
+            )}
+
+            {/* Gestión (solo G4) */}
+            {isTransformador && (
+              <>
+                <span aria-hidden className="mx-1 h-5 w-px shrink-0 self-center bg-border" />
+                <TabsTrigger value="tablero-rh" className="px-2.5">
+                  <LayoutDashboard className="mr-1.5 h-4 w-4" /> Tablero
+                </TabsTrigger>
+                <TabsTrigger value="equipo" className="px-2.5">
+                  <Users className="mr-1.5 h-4 w-4" /> Equipo
+                </TabsTrigger>
+                <TabsTrigger value="turnos" className="px-2.5">
+                  <CalendarClock className="mr-1.5 h-4 w-4" /> Turnos
+                </TabsTrigger>
+                <TabsTrigger value="expedientes" className="px-2.5">
+                  <FolderArchive className="mr-1.5 h-4 w-4" /> Expedientes
+                </TabsTrigger>
+                <TabsTrigger value="resultados-rh" className="px-2.5">
+                  <BarChart3 className="mr-1.5 h-4 w-4" /> Resultados
+                </TabsTrigger>
+              </>
+            )}
+          </TabsList>
+        </div>
 
         <TabsContent value="jornada" className="mt-5">
           <div className="grid gap-5 lg:grid-cols-2">
