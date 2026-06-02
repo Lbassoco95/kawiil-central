@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, Mail, StickyNote, Send, FileText, Upload, UserCheck, Trash2 } from "lucide-react";
-import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
@@ -394,9 +393,25 @@ function CandidateDetailInner({
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-600" onClick={() => setConfirmDelete(true)}>
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar candidato
-            </Button>
+            {confirmDelete ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-red-600">¿Eliminar?</span>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={del.isPending}
+                  onClick={() => del.mutate({ candidate }, { onSuccess: () => { setConfirmDelete(false); onClose(); } })}
+                >
+                  {del.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  Sí, eliminar
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-600" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar candidato
+              </Button>
+            )}
             <Button size="sm" onClick={saveProfile} disabled={updateCandidate.isPending}>
               {updateCandidate.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Guardar ficha
@@ -517,15 +532,6 @@ function CandidateDetailInner({
           </div>
         </TabsContent>
       </Tabs>
-
-      <DeleteConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title="¿Eliminar candidato?"
-        description={`Se eliminará a ${candidate.full_name} y su historial de este proceso. Esta acción no se puede deshacer.`}
-        isPending={del.isPending}
-        onConfirm={() => del.mutate({ candidate }, { onSuccess: () => { setConfirmDelete(false); onClose(); } })}
-      />
     </>
   );
 }
