@@ -43,7 +43,7 @@ export function TeamAttendanceBoard() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
         <CardTitle className="flex items-center gap-2 text-base">
           <Users className="h-4 w-4 text-primary" />
           Asistencia del equipo
