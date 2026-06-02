@@ -65,20 +65,16 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('cv', 'cv', false)
 ON CONFLICT (id) DO NOTHING;
 
-DO $$
-DECLARE pol text; act text;
-BEGIN
-  FOREACH act IN ARRAY ARRAY['select', 'insert', 'update', 'delete'] LOOP
-    pol := 'CV recruiters ' || act;
-    EXECUTE format('DROP POLICY IF EXISTS %L ON storage.objects;', pol);
-  END LOOP;
+DROP POLICY IF EXISTS "CV recruiters select" ON storage.objects;
+DROP POLICY IF EXISTS "CV recruiters insert" ON storage.objects;
+DROP POLICY IF EXISTS "CV recruiters update" ON storage.objects;
+DROP POLICY IF EXISTS "CV recruiters delete" ON storage.objects;
 
-  CREATE POLICY "CV recruiters select" ON storage.objects FOR SELECT TO authenticated
-    USING (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
-  CREATE POLICY "CV recruiters insert" ON storage.objects FOR INSERT TO authenticated
-    WITH CHECK (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
-  CREATE POLICY "CV recruiters update" ON storage.objects FOR UPDATE TO authenticated
-    USING (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
-  CREATE POLICY "CV recruiters delete" ON storage.objects FOR DELETE TO authenticated
-    USING (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
-END $$;
+CREATE POLICY "CV recruiters select" ON storage.objects FOR SELECT TO authenticated
+  USING (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
+CREATE POLICY "CV recruiters insert" ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
+CREATE POLICY "CV recruiters update" ON storage.objects FOR UPDATE TO authenticated
+  USING (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
+CREATE POLICY "CV recruiters delete" ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'cv' AND public.rh_is_recruiter(auth.uid()));
