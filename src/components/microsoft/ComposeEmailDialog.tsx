@@ -15,6 +15,7 @@ import { useOrgUsers } from "@/hooks/useOrgUsers";
 import { useMailDirectoryContacts, useSyncMailDirectory } from "@/hooks/useMailDirectory";
 import { ComposeRecipientInput } from "@/components/microsoft/ComposeRecipientInput";
 import { supabase } from "@/integrations/supabase/client";
+import { FunctionsHttpError } from "@supabase/functions-js";
 import {
   Loader2,
   Send,
@@ -40,6 +41,21 @@ import { AccountingTemplatePicker, type AccountingTemplatePickerApplied } from "
 import { TemplatePickerBoundary } from "@/components/accounting/TemplatePickerBoundary";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
+
+async function extractFnError(error: unknown, fallback: string): Promise<string> {
+  if (error instanceof FunctionsHttpError) {
+    const res = error.context;
+    if (res instanceof Response) {
+      try {
+        const body = await res.clone().json() as { error?: string; message?: string };
+        const msg = body?.message || body?.error;
+        if (msg) return String(msg).slice(0, 300);
+      } catch { /* ignore */ }
+    }
+  }
+  if (error instanceof Error && error.message && !error.message.includes("non-2xx")) return error.message;
+  return fallback;
+}
 import {
   QUICK_DRAFT_TEMPLATES,
   plainTextToEmailHtml,
@@ -216,7 +232,9 @@ export function ComposeEmailDialog({
           tone: "formal",
         },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(await extractFnError(error, "Error al generar borrador"));
+      }
       if (data?.error) throw new Error(typeof data.message === "string" ? data.message : data.error);
       const text = data?.text ?? "";
       if (!text) throw new Error("La IA no devolvió texto");
@@ -227,7 +245,8 @@ export function ComposeEmailDialog({
       setHasAiDraft(true);
       toast.success("Borrador generado");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Error al generar borrador");
+      const msg = await extractFnError(e, "Error al generar borrador");
+      toast.error(msg);
     } finally {
       setAiLoading(false);
     }
@@ -293,7 +312,7 @@ export function ComposeEmailDialog({
             locale: "es",
           },
         });
-        if (error) throw new Error(error.message || "Error AI");
+        if (error) throw new Error(await extractFnError(error, "Error al mejorar con IA"));
         if (!data || data.error) {
           throw new Error(data?.message || data?.error || "Sin sugerencia");
         }
@@ -312,7 +331,8 @@ export function ComposeEmailDialog({
                 : "Borrador mejorado",
         );
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Error mejorando con IA");
+        const msg = await extractFnError(e, "Error mejorando con IA");
+        toast.error(msg);
       } finally {
         setImproveBusy(null);
       }
