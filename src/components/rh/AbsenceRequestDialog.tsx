@@ -24,6 +24,7 @@ import {
   ABSENCE_TYPES,
   ABSENCE_TYPE_EMOJI,
   ABSENCE_TYPE_LABEL,
+  BURNOUT_DAYS_PER_YEAR,
   DAY_PARTS,
   DAY_PART_LABEL,
   HALF_DAY_ABSENCE_TYPES,
@@ -48,9 +49,10 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
   const [celulaId, setCelulaId] = useState<string>("");
   const [reason, setReason] = useState("");
 
+  const isBurnout = absenceType === "burnout";
   const isSingleDay = !!startDate && startDate === endDate;
   // El medio día solo aplica a Evento escolar/familiar y Permiso, y a un único día.
-  const allowsHalfDay = HALF_DAY_ABSENCE_TYPES.includes(absenceType) && isSingleDay;
+  const allowsHalfDay = HALF_DAY_ABSENCE_TYPES.includes(absenceType) && isSingleDay && !isBurnout;
 
   useEffect(() => {
     if (!open) return;
@@ -69,6 +71,11 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
   useEffect(() => {
     if (!allowsHalfDay && dayPart !== "full_day") setDayPart("full_day");
   }, [allowsHalfDay, dayPart]);
+
+  // El día de burnout es siempre de un único día.
+  useEffect(() => {
+    if (isBurnout && startDate && endDate !== startDate) setEndDate(startDate);
+  }, [isBurnout, startDate, endDate]);
 
   function handleSubmit() {
     if (!startDate || !endDate) {
@@ -98,7 +105,9 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Nueva solicitud</DialogTitle>
           <DialogDescription>
-            Se enviará a quien aprueba en tu célula. Recibirás un aviso con la decisión.
+            {isBurnout
+              ? `El día de burnout se aprueba al instante. Tienes ${BURNOUT_DAYS_PER_YEAR} al año calendario.`
+              : "Se enviará a quien aprueba en tu célula. Recibirás un aviso con la decisión."}
           </DialogDescription>
         </DialogHeader>
 
@@ -131,7 +140,13 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label>Hasta</Label>
-              <Input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+              <Input
+                type="date"
+                value={endDate}
+                min={startDate}
+                disabled={isBurnout}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
             </div>
           </div>
 
@@ -164,7 +179,7 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={create.isPending}>
             {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Enviar solicitud
+            {isBurnout ? "Registrar día" : "Enviar solicitud"}
           </Button>
         </DialogFooter>
       </DialogContent>

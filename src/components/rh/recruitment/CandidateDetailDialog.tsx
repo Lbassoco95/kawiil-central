@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,28 +17,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Mail, StickyNote, Send } from "lucide-react";
+import { Loader2, Mail, StickyNote, Send, FileText, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
 import {
   ACTIVITY_LABEL,
-  CANDIDATE_STATUS_LABEL,
-  CANDIDATE_STATUS_STYLE,
+  STATE_COLOR_STYLE,
   type Candidate,
   type RecruitmentStage,
-  type RhCandidateStatus,
+  type RecruitmentState,
 } from "@/lib/recruitment";
 import {
   useCandidateActivities,
   useAddCandidateNote,
   useMoveCandidateStage,
-  useSetCandidateStatus,
+  useSetCandidateState,
   useLogCandidateEmail,
+  useUploadCandidateCv,
+  getCvSignedUrl,
 } from "@/hooks/useRecruitment";
 import { useSendNewEmail } from "@/hooks/useMicrosoft";
-
-const STATUSES: RhCandidateStatus[] = ["active", "hired", "rejected", "withdrawn"];
 
 function textToHtml(text: string): string {
   return text
@@ -50,24 +49,29 @@ function textToHtml(text: string): string {
 interface Props {
   candidate: Candidate | null;
   stages: RecruitmentStage[];
+  states: RecruitmentState[];
   onOpenChange: (v: boolean) => void;
 }
 
-export function CandidateDetailDialog({ candidate, stages, onOpenChange }: Props) {
+export function CandidateDetailDialog({ candidate, stages, states, onOpenChange }: Props) {
   const open = !!candidate;
   const { data: activities = [] } = useCandidateActivities(candidate?.id ?? null);
   const addNote = useAddCandidateNote();
   const moveStage = useMoveCandidateStage();
-  const setStatus = useSetCandidateStatus();
+  const setState = useSetCandidateState();
   const logEmail = useLogCandidateEmail();
+  const uploadCv = useUploadCandidateCv();
   const sendEmail = useSendNewEmail();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [note, setNote] = useState("");
   const [emailOpen, setEmailOpen] = useState(false);
   const [subject, setSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
+  const [openingCv, setOpeningCv] = useState(false);
 
   if (!candidate) return null;
+  const currentState = states.find((s) => s.id === candidate.state_id);
 
   async function handleSendEmail() {
     if (!candidate.email) {
@@ -89,15 +93,26 @@ export function CandidateDetailDialog({ candidate, stages, onOpenChange }: Props
     }
   }
 
+  async function handleViewCv() {
+    if (!candidate.resume_url) return;
+    setOpeningCv(true);
+    const url = await getCvSignedUrl(candidate.resume_url);
+    setOpeningCv(false);
+    if (url) window.open(url, "_blank", "noopener");
+    else toast.error("No se pudo abrir el CV.");
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {candidate.full_name}
-            <Badge variant="outline" className={cn(CANDIDATE_STATUS_STYLE[candidate.status])}>
-              {CANDIDATE_STATUS_LABEL[candidate.status]}
-            </Badge>
+            {currentState && (
+              <Badge variant="outline" className={cn(STATE_COLOR_STYLE[currentState.color] ?? STATE_COLOR_STYLE.slate)}>
+                {currentState.name}
+              </Badge>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -107,6 +122,38 @@ export function CandidateDetailDialog({ candidate, stages, onOpenChange }: Props
             {candidate.email && <div className="text-muted-foreground">📧 {candidate.email}</div>}
             {candidate.phone && <div className="text-muted-foreground">📞 {candidate.phone}</div>}
             {candidate.source && <div className="text-muted-foreground">🔗 {candidate.source}</div>}
+          </div>
+
+          {/* CV */}
+          <div className="flex items-center gap-2">
+            {candidate.resume_url ? (
+              <Button size="sm" variant="outline" onClick={handleViewCv} disabled={openingCv}>
+                {openingCv ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <FileText className="mr-1.5 h-3.5 w-3.5" />}
+                Ver CV
+              </Button>
+            ) : (
+              <span className="text-xs text-muted-foreground">Sin CV cargado</span>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadCv.isPending}
+            >
+              {uploadCv.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+              {candidate.resume_url ? "Reemplazar" : "Subir CV"}
+            </Button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.doc,.docx,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadCv.mutate({ candidate, file });
+                e.target.value = "";
+              }}
+            />
           </div>
 
           {/* Fase y estado */}
@@ -131,13 +178,16 @@ export function CandidateDetailDialog({ candidate, stages, onOpenChange }: Props
             <div className="space-y-1.5">
               <Label>Estado</Label>
               <Select
-                value={candidate.status}
-                onValueChange={(v) => setStatus.mutate({ candidate, status: v as RhCandidateStatus })}
+                value={candidate.state_id ?? ""}
+                onValueChange={(stateId) => {
+                  const st = states.find((s) => s.id === stateId);
+                  if (st) setState.mutate({ candidate, stateId, stateName: st.name });
+                }}
               >
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Sin estado" /></SelectTrigger>
                 <SelectContent>
-                  {STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{CANDIDATE_STATUS_LABEL[s]}</SelectItem>
+                  {states.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

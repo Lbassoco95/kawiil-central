@@ -6,12 +6,13 @@ import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
   DEFAULT_STAGES,
+  DEFAULT_STATES,
   type Candidate,
   type CandidateActivity,
   type RecruitmentProcess,
   type RecruitmentStage,
+  type RecruitmentState,
   type RhCandidateActivityType,
-  type RhCandidateStatus,
   type RhProcessStatus,
 } from "@/lib/recruitment";
 
@@ -79,6 +80,17 @@ export function useCreateProcess() {
       }));
       const { error: se } = await db.from("rh_recruitment_stages").insert(stages);
       if (se) throw se;
+      // Sembrar estados por defecto.
+      const states = DEFAULT_STATES.map((s, i) => ({
+        organization_id: orgId,
+        process_id: processId,
+        name: s.name,
+        color: s.color,
+        position: i,
+        is_default: i === 0,
+      }));
+      const { error: ste } = await db.from("rh_recruitment_states").insert(states);
+      if (ste) throw ste;
       return processId;
     },
     onSuccess: () => {
@@ -120,6 +132,136 @@ export function useProcessStages(processId: string | null) {
   });
 }
 
+/* ---------------- Gestión de fases (columnas del Kanban) ---------------- */
+export function useCreateStage() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ processId, name, position }: { processId: string; name: string; position: number }) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { error } = await db.from("rh_recruitment_stages").insert({
+        organization_id: orgId,
+        process_id: processId,
+        name,
+        position,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-stages", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo crear la fase"),
+  });
+}
+
+export function useRenameStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string; processId: string }) => {
+      const { error } = await db.from("rh_recruitment_stages").update({ name }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-stages", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo renombrar la fase"),
+  });
+}
+
+export function useDeleteStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; processId: string }) => {
+      const { error } = await db.from("rh_recruitment_stages").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-stages", vars.processId] });
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.processId] });
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo eliminar la fase"),
+  });
+}
+
+/** Reordena las fases guardando su nueva posición. */
+export function useReorderStages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ordered }: { processId: string; ordered: RecruitmentStage[] }) => {
+      await Promise.all(
+        ordered.map((s, i) =>
+          db.from("rh_recruitment_stages").update({ position: i }).eq("id", s.id),
+        ),
+      );
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-stages", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo reordenar"),
+  });
+}
+
+/* ---------------- Estados personalizados ---------------- */
+export function useProcessStates(processId: string | null) {
+  return useQuery({
+    queryKey: ["rh-states", processId],
+    queryFn: async (): Promise<RecruitmentState[]> => {
+      const { data, error } = await db
+        .from("rh_recruitment_states")
+        .select("*")
+        .eq("process_id", processId)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return (data as RecruitmentState[]) ?? [];
+    },
+    enabled: !!processId,
+  });
+}
+
+export function useCreateState() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ processId, name, color, position }: { processId: string; name: string; color: string; position: number }) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { error } = await db.from("rh_recruitment_states").insert({
+        organization_id: orgId,
+        process_id: processId,
+        name,
+        color,
+        position,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-states", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo crear el estado"),
+  });
+}
+
+export function useUpdateState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name, color }: { id: string; name?: string; color?: string; processId: string }) => {
+      const patch: Record<string, string> = {};
+      if (name !== undefined) patch.name = name;
+      if (color !== undefined) patch.color = color;
+      const { error } = await db.from("rh_recruitment_states").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-states", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo actualizar el estado"),
+  });
+}
+
+export function useDeleteState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; processId: string }) => {
+      const { error } = await db.from("rh_recruitment_states").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-states", vars.processId] });
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.processId] });
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo eliminar el estado"),
+  });
+}
+
 export function useCandidates(processId: string | null) {
   return useQuery({
     queryKey: ["rh-candidates", processId],
@@ -143,23 +285,30 @@ export function useCreateCandidate() {
     mutationFn: async (input: {
       process_id: string;
       stage_id: string | null;
+      state_id: string | null;
       full_name: string;
       email?: string | null;
       phone?: string | null;
       source?: string | null;
-    }) => {
+    }): Promise<string> => {
       const orgId = await getMyOrgId(user!.id);
-      const { error } = await db.from("rh_candidates").insert({
-        organization_id: orgId,
-        process_id: input.process_id,
-        stage_id: input.stage_id,
-        full_name: input.full_name,
-        email: input.email ?? null,
-        phone: input.phone ?? null,
-        source: input.source ?? null,
-        created_by: user!.id,
-      });
+      const { data, error } = await db
+        .from("rh_candidates")
+        .insert({
+          organization_id: orgId,
+          process_id: input.process_id,
+          stage_id: input.stage_id,
+          state_id: input.state_id,
+          full_name: input.full_name,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          source: input.source ?? null,
+          created_by: user!.id,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
+      return data.id as string;
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-candidates", vars.process_id] });
@@ -213,20 +362,14 @@ export function useMoveCandidateStage() {
   });
 }
 
-export function useSetCandidateStatus() {
+export function useSetCandidateState() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ candidate, status }: { candidate: Candidate; status: RhCandidateStatus }) => {
-      const { error } = await db.from("rh_candidates").update({ status }).eq("id", candidate.id);
+    mutationFn: async ({ candidate, stateId, stateName }: { candidate: Candidate; stateId: string; stateName: string }) => {
+      const { error } = await db.from("rh_candidates").update({ state_id: stateId }).eq("id", candidate.id);
       if (error) throw error;
-      const labels: Record<RhCandidateStatus, string> = {
-        active: "En proceso",
-        hired: "Contratado",
-        rejected: "Descartado",
-        withdrawn: "Declinó",
-      };
-      await logActivity(candidate.organization_id, user!.id, candidate.id, "status_change", labels[status]);
+      await logActivity(candidate.organization_id, user!.id, candidate.id, "status_change", stateName);
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
@@ -283,3 +426,51 @@ export function useLogCandidateEmail() {
     },
   });
 }
+
+const CV_BUCKET = "cv";
+
+/** Sube (o reemplaza) el CV del candidato al bucket privado y guarda su ruta. */
+export function useUploadCandidateCv() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate, file }: { candidate: Candidate; file: File }) => {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+      const path = `${candidate.organization_id}/${candidate.id}/cv_${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from(CV_BUCKET)
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { error } = await db.from("rh_candidates").update({ resume_url: path }).eq("id", candidate.id);
+      if (error) throw error;
+      await logActivity(candidate.organization_id, user!.id, candidate.id, "note", `CV cargado: ${file.name}`);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      qc.invalidateQueries({ queryKey: ["rh-candidate-activities", vars.candidate.id] });
+      toast.success("CV cargado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo cargar el CV"),
+  });
+}
+
+/** Sube el CV de un candidato recién creado (cuando ya tenemos su id). */
+export async function uploadCandidateCvByIds(orgId: string, candidateId: string, file: File): Promise<void> {
+  const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+  const path = `${orgId}/${candidateId}/cv_${Date.now()}.${ext}`;
+  const { error: upErr } = await supabase.storage
+    .from(CV_BUCKET)
+    .upload(path, file, { upsert: true, contentType: file.type || undefined });
+  if (upErr) throw upErr;
+  const { error } = await db.from("rh_candidates").update({ resume_url: path }).eq("id", candidateId);
+  if (error) throw error;
+}
+
+/** Genera una URL firmada temporal para ver/descargar el CV. */
+export async function getCvSignedUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(CV_BUCKET).createSignedUrl(path, 60 * 10);
+  if (error) return null;
+  return data?.signedUrl ?? null;
+}
+
+export { CV_BUCKET };

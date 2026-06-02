@@ -441,7 +441,8 @@ export type RhAbsenceType =
   | "dia_personal"
   | "evento_escolar_familiar"
   | "permiso"
-  | "incapacidad";
+  | "incapacidad"
+  | "burnout";
 
 export type RhDayPart = "full_day" | "morning" | "afternoon";
 
@@ -453,6 +454,7 @@ export const ABSENCE_TYPES: RhAbsenceType[] = [
   "evento_escolar_familiar",
   "permiso",
   "incapacidad",
+  "burnout",
 ];
 
 export const ABSENCE_TYPE_LABEL: Record<RhAbsenceType, string> = {
@@ -461,6 +463,7 @@ export const ABSENCE_TYPE_LABEL: Record<RhAbsenceType, string> = {
   evento_escolar_familiar: "Evento escolar/familiar",
   permiso: "Permiso",
   incapacidad: "Incapacidad",
+  burnout: "Día de burnout",
 };
 
 export const ABSENCE_TYPE_EMOJI: Record<RhAbsenceType, string> = {
@@ -469,7 +472,14 @@ export const ABSENCE_TYPE_EMOJI: Record<RhAbsenceType, string> = {
   evento_escolar_familiar: "🎓",
   permiso: "📄",
   incapacidad: "🩺",
+  burnout: "😮‍💨",
 };
+
+/** Tipos que se autoaprueban al crearse (no requieren decisión de un G4). */
+export const SELF_APPROVED_ABSENCE_TYPES: RhAbsenceType[] = ["burnout"];
+
+/** Días de burnout permitidos por persona y año calendario. */
+export const BURNOUT_DAYS_PER_YEAR = 2;
 
 export const DAY_PARTS: RhDayPart[] = ["full_day", "morning", "afternoon"];
 
