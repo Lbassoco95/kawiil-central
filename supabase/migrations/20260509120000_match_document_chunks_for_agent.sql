@@ -4,8 +4,8 @@
 
 CREATE OR REPLACE FUNCTION public.match_document_chunks_for_agent(
   query_embedding extensions.vector(1536),
-  filter_org_id uuid NOT NULL,
-  filter_document_ids uuid[] NOT NULL,
+  filter_org_id uuid,
+  filter_document_ids uuid[],
   match_count integer DEFAULT 20,
   filter_source_types text[] DEFAULT NULL,
   similarity_threshold float DEFAULT 0.3
