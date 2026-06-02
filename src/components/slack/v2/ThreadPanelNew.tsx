@@ -13,6 +13,7 @@ interface Props {
   isSending?: boolean;
   onSendReply: (text: string) => void;
   onReact?: (ts: string, emoji: string) => void;
+  onCreateTask?: (msg: SlackMessage) => void;
   userMap?: Record<string, { display_name?: string; real_name?: string; avatar_url?: string }>;
   selfUserId?: string;
 }
@@ -27,6 +28,7 @@ export function ThreadPanelNew({
   isSending,
   onSendReply,
   onReact,
+  onCreateTask,
   userMap = {},
   selfUserId,
 }: Props) {
@@ -106,6 +108,7 @@ export function ThreadPanelNew({
                   isSelf={msg.user === selfUserId}
                   userMap={userMap}
                   onReact={onReact}
+                  onCreateTask={onCreateTask}
                 />
               </div>
             );

@@ -306,6 +306,31 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     },
   });
 
+  // ─── Reacciones ─────────────────────────────────────────
+  const reactionMutation = useMutation({
+    mutationFn: async ({ ts, emoji }: { ts: string; emoji: string }) => {
+      const name = emoji.replace(/^:|:$/g, "").trim();
+      if (!selectedChannel || !name) throw new Error("Sin canal o emoji");
+      await invokeSlackApi<{ ok: boolean }>({
+        action: "reactions.add",
+        channel: selectedChannel,
+        ts,
+        name,
+      }, 15_000);
+    },
+    onSuccess: () => {
+      void historyQuery.refetch();
+      void threadQuery.refetch();
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "No se pudo agregar la reacción");
+    },
+  });
+
+  const handleReact = useCallback((ts: string, emoji: string) => {
+    reactionMutation.mutate({ ts, emoji });
+  }, [reactionMutation]);
+
   // ─── Perfiles de usuarios ────────────────────────────────
   const userIds = useMemo(() => {
     const ids = new Set<string>();
@@ -436,6 +461,7 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           selfUserId={connection.slack_user_id ?? undefined}
           onOpenAi={() => {}}
           onOpenActivity={() => {}}
+          onReact={handleReact}
           onCreateTask={handleCreateTask}
           onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
         />
@@ -462,6 +488,8 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           isLoading={threadQuery.isLoading}
           isSending={sendReplyMutation.isPending}
           onSendReply={(text) => sendReplyMutation.mutate(text)}
+          onReact={handleReact}
+          onCreateTask={handleCreateTask}
           userMap={userMap}
           selfUserId={connection.slack_user_id ?? undefined}
         />
