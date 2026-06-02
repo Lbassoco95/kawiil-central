@@ -158,7 +158,7 @@ export function TableroRHPanel() {
           <BookOpen className="mr-1.5 h-3.5 w-3.5" /> Guía de uso
         </Button>
       </div>
-      <GuiaRHDialog open={guiaOpen} onOpenChange={setGuiaOpen} />
+      <GuiaRHDialog open={guiaOpen} onOpenChange={setGuiaOpen} isG4 />
 
       {/* Pendientes */}
       <Card>
