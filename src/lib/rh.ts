@@ -473,6 +473,12 @@ export const ABSENCE_TYPE_EMOJI: Record<RhAbsenceType, string> = {
 
 export const DAY_PARTS: RhDayPart[] = ["full_day", "morning", "afternoon"];
 
+/** Tipos que admiten medio día (mañana/tarde). El resto es siempre día completo. */
+export const HALF_DAY_ABSENCE_TYPES: RhAbsenceType[] = [
+  "evento_escolar_familiar",
+  "permiso",
+];
+
 export const DAY_PART_LABEL: Record<RhDayPart, string> = {
   full_day: "Día completo",
   morning: "Medio día (mañana)",

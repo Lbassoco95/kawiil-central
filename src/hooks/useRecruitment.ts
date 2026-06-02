@@ -55,16 +55,15 @@ export function useCreateProcess() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { title: string; area?: string | null; description?: string | null; celula_id?: string | null }) => {
+    mutationFn: async (input: { title: string; celula_id: string; description?: string | null }) => {
       const orgId = await getMyOrgId(user!.id);
       const { data, error } = await db
         .from("rh_recruitment_processes")
         .insert({
           organization_id: orgId,
           title: input.title,
-          area: input.area ?? null,
           description: input.description ?? null,
-          celula_id: input.celula_id ?? null,
+          celula_id: input.celula_id,
           created_by: user!.id,
         })
         .select("id")

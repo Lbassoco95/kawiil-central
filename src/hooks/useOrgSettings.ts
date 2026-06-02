@@ -9,6 +9,8 @@ export interface OrgSettings {
   referente_edit_due_dates?: boolean;
   /** Si está definido y no vacío, solo este usuario (transformador) puede editar permisos de módulos y settings de permisos de la org. */
   permissions_steward_user_id?: string | null;
+  /** Aprobador por defecto de solicitudes de ausencia cuya célula no tiene responsable asignado. */
+  default_absence_approver_user_id?: string | null;
 }
 
 /** Transformador con permiso para mutar `user_module_permissions` y `organizations.settings` de permisos (RLS alineado). */

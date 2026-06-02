@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ import {
   ABSENCE_TYPE_LABEL,
   DAY_PARTS,
   DAY_PART_LABEL,
+  HALF_DAY_ABSENCE_TYPES,
   type RhAbsenceType,
   type RhDayPart,
 } from "@/lib/rh";
@@ -48,6 +49,8 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
   const [reason, setReason] = useState("");
 
   const isSingleDay = !!startDate && startDate === endDate;
+  // El medio día solo aplica a Evento escolar/familiar y Permiso, y a un único día.
+  const allowsHalfDay = HALF_DAY_ABSENCE_TYPES.includes(absenceType) && isSingleDay;
 
   useEffect(() => {
     if (!open) return;
@@ -56,20 +59,16 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
     setEndDate("");
     setDayPart("full_day");
     setReason("");
-    setCelulaId(celulas[0]?.id ?? "");
+    // Se enruta automáticamente por la célula del colaborador: si pertenece a
+    // varias, se prioriza la que tenga responsable asignado.
+    const withResponsible = celulas.find((c) => c.responsible_user_id);
+    setCelulaId((withResponsible ?? celulas[0])?.id ?? "");
   }, [open, celulas]);
 
-  // Medio día solo aplica a un único día.
+  // Si el tipo/fechas no admiten medio día, volver a día completo.
   useEffect(() => {
-    if (!isSingleDay && dayPart !== "full_day") setDayPart("full_day");
-  }, [isSingleDay, dayPart]);
-
-  const responsibleHint = useMemo(() => {
-    const c = celulas.find((x) => x.id === celulaId);
-    if (!c) return null;
-    if (!c.responsible_user_id) return "Esta célula no tiene G4 responsable asignado; avisa a tu líder.";
-    return null;
-  }, [celulas, celulaId]);
+    if (!allowsHalfDay && dayPart !== "full_day") setDayPart("full_day");
+  }, [allowsHalfDay, dayPart]);
 
   function handleSubmit() {
     if (!startDate || !endDate) {
@@ -99,7 +98,7 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Nueva solicitud</DialogTitle>
           <DialogDescription>
-            La aprueba el G4 responsable de tu célula. Recibirás un aviso con la decisión.
+            Se enviará a quien aprueba en tu célula. Recibirás un aviso con la decisión.
           </DialogDescription>
         </DialogHeader>
 
@@ -142,41 +141,23 @@ export function AbsenceRequestDialog({ open, onOpenChange }: Props) {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {DAY_PARTS.map((p) => (
-                  <SelectItem key={p} value={p} disabled={p !== "full_day" && !isSingleDay}>
+                  <SelectItem key={p} value={p} disabled={p !== "full_day" && !allowsHalfDay}>
                     {DAY_PART_LABEL[p]}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {!isSingleDay && (
-              <p className="text-xs text-muted-foreground">El medio día solo aplica a un único día.</p>
+            {!allowsHalfDay && (
+              <p className="text-xs text-muted-foreground">
+                El medio día solo aplica a Evento escolar/familiar y Permiso, en un único día.
+              </p>
             )}
           </div>
-
-          {celulas.length > 1 && (
-            <div className="space-y-1.5">
-              <Label>Célula</Label>
-              <Select value={celulaId} onValueChange={setCelulaId}>
-                <SelectTrigger><SelectValue placeholder="Selecciona" /></SelectTrigger>
-                <SelectContent>
-                  {celulas.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
 
           <div className="space-y-1.5">
             <Label>Motivo (opcional)</Label>
             <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} />
           </div>
-
-          {responsibleHint && (
-            <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
-              {responsibleHint}
-            </p>
-          )}
         </div>
 
         <DialogFooter>
