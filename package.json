@@ -5,6 +5,7 @@
   "type": "module",
   "workspaces": ["services/slack-socket-bridge"],
   "trustedDependencies": [],
+  "engines": { "node": "20" },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -1,2 +1,2 @@
 [build]
-buildCommand = "bun install --frozen-lockfile --ignore-scripts && bun run build"
+buildCommand = "bun run build"
