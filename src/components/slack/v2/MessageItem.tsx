@@ -238,6 +238,7 @@ interface Props {
   onOpenThread?: (ts: string) => void;
   onReact?: (ts: string, emoji: string) => void;
   onSaveForLater?: (msg: SlackMessage) => void;
+  onCreateTask?: (msg: SlackMessage) => void;
 }
 
 export function MessageItem({
@@ -250,6 +251,7 @@ export function MessageItem({
   onOpenThread,
   onReact,
   onSaveForLater,
+  onCreateTask,
 }: Props) {
   const name = userName || message.user || message.bot_id || "Usuario";
   const initials = getInitials(name);
@@ -366,6 +368,13 @@ export function MessageItem({
           <button className="sl-msg-action" title="Guardar para después" onClick={() => onSaveForLater(message)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
               <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>
+            </svg>
+          </button>
+        )}
+        {onCreateTask && (
+          <button className="sl-msg-action" title="Crear tarea desde mensaje" onClick={() => onCreateTask(message)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+              <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
             </svg>
           </button>
         )}

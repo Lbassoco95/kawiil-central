@@ -20,8 +20,10 @@ import {
   SLACK_CONV_LIST_TIMEOUT_MS,
 } from "@/lib/slackWorkspaceFetch";
 import { useSlackUserProfiles } from "@/hooks/useSlackUserProfiles";
-import { useSlackChannelNotificationBadges } from "@/hooks/useSlackChannelNotificationBadges";
+import { useSlackChannelNotificationBadges, markSlackChannelNotificationsRead } from "@/hooks/useSlackChannelNotificationBadges";
 import { useSlackUnreadMentionsCount } from "@/hooks/useSlackActivityFeed";
+import { useSlackTyping } from "@/hooks/useSlackTyping";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { ChannelSidebar } from "./ChannelSidebar";
@@ -29,7 +31,9 @@ import { MessageArea } from "./MessageArea";
 import { SlackComposerNew } from "./SlackComposerNew";
 import { ThreadPanelNew } from "./ThreadPanelNew";
 import { KawiilContextPanel } from "./KawiilContextPanel";
+import { TypingIndicator } from "./TypingIndicator";
 import { SlackGroupsOrganizerDialog } from "@/components/slack/SlackGroupsOrganizerDialog";
+import { SlackCreateTaskDialog } from "@/components/slack/SlackCreateTaskDialog";
 
 // ─── Tipos ───────────────────────────────────────────────────
 type HistoryPage = {
@@ -70,11 +74,16 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
   const { user } = useAuth();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
 
   const channelFromUrl = searchParams.get("channel") || "";
   const [selectedChannel, setSelectedChannel] = useState<string>(channelFromUrl);
   const [threadRootTs, setThreadRootTs] = useState<string | null>(null);
   const [groupsDialogOpen, setGroupsDialogOpen] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [taskMsg, setTaskMsg] = useState<SlackMessage | null>(null);
+  // En móvil: "sidebar" | "messages"
+  const [mobilePanel, setMobilePanel] = useState<"sidebar" | "messages">("sidebar");
   const slackConvGenRef = useRef(0);
   const slackReconnectToastAtRef = useRef(0);
 
@@ -87,12 +96,19 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
 
   const selectChannel = useCallback(
     (id: string) => {
-      if (id === selectedChannel) return;
-      setSelectedChannel(id);
-      setThreadRootTs(null);
-      setSearchParams({ channel: id });
+      if (id !== selectedChannel) {
+        setSelectedChannel(id);
+        setThreadRootTs(null);
+        setSearchParams({ channel: id });
+        // Limpiar badges de notificaciones inmediatamente al entrar al canal
+        if (user?.id) {
+          void markSlackChannelNotificationsRead(user.id, id);
+        }
+      }
+      // En móvil, navegar a la vista de mensajes
+      if (isMobile) setMobilePanel("messages");
     },
-    [selectedChannel, setSearchParams],
+    [selectedChannel, setSearchParams, user?.id, isMobile],
   );
 
   // ─── Conversaciones ──────────────────────────────────────
@@ -333,6 +349,25 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     return currentConv.name || selectedChannel;
   }, [currentConv, selectedChannel, userMap]);
 
+  // ─── Nombre del usuario actual (para typing indicator) ─────
+  const currentUserName = useMemo(() => {
+    if (!connection.slack_user_id) return "Tú";
+    const p = userMap[connection.slack_user_id];
+    return p?.display_name || p?.real_name || "Tú";
+  }, [connection.slack_user_id, userMap]);
+
+  const currentUserAvatar = useMemo(() => {
+    if (!connection.slack_user_id) return undefined;
+    return userMap[connection.slack_user_id]?.avatar_url ?? undefined;
+  }, [connection.slack_user_id, userMap]);
+
+  // ─── Typing indicator ────────────────────────────────────
+  const { typingUsers, onTyping, onStopTyping } = useSlackTyping(
+    selectedChannel || null,
+    currentUserName,
+    currentUserAvatar,
+  );
+
   // ─── Workspace switcher ──────────────────────────────────
   const workspaces = useMemo(() => [{
     id: "kawiil",
@@ -343,11 +378,23 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
     unread: Object.values(unreadBadges).reduce((a, b) => a + b, 0),
   }], [unreadBadges]);
 
+  const handleCreateTask = useCallback((msg: SlackMessage) => {
+    setTaskMsg(msg);
+    setTaskDialogOpen(true);
+  }, []);
+
+  // Nombre del autor del mensaje seleccionado para el diálogo de tarea
+  const taskMsgAuthorLabel = useMemo(() => {
+    if (!taskMsg?.user) return "";
+    const p = userMap[taskMsg.user];
+    return p?.display_name || p?.real_name || taskMsg.user;
+  }, [taskMsg, userMap]);
+
   // ─── Render ──────────────────────────────────────────────
   return (
-    <div className="slack-layout">
-      {/* Col 1 — Workspaces */}
-      <WorkspaceSwitcher workspaces={workspaces} onSelect={() => {}} />
+    <div className={`slack-layout${isMobile ? " slack-layout--mobile" : ""}`}>
+      {/* Col 1 — Workspaces (oculto en móvil) */}
+      {!isMobile && <WorkspaceSwitcher workspaces={workspaces} onSelect={() => {}} />}
 
       {/* Col 2 — Canales */}
       <ChannelSidebar
@@ -368,10 +415,14 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           void conversationsQuery.refetch();
           onRefreshConversations?.();
         }}
+        mobileHidden={isMobile && mobilePanel === "messages"}
       />
 
       {/* Col 3 — Área de mensajes */}
-      <div style={{ display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" }}>
+      <div
+        className="sl-msg-col"
+        data-mobile-hidden={isMobile && mobilePanel === "sidebar" ? "true" : undefined}
+      >
         <MessageArea
           channel={currentConv}
           channelId={selectedChannel}
@@ -385,12 +436,20 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           selfUserId={connection.slack_user_id ?? undefined}
           onOpenAi={() => {}}
           onOpenActivity={() => {}}
+          onCreateTask={handleCreateTask}
+          onBack={isMobile ? () => setMobilePanel("sidebar") : undefined}
         />
+        <TypingIndicator typingUsers={typingUsers} />
         <SlackComposerNew
           channelName={channelName}
           isSending={sendMutation.isPending}
-          onSend={(text) => sendMutation.mutate(text)}
+          onSend={(text) => {
+            sendMutation.mutate(text);
+            onStopTyping();
+          }}
           disabled={!selectedChannel}
+          userMap={userMap}
+          onTyping={onTyping}
         />
 
         {/* Panel de hilo sobre los mensajes */}
@@ -408,15 +467,17 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
         />
       </div>
 
-      {/* Col 4 — Panel contexto Kawiil */}
-      <KawiilContextPanel
-        channelId={selectedChannel}
-        channelName={channelName}
-        currentConv={currentConv}
-        userMap={userMap}
-        unreadMentions={unreadMentions}
-        onOpenActivity={() => {}}
-      />
+      {/* Col 4 — Panel contexto Kawiil (oculto en móvil) */}
+      {!isMobile && (
+        <KawiilContextPanel
+          channelId={selectedChannel}
+          channelName={channelName}
+          currentConv={currentConv}
+          userMap={userMap}
+          unreadMentions={unreadMentions}
+          onOpenActivity={() => {}}
+        />
+      )}
 
       {/* Diálogo organizar secciones */}
       {orgId && (
@@ -428,6 +489,16 @@ export function SlackView({ connection, onRefreshConversations, onConnect, isCon
           userMap={userMap}
         />
       )}
+
+      {/* Diálogo crear tarea desde mensaje */}
+      <SlackCreateTaskDialog
+        open={taskDialogOpen}
+        onOpenChange={setTaskDialogOpen}
+        message={taskMsg}
+        channelId={selectedChannel}
+        channelTitle={channelName}
+        authorLabel={taskMsgAuthorLabel}
+      />
     </div>
   );
 }
