@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, Eye } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, UserCog, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -55,6 +55,7 @@ import {
   useMoveCandidateStage,
   useOrgName,
   useIsRecruiter,
+  useIsProcessOwner,
   uploadCandidateCvByIds,
 } from "@/hooks/useRecruitment";
 import { useCelulas } from "@/hooks/useCatalogs";
@@ -66,6 +67,7 @@ import { CriteriaManagerDialog } from "./CriteriaManagerDialog";
 import { EmailTemplateManagerDialog } from "./EmailTemplateManagerDialog";
 import { CandidateImportDialog } from "./CandidateImportDialog";
 import { InterviewerManagerDialog } from "./InterviewerManagerDialog";
+import { OwnerManagerDialog } from "./OwnerManagerDialog";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
 
@@ -205,7 +207,9 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const celulaName = celulas.find((c) => c.id === process.celula_id)?.name ?? null;
   const updateStatus = useUpdateProcessStatus();
   const moveStage = useMoveCandidateStage();
-  const isAdmin = useIsRecruiter();
+  const isRecruiter = useIsRecruiter();
+  const isOwner = useIsProcessOwner(process.id);
+  const canManage = isRecruiter || isOwner;
   const [addOpen, setAddOpen] = useState(false);
   const [stagesOpen, setStagesOpen] = useState(false);
   const [statesOpen, setStatesOpen] = useState(false);
@@ -213,6 +217,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [interviewersOpen, setInterviewersOpen] = useState(false);
+  const [ownersOpen, setOwnersOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
 
   const defaultStateId = states.find((s) => s.is_default)?.id ?? states[0]?.id ?? null;
@@ -236,7 +241,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   }, [stages, candidates]);
 
   const handleDragEnd = (e: DragEndEvent) => {
-    if (!isAdmin) return;
+    if (!canManage) return;
     const { active, over } = e;
     if (!over) return;
     const cand = candidates.find((c) => c.id === active.id);
@@ -255,7 +260,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
           <h3 className="truncate text-base font-semibold">{process.title}</h3>
           {celulaName && <p className="text-xs text-muted-foreground">{celulaName}</p>}
         </div>
-        {isAdmin ? (
+        {canManage ? (
           <>
             <Select value={process.status} onValueChange={(v) => updateStatus.mutate({ id: process.id, status: v as RhProcessStatus })}>
               <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
@@ -280,12 +285,24 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
             <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
               <FileUp className="mr-1.5 h-3.5 w-3.5" /> Importar
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setInterviewersOpen(true)}>
-              <Users className="mr-1.5 h-3.5 w-3.5" /> Entrevistadores
-            </Button>
+            {isRecruiter && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setInterviewersOpen(true)}>
+                  <Users className="mr-1.5 h-3.5 w-3.5" /> Entrevistadores
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setOwnersOpen(true)}>
+                  <UserCog className="mr-1.5 h-3.5 w-3.5" /> Responsables
+                </Button>
+              </>
+            )}
             <Button size="sm" onClick={() => setAddOpen(true)}>
               <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Candidato
             </Button>
+            {isOwner && !isRecruiter && (
+              <Badge variant="outline" className="gap-1 border-violet-300 text-violet-700 dark:text-violet-400">
+                <UserCog className="h-3.5 w-3.5" /> Responsable
+              </Badge>
+            )}
           </>
         ) : (
           <Badge variant="outline" className="gap-1 border-sky-300 text-sky-700 dark:text-sky-400">
@@ -308,7 +325,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
                     key={c.id}
                     candidate={c}
                     state={c.state_id ? stateById.get(c.state_id) : undefined}
-                    draggable={isAdmin}
+                    draggable={canManage}
                     onClick={() => setDetail(c)}
                   />
                 ))}
@@ -340,6 +357,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
       <CriteriaManagerDialog open={criteriaOpen} onOpenChange={setCriteriaOpen} processId={process.id} criteria={criteria} />
       <EmailTemplateManagerDialog open={templatesOpen} onOpenChange={setTemplatesOpen} />
       <InterviewerManagerDialog open={interviewersOpen} onOpenChange={setInterviewersOpen} processId={process.id} />
+      <OwnerManagerDialog open={ownersOpen} onOpenChange={setOwnersOpen} processId={process.id} />
       <CandidateDetailDialog
         candidate={detailLive}
         stages={stages}
@@ -347,7 +365,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         criteria={criteria}
         processTitle={process.title}
         orgName={orgName}
-        isAdmin={isAdmin}
+        isAdmin={canManage}
         onOpenChange={(v) => !v && setDetail(null)}
       />
     </section>
