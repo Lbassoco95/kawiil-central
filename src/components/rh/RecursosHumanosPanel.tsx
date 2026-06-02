@@ -5,6 +5,7 @@ import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { TeamScheduleManager } from "./TeamScheduleManager";
 import { TeamAttendanceBoard } from "./TeamAttendanceBoard";
+import { TeamLivePresence } from "./TeamLivePresence";
 import { OfficeLocationsManager } from "./OfficeLocationsManager";
 
 /**
@@ -52,7 +53,10 @@ export function RecursosHumanosPanel() {
         {isTransformador && (
           <>
             <TabsContent value="equipo" className="mt-5">
-              <TeamAttendanceBoard />
+              <div className="grid gap-5">
+                <TeamLivePresence />
+                <TeamAttendanceBoard />
+              </div>
             </TabsContent>
             <TabsContent value="turnos" className="mt-5">
               <div className="grid gap-5 lg:grid-cols-2">

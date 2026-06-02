@@ -169,12 +169,19 @@ export function JornadaCard() {
         {/* ---- Estado: trabajando ---- */}
         {summary.state === "working" && (
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" disabled={isPending} onClick={() => act({ type: "lunch_start" })}>
-              <Utensils className="mr-2 h-4 w-4" />
-              Ir a comer
-            </Button>
+            {session?.is_additional_shift ? (
+              <p className="col-span-2 rounded-md bg-muted/50 px-2 py-1.5 text-center text-xs text-muted-foreground">
+                Turno adicional · solo descansos (sin comida)
+              </p>
+            ) : (
+              <Button variant="outline" disabled={isPending} onClick={() => act({ type: "lunch_start" })}>
+                <Utensils className="mr-2 h-4 w-4" />
+                Ir a comer
+              </Button>
+            )}
             <Button
               variant="outline"
+              className={cn(session?.is_additional_shift && "col-span-2")}
               disabled={isPending || !summary.canBreak}
               onClick={() => act({ type: "break_start" })}
               title={

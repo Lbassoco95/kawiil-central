@@ -71,6 +71,7 @@ export interface RhAttendance {
   check_out_lat: number | null;
   check_out_lng: number | null;
   notes: string | null;
+  is_additional_shift: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -127,11 +128,22 @@ export const WORK_MODE_EMOJI: Record<RhWorkMode, string> = {
   commission: "🚶",
 };
 
+export interface SlackStatus {
+  emoji: string;
+  text: string;
+}
+
 /** Texto/emoji de estado de Slack por modalidad. */
-export const WORK_MODE_SLACK_STATUS: Record<RhWorkMode, { emoji: string; text: string }> = {
+export const WORK_MODE_SLACK_STATUS: Record<RhWorkMode, SlackStatus> = {
   office: { emoji: ":office:", text: "En la oficina" },
   home_office: { emoji: ":house_with_garden:", text: "Home Office" },
   commission: { emoji: ":walking:", text: "De comisión" },
+};
+
+/** Estado de Slack durante las pausas (comida y descanso). */
+export const PAUSE_SLACK_STATUS: Record<"lunch" | "break", SlackStatus> = {
+  lunch: { emoji: ":knife_fork_plate:", text: "Comiendo" },
+  break: { emoji: ":coffee:", text: "En un descanso" },
 };
 
 /** Etiquetas ISO weekday: 1=Lunes ... 7=Domingo */
