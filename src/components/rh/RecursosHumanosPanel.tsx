@@ -1,6 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Users, CalendarClock, CalendarDays } from "lucide-react";
+import { Clock, Users, CalendarClock, CalendarDays, Briefcase } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useIsRecruiter } from "@/hooks/useRecruitment";
+import { ReclutamientoPanel } from "./recruitment/ReclutamientoPanel";
 import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { SolicitudesPanel } from "./SolicitudesPanel";
@@ -17,6 +19,7 @@ import { OfficeLocationsManager } from "./OfficeLocationsManager";
  */
 export function RecursosHumanosPanel() {
   const { isTransformador } = useUserRole();
+  const isRecruiter = useIsRecruiter();
 
   return (
     <section className="space-y-4">
@@ -47,6 +50,12 @@ export function RecursosHumanosPanel() {
               </TabsTrigger>
             </>
           )}
+          {isRecruiter && (
+            <TabsTrigger value="reclutamiento">
+              <Briefcase className="mr-1.5 h-4 w-4" />
+              Reclutamiento
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="jornada" className="mt-5">
@@ -59,6 +68,12 @@ export function RecursosHumanosPanel() {
         <TabsContent value="solicitudes" className="mt-5">
           <SolicitudesPanel />
         </TabsContent>
+
+        {isRecruiter && (
+          <TabsContent value="reclutamiento" className="mt-5">
+            <ReclutamientoPanel />
+          </TabsContent>
+        )}
 
         {isTransformador && (
           <>
