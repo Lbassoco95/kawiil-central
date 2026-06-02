@@ -661,6 +661,21 @@ async function logActivity(
   });
 }
 
+export function useDeleteCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate }: { candidate: Candidate }) => {
+      const { error } = await db.from("rh_candidates").delete().eq("id", candidate.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      toast.success("Candidato eliminado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo eliminar el candidato"),
+  });
+}
+
 export function useMoveCandidateStage() {
   const { user } = useAuth();
   const qc = useQueryClient();

@@ -18,7 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Mail, StickyNote, Send, FileText, Upload, UserCheck } from "lucide-react";
+import { Loader2, Mail, StickyNote, Send, FileText, Upload, UserCheck, Trash2 } from "lucide-react";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatMX } from "@/lib/dateUtils";
@@ -50,6 +51,7 @@ import {
   useSetCandidateState,
   useSetCandidateScore,
   useUpdateCandidate,
+  useDeleteCandidate,
   useLogCandidateEmail,
   useUploadCandidateCv,
   getCvSignedUrl,
@@ -89,6 +91,7 @@ export function CandidateDetailDialog({ candidate, stages, states, criteria, pro
             processTitle={processTitle}
             orgName={orgName}
             isAdmin={isAdmin}
+            onClose={() => onOpenChange(false)}
           />
         )}
       </DialogContent>
@@ -104,6 +107,7 @@ function CandidateDetailInner({
   processTitle,
   orgName,
   isAdmin,
+  onClose,
 }: {
   candidate: Candidate;
   stages: RecruitmentStage[];
@@ -112,12 +116,15 @@ function CandidateDetailInner({
   processTitle: string;
   orgName: string;
   isAdmin: boolean;
+  onClose: () => void;
 }) {
   const { data: activities = [] } = useCandidateActivities(candidate.id);
   const { data: scores = [] } = useCandidateScores(candidate.id);
   const { data: templates = [] } = useEmailTemplates();
   const { isTransformador } = useUserRole();
   const convert = useConvertCandidate();
+  const del = useDeleteCandidate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const addNote = useAddCandidateNote();
   const moveStage = useMoveCandidateStage();
   const setState = useSetCandidateState();
@@ -386,7 +393,10 @@ function CandidateDetailInner({
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2">
+            <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-600" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar candidato
+            </Button>
             <Button size="sm" onClick={saveProfile} disabled={updateCandidate.isPending}>
               {updateCandidate.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Guardar ficha
@@ -507,6 +517,15 @@ function CandidateDetailInner({
           </div>
         </TabsContent>
       </Tabs>
+
+      <DeleteConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="¿Eliminar candidato?"
+        description={`Se eliminará a ${candidate.full_name} y su historial de este proceso. Esta acción no se puede deshacer.`}
+        isPending={del.isPending}
+        onConfirm={() => del.mutate({ candidate }, { onSuccess: () => { setConfirmDelete(false); onClose(); } })}
+      />
     </>
   );
 }
