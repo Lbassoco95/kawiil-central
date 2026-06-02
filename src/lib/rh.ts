@@ -434,6 +434,76 @@ export function overtimeMinutes(
   return Math.max(0, workedMin - scheduledMin);
 }
 
+/* ====================== Ausencias / solicitudes ====================== */
+
+export type RhAbsenceType =
+  | "vacaciones"
+  | "dia_personal"
+  | "evento_escolar_familiar"
+  | "permiso"
+  | "incapacidad";
+
+export type RhDayPart = "full_day" | "morning" | "afternoon";
+
+export type RhRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+
+export const ABSENCE_TYPES: RhAbsenceType[] = [
+  "vacaciones",
+  "dia_personal",
+  "evento_escolar_familiar",
+  "permiso",
+  "incapacidad",
+];
+
+export const ABSENCE_TYPE_LABEL: Record<RhAbsenceType, string> = {
+  vacaciones: "Vacaciones",
+  dia_personal: "Día personal",
+  evento_escolar_familiar: "Evento escolar/familiar",
+  permiso: "Permiso",
+  incapacidad: "Incapacidad",
+};
+
+export const ABSENCE_TYPE_EMOJI: Record<RhAbsenceType, string> = {
+  vacaciones: "🏖️",
+  dia_personal: "🙋",
+  evento_escolar_familiar: "🎓",
+  permiso: "📄",
+  incapacidad: "🩺",
+};
+
+export const DAY_PARTS: RhDayPart[] = ["full_day", "morning", "afternoon"];
+
+export const DAY_PART_LABEL: Record<RhDayPart, string> = {
+  full_day: "Día completo",
+  morning: "Medio día (mañana)",
+  afternoon: "Medio día (tarde)",
+};
+
+export const REQUEST_STATUS_LABEL: Record<RhRequestStatus, string> = {
+  pending: "Pendiente",
+  approved: "Aprobada",
+  rejected: "Rechazada",
+  cancelled: "Cancelada",
+};
+
+export interface RhAbsenceRequest {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  celula_id: string | null;
+  absence_type: RhAbsenceType;
+  start_date: string;
+  end_date: string;
+  day_part: RhDayPart;
+  reason: string | null;
+  status: RhRequestStatus;
+  approver_user_id: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Duración legible entre check-in y check-out (o ahora). */
 export function workedDuration(checkIn: string, checkOut: string | null): string {
   const start = new Date(checkIn).getTime();

@@ -1,8 +1,9 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Users, CalendarClock } from "lucide-react";
+import { Clock, Users, CalendarClock, CalendarDays } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
+import { SolicitudesPanel } from "./SolicitudesPanel";
 import { TeamScheduleManager } from "./TeamScheduleManager";
 import { TeamAttendanceBoard } from "./TeamAttendanceBoard";
 import { TeamLivePresence } from "./TeamLivePresence";
@@ -29,6 +30,10 @@ export function RecursosHumanosPanel() {
             <Clock className="mr-1.5 h-4 w-4" />
             Mi jornada
           </TabsTrigger>
+          <TabsTrigger value="solicitudes">
+            <CalendarDays className="mr-1.5 h-4 w-4" />
+            Solicitudes
+          </TabsTrigger>
           {isTransformador && (
             <>
               <TabsTrigger value="equipo">
@@ -48,6 +53,10 @@ export function RecursosHumanosPanel() {
             <JornadaCard />
             <MyAttendanceList />
           </div>
+        </TabsContent>
+
+        <TabsContent value="solicitudes" className="mt-5">
+          <SolicitudesPanel />
         </TabsContent>
 
         {isTransformador && (
