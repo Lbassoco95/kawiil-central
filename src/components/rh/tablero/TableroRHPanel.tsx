@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Users, UserPlus, FolderCheck, ClipboardList, Bell, Download } from "lucide-react";
+import { Loader2, Users, UserPlus, FolderCheck, ClipboardList, Bell, Download, BookOpen } from "lucide-react";
+import { GuiaRHDialog } from "./GuiaRHDialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +32,7 @@ export function TableroRHPanel() {
   const { data: responses = [] } = useAllResponses(true);
   const sendEmail = useSendNewEmail();
   const [exporting, setExporting] = useState(false);
+  const [guiaOpen, setGuiaOpen] = useState(false);
 
   const activeUsers = useMemo(() => users.filter((u) => u.is_active), [users]);
   const activeQs = useMemo(() => questionnaires.filter((q) => q.active), [questionnaires]);
@@ -143,7 +145,7 @@ export function TableroRHPanel() {
         <Kpi icon={ClipboardList} label="Avance cuestionarios" value={`${avancePct}%`} sub={`${activeQs.length} abierto(s)`} />
       </div>
 
-      {/* Exportar */}
+      {/* Acciones */}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={exportExpedientes}>
           <Download className="mr-1.5 h-3.5 w-3.5" /> Exportar expedientes (Excel)
@@ -152,7 +154,11 @@ export function TableroRHPanel() {
           {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
           Exportar resultados (Excel)
         </Button>
+        <Button size="sm" variant="ghost" onClick={() => setGuiaOpen(true)}>
+          <BookOpen className="mr-1.5 h-3.5 w-3.5" /> Guía de uso
+        </Button>
       </div>
+      <GuiaRHDialog open={guiaOpen} onOpenChange={setGuiaOpen} />
 
       {/* Pendientes */}
       <Card>
