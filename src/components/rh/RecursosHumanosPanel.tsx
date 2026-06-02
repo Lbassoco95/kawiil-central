@@ -1,8 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, Users, CalendarClock, CalendarDays, Briefcase } from "lucide-react";
+import { Clock, Users, CalendarClock, CalendarDays, Briefcase, FolderArchive } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCanAccessRecruitment } from "@/hooks/useRecruitment";
 import { ReclutamientoPanel } from "./recruitment/ReclutamientoPanel";
+import { MiExpedientePanel } from "./expediente/MiExpedientePanel";
+import { ExpedientesEquipoPanel } from "./expediente/ExpedientesEquipoPanel";
 import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { SolicitudesPanel } from "./SolicitudesPanel";
@@ -38,6 +40,10 @@ export function RecursosHumanosPanel() {
             <CalendarDays className="mr-1.5 h-4 w-4" />
             Solicitudes
           </TabsTrigger>
+          <TabsTrigger value="expediente">
+            <FolderArchive className="mr-1.5 h-4 w-4" />
+            Mi expediente
+          </TabsTrigger>
           {isTransformador && (
             <>
               <TabsTrigger value="equipo">
@@ -47,6 +53,10 @@ export function RecursosHumanosPanel() {
               <TabsTrigger value="turnos">
                 <CalendarClock className="mr-1.5 h-4 w-4" />
                 Turnos y horarios
+              </TabsTrigger>
+              <TabsTrigger value="expedientes">
+                <FolderArchive className="mr-1.5 h-4 w-4" />
+                Expedientes
               </TabsTrigger>
             </>
           )}
@@ -67,6 +77,10 @@ export function RecursosHumanosPanel() {
 
         <TabsContent value="solicitudes" className="mt-5">
           <SolicitudesPanel />
+        </TabsContent>
+
+        <TabsContent value="expediente" className="mt-5">
+          <MiExpedientePanel />
         </TabsContent>
 
         {canRecruit && (
@@ -92,6 +106,9 @@ export function RecursosHumanosPanel() {
                 <TeamScheduleManager />
                 <OfficeLocationsManager />
               </div>
+            </TabsContent>
+            <TabsContent value="expedientes" className="mt-5">
+              <ExpedientesEquipoPanel />
             </TabsContent>
           </>
         )}
