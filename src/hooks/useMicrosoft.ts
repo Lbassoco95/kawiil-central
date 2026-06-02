@@ -1701,7 +1701,28 @@ export function useCreateMailRule() {
       const { data, error } = await supabase.functions.invoke("microsoft-api", {
         body: { action: "create-mail-rule", params: { displayName, senderEmail, moveToFolderId, markAsRead } },
       });
-      if (error) throw error;
+      const errBody = await readSupabaseFunctionErrorBody(error);
+      if (error) {
+        const combined = [errBody, (error as Error)?.message ?? ""].join(" ");
+        if (
+          combined.includes("PERMISSION_REQUIRED") ||
+          combined.includes("MICROSOFT_PERMISSION_REQUIRED") ||
+          combined.includes("MailboxSettings") ||
+          combined.includes("permisos necesarios") ||
+          combined.includes("insufficient") ||
+          errBody.includes("403")
+        ) {
+          throw new Error("Permisos insuficientes. Para crear reglas es necesario reconectar tu cuenta de Microsoft: ve a Configuración → Integraciones y vuelve a conectar Microsoft.");
+        }
+        // Try to surface the message from the JSON body
+        try {
+          const parsed = JSON.parse(errBody) as { error?: string; message?: string };
+          if (parsed?.error || parsed?.message) {
+            throw new Error(parsed.message || parsed.error || "Error desconocido");
+          }
+        } catch { /* ignore parse errors */ }
+        throw error;
+      }
       if (data?.error) throw new Error(data.error);
       return data as MailRule;
     },
@@ -1709,7 +1730,7 @@ export function useCreateMailRule() {
       void queryClient.invalidateQueries({ queryKey: ["mail-rules", user?.id] });
       toast.success("Regla creada");
     },
-    onError: (err: Error) => toast.error("Error al crear la regla: " + err.message),
+    onError: (err: Error) => toast.error(err.message.slice(0, 300)),
   });
 }
 

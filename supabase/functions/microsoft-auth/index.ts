@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
       "Mail.Read",
       "Mail.ReadWrite",
       "Mail.Send",
+      "MailboxSettings.ReadWrite",
       "User.Read",
     ].join(" ");
 
