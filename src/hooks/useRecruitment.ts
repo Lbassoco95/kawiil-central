@@ -5,10 +5,14 @@ import { toast } from "sonner";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
+  DEFAULT_CRITERIA,
   DEFAULT_STAGES,
   DEFAULT_STATES,
+  weightedScore,
   type Candidate,
   type CandidateActivity,
+  type CandidateScore,
+  type RecruitmentCriterion,
   type RecruitmentProcess,
   type RecruitmentStage,
   type RecruitmentState,
@@ -91,6 +95,16 @@ export function useCreateProcess() {
       }));
       const { error: ste } = await db.from("rh_recruitment_states").insert(states);
       if (ste) throw ste;
+      // Sembrar criterios de la rúbrica por defecto.
+      const criteria = DEFAULT_CRITERIA.map((c, i) => ({
+        organization_id: orgId,
+        process_id: processId,
+        name: c.name,
+        weight: c.weight,
+        position: i,
+      }));
+      const { error: ce } = await db.from("rh_recruitment_criteria").insert(criteria);
+      if (ce) throw ce;
       return processId;
     },
     onSuccess: () => {
@@ -259,6 +273,149 @@ export function useDeleteState() {
       qc.invalidateQueries({ queryKey: ["rh-candidates", vars.processId] });
     },
     onError: (e: Error) => toast.error(e.message || "No se pudo eliminar el estado"),
+  });
+}
+
+/* ---------------- Rúbrica: criterios ---------------- */
+export function useProcessCriteria(processId: string | null) {
+  return useQuery({
+    queryKey: ["rh-criteria", processId],
+    queryFn: async (): Promise<RecruitmentCriterion[]> => {
+      const { data, error } = await db
+        .from("rh_recruitment_criteria")
+        .select("*")
+        .eq("process_id", processId)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return (data as RecruitmentCriterion[]) ?? [];
+    },
+    enabled: !!processId,
+  });
+}
+
+export function useCreateCriterion() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ processId, name, weight, position }: { processId: string; name: string; weight: number; position: number }) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { error } = await db.from("rh_recruitment_criteria").insert({
+        organization_id: orgId,
+        process_id: processId,
+        name,
+        weight,
+        position,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-criteria", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo crear el criterio"),
+  });
+}
+
+export function useUpdateCriterion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name, weight }: { id: string; name?: string; weight?: number; processId: string }) => {
+      const patch: Record<string, string | number> = {};
+      if (name !== undefined) patch.name = name;
+      if (weight !== undefined) patch.weight = weight;
+      const { error } = await db.from("rh_recruitment_criteria").update(patch).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-criteria", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo actualizar el criterio"),
+  });
+}
+
+export function useDeleteCriterion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; processId: string }) => {
+      const { error } = await db.from("rh_recruitment_criteria").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ["rh-criteria", vars.processId] }),
+    onError: (e: Error) => toast.error(e.message || "No se pudo eliminar el criterio"),
+  });
+}
+
+/* ---------------- Rúbrica: calificaciones ---------------- */
+export function useCandidateScores(candidateId: string | null) {
+  return useQuery({
+    queryKey: ["rh-scores", candidateId],
+    queryFn: async (): Promise<CandidateScore[]> => {
+      const { data, error } = await db
+        .from("rh_candidate_scores")
+        .select("*")
+        .eq("candidate_id", candidateId);
+      if (error) throw error;
+      return (data as CandidateScore[]) ?? [];
+    },
+    enabled: !!candidateId,
+  });
+}
+
+/** Registra/actualiza la calificación de un criterio y recalcula el rating global. */
+export function useSetCandidateScore() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      candidate,
+      criteria,
+      criterionId,
+      score,
+    }: {
+      candidate: Candidate;
+      criteria: RecruitmentCriterion[];
+      criterionId: string;
+      score: number;
+    }) => {
+      const { error } = await db
+        .from("rh_candidate_scores")
+        .upsert(
+          {
+            organization_id: candidate.organization_id,
+            candidate_id: candidate.id,
+            criterion_id: criterionId,
+            score,
+            scored_by: user!.id,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "candidate_id,criterion_id" },
+        );
+      if (error) throw error;
+
+      // Recalcular promedio ponderado y guardarlo en rating (0..5) para el tablero.
+      const { data: rows } = await db.from("rh_candidate_scores").select("*").eq("candidate_id", candidate.id);
+      const avg = weightedScore(criteria, (rows as CandidateScore[]) ?? []);
+      await db.from("rh_candidates").update({ rating: avg == null ? 0 : Math.round(avg) }).eq("id", candidate.id);
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-scores", vars.candidate.id] });
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo guardar la calificación"),
+  });
+}
+
+/* ---------------- Ficha del candidato ---------------- */
+export function useUpdateCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ candidate, patch }: { candidate: Candidate; patch: Partial<Candidate> }) => {
+      const { error } = await db
+        .from("rh_candidates")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", candidate.id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-candidates", vars.candidate.process_id] });
+      toast.success("Ficha actualizada");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo actualizar la ficha"),
   });
 }
 
