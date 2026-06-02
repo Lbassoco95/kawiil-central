@@ -67,10 +67,11 @@ interface Props {
   criteria: RecruitmentCriterion[];
   processTitle: string;
   orgName: string;
+  isAdmin: boolean;
   onOpenChange: (v: boolean) => void;
 }
 
-export function CandidateDetailDialog({ candidate, stages, states, criteria, processTitle, orgName, onOpenChange }: Props) {
+export function CandidateDetailDialog({ candidate, stages, states, criteria, processTitle, orgName, isAdmin, onOpenChange }: Props) {
   const open = !!candidate;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -84,6 +85,7 @@ export function CandidateDetailDialog({ candidate, stages, states, criteria, pro
             criteria={criteria}
             processTitle={processTitle}
             orgName={orgName}
+            isAdmin={isAdmin}
           />
         )}
       </DialogContent>
@@ -98,6 +100,7 @@ function CandidateDetailInner({
   criteria,
   processTitle,
   orgName,
+  isAdmin,
 }: {
   candidate: Candidate;
   stages: RecruitmentStage[];
@@ -105,6 +108,7 @@ function CandidateDetailInner({
   criteria: RecruitmentCriterion[];
   processTitle: string;
   orgName: string;
+  isAdmin: boolean;
 }) {
   const { data: activities = [] } = useCandidateActivities(candidate.id);
   const { data: scores = [] } = useCandidateScores(candidate.id);
@@ -242,14 +246,18 @@ function CandidateDetailInner({
             ) : (
               <span className="text-xs text-muted-foreground">Sin CV cargado</span>
             )}
-            <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()} disabled={uploadCv.isPending}>
-              {uploadCv.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
-              {candidate.resume_url ? "Reemplazar" : "Subir CV"}
-            </Button>
-            <input
-              ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf" className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCv.mutate({ candidate, file: f }); e.target.value = ""; }}
-            />
+            {isAdmin && (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()} disabled={uploadCv.isPending}>
+                  {uploadCv.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                  {candidate.resume_url ? "Reemplazar" : "Subir CV"}
+                </Button>
+                <input
+                  ref={fileRef} type="file" accept=".pdf,.doc,.docx,application/pdf" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCv.mutate({ candidate, file: f }); e.target.value = ""; }}
+                />
+              </>
+            )}
           </div>
 
           {/* Fase y estado */}
@@ -258,6 +266,7 @@ function CandidateDetailInner({
               <Label>Fase</Label>
               <Select
                 value={candidate.stage_id ?? ""}
+                disabled={!isAdmin}
                 onValueChange={(stageId) => { const st = stages.find((s) => s.id === stageId); if (st) moveStage.mutate({ candidate, stageId, stageName: st.name }); }}
               >
                 <SelectTrigger><SelectValue placeholder="Sin fase" /></SelectTrigger>
@@ -268,6 +277,7 @@ function CandidateDetailInner({
               <Label>Estado</Label>
               <Select
                 value={candidate.state_id ?? ""}
+                disabled={!isAdmin}
                 onValueChange={(stateId) => { const st = states.find((s) => s.id === stateId); if (st) setState.mutate({ candidate, stateId, stateName: st.name }); }}
               >
                 <SelectTrigger><SelectValue placeholder="Sin estado" /></SelectTrigger>
@@ -276,6 +286,8 @@ function CandidateDetailInner({
             </div>
           </div>
 
+          {isAdmin ? (
+          <>
           {/* Datos académicos / experiencia (editables) */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -333,6 +345,10 @@ function CandidateDetailInner({
               Guardar ficha
             </Button>
           </div>
+          </>
+          ) : (
+            <ProfileReadOnly candidate={candidate} />
+          )}
         </TabsContent>
 
         {/* ---------------- EVALUACIÓN ---------------- */}
@@ -354,7 +370,7 @@ function CandidateDetailInner({
                         <button
                           key={n}
                           type="button"
-                          onClick={() => setScore.mutate({ candidate, criteria, criterionId: c.id, score: n })}
+                          onClick={() => setScore.mutate({ candidate, criterionId: c.id, score: n })}
                           className={cn(
                             "h-8 flex-1 rounded-md border text-sm transition-colors",
                             val === n ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
@@ -384,13 +400,15 @@ function CandidateDetailInner({
 
         {/* ---------------- SEGUIMIENTO ---------------- */}
         <TabsContent value="track" className="space-y-4 pt-2">
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => setEmailOpen((v) => !v)} disabled={!candidate.email}>
-              <Mail className="mr-1.5 h-3.5 w-3.5" /> Enviar correo
-            </Button>
-          </div>
+          {isAdmin && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => setEmailOpen((v) => !v)} disabled={!candidate.email}>
+                <Mail className="mr-1.5 h-3.5 w-3.5" /> Enviar correo
+              </Button>
+            </div>
+          )}
 
-          {emailOpen && (
+          {isAdmin && emailOpen && (
             <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
               {templates.length > 0 && (
                 <Select onValueChange={applyTemplate}>
@@ -443,5 +461,34 @@ function CandidateDetailInner({
         </TabsContent>
       </Tabs>
     </>
+  );
+}
+
+/** Resumen de la ficha en solo lectura (entrevistadores). */
+function ProfileReadOnly({ candidate }: { candidate: Candidate }) {
+  const rows: { label: string; value: string | null }[] = [
+    { label: "Universidad", value: candidate.university },
+    { label: "Carrera", value: candidate.degree },
+    { label: "Titulación", value: candidate.education_status ? EDUCATION_STATUS_LABEL[candidate.education_status] : null },
+    { label: "Años de experiencia", value: candidate.years_experience != null ? String(candidate.years_experience) : null },
+    { label: "Pretensión", value: candidate.salary_expectation != null ? `$${candidate.salary_expectation.toLocaleString("es-MX")}` : null },
+    { label: "Disponible desde", value: candidate.available_from },
+    { label: "Software", value: candidate.skills?.length ? candidate.skills.join(", ") : null },
+    { label: "LinkedIn", value: candidate.linkedin_url },
+    { label: "Portafolio", value: candidate.portfolio_url },
+  ].filter((r) => r.value);
+
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground">Sin datos adicionales en la ficha.</p>;
+  }
+  return (
+    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+      {rows.map((r) => (
+        <div key={r.label} className="space-y-0.5">
+          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{r.label}</dt>
+          <dd className="break-words">{r.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

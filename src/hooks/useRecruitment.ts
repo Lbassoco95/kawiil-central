@@ -8,7 +8,6 @@ import {
   DEFAULT_CRITERIA,
   DEFAULT_STAGES,
   DEFAULT_STATES,
-  weightedScore,
   type Candidate,
   type CandidateActivity,
   type CandidateScore,
@@ -34,11 +33,94 @@ async function getMyOrgId(userId: string): Promise<string> {
   return data.organization_id as string;
 }
 
-/** ¿El usuario actual puede gestionar reclutamiento? (permiso o G4) */
+/** ¿El usuario actual es Admin de reclutamiento? (permiso de módulo o G4) */
 export function useIsRecruiter(): boolean {
   const { hasModule } = useModulePermissions();
   const { isTransformador } = useUserRole();
   return isTransformador || hasModule("reclutamiento");
+}
+
+/** ¿El usuario actual está asignado como entrevistador en alguna vacante? */
+export function useIsAnyInterviewer(): boolean {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ["rh-is-interviewer", user?.id],
+    queryFn: async (): Promise<boolean> => {
+      const { count, error } = await db
+        .from("rh_process_interviewers")
+        .select("process_id", { count: "exact", head: true })
+        .eq("user_id", user!.id);
+      if (error) return false;
+      return (count ?? 0) > 0;
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000,
+  });
+  return !!data;
+}
+
+/** Acceso al módulo de reclutamiento: Admin o entrevistador asignado. */
+export function useCanAccessRecruitment(): boolean {
+  const isRecruiter = useIsRecruiter();
+  const isInterviewer = useIsAnyInterviewer();
+  return isRecruiter || isInterviewer;
+}
+
+/* ---------------- Entrevistadores por vacante ---------------- */
+export function useProcessInterviewers(processId: string | null) {
+  return useQuery({
+    queryKey: ["rh-interviewers", processId],
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await db
+        .from("rh_process_interviewers")
+        .select("user_id")
+        .eq("process_id", processId);
+      if (error) throw error;
+      return ((data as { user_id: string }[]) ?? []).map((r) => r.user_id);
+    },
+    enabled: !!processId,
+  });
+}
+
+export function useAddInterviewer() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ processId, userId }: { processId: string; userId: string }) => {
+      const orgId = await getMyOrgId(user!.id);
+      const { error } = await db.from("rh_process_interviewers").insert({
+        organization_id: orgId,
+        process_id: processId,
+        user_id: userId,
+        created_by: user!.id,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-interviewers", vars.processId] });
+      toast.success("Entrevistador asignado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo asignar"),
+  });
+}
+
+export function useRemoveInterviewer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ processId, userId }: { processId: string; userId: string }) => {
+      const { error } = await db
+        .from("rh_process_interviewers")
+        .delete()
+        .eq("process_id", processId)
+        .eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["rh-interviewers", vars.processId] });
+      toast.success("Entrevistador quitado");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo quitar"),
+  });
 }
 
 export function useRecruitmentProcesses() {
@@ -364,15 +446,14 @@ export function useSetCandidateScore() {
   return useMutation({
     mutationFn: async ({
       candidate,
-      criteria,
       criterionId,
       score,
     }: {
       candidate: Candidate;
-      criteria: RecruitmentCriterion[];
       criterionId: string;
       score: number;
     }) => {
+      // El rating ponderado se recalcula en la BD mediante trigger.
       const { error } = await db
         .from("rh_candidate_scores")
         .upsert(
@@ -387,11 +468,6 @@ export function useSetCandidateScore() {
           { onConflict: "candidate_id,criterion_id" },
         );
       if (error) throw error;
-
-      // Recalcular promedio ponderado y guardarlo en rating (0..5) para el tablero.
-      const { data: rows } = await db.from("rh_candidate_scores").select("*").eq("candidate_id", candidate.id);
-      const avg = weightedScore(criteria, (rows as CandidateScore[]) ?? []);
-      await db.from("rh_candidates").update({ rating: avg == null ? 0 : Math.round(avg) }).eq("id", candidate.id);
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["rh-scores", vars.candidate.id] });

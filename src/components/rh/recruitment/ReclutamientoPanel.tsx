@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp, Users, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -54,6 +54,7 @@ import {
   useCreateCandidate,
   useMoveCandidateStage,
   useOrgName,
+  useIsRecruiter,
   uploadCandidateCvByIds,
 } from "@/hooks/useRecruitment";
 import { useCelulas } from "@/hooks/useCatalogs";
@@ -64,6 +65,7 @@ import { StateManagerDialog } from "./StateManagerDialog";
 import { CriteriaManagerDialog } from "./CriteriaManagerDialog";
 import { EmailTemplateManagerDialog } from "./EmailTemplateManagerDialog";
 import { CandidateImportDialog } from "./CandidateImportDialog";
+import { InterviewerManagerDialog } from "./InterviewerManagerDialog";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
 
@@ -80,17 +82,22 @@ export function ReclutamientoPanel() {
 function ProcessList({ onOpen }: { onOpen: (p: RecruitmentProcess) => void }) {
   const { data: processes = [], isLoading } = useRecruitmentProcesses();
   const { data: celulas = [] } = useCelulas();
+  const isAdmin = useIsRecruiter();
   const celulaName = (id: string | null) => celulas.find((c) => c.id === id)?.name ?? "Sin célula";
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Vacantes y procesos de selección</p>
-        <Button size="sm" onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" />
-          Nueva vacante
-        </Button>
+        <p className="text-sm text-muted-foreground">
+          {isAdmin ? "Vacantes y procesos de selección" : "Vacantes en las que participas como entrevistador"}
+        </p>
+        {isAdmin && (
+          <Button size="sm" onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Nueva vacante
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -198,12 +205,14 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const celulaName = celulas.find((c) => c.id === process.celula_id)?.name ?? null;
   const updateStatus = useUpdateProcessStatus();
   const moveStage = useMoveCandidateStage();
+  const isAdmin = useIsRecruiter();
   const [addOpen, setAddOpen] = useState(false);
   const [stagesOpen, setStagesOpen] = useState(false);
   const [statesOpen, setStatesOpen] = useState(false);
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [interviewersOpen, setInterviewersOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
 
   const defaultStateId = states.find((s) => s.is_default)?.id ?? states[0]?.id ?? null;
@@ -227,6 +236,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   }, [stages, candidates]);
 
   const handleDragEnd = (e: DragEndEvent) => {
+    if (!isAdmin) return;
     const { active, over } = e;
     if (!over) return;
     const cand = candidates.find((c) => c.id === active.id);
@@ -245,32 +255,43 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
           <h3 className="truncate text-base font-semibold">{process.title}</h3>
           {celulaName && <p className="text-xs text-muted-foreground">{celulaName}</p>}
         </div>
-        <Select value={process.status} onValueChange={(v) => updateStatus.mutate({ id: process.id, status: v as RhProcessStatus })}>
-          <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {PROCESS_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{PROCESS_STATUS_LABEL[s]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button size="sm" variant="outline" onClick={() => setStagesOpen(true)}>
-          <Columns3 className="mr-1.5 h-3.5 w-3.5" /> Fases
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setStatesOpen(true)}>
-          <Tag className="mr-1.5 h-3.5 w-3.5" /> Estados
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setCriteriaOpen(true)}>
-          <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Rúbrica
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
-          <Mail className="mr-1.5 h-3.5 w-3.5" /> Plantillas
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
-          <FileUp className="mr-1.5 h-3.5 w-3.5" /> Importar
-        </Button>
-        <Button size="sm" onClick={() => setAddOpen(true)}>
-          <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Candidato
-        </Button>
+        {isAdmin ? (
+          <>
+            <Select value={process.status} onValueChange={(v) => updateStatus.mutate({ id: process.id, status: v as RhProcessStatus })}>
+              <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PROCESS_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>{PROCESS_STATUS_LABEL[s]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={() => setStagesOpen(true)}>
+              <Columns3 className="mr-1.5 h-3.5 w-3.5" /> Fases
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setStatesOpen(true)}>
+              <Tag className="mr-1.5 h-3.5 w-3.5" /> Estados
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setCriteriaOpen(true)}>
+              <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Rúbrica
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
+              <Mail className="mr-1.5 h-3.5 w-3.5" /> Plantillas
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+              <FileUp className="mr-1.5 h-3.5 w-3.5" /> Importar
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setInterviewersOpen(true)}>
+              <Users className="mr-1.5 h-3.5 w-3.5" /> Entrevistadores
+            </Button>
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Candidato
+            </Button>
+          </>
+        ) : (
+          <Badge variant="outline" className="gap-1 border-sky-300 text-sky-700 dark:text-sky-400">
+            <Eye className="h-3.5 w-3.5" /> Entrevistador
+          </Badge>
+        )}
       </div>
 
       {isLoading ? (
@@ -287,6 +308,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
                     key={c.id}
                     candidate={c}
                     state={c.state_id ? stateById.get(c.state_id) : undefined}
+                    draggable={isAdmin}
                     onClick={() => setDetail(c)}
                   />
                 ))}
@@ -317,6 +339,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
       <StateManagerDialog open={statesOpen} onOpenChange={setStatesOpen} processId={process.id} states={states} />
       <CriteriaManagerDialog open={criteriaOpen} onOpenChange={setCriteriaOpen} processId={process.id} criteria={criteria} />
       <EmailTemplateManagerDialog open={templatesOpen} onOpenChange={setTemplatesOpen} />
+      <InterviewerManagerDialog open={interviewersOpen} onOpenChange={setInterviewersOpen} processId={process.id} />
       <CandidateDetailDialog
         candidate={detailLive}
         stages={stages}
@@ -324,6 +347,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         criteria={criteria}
         processTitle={process.title}
         orgName={orgName}
+        isAdmin={isAdmin}
         onOpenChange={(v) => !v && setDetail(null)}
       />
     </section>
@@ -360,13 +384,18 @@ function DroppableColumn({ stage, count, children }: { stage: RecruitmentStage; 
 function DraggableCard({
   candidate,
   state,
+  draggable,
   onClick,
 }: {
   candidate: Candidate;
   state: RecruitmentState | undefined;
+  draggable: boolean;
   onClick: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: candidate.id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: candidate.id,
+    disabled: !draggable,
+  });
   const style = transform
     ? { transform: `translate(${transform.x}px, ${transform.y}px)`, zIndex: 50 }
     : undefined;
@@ -377,7 +406,10 @@ function DraggableCard({
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className={cn("cursor-grab touch-none active:cursor-grabbing", isDragging && "opacity-50")}
+      className={cn(
+        draggable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer",
+        isDragging && "opacity-50",
+      )}
     >
       <Card className="transition-colors hover:bg-muted/50">
         <CardContent className="space-y-1 p-3">
