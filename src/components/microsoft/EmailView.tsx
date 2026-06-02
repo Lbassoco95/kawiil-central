@@ -81,7 +81,7 @@ import {
   FolderPlus, X, Check, FolderInput, Archive, Star, MoreHorizontal,
   Keyboard, ArrowDown, ChevronsLeft, ChevronsRight, Maximize2, List, ListOrdered, RefreshCw,
   Eye, Download, CalendarClock, Copy, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
-  GripVertical,
+  GripVertical, ShieldCheck,
 } from "lucide-react";
 import {
   DndContext,
@@ -122,6 +122,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { CreateTaskFromEmailDialog } from "./CreateTaskFromEmailDialog";
+import { CreateMailRuleDialog } from "./CreateMailRuleDialog";
 import { SendEmailToSlackDialog } from "./SendEmailToSlackDialog";
 import { MessageSquare } from "lucide-react";
 import { EmailAIAssistant } from "./EmailAIAssistant";
@@ -811,6 +812,7 @@ export function EmailView() {
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [quickTaskEmail, setQuickTaskEmail] = useState<{ id: string; subject?: string; senderName?: string; senderEmail?: string; bodyPreview?: string; receivedDateTime?: string } | null>(null);
   const [sendToSlackOpen, setSendToSlackOpen] = useState(false);
+  const [mailRuleDialogOpen, setMailRuleDialogOpen] = useState(false);
   const [emailAiSummary, setEmailAiSummary] = useState<{
     summary: string;
     suggestedAction: string | null;
@@ -3371,6 +3373,23 @@ export function EmailView() {
                       Enviar a Slack
                     </TooltipContent>
                   </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-blue-600 hover:bg-blue-100/60 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                        onClick={() => setMailRuleDialogOpen(true)}
+                        disabled={!emailDetail}
+                      >
+                        <ShieldCheck className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">
+                      Crear regla para este remitente
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             </TooltipProvider>
@@ -3672,6 +3691,14 @@ export function EmailView() {
         />
       )}
       <ComposeEmailDialog open={composeOpen} onOpenChange={setComposeOpen} onAfterSend={handleAfterSendTemplate} />
+
+      <CreateMailRuleDialog
+        open={mailRuleDialogOpen}
+        onOpenChange={setMailRuleDialogOpen}
+        senderEmail={emailDetail?.from?.emailAddress?.address ?? ""}
+        senderName={emailDetail?.from?.emailAddress?.name ?? undefined}
+        folders={foldersForMoveList as Array<{ id: string; displayName: string }>}
+      />
     </>
   );
 }

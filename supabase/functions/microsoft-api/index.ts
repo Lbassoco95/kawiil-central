@@ -1958,6 +1958,34 @@ Deno.serve(async (req) => {
         }
         break;
       }
+
+      case "create-mail-rule": {
+        const { displayName, senderEmail, moveToFolderId, markAsRead } = params || {};
+        if (!senderEmail) throw new Error("senderEmail required");
+        const rule: Record<string, unknown> = {
+          displayName: displayName || `Regla: ${senderEmail}`,
+          sequence: 1,
+          isEnabled: true,
+          conditions: {
+            fromAddresses: [{ emailAddress: { address: senderEmail } }],
+          },
+          actions: {
+            ...(moveToFolderId ? { moveToFolder: moveToFolderId } : {}),
+            ...(markAsRead ? { markAsRead: true } : {}),
+          },
+        };
+        result = await graphRequest(accessToken, "/me/mailFolders/inbox/messageRules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(rule),
+        });
+        break;
+      }
+
+      case "list-mail-rules": {
+        result = await graphRequest(accessToken, "/me/mailFolders/inbox/messageRules");
+        break;
+      }
     }
 
     if (result === undefined) {

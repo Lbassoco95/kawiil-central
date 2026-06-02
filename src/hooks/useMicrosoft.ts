@@ -1654,6 +1654,65 @@ export function useCancelScheduledMailJob() {
   });
 }
 
+export type MailRule = {
+  id: string;
+  displayName: string;
+  sequence: number;
+  isEnabled: boolean;
+  conditions?: Record<string, unknown>;
+  actions?: Record<string, unknown>;
+};
+
+export function useListMailRules() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["mail-rules", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "list-mail-rules" },
+      });
+      if (isNotConnectedError(data, error)) return [];
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return (data?.value || []) as MailRule[];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCreateMailRule() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      displayName,
+      senderEmail,
+      moveToFolderId,
+      markAsRead,
+    }: {
+      displayName?: string;
+      senderEmail: string;
+      moveToFolderId?: string;
+      markAsRead?: boolean;
+    }) => {
+      const { data, error } = await supabase.functions.invoke("microsoft-api", {
+        body: { action: "create-mail-rule", params: { displayName, senderEmail, moveToFolderId, markAsRead } },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as MailRule;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["mail-rules", user?.id] });
+      toast.success("Regla creada");
+    },
+    onError: (err: Error) => toast.error("Error al crear la regla: " + err.message),
+  });
+}
+
 export function useFlagEmail() {
   const queryClient = useQueryClient();
 
