@@ -3460,107 +3460,9 @@ export function EmailView() {
               </div>
             )}
 
-            {/* Email body + thread — columna centrada estilo lector premium */}
+            {/* Email body + thread — email body FIRST, AI card and thread below */}
             <ScrollArea className="flex-1">
-              <div className="px-3 sm:px-6 py-4 sm:py-6 space-y-5">
-                {/* Kawiil AI · Resumen + Quick Reply (Fase 2 v2.4) */}
-                {selectedEmailId && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full">
-                    <EmailKawiilCard
-                      emailId={selectedEmailId}
-                      subject={emailDetail.subject || ""}
-                      senderName={emailDetail.from?.emailAddress?.name}
-                      senderEmail={emailDetail.from?.emailAddress?.address}
-                      body={emailDetail.body?.content || ""}
-                      thread={threadContextForAi || undefined}
-                      onUseReply={(text) => {
-                        if (emailAction !== "reply") {
-                          handleStartReply("reply");
-                        }
-                        const safe = text
-                          .replace(/&/g, "&amp;")
-                          .replace(/</g, "&lt;")
-                          .replace(/>/g, "&gt;")
-                          .replace(/\n/g, "<br>");
-                        setDraftHtml(safe);
-                      }}
-                      onCreateTask={() => setCreateTaskOpen(true)}
-                      onSummaryReady={(s) =>
-                        setEmailAiSummary({ summary: s.summary, suggestedAction: s.suggestedAction })
-                      }
-                    />
-                  </div>
-                )}
-
-                {/* Historial del hilo (arriba, orden antiguo → reciente) para contexto */}
-                {threadHistoryLoading && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-4">
-                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <ListOrdered className="h-3.5 w-3.5" />
-                      Cargando historial de la conversación…
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
-                      <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
-                    </div>
-                  </div>
-                )}
-
-                {!threadHistoryLoading && hasPriorMessages && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-xl border border-border/50 bg-muted/20 p-4 sm:p-5 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                          <ListOrdered className="h-4 w-4 text-primary" />
-                          Historial de la conversación
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                          {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} en este
-                          hilo, del más antiguo al más reciente. Toca cada uno para leerlo completo o abre
-                          todo el contexto.
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 shrink-0">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 text-xs"
-                          onClick={() => setThreadExpandAll((v) => !v)}
-                        >
-                          {threadExpandAll ? "Contraer todo" : "Expandir todo"}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-0.5">
-                      {otherThreadEmails.map((threadEmail: any) => (
-                        <ThreadEmailItem
-                          key={threadEmail.id}
-                          email={threadEmail}
-                          onPreviewAttachment={setAttachmentPreview}
-                          expandAll={threadExpandAll}
-                          onExitExpandAll={() => setThreadExpandAll(false)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {!threadHistoryLoading &&
-                  !hasPriorMessages &&
-                  typeof (emailDetail as { conversationId?: string })?.conversationId === "string" &&
-                  (emailDetail as { conversationId: string }).conversationId.trim() && (
-                    <p className="max-w-[min(100%,680px)] mx-auto w-full text-xs text-muted-foreground px-0.5">
-                      Solo un mensaje en este hilo por ahora, o el buzón aún no devolvió el resto. Si
-                      acabas de enviar una respuesta, el historial puede completarse en unos segundos.
-                    </p>
-                  )}
-
-                {(hasPriorMessages || threadHistoryLoading) && (
-                  <div className="max-w-[min(100%,680px)] mx-auto w-full">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Mensaje que estás leyendo</p>
-                  </div>
-                )}
+              <div className="px-3 sm:px-6 py-4 sm:py-6 space-y-4">
                 <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-2xl border-2 border-primary/15 bg-card/95 shadow-md ring-1 ring-black/[0.06] dark:ring-white/[0.08] overflow-hidden">
                   <div className="px-4 py-5 sm:px-7 sm:py-7 bg-muted/20">
                     {emailDetail.body?.contentType === "html" ? (
@@ -3598,6 +3500,53 @@ export function EmailView() {
                           />
                         ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Thread history — below the email body */}
+                {!threadHistoryLoading && hasPriorMessages && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                        <ListOrdered className="h-3.5 w-3.5" />
+                        {otherThreadEmails.length} mensaje{otherThreadEmails.length > 1 ? "s" : ""} anteriores en este hilo
+                      </p>
+                      <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setThreadExpandAll((v) => !v)}>
+                        {threadExpandAll ? "Contraer" : "Expandir"}
+                      </Button>
+                    </div>
+                    <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-0.5">
+                      {otherThreadEmails.map((threadEmail: any) => (
+                        <ThreadEmailItem
+                          key={threadEmail.id}
+                          email={threadEmail}
+                          onPreviewAttachment={setAttachmentPreview}
+                          expandAll={threadExpandAll}
+                          onExitExpandAll={() => setThreadExpandAll(false)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Kawiil AI card — at the bottom, out of the way */}
+                {selectedEmailId && (
+                  <div className="max-w-[min(100%,680px)] mx-auto w-full">
+                    <EmailKawiilCard
+                      emailId={selectedEmailId}
+                      subject={emailDetail.subject || ""}
+                      senderName={emailDetail.from?.emailAddress?.name}
+                      senderEmail={emailDetail.from?.emailAddress?.address}
+                      body={emailDetail.body?.content || ""}
+                      thread={threadContextForAi || undefined}
+                      onUseReply={(text) => {
+                        if (emailAction !== "reply") handleStartReply("reply");
+                        const safe = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+                        setDraftHtml(safe);
+                      }}
+                      onCreateTask={() => setCreateTaskOpen(true)}
+                      onSummaryReady={(s) => setEmailAiSummary({ summary: s.summary, suggestedAction: s.suggestedAction })}
+                    />
                   </div>
                 )}
               </div>
