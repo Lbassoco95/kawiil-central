@@ -56,10 +56,102 @@ export interface Candidate {
   rating: number;
   status: RhCandidateStatus;
   notes: string | null;
+  // Ficha ampliada (Fase A)
+  university: string | null;
+  degree: string | null;
+  education_status: EducationStatus | null;
+  skills: string[];
+  years_experience: number | null;
+  salary_expectation: number | null;
+  available_from: string | null;
+  linkedin_url: string | null;
+  portfolio_url: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type EducationStatus = "titulado" | "pasante" | "trunco";
+
+export const EDUCATION_STATUS_LABEL: Record<EducationStatus, string> = {
+  titulado: "Titulado",
+  pasante: "Pasante",
+  trunco: "Trunco",
+};
+
+export const EDUCATION_STATUSES: EducationStatus[] = ["titulado", "pasante", "trunco"];
+
+/** Rúbrica (Fase B) */
+export interface RecruitmentCriterion {
+  id: string;
+  organization_id: string;
+  process_id: string;
+  name: string;
+  weight: number;
+  position: number;
+  created_at: string;
+}
+
+export interface CandidateScore {
+  id: string;
+  organization_id: string;
+  candidate_id: string;
+  criterion_id: string;
+  score: number;
+  scored_by: string | null;
+  updated_at: string;
+}
+
+/** Criterios por defecto al crear una vacante (set genérico, pesos iguales). */
+export const DEFAULT_CRITERIA: { name: string; weight: number }[] = [
+  { name: "Experiencia", weight: 1 },
+  { name: "Habilidades técnicas", weight: 1 },
+  { name: "Comunicación", weight: 1 },
+  { name: "Cultura / actitud", weight: 1 },
+];
+
+/**
+ * Promedio ponderado (1..5) de las calificaciones de un candidato.
+ * Solo considera criterios con calificación registrada. Devuelve null si no hay.
+ */
+export function weightedScore(
+  criteria: RecruitmentCriterion[],
+  scores: CandidateScore[],
+): number | null {
+  const byCriterion = new Map(scores.map((s) => [s.criterion_id, s.score]));
+  let num = 0;
+  let den = 0;
+  for (const c of criteria) {
+    const s = byCriterion.get(c.id);
+    if (s == null) continue;
+    num += s * c.weight;
+    den += c.weight;
+  }
+  if (den === 0) return null;
+  return num / den;
+}
+
+/** Semáforo: verde ≥ 4, ámbar ≥ 3, rojo < 3. */
+export function scoreSemaphore(score: number | null): "green" | "amber" | "red" | "none" {
+  if (score == null) return "none";
+  if (score >= 4) return "green";
+  if (score >= 3) return "amber";
+  return "red";
+}
+
+export const SEMAPHORE_DOT: Record<"green" | "amber" | "red" | "none", string> = {
+  green: "bg-emerald-500",
+  amber: "bg-amber-500",
+  red: "bg-red-500",
+  none: "bg-muted-foreground/30",
+};
+
+export const SEMAPHORE_TEXT: Record<"green" | "amber" | "red" | "none", string> = {
+  green: "text-emerald-600 dark:text-emerald-400",
+  amber: "text-amber-600 dark:text-amber-400",
+  red: "text-red-600 dark:text-red-400",
+  none: "text-muted-foreground",
+};
 
 export interface CandidateActivity {
   id: string;

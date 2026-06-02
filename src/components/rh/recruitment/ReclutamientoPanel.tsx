@@ -28,13 +28,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   PROCESS_STATUS_LABEL,
   PROCESS_STATUS_STYLE,
   STATE_COLOR_STYLE,
+  SEMAPHORE_DOT,
+  scoreSemaphore,
   type Candidate,
   type RecruitmentProcess,
   type RecruitmentStage,
@@ -47,6 +49,7 @@ import {
   useUpdateProcessStatus,
   useProcessStages,
   useProcessStates,
+  useProcessCriteria,
   useCandidates,
   useCreateCandidate,
   useMoveCandidateStage,
@@ -57,6 +60,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CandidateDetailDialog } from "./CandidateDetailDialog";
 import { StageManagerDialog } from "./StageManagerDialog";
 import { StateManagerDialog } from "./StateManagerDialog";
+import { CriteriaManagerDialog } from "./CriteriaManagerDialog";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
 
@@ -184,6 +188,7 @@ function NewProcessDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
 function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack: () => void }) {
   const { data: stages = [] } = useProcessStages(process.id);
   const { data: states = [] } = useProcessStates(process.id);
+  const { data: criteria = [] } = useProcessCriteria(process.id);
   const { data: candidates = [], isLoading } = useCandidates(process.id);
   const { data: celulas = [] } = useCelulas();
   const celulaName = celulas.find((c) => c.id === process.celula_id)?.name ?? null;
@@ -192,6 +197,7 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const [addOpen, setAddOpen] = useState(false);
   const [stagesOpen, setStagesOpen] = useState(false);
   const [statesOpen, setStatesOpen] = useState(false);
+  const [criteriaOpen, setCriteriaOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -245,6 +251,9 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         <Button size="sm" variant="outline" onClick={() => setStatesOpen(true)}>
           <Tag className="mr-1.5 h-3.5 w-3.5" /> Estados
         </Button>
+        <Button size="sm" variant="outline" onClick={() => setCriteriaOpen(true)}>
+          <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Rúbrica
+        </Button>
         <Button size="sm" onClick={() => setAddOpen(true)}>
           <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Candidato
         </Button>
@@ -285,10 +294,12 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
       />
       <StageManagerDialog open={stagesOpen} onOpenChange={setStagesOpen} processId={process.id} stages={stages} />
       <StateManagerDialog open={statesOpen} onOpenChange={setStatesOpen} processId={process.id} states={states} />
+      <CriteriaManagerDialog open={criteriaOpen} onOpenChange={setCriteriaOpen} processId={process.id} criteria={criteria} />
       <CandidateDetailDialog
         candidate={detailLive}
         stages={stages}
         states={states}
+        criteria={criteria}
         onOpenChange={(v) => !v && setDetail(null)}
       />
     </section>
@@ -347,7 +358,15 @@ function DraggableCard({
       <Card className="transition-colors hover:bg-muted/50">
         <CardContent className="space-y-1 p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate text-sm font-medium">{candidate.full_name}</span>
+            <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+              {candidate.rating > 0 && (
+                <span
+                  className={cn("h-2 w-2 shrink-0 rounded-full", SEMAPHORE_DOT[scoreSemaphore(candidate.rating)])}
+                  title={`Calificación ${candidate.rating}/5`}
+                />
+              )}
+              <span className="min-w-0 truncate">{candidate.full_name}</span>
+            </span>
             {state && (
               <Badge variant="outline" className={cn("shrink-0 text-[10px]", STATE_COLOR_STYLE[state.color] ?? STATE_COLOR_STYLE.slate)}>
                 {state.name}
