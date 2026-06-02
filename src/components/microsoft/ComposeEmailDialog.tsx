@@ -36,7 +36,7 @@ import {
   validateRecipientGroups,
   type ComposerAttachment,
 } from "@/lib/emailComposer";
-import { AccountingTemplatePicker } from "@/components/accounting/AccountingTemplatePicker";
+import { AccountingTemplatePicker, type AccountingTemplatePickerApplied } from "@/components/accounting/AccountingTemplatePicker";
 import { TemplatePickerBoundary } from "@/components/accounting/TemplatePickerBoundary";
 import { Badge } from "@/components/ui/badge";
 import { KAWIIL_AI_GRADIENT, KAWIIL_AI_HEADER_BG } from "@/lib/kawiilAi";
@@ -354,7 +354,7 @@ export function ComposeEmailDialog({
   }, [subject, to]);
 
   const applyAccountingTemplate = useCallback(
-    (result: import("@/components/accounting/AccountingTemplatePicker").AccountingTemplatePickerApplied) => {
+    (result: AccountingTemplatePickerApplied) => {
       setSubject(result.subject);
       editorRef.current?.setHtml(result.bodyHtml);
       bodyRef.current = result.bodyHtml;

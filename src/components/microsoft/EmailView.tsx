@@ -1619,63 +1619,6 @@ export function EmailView() {
     setBulkSelectedIds(new Set());
   }, [markRead, bulkSelectedIds]);
 
-  const handleAfterSendTemplate = useCallback(async (info: { templateCategory?: string; clientId?: string; clientName?: string }) => {
-    const declarationCategories = ["pagos_provisionales", "declaracion_ceros", "envio_anuales", "previos_provisionales", "isn_imss"];
-    if (!info.templateCategory || !declarationCategories.includes(info.templateCategory)) return;
-    if (!info.clientId) return;
-
-    try {
-      const { data: project } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("client_id", info.clientId)
-        .eq("type", "contabilidad")
-        .maybeSingle();
-
-      if (!project?.id) return;
-
-      const nowDate = new Date();
-      const { data: period } = await supabase
-        .from("accounting_periods")
-        .select("id, steps")
-        .eq("project_id", project.id)
-        .eq("year", nowDate.getFullYear())
-        .eq("month", nowDate.getMonth() + 1)
-        .maybeSingle();
-
-      if (!period) return;
-
-      const steps = period.steps as Array<{ key: string; completed: boolean }>;
-      const step = steps.find(s => s.key === "envio_acuses");
-      if (!step || step.completed) return;
-
-      toast.success(
-        `Plantilla de ${info.clientName || "cliente"} enviada. ¿Marcar "Envío de acuses" como completado?`,
-        {
-          action: {
-            label: "Marcar completo",
-            onClick: async () => {
-              const updatedSteps = steps.map(s =>
-                s.key === "envio_acuses"
-                  ? { ...s, completed: true, completed_at: new Date().toISOString(), completed_by: user?.id, step_status: "completado" }
-                  : s
-              );
-              await supabase
-                .from("accounting_periods")
-                .update({ steps: updatedSteps as any })
-                .eq("id", period.id);
-              queryClient.invalidateQueries({ queryKey: ["accounting-periods", project.id] });
-              toast.success("Paso marcado como completado");
-            },
-          },
-          duration: 10000,
-        }
-      );
-    } catch {
-      // silent fail - do not interrupt the email flow
-    }
-  }, [user?.id, queryClient]);
-
   const closeDetailAiPanel = useCallback(() => {
     setDetailAiPanel(null);
     setDetailAiLoading(false);
