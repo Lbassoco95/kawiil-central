@@ -367,6 +367,13 @@ export function MessageItem({
           👍
         </button>
         <button
+          className={`sl-msg-action sl-quick-react${hasReacted("eyes") ? " active" : ""}`}
+          title="Lo estoy revisando"
+          onClick={() => onReact?.(message.ts ?? "", "eyes")}
+        >
+          👀
+        </button>
+        <button
           className={`sl-msg-action sl-quick-react${hasReacted("question") ? " active" : ""}`}
           title="Hay una duda"
           onClick={() => onReact?.(message.ts ?? "", "question")}
