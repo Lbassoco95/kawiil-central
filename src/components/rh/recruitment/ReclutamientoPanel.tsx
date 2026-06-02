@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Briefcase, UserPlus, Columns3, Tag, Upload, FileText, ClipboardList, Mail, FileUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -63,6 +63,7 @@ import { StageManagerDialog } from "./StageManagerDialog";
 import { StateManagerDialog } from "./StateManagerDialog";
 import { CriteriaManagerDialog } from "./CriteriaManagerDialog";
 import { EmailTemplateManagerDialog } from "./EmailTemplateManagerDialog";
+import { CandidateImportDialog } from "./CandidateImportDialog";
 
 const PROCESS_STATUSES: RhProcessStatus[] = ["open", "paused", "closed", "filled"];
 
@@ -202,7 +203,10 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
   const [statesOpen, setStatesOpen] = useState(false);
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [detail, setDetail] = useState<Candidate | null>(null);
+
+  const defaultStateId = states.find((s) => s.is_default)?.id ?? states[0]?.id ?? null;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -261,6 +265,9 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         <Button size="sm" variant="outline" onClick={() => setTemplatesOpen(true)}>
           <Mail className="mr-1.5 h-3.5 w-3.5" /> Plantillas
         </Button>
+        <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+          <FileUp className="mr-1.5 h-3.5 w-3.5" /> Importar
+        </Button>
         <Button size="sm" onClick={() => setAddOpen(true)}>
           <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Candidato
         </Button>
@@ -297,7 +304,14 @@ function ProcessBoard({ process, onBack }: { process: RecruitmentProcess; onBack
         onOpenChange={setAddOpen}
         process={process}
         firstStageId={stages[0]?.id ?? null}
-        defaultStateId={states.find((s) => s.is_default)?.id ?? states[0]?.id ?? null}
+        defaultStateId={defaultStateId}
+      />
+      <CandidateImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        processId={process.id}
+        firstStageId={stages[0]?.id ?? null}
+        defaultStateId={defaultStateId}
       />
       <StageManagerDialog open={stagesOpen} onOpenChange={setStagesOpen} processId={process.id} stages={stages} />
       <StateManagerDialog open={statesOpen} onOpenChange={setStatesOpen} processId={process.id} states={states} />
