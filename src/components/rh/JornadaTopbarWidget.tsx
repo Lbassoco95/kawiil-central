@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,6 +12,7 @@ import {
   Clock,
   Coffee,
   Utensils,
+  Car,
   LogIn,
   LogOut,
   ChevronDown,
@@ -24,7 +26,7 @@ import {
   formatDuration,
   plannedModeForToday,
 } from "@/lib/rh";
-import { useJornada } from "@/hooks/useRh";
+import { useJornada, useTransitStatus } from "@/hooks/useRh";
 
 /**
  * Widget compacto de jornada para la barra superior.
@@ -33,6 +35,8 @@ import { useJornada } from "@/hooks/useRh";
 export function JornadaTopbarWidget() {
   const { session, schedule, summary, isPending, act } = useJornada();
   const plannedMode = plannedModeForToday(schedule);
+  const transit = useTransitStatus();
+  const [inTransit, setInTransit] = useState(false);
 
   // Sin iniciar o jornada cerrada: botón "Iniciar" con menú para elegir modalidad.
   if (summary.state === "none" || summary.state === "done") {
@@ -128,6 +132,16 @@ export function JornadaTopbarWidget() {
               {new Date(summary.nextBreakAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            const next = !inTransit;
+            setInTransit(next);
+            transit.mutate({ on: next, workMode: session?.work_mode ?? "office", attendanceId: session?.id ?? null });
+          }}
+        >
+          <Car className="mr-2 h-4 w-4" />
+          {inTransit ? "Llegué (salir de trayecto)" : "En trayecto"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
