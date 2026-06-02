@@ -234,6 +234,7 @@ interface Props {
   userName?: string;
   avatarUrl?: string;
   isSelf?: boolean;
+  selfUserId?: string;
   userMap?: Record<string, SlackUserProfile | undefined>;
   onOpenThread?: (ts: string) => void;
   onReact?: (ts: string, emoji: string) => void;
@@ -247,6 +248,7 @@ export function MessageItem({
   userName,
   avatarUrl,
   isSelf = false,
+  selfUserId,
   userMap,
   onOpenThread,
   onReact,
@@ -265,6 +267,11 @@ export function MessageItem({
   );
 
   const [previewFile, setPreviewFile] = useState<SlackFile | null>(null);
+
+  const hasReacted = (name: string) =>
+    selfUserId
+      ? (message.reactions?.some(r => r.name === name && r.users?.includes(selfUserId)) ?? false)
+      : false;
 
   return (
     <div className={`sl-msg${isCompact ? " compact" : ""}`} data-ts={message.ts}>
@@ -318,10 +325,10 @@ export function MessageItem({
             {message.reactions.map((r: any) => (
               <button
                 key={r.name}
-                className="sl-react-pill"
+                className={`sl-react${selfUserId && r.users?.includes(selfUserId) ? " me" : ""}`}
                 onClick={() => onReact?.(message.ts ?? "", r.name)}
               >
-                {slackEmojiAliasToChar(r.name)} {r.count}
+                {slackEmojiAliasToChar(r.name)} <span className="count">{r.count}</span>
               </button>
             ))}
           </div>
@@ -352,10 +359,19 @@ export function MessageItem({
 
       {/* Acciones hover */}
       <div className="sl-msg-actions">
-        <button className="sl-msg-action" title="Reaccionar" onClick={() => onReact?.(message.ts ?? "", "thumbsup")}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
-          </svg>
+        <button
+          className={`sl-msg-action sl-quick-react${hasReacted("thumbsup") ? " active" : ""}`}
+          title="Está bien / en revisión"
+          onClick={() => onReact?.(message.ts ?? "", "thumbsup")}
+        >
+          👍
+        </button>
+        <button
+          className={`sl-msg-action sl-quick-react${hasReacted("question") ? " active" : ""}`}
+          title="Hay una duda"
+          onClick={() => onReact?.(message.ts ?? "", "question")}
+        >
+          ❓
         </button>
         {onOpenThread && (
           <button className="sl-msg-action" title="Responder en hilo" onClick={() => onOpenThread(message.thread_ts || message.ts || "")}>

@@ -106,6 +106,7 @@ export function ThreadPanelNew({
                   userName={uProfile?.display_name || uProfile?.real_name || msg.user}
                   avatarUrl={uProfile?.avatar_url}
                   isSelf={msg.user === selfUserId}
+                  selfUserId={selfUserId}
                   userMap={userMap}
                   onReact={onReact}
                   onCreateTask={onCreateTask}
