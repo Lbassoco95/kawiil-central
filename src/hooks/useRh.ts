@@ -5,8 +5,14 @@ import { toast } from "sonner";
 import { invokeSlackApi } from "@/lib/slackApi";
 import {
   WORK_MODE_SLACK_STATUS,
+  getCurrentPosition,
+  matchOffice,
+  plannedModeForToday,
+  summarizeJornada,
   type RhAttendance,
+  type RhAttendanceEvent,
   type RhEmploymentType,
+  type RhEventType,
   type RhOfficeLocation,
   type RhWeeklyPlan,
   type RhWorkMode,
@@ -126,75 +132,170 @@ export function useMyAttendance(limit = 30) {
   });
 }
 
-export interface CheckInPayload {
-  workMode: RhWorkMode;
-  expectedWorkMode: RhWorkMode | null;
-  fix: GeoFix | null;
-  withinGeofence: boolean | null;
-  officeLocationId: string | null;
-  notes?: string | null;
+/* ============================================================
+ * Eventos de jornada (punches) de hoy
+ * ========================================================== */
+const startOfTodayISO = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+};
+
+export function useTodayEvents() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-today-events", user?.id, todayKey()],
+    queryFn: async (): Promise<RhAttendanceEvent[]> => {
+      const { data, error } = await db
+        .from("rh_attendance_events")
+        .select("*")
+        .eq("user_id", user!.id)
+        .gte("event_at", startOfTodayISO())
+        .order("event_at", { ascending: true });
+      if (error) throw error;
+      return (data as RhAttendanceEvent[]) ?? [];
+    },
+    enabled: !!user,
+  });
 }
 
-export function useCheckIn() {
+/** Captura ubicación (siempre) y resuelve geocerca para la modalidad dada. */
+async function captureGeo(workMode: RhWorkMode, offices: RhOfficeLocation[]) {
+  let fix: GeoFix | null = null;
+  let withinGeofence: boolean | null = null;
+  let officeLocationId: string | null = null;
+  try {
+    fix = await getCurrentPosition();
+    if (offices.length > 0) {
+      const m = matchOffice(fix, offices);
+      officeLocationId = m?.office.id ?? null;
+      if (workMode === "office") withinGeofence = !!m;
+    }
+  } catch {
+    if (workMode === "office" && offices.length > 0) withinGeofence = false;
+  }
+  return { fix, withinGeofence, officeLocationId };
+}
+
+export type JornadaAction =
+  | { type: "check_in"; workMode: RhWorkMode }
+  | { type: "lunch_start" }
+  | { type: "lunch_end" }
+  | { type: "break_start" }
+  | { type: "break_end" }
+  | { type: "check_out" };
+
+const ACTION_TOAST: Record<RhEventType, string> = {
+  check_in: "Jornada iniciada",
+  lunch_start: "¡Buen provecho! Comida iniciada",
+  lunch_end: "De vuelta de comer",
+  break_start: "Descanso iniciado (20 min)",
+  break_end: "De vuelta del descanso",
+  check_out: "Jornada cerrada",
+};
+
+/**
+ * Hook integral de jornada: estado actual + acciones (entrada, comida,
+ * descansos, salida). Cada acción guarda ubicación y, en entrada/salida,
+ * sincroniza el estado de Slack.
+ */
+export function useJornada() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: CheckInPayload) => {
+  const { data: session } = useTodayAttendance();
+  const { data: events = [] } = useTodayEvents();
+  const { data: schedule } = useMyWorkSchedule();
+  const { data: offices = [] } = useOfficeLocations();
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["rh-today-attendance"] });
+    qc.invalidateQueries({ queryKey: ["rh-today-events"] });
+    qc.invalidateQueries({ queryKey: ["rh-my-attendance"] });
+    qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
+  };
+
+  const mutation = useMutation({
+    mutationFn: async (action: JornadaAction) => {
       const orgId = await getMyOrgId(user!.id);
-      const { error } = await db.from("rh_attendance").insert({
-        user_id: user!.id,
-        organization_id: orgId,
-        work_date: todayKey(),
-        check_in_at: new Date().toISOString(),
-        work_mode: payload.workMode,
-        expected_work_mode: payload.expectedWorkMode,
-        check_in_lat: payload.fix?.lat ?? null,
-        check_in_lng: payload.fix?.lng ?? null,
-        check_in_accuracy_m: payload.fix?.accuracy ?? null,
-        within_geofence: payload.withinGeofence,
-        office_location_id: payload.officeLocationId,
-        notes: payload.notes ?? null,
-      });
-      if (error) throw error;
-      // Refleja el estado en Slack para que el equipo lo vea (no bloqueante).
-      await syncSlackStatus(payload.workMode);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["rh-today-attendance"] });
-      qc.invalidateQueries({ queryKey: ["rh-my-attendance"] });
-      qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
-      toast.success("Entrada registrada");
-    },
-    onError: (e: Error) => toast.error(e.message || "No se pudo registrar la entrada"),
-  });
-}
+      const workMode =
+        action.type === "check_in" ? action.workMode : session?.work_mode ?? "office";
+      const geo = await captureGeo(workMode, offices);
 
-export function useCheckOut() {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, fix }: { id: string; fix: GeoFix | null }) => {
-      const { error } = await db
-        .from("rh_attendance")
-        .update({
-          check_out_at: new Date().toISOString(),
-          check_out_lat: fix?.lat ?? null,
-          check_out_lng: fix?.lng ?? null,
-        })
-        .eq("id", id)
-        .eq("user_id", user!.id);
-      if (error) throw error;
-      // Limpia el estado de Slack al cerrar la jornada (no bloqueante).
-      await syncSlackStatus(null);
+      let attendanceId = session?.id ?? null;
+
+      if (action.type === "check_in") {
+        const expected = plannedModeForToday(schedule);
+        const { data, error } = await db
+          .from("rh_attendance")
+          .insert({
+            user_id: user!.id,
+            organization_id: orgId,
+            work_date: todayKey(),
+            check_in_at: new Date().toISOString(),
+            work_mode: action.workMode,
+            expected_work_mode: expected,
+            check_in_lat: geo.fix?.lat ?? null,
+            check_in_lng: geo.fix?.lng ?? null,
+            check_in_accuracy_m: geo.fix?.accuracy ?? null,
+            within_geofence: geo.withinGeofence,
+            office_location_id: geo.officeLocationId,
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        attendanceId = data.id as string;
+      }
+
+      if (!attendanceId) throw new Error("No hay una jornada activa.");
+
+      const { error: evErr } = await db.from("rh_attendance_events").insert({
+        attendance_id: attendanceId,
+        organization_id: orgId,
+        user_id: user!.id,
+        event_type: action.type,
+        event_at: new Date().toISOString(),
+        lat: geo.fix?.lat ?? null,
+        lng: geo.fix?.lng ?? null,
+        accuracy_m: geo.fix?.accuracy ?? null,
+        within_geofence: geo.withinGeofence,
+        office_location_id: geo.officeLocationId,
+      });
+      if (evErr) throw evErr;
+
+      if (action.type === "check_out") {
+        await db
+          .from("rh_attendance")
+          .update({
+            check_out_at: new Date().toISOString(),
+            check_out_lat: geo.fix?.lat ?? null,
+            check_out_lng: geo.fix?.lng ?? null,
+          })
+          .eq("id", attendanceId)
+          .eq("user_id", user!.id);
+        await syncSlackStatus(null);
+      } else if (action.type === "check_in") {
+        await syncSlackStatus(action.workMode);
+      }
+
+      return action.type;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["rh-today-attendance"] });
-      qc.invalidateQueries({ queryKey: ["rh-my-attendance"] });
-      qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
-      toast.success("Salida registrada");
+    onSuccess: (type) => {
+      invalidate();
+      toast.success(ACTION_TOAST[type]);
     },
-    onError: (e: Error) => toast.error(e.message || "No se pudo registrar la salida"),
+    onError: (e: Error) => toast.error(e.message || "No se pudo registrar el evento"),
   });
+
+  const summary = summarizeJornada(events);
+
+  return {
+    session: session ?? null,
+    events,
+    schedule: schedule ?? null,
+    summary,
+    isPending: mutation.isPending,
+    act: mutation.mutate,
+  };
 }
 
 /* ============================================================
@@ -290,6 +391,8 @@ export interface ScheduleInput {
   employment_type: RhEmploymentType;
   start_time: string;
   end_time: string;
+  lunch_start: string;
+  lunch_end: string;
   timezone?: string;
   default_work_mode: RhWorkMode;
   weekly_plan: RhWeeklyPlan;
@@ -311,6 +414,8 @@ export function useSaveSchedule() {
           employment_type: input.employment_type,
           start_time: input.start_time,
           end_time: input.end_time,
+          lunch_start: input.lunch_start,
+          lunch_end: input.lunch_end,
           timezone: input.timezone ?? "America/Mexico_City",
           default_work_mode: input.default_work_mode,
           weekly_plan: input.weekly_plan,

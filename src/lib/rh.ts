@@ -42,6 +42,8 @@ export interface RhWorkSchedule {
   employment_type: RhEmploymentType;
   start_time: string; // "HH:MM:SS"
   end_time: string;
+  lunch_start: string;
+  lunch_end: string;
   timezone: string;
   default_work_mode: RhWorkMode;
   weekly_plan: RhWeeklyPlan;
@@ -72,6 +74,46 @@ export interface RhAttendance {
   created_at: string;
   updated_at: string;
 }
+
+/* ====================== Eventos de jornada ====================== */
+
+export type RhEventType =
+  | "check_in"
+  | "lunch_start"
+  | "lunch_end"
+  | "break_start"
+  | "break_end"
+  | "check_out";
+
+export interface RhAttendanceEvent {
+  id: string;
+  attendance_id: string;
+  organization_id: string;
+  user_id: string;
+  event_type: RhEventType;
+  event_at: string;
+  lat: number | null;
+  lng: number | null;
+  accuracy_m: number | null;
+  within_geofence: boolean | null;
+  office_location_id: string | null;
+  created_at: string;
+}
+
+/** Duración máxima sugerida de un descanso corto (minutos). */
+export const BREAK_MAX_MINUTES = 20;
+/** Intervalo mínimo entre descansos cortos (horas). */
+export const BREAK_INTERVAL_HOURS = 2;
+
+export type RhJornadaState = "none" | "working" | "lunch" | "break" | "done";
+
+export const JORNADA_STATE_LABEL: Record<RhJornadaState, string> = {
+  none: "Sin iniciar",
+  working: "En jornada",
+  lunch: "En comida",
+  break: "En descanso",
+  done: "Jornada cerrada",
+};
 
 export const WORK_MODE_LABEL: Record<RhWorkMode, string> = {
   office: "Oficina",
@@ -246,6 +288,138 @@ export function evaluateCompliance(params: {
     label: "No coincide con el turno",
     detail: `Tu turno indicaba ${WORK_MODE_LABEL[expected]} y registraste ${WORK_MODE_LABEL[actual]}.`,
   };
+}
+
+export interface JornadaSummary {
+  state: RhJornadaState;
+  /** ms efectivos trabajados (excluye comida y descansos) */
+  workedMs: number;
+  /** ms en comida */
+  lunchMs: number;
+  /** ms en descansos cortos */
+  breakMs: number;
+  /** Número de descansos cortos tomados hoy */
+  breaksTaken: number;
+  /** ¿Puede iniciar un descanso corto ahora? (han pasado ≥2h desde el último) */
+  canBreak: boolean;
+  /** Cuándo estará disponible el próximo descanso (epoch ms), o null si ya. */
+  nextBreakAt: number | null;
+  /** Marca temporal del inicio de la pausa actual (comida o descanso), si aplica. */
+  pauseStartedAt: number | null;
+}
+
+/**
+ * Reconstruye el estado de la jornada a partir de los eventos ordenados.
+ * Calcula tiempo trabajado (descontando pausas) y elegibilidad de descanso.
+ */
+export function summarizeJornada(
+  events: RhAttendanceEvent[],
+  now = Date.now(),
+): JornadaSummary {
+  const empty: JornadaSummary = {
+    state: "none",
+    workedMs: 0,
+    lunchMs: 0,
+    breakMs: 0,
+    breaksTaken: 0,
+    canBreak: false,
+    nextBreakAt: null,
+    pauseStartedAt: null,
+  };
+  if (events.length === 0) return empty;
+
+  const sorted = [...events].sort(
+    (a, b) => new Date(a.event_at).getTime() - new Date(b.event_at).getTime(),
+  );
+  const t = (e: RhAttendanceEvent) => new Date(e.event_at).getTime();
+
+  const checkIn = sorted.find((e) => e.event_type === "check_in");
+  if (!checkIn) return empty;
+  const checkOut = sorted.find((e) => e.event_type === "check_out");
+
+  let state: RhJornadaState = checkOut ? "done" : "working";
+  let lunchMs = 0;
+  let breakMs = 0;
+  let breaksTaken = 0;
+  let pauseStartedAt: number | null = null;
+  let openPause: { kind: "lunch" | "break"; at: number } | null = null;
+  let lastResumeOrStart = t(checkIn);
+
+  for (const e of sorted) {
+    switch (e.event_type) {
+      case "lunch_start":
+        openPause = { kind: "lunch", at: t(e) };
+        break;
+      case "break_start":
+        openPause = { kind: "break", at: t(e) };
+        breaksTaken += 1;
+        break;
+      case "lunch_end":
+        if (openPause?.kind === "lunch") {
+          lunchMs += t(e) - openPause.at;
+          lastResumeOrStart = t(e);
+          openPause = null;
+        }
+        break;
+      case "break_end":
+        if (openPause?.kind === "break") {
+          breakMs += t(e) - openPause.at;
+          lastResumeOrStart = t(e);
+          openPause = null;
+        }
+        break;
+    }
+  }
+
+  if (!checkOut && openPause) {
+    state = openPause.kind === "lunch" ? "lunch" : "break";
+    pauseStartedAt = openPause.at;
+    // pausa abierta: suma el tiempo transcurrido hasta ahora
+    if (openPause.kind === "lunch") lunchMs += now - openPause.at;
+    else breakMs += now - openPause.at;
+  }
+
+  const end = checkOut ? t(checkOut) : now;
+  const grossMs = end - t(checkIn);
+  const workedMs = Math.max(0, grossMs - lunchMs - breakMs);
+
+  // Descanso corto disponible cada 2h desde el inicio o el último descanso.
+  const intervalMs = BREAK_INTERVAL_HOURS * 3600_000;
+  const nextBreakAt = lastResumeOrStart + intervalMs;
+  const canBreak = state === "working" && now >= nextBreakAt;
+
+  return {
+    state,
+    workedMs,
+    lunchMs,
+    breakMs,
+    breaksTaken,
+    canBreak,
+    nextBreakAt: state === "working" && !canBreak ? nextBreakAt : null,
+    pauseStartedAt,
+  };
+}
+
+/** Formatea ms a "Hh Mm". */
+export function formatDuration(ms: number): string {
+  const mins = Math.max(0, Math.round(ms / 60000));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m} min`;
+  return `${h}h ${m}m`;
+}
+
+/** Minutos de tiempo extra trabajado respecto al horario del turno (o 0). */
+export function overtimeMinutes(
+  schedule: Pick<RhWorkSchedule, "start_time" | "end_time"> | null | undefined,
+  workedMs: number,
+): number {
+  if (!schedule) return 0;
+  const [sh, sm] = schedule.start_time.split(":").map(Number);
+  const [eh, em] = schedule.end_time.split(":").map(Number);
+  const scheduledMin = eh * 60 + em - (sh * 60 + sm);
+  const workedMin = Math.round(workedMs / 60000);
+  return Math.max(0, workedMin - scheduledMin);
 }
 
 /** Duración legible entre check-in y check-out (o ahora). */

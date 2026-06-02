@@ -7,6 +7,7 @@ import { openMobileSidebar } from "@/lib/openMobileSidebar";
 import { cn } from "@/lib/utils";
 import { TopbarWidgets } from "./TopbarWidgets";
 import { RealtimeStatusIndicator } from "./RealtimeStatusIndicator";
+import { JornadaTopbarWidget } from "@/components/rh/JornadaTopbarWidget";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 interface AppTopbarProps {
@@ -86,6 +87,8 @@ export function AppTopbar({ isFullWidth = false }: AppTopbarProps) {
             </kbd>
           )}
         </button>
+
+        <JornadaTopbarWidget />
 
         <TooltipProvider delayDuration={150}>
           <RealtimeStatusIndicator />
