@@ -804,12 +804,12 @@ serve(async (req) => {
 
       const scoped = parseScopedPath(searchPath);
 
-      // search_v2 does not support Dropbox-API-Select-Admin nor Dropbox-API-Path-Root
-      // Use only the bearer token; scope via the path option in the body instead
+      // search_v2 requires Dropbox-API-Select-User (not Select-Admin) for team tokens
       const searchHeaders: Record<string, string> = {
         'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       };
+      if (adminMemberId) searchHeaders['Dropbox-API-Select-User'] = adminMemberId;
 
       const searchOptions: Record<string, any> = { max_results: 30 };
       if (scoped.path && scoped.path !== '' && scoped.path !== '/') {
