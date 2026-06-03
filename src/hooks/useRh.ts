@@ -538,6 +538,93 @@ export function useOrgAttendance(workDate?: string) {
 }
 
 /* ============================================================
+ * Corrección de salida (jornadas cerradas a la fuerza)
+ * ========================================================== */
+/** Mis jornadas cerradas a la fuerza que esperan que declare mi salida. */
+export function useMyPendingCheckouts() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["rh-my-pending-checkouts", user?.id],
+    queryFn: async (): Promise<RhAttendance[]> => {
+      const { data, error } = await db
+        .from("rh_attendance")
+        .select("*")
+        .eq("user_id", user!.id)
+        .eq("checkout_review", "pending_user")
+        .order("work_date", { ascending: true });
+      if (error) throw error;
+      return (data as RhAttendance[]) ?? [];
+    },
+    enabled: !!user,
+  });
+}
+
+/** Declara la hora aproximada de salida -> pasa a aprobación de G4. */
+export function useProposeCheckout() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, proposedAt }: { id: string; proposedAt: string }) => {
+      const { error } = await db
+        .from("rh_attendance")
+        .update({ proposed_check_out_at: proposedAt, checkout_review: "pending_g4" })
+        .eq("id", id)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-my-pending-checkouts"] });
+      qc.invalidateQueries({ queryKey: ["rh-checkout-approvals"] });
+      toast.success("Salida enviada para aprobación de G4");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo enviar"),
+  });
+}
+
+/** G4: jornadas con salida propuesta pendiente de aprobar. */
+export function useCheckoutApprovals(enabled: boolean) {
+  return useQuery({
+    queryKey: ["rh-checkout-approvals"],
+    queryFn: async (): Promise<RhAttendance[]> => {
+      const { data, error } = await db
+        .from("rh_attendance")
+        .select("*")
+        .eq("checkout_review", "pending_g4")
+        .order("work_date", { ascending: true });
+      if (error) throw error;
+      return (data as RhAttendance[]) ?? [];
+    },
+    enabled,
+  });
+}
+
+/** G4 aprueba (fija la hora real) o rechaza (vuelve a pedir la salida). */
+export function useDecideCheckout() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ row, approve }: { row: RhAttendance; approve: boolean }) => {
+      const patch = approve
+        ? {
+            check_out_at: row.proposed_check_out_at,
+            checkout_review: "approved",
+            checkout_reviewed_by: user!.id,
+            checkout_reviewed_at: new Date().toISOString(),
+          }
+        : { checkout_review: "pending_user", proposed_check_out_at: null };
+      const { error } = await db.from("rh_attendance").update(patch).eq("id", row.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rh-checkout-approvals"] });
+      qc.invalidateQueries({ queryKey: ["rh-org-attendance"] });
+      toast.success("Listo");
+    },
+    onError: (e: Error) => toast.error(e.message || "No se pudo procesar"),
+  });
+}
+
+/* ============================================================
  * Células y solicitudes de ausencias (Entrega 3)
  * ========================================================== */
 export interface Celula {
