@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { playNotificationBeep } from "@/lib/notificationBeep";
 import { asistenteChatDeepLinkFromNotification } from "@/lib/asistenteNotificationLink";
 import { slackDeepLinkFromNotification } from "@/lib/slackDeepLink";
+import { invokeSlackApi } from "@/lib/slackApi";
 import {
   slackDesktopNotificationTagFromEntityRef,
   slackChannelAndMessageTsFromEntityRef,
@@ -86,9 +87,30 @@ function invalidateSlackCachesFromNotifRow(qc: QueryClient, userId: string, row:
   if (!isSlackInAppNotification(row)) return;
   qc.invalidateQueries({ queryKey: ["slack-channel-notification-badges", userId] });
   void qc.invalidateQueries({ queryKey: ["slack-unread-snapshot", userId] });
-  // No invalidar `slack-history` / `slack-thread` desde notificaciones: INSERT/UPDATE en ráfaga
-  // cancelaba el fetch inicial (p. ej. MPIM con muchos avisos). El historial se refresca en
-  // Comunicación con `refetchInterval` y las mutaciones al enviar/reaccionar.
+
+  // Pre-warm history for the notified channel so it's cached before the user taps the toast.
+  const slackCh = slackChannelAndMessageTsFromEntityRef(row.entity_ref);
+  if (slackCh?.channelId) {
+    const channelId = slackCh.channelId;
+    const existing = qc.getQueryData(["slack-history-v2", channelId]);
+    if (!existing) {
+      void qc.prefetchInfiniteQuery({
+        queryKey: ["slack-history-v2", channelId],
+        initialPageParam: undefined as string | undefined,
+        queryFn: async () => {
+          const data = await invokeSlackApi<{
+            ok: boolean;
+            messages?: Array<{ ts?: string; user?: string; text?: string; [k: string]: unknown }>;
+            response_metadata?: { next_cursor?: string };
+          }>({ action: "conversations.history", channel: channelId, limit: 50 }, 110_000);
+          const msgs = (data.messages ?? []).slice().reverse();
+          return { messages: msgs, nextCursor: data.response_metadata?.next_cursor };
+        },
+        staleTime: 5 * 60_000,
+        pages: 1,
+      } as Parameters<typeof qc.prefetchInfiniteQuery>[0]);
+    }
+  }
 }
 
 const SLACK_POLL_MS = 22_000;

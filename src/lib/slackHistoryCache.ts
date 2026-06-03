@@ -1,28 +1,28 @@
 import type { SlackMessage } from "@/lib/slackApi";
 
 const PREFIX = "kawiil-slack-hist:";
-const TTL_MS = 10 * 60_000; // 10 minutes
+const TTL_MS = 30 * 60_000; // 30 min — survives page reloads
 const MAX_MESSAGES = 60;
 
 type CachedHistory = { updatedAt: number; messages: SlackMessage[] };
 
 export function saveSlackHistoryCache(channelId: string, messages: SlackMessage[]): void {
-  if (typeof sessionStorage === "undefined" || !channelId || !messages.length) return;
+  if (typeof localStorage === "undefined" || !channelId || !messages.length) return;
   try {
     const payload: CachedHistory = {
       updatedAt: Date.now(),
       messages: messages.slice(-MAX_MESSAGES),
     };
-    sessionStorage.setItem(PREFIX + channelId, JSON.stringify(payload));
+    localStorage.setItem(PREFIX + channelId, JSON.stringify(payload));
   } catch {
-    /* quota */
+    /* quota — silently ignore */
   }
 }
 
 export function loadSlackHistoryCache(channelId: string): SlackMessage[] | undefined {
-  if (typeof sessionStorage === "undefined" || !channelId) return undefined;
+  if (typeof localStorage === "undefined" || !channelId) return undefined;
   try {
-    const raw = sessionStorage.getItem(PREFIX + channelId);
+    const raw = localStorage.getItem(PREFIX + channelId);
     if (!raw) return undefined;
     const p = JSON.parse(raw) as CachedHistory;
     if (!p?.updatedAt || !Array.isArray(p.messages)) return undefined;
