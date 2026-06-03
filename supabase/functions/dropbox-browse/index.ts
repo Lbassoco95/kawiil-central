@@ -562,14 +562,15 @@ serve(async (req) => {
     }
 
     if (action === "get_link") {
-      // Support "user:MEMBER_ID:/path" format returned by search for personal-namespace files
+      // Support "user:MEMBER_ID:/path" format returned by search.
+      // Member IDs contain colons (e.g. dbmid:XXX), so split on ':/' (the path always starts with '/')
       let linkPath = path;
       let linkUserId: string | null = null;
       if (path?.startsWith('user:')) {
-        const rest = path.slice(5);
-        const sep = rest.indexOf(':');
-        linkUserId = sep === -1 ? rest : rest.slice(0, sep);
-        linkPath = sep === -1 ? '' : rest.slice(sep + 1);
+        const rest = path.slice(5); // remove 'user:'
+        const colonSlashIdx = rest.indexOf(':/');
+        linkUserId = colonSlashIdx === -1 ? rest : rest.slice(0, colonSlashIdx);
+        linkPath = colonSlashIdx === -1 ? '' : rest.slice(colonSlashIdx + 1);
       }
 
       const scoped = parseScopedPath(linkPath);
