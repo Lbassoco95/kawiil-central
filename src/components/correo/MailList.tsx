@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter } from "lucide-react";
+import { Search, RefreshCw, Loader2, PenLine, FolderOpen } from "lucide-react";
 import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
 import { getLabelStyle } from "./MailLabelPicker";
@@ -44,6 +44,7 @@ interface Props {
   customFolderOverride?: string;
   customFolderName?: string;
   onClearCustomFolder?: () => void;
+  externalLabelFilter?: string | null;
 }
 
 type ReadFilter = "todos" | "sinleer" | "leidos";
@@ -77,7 +78,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
   const { data: bulkAssignments = [] } = useEmailLabelAssignmentsBulk(allEmailIds);
 
   // Reset read filter when tab changes
-  useEffect(() => { setReadFilter("todos"); }, [activeTab]);
+  useEffect(() => { setReadFilter("sinleer"); }, [activeTab]);
 
   const filtered = useMemo(() => {
     let list = allEmails;
