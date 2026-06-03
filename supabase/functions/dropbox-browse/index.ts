@@ -803,12 +803,21 @@ serve(async (req) => {
       }
 
       const scoped = parseScopedPath(searchPath);
-      const scopedHeaders = getScopedDropboxHeaders(
-        DROPBOX_ACCESS_TOKEN,
-        adminMemberId,
-        rootNamespaceId,
-        scoped.namespaceId,
-      );
+
+      // Search uses minimal headers — Dropbox-API-Path-Root conflicts with search_v2
+      const searchHeaders: Record<string, string> = {
+        'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      };
+      if (adminMemberId) searchHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
+
+      // For member namespace paths, override with namespace-scoped header
+      if (scoped.namespaceId) {
+        searchHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
+          '.tag': 'namespace_id',
+          namespace_id: scoped.namespaceId,
+        });
+      }
 
       const searchOptions: Record<string, any> = { max_results: 30 };
       if (scoped.path && scoped.path !== '' && scoped.path !== '/') {
@@ -817,7 +826,7 @@ serve(async (req) => {
 
       const response = await fetch('https://api.dropboxapi.com/2/files/search_v2', {
         method: 'POST',
-        headers: scopedHeaders,
+        headers: searchHeaders,
         body: JSON.stringify({ query: query.trim(), options: searchOptions }),
       });
 
