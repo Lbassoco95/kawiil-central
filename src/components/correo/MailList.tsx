@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter } from "lucide-react";
-import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread } from "@/hooks/useMicrosoft";
+import { useOutlookEmails, useArchiveEmail, useMarkEmailRead, useMarkEmailUnread, useEmailUserLabels, useEmailLabelAssignmentsBulk } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
+import { getLabelStyle } from "./MailLabelPicker";
 import {
   emailListTimestamp,
   getDateBucket,
@@ -50,7 +51,9 @@ type ReadFilter = "todos" | "sinleer" | "leidos";
 export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules, customFolderOverride, customFolderName, onClearCustomFolder }: Props) {
   const [search, setSearch] = useState("");
   const [readFilter, setReadFilter] = useState<ReadFilter>("todos");
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { data: userLabels = [] } = useEmailUserLabels();
   const listRef = useRef<HTMLDivElement>(null);
   const archiveEmail = useArchiveEmail();
   const markRead = useMarkEmailRead();
@@ -69,6 +72,9 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     () => (data?.pages ?? []).flatMap((p) => p.emails as Record<string, unknown>[]),
     [data]
   );
+
+  const allEmailIds = useMemo(() => allEmails.map(e => e.id as string).filter(Boolean), [allEmails]);
+  const { data: bulkAssignments = [] } = useEmailLabelAssignmentsBulk(allEmailIds);
 
   // Reset read filter when tab changes
   useEffect(() => { setReadFilter("todos"); }, [activeTab]);
@@ -91,8 +97,14 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     }
     if (readFilter === "sinleer") list = list.filter((e) => !(e.isRead as boolean));
     if (readFilter === "leidos") list = list.filter((e) => e.isRead as boolean);
+    if (labelFilter) {
+      const emailsWithLabel = new Set(
+        bulkAssignments.filter(a => a.label_id === labelFilter).map(a => a.email_message_id)
+      );
+      list = list.filter((e) => emailsWithLabel.has(e.id as string));
+    }
     return list;
-  }, [allEmails, activeTab, isAiTab, readFilter]);
+  }, [allEmails, activeTab, isAiTab, readFilter, labelFilter, bulkAssignments]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;
@@ -151,6 +163,41 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
           >
             ← Bandeja
           </button>
+        </div>
+      )}
+
+      {/* Label filter row — only show if user has labels */}
+      {userLabels.length > 0 && (
+        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border/30 shrink-0 overflow-x-auto">
+          <button
+            onClick={() => setLabelFilter(null)}
+            className={cn(
+              "px-2.5 py-1 text-[11.5px] rounded-full whitespace-nowrap transition-colors shrink-0",
+              !labelFilter ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Todas
+          </button>
+          {userLabels.map(label => {
+            const style = getLabelStyle(label.color);
+            return (
+              <button
+                key={label.id}
+                onClick={() => setLabelFilter(labelFilter === label.id ? null : label.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] rounded-full whitespace-nowrap transition-colors shrink-0",
+                  labelFilter === label.id ? "font-semibold" : "hover:opacity-80"
+                )}
+                style={labelFilter === label.id
+                  ? { background: style.bg, color: style.text }
+                  : { color: style.text }
+                }
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: style.dot }} />
+                {label.name}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -240,18 +287,26 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
             <div className="px-4 py-2.5 text-[10px] font-bold tracking-widest text-muted-foreground/60 sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
               {bucketLabel(bucket)}
             </div>
-            {emails.map((email) => (
+            {emails.map((email) => {
+              const emailId = email.id as string;
+              const chips = bulkAssignments
+                .filter(a => a.email_message_id === emailId && a.email_user_labels)
+                .map(a => ({ name: a.email_user_labels!.name, color: a.email_user_labels!.color }));
+              return (
               <MailItem
-                key={email.id as string}
+                key={emailId}
                 email={email}
-                isActive={selectedEmailId === (email.id as string)}
-                onClick={() => onSelectEmail(email.id as string)}
-                onArchive={() => archiveEmail.mutate(email.id as string)}
+                isActive={selectedEmailId === emailId}
+                onClick={() => onSelectEmail(emailId)}
+                onArchive={() => archiveEmail.mutate(emailId)}
                 onMarkRead={() => {
-                  if (email.isRead) markUnread.mutate(email.id as string);
-                  else markRead.mutate(email.id as string);
+                  if (email.isRead) markUnread.mutate(emailId);
+                  else markRead.mutate(emailId);
                 }}
+                labelChips={chips.length > 0 ? chips : undefined}
               />
+              );
+            }
             ))}
           </div>
         ))}

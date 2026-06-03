@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Archive, Check } from "lucide-react";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
+import { getLabelStyle } from "./MailLabelPicker";
 
 interface Props {
   email: Record<string, unknown>;
@@ -8,9 +9,10 @@ interface Props {
   onClick: () => void;
   onArchive?: () => void;
   onMarkRead?: () => void;
+  labelChips?: { name: string; color: string }[];
 }
 
-export function MailItem({ email, isActive, onClick, onArchive, onMarkRead }: Props) {
+export function MailItem({ email, isActive, onClick, onArchive, onMarkRead, labelChips }: Props) {
   const from = email.from as { emailAddress?: { name?: string; address?: string } } | undefined;
   const senderName = from?.emailAddress?.name || from?.emailAddress?.address || "Sin remitente";
   const subject = (email.subject as string) || "(sin asunto)";
@@ -45,7 +47,9 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead }: Pr
     <div
       className={cn(
         "group relative grid items-center px-4 h-11 cursor-pointer transition-colors",
-        "grid-cols-[8px_160px_minmax(0,1fr)_52px]",
+        labelChips && labelChips.length > 0
+        ? "grid-cols-[8px_160px_minmax(0,1fr)_auto_52px]"
+        : "grid-cols-[8px_160px_minmax(0,1fr)_52px]",
         "border-l-2",
         isActive
           ? "bg-accent border-l-primary"
@@ -88,6 +92,25 @@ export function MailItem({ email, isActive, onClick, onArchive, onMarkRead }: Pr
           </span>
         )}
       </div>
+
+      {/* Label chips */}
+      {labelChips && labelChips.length > 0 && (
+        <div className="flex items-center gap-1 px-1 overflow-hidden">
+          {labelChips.slice(0, 3).map(chip => {
+            const style = getLabelStyle(chip.color);
+            return (
+              <span
+                key={chip.name}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10.5px] font-medium whitespace-nowrap"
+                style={{ background: style.bg, color: style.text }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: style.dot }} />
+                {chip.name}
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* Date — hides on hover, actions appear */}
       <span className={cn(

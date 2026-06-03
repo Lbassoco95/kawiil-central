@@ -1,8 +1,9 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter } from "lucide-react";
+import { ArrowLeft, Reply, Forward, Archive, Trash2, CheckSquare, Filter, Tag } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail } from "@/hooks/useMicrosoft";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { useEmailAttachments } from "@/hooks/useMicrosoft";
+import { MailLabelPicker } from "./MailLabelPicker";
 import { useMemo } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -92,6 +93,14 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onForwar
           >
             <Filter className="w-3.5 h-3.5" />
           </button>
+          <MailLabelPicker emailMessageId={emailId || ""}>
+            <button
+              className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              title="Etiquetas"
+            >
+              <Tag className="w-3.5 h-3.5" />
+            </button>
+          </MailLabelPicker>
           <button
             className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             title="Archivar"

@@ -1771,3 +1771,149 @@ export function useFlagEmail() {
   });
 }
 
+// ─── Email labels (etiquetas) ────────────────────────────────────────────────
+
+export type EmailUserLabel = {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  position: number;
+  created_at: string;
+};
+
+export type EmailLabelAssignment = {
+  id: string;
+  user_id: string;
+  email_message_id: string;
+  label_id: string;
+  created_at: string;
+  email_user_labels?: EmailUserLabel;
+};
+
+export function useEmailUserLabels() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["email-user-labels", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("email_user_labels")
+        .select("*")
+        .order("position", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as EmailUserLabel[];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCreateEmailLabel() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ name, color }: { name: string; color: string }) => {
+      const { data, error } = await supabase
+        .from("email_user_labels")
+        .insert({ user_id: user!.id, name: name.trim(), color })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as EmailUserLabel;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["email-user-labels"] });
+      toast.success("Etiqueta creada");
+    },
+    onError: (err: Error) => toast.error("Error: " + err.message),
+  });
+}
+
+export function useDeleteEmailLabel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (labelId: string) => {
+      const { error } = await supabase.from("email_user_labels").delete().eq("id", labelId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["email-user-labels"] });
+      void queryClient.invalidateQueries({ queryKey: ["email-label-assignments"] });
+      toast.success("Etiqueta eliminada");
+    },
+  });
+}
+
+export function useEmailLabelAssignments(emailMessageId: string | null | undefined) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["email-label-assignments", emailMessageId, user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("email_label_assignments")
+        .select("*, email_user_labels(*)")
+        .eq("email_message_id", emailMessageId!);
+      if (error) throw error;
+      return (data ?? []) as EmailLabelAssignment[];
+    },
+    enabled: !!user && !!emailMessageId,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useEmailLabelAssignmentsBulk(emailMessageIds: string[]) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["email-label-assignments-bulk", emailMessageIds.join(","), user?.id],
+    queryFn: async () => {
+      if (!emailMessageIds.length) return [];
+      const { data, error } = await supabase
+        .from("email_label_assignments")
+        .select("*, email_user_labels(*)")
+        .in("email_message_id", emailMessageIds);
+      if (error) throw error;
+      return (data ?? []) as EmailLabelAssignment[];
+    },
+    enabled: !!user && emailMessageIds.length > 0,
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useAddEmailLabelAssignment() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async ({ emailMessageId, labelId }: { emailMessageId: string; labelId: string }) => {
+      const { data, error } = await supabase
+        .from("email_label_assignments")
+        .upsert({ user_id: user!.id, email_message_id: emailMessageId, label_id: labelId })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_d, vars) => {
+      void queryClient.invalidateQueries({ queryKey: ["email-label-assignments", vars.emailMessageId] });
+      void queryClient.invalidateQueries({ queryKey: ["email-label-assignments-bulk"] });
+    },
+  });
+}
+
+export function useRemoveEmailLabelAssignment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ emailMessageId, labelId }: { emailMessageId: string; labelId: string }) => {
+      const { error } = await supabase
+        .from("email_label_assignments")
+        .delete()
+        .eq("email_message_id", emailMessageId)
+        .eq("label_id", labelId);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      void queryClient.invalidateQueries({ queryKey: ["email-label-assignments", vars.emailMessageId] });
+      void queryClient.invalidateQueries({ queryKey: ["email-label-assignments-bulk"] });
+    },
+  });
+}
