@@ -73,6 +73,11 @@ export interface RhAttendance {
   notes: string | null;
   is_additional_shift: boolean;
   in_transit: boolean;
+  auto_closed?: boolean;
+  proposed_check_out_at?: string | null;
+  checkout_review?: "pending_user" | "pending_g4" | "approved" | "rejected" | null;
+  checkout_reviewed_by?: string | null;
+  checkout_reviewed_at?: string | null;
   created_at: string;
   updated_at: string;
 }

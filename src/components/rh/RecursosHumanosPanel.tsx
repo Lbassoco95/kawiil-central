@@ -12,6 +12,7 @@ import { ExpedientesEquipoPanel } from "./expediente/ExpedientesEquipoPanel";
 import { CuestionariosPanel } from "./cuestionarios/CuestionariosPanel";
 import { ResultadosRHPanel } from "./cuestionarios/ResultadosRHPanel";
 import { TableroRHPanel } from "./tablero/TableroRHPanel";
+import { PendingCheckoutBanner, CheckoutApprovalsCard } from "./CheckoutCorrection";
 import { JornadaCard } from "./JornadaCard";
 import { MyAttendanceList } from "./MyAttendanceList";
 import { SolicitudesPanel } from "./SolicitudesPanel";
@@ -48,6 +49,9 @@ export function RecursosHumanosPanel() {
         </Button>
       </div>
       <GuiaRHDialog open={guiaOpen} onOpenChange={setGuiaOpen} isG4={isTransformador} />
+
+      {/* Aviso de jornada sin salida (declarar hora aprox. → aprobación G4). */}
+      <PendingCheckoutBanner />
 
       <Tabs defaultValue={initialTab}>
         {/* Barra en una sola fila con scroll horizontal; agrupada por bloques. */}
@@ -133,6 +137,7 @@ export function RecursosHumanosPanel() {
             </TabsContent>
             <TabsContent value="equipo" className="mt-5">
               <div className="grid gap-5">
+                <CheckoutApprovalsCard />
                 <div className="grid gap-5 lg:grid-cols-2">
                   <TeamLivePresence />
                   <TeamAbsencesToday />
