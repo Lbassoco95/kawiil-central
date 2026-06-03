@@ -804,20 +804,12 @@ serve(async (req) => {
 
       const scoped = parseScopedPath(searchPath);
 
-      // Search uses minimal headers — Dropbox-API-Path-Root conflicts with search_v2
+      // search_v2 does not support Dropbox-API-Select-Admin nor Dropbox-API-Path-Root
+      // Use only the bearer token; scope via the path option in the body instead
       const searchHeaders: Record<string, string> = {
         'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       };
-      if (adminMemberId) searchHeaders['Dropbox-API-Select-Admin'] = adminMemberId;
-
-      // For member namespace paths, override with namespace-scoped header
-      if (scoped.namespaceId) {
-        searchHeaders['Dropbox-API-Path-Root'] = JSON.stringify({
-          '.tag': 'namespace_id',
-          namespace_id: scoped.namespaceId,
-        });
-      }
 
       const searchOptions: Record<string, any> = { max_results: 30 };
       if (scoped.path && scoped.path !== '' && scoped.path !== '/') {
