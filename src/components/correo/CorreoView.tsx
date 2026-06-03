@@ -126,7 +126,7 @@ export function CorreoView() {
       <MailRulesSheet
         open={rulesOpen}
         onOpenChange={setRulesOpen}
-        folders={foldersData as any[]}
+        folders={folders}
         onNewRule={() => { setRulesOpen(false); setRuleDialogOpen(true); }}
       />
 
@@ -141,7 +141,7 @@ export function CorreoView() {
         onOpenChange={setRuleDialogOpen}
         senderEmail={ruleSenderEmail}
         senderName={ruleSenderName}
-        folders={foldersData as any[]}
+        folders={folders}
       />
       <MailTaskDrawer
         open={!!taskEmail}
