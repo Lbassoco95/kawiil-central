@@ -175,7 +175,7 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
             onClick={() => setLabelFilter(null)}
             className={cn(
               "px-2.5 py-1 text-[11.5px] rounded-full whitespace-nowrap transition-colors shrink-0",
-              !labelFilter ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:text-foreground"
+              !effectiveLabelFilter ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:text-foreground"
             )}
           >
             Todas
@@ -185,12 +185,12 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
             return (
               <button
                 key={label.id}
-                onClick={() => setLabelFilter(labelFilter === label.id ? null : label.id)}
+                onClick={() => setLabelFilter(effectiveLabelFilter === label.id ? null : label.id)}
                 className={cn(
                   "flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] rounded-full whitespace-nowrap transition-colors shrink-0",
-                  labelFilter === label.id ? "font-semibold" : "hover:opacity-80"
+                  effectiveLabelFilter === label.id ? "font-semibold" : "hover:opacity-80"
                 )}
-                style={labelFilter === label.id
+                style={effectiveLabelFilter === label.id
                   ? { background: style.bg, color: style.text }
                   : { color: style.text }
                 }
