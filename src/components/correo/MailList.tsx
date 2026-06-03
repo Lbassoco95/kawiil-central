@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, RefreshCw, Loader2 } from "lucide-react";
+import { Search, RefreshCw, Loader2, PenLine, FolderOpen, ListFilter } from "lucide-react";
 import { useOutlookEmails, useArchiveEmail, useMarkEmailRead } from "@/hooks/useMicrosoft";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -37,9 +37,12 @@ interface Props {
   onSelectTab: (tab: MailTabId) => void;
   selectedEmailId: string | null;
   onSelectEmail: (id: string) => void;
+  onCompose: () => void;
+  onOpenFolders: () => void;
+  onOpenRules: () => void;
 }
 
-export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail }: Props) {
+export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmail, onCompose, onOpenFolders, onOpenRules }: Props) {
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const listRef = useRef<HTMLDivElement>(null);
@@ -124,6 +127,32 @@ export function MailList({ activeTab, onSelectTab, selectedEmailId, onSelectEmai
     <div className="flex flex-col h-full min-h-0">
       {/* Tabs */}
       <MailTabs activeTab={activeTab} onSelectTab={onSelectTab} />
+
+      {/* Toolbar row */}
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 shrink-0">
+        <button
+          onClick={onCompose}
+          className="h-8 flex items-center gap-1.5 px-3 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors shrink-0"
+        >
+          <PenLine className="w-3.5 h-3.5" />
+          Redactar
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={onOpenFolders}
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+          title="Carpetas"
+        >
+          <FolderOpen className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onOpenRules}
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors shrink-0"
+          title="Reglas"
+        >
+          <ListFilter className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       {/* Search row */}
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/40 shrink-0">

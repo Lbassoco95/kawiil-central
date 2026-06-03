@@ -3,11 +3,13 @@ import { useEmailDetail } from "@/hooks/useMicrosoft";
 import { useOutlookEmails } from "@/hooks/useMicrosoft";
 import { inferEmailChips, emailListTimestamp, formatEmailDate } from "@/lib/emailChips";
 import { cn } from "@/lib/utils";
-import { Sparkles, Mail, CheckSquare, Link2 } from "lucide-react";
+import { Sparkles, Mail, CheckSquare, Link2, Filter } from "lucide-react";
 
 interface Props {
   emailId: string | null;
   onAskAI?: () => void;
+  onCreateTask?: () => void;
+  onCreateRule?: () => void;
 }
 
 function getInitials(name: string): string {
@@ -35,7 +37,7 @@ const CHIP_STYLES: Record<string, { bg: string; text: string }> = {
   interno: { bg: "hsl(157 72% 36% / 0.15)", text: "hsl(157 72% 36%)" },
 };
 
-export function MailContactPanel({ emailId, onAskAI }: Props) {
+export function MailContactPanel({ emailId, onAskAI, onCreateTask, onCreateRule }: Props) {
   const { data: emailDetail } = useEmailDetail(emailId);
 
   const senderName = (emailDetail as any)?.from?.emailAddress?.name || "";
@@ -122,6 +124,24 @@ export function MailContactPanel({ emailId, onAskAI }: Props) {
             <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground">{l}</p>
           </div>
         ))}
+      </div>
+
+      {/* Action buttons */}
+      <div className="px-5 py-3 border-b border-border/30 flex gap-2 shrink-0">
+        <button
+          onClick={onCreateTask}
+          className="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md border border-border/50 text-[11.5px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+        >
+          <CheckSquare className="w-3 h-3" />
+          Crear tarea
+        </button>
+        <button
+          onClick={onCreateRule}
+          className="flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md border border-border/50 text-[11.5px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+        >
+          <Filter className="w-3 h-3" />
+          Crear regla
+        </button>
       </div>
 
       {/* Scrollable content */}

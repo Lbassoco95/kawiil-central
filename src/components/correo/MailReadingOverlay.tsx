@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Reply, Archive, Trash2, CheckSquare } from "lucide-react";
+import { ArrowLeft, Reply, Archive, Trash2, CheckSquare, Filter } from "lucide-react";
 import { useEmailDetail, useArchiveEmail, useDeleteEmail } from "@/hooks/useMicrosoft";
 import { useResolvedEmailHtml } from "@/hooks/useResolvedEmailHtml";
 import { useEmailAttachments } from "@/hooks/useMicrosoft";
@@ -23,9 +23,10 @@ interface Props {
   onClose: () => void;
   onCompose: () => void;
   onCreateTask: (email: EmailShape) => void;
+  onCreateRule?: () => void;
 }
 
-export function MailReadingOverlay({ emailId, open, onClose, onCompose, onCreateTask }: Props) {
+export function MailReadingOverlay({ emailId, open, onClose, onCompose, onCreateTask, onCreateRule }: Props) {
   const { data: emailDetail, isLoading } = useEmailDetail(emailId);
   const { data: attachments = [] } = useEmailAttachments(emailId ?? undefined);
   const { html: resolvedHtml } = useResolvedEmailHtml(
@@ -73,6 +74,13 @@ export function MailReadingOverlay({ emailId, open, onClose, onCompose, onCreate
             Responder
           </button>
           <div className="w-px h-4 bg-border mx-1" />
+          <button
+            className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            title="Crear regla"
+            onClick={onCreateRule}
+          >
+            <Filter className="w-3.5 h-3.5" />
+          </button>
           <button
             className="h-[30px] w-[30px] flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
             title="Archivar"
