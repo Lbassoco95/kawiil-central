@@ -22,7 +22,7 @@ import {
   Plus, Search, FileText, Link, ExternalLink, Trash2,
   Eye, Folder, FolderOpen, ChevronLeft, Image,
   FileSpreadsheet, File, FileCode, Loader2, HardDrive, Cloud,
-  FolderPlus, Pencil, Clock, Star, Sparkles
+  FolderPlus, Pencil, Clock, Star, Sparkles, X
 } from "lucide-react";
 import { FileDropzone } from "@/components/shared/FileDropzone";
 import { documentsLimits } from "@/lib/fileIntake/limits";
@@ -124,6 +124,13 @@ function DropboxLiveBrowser() {
   const [dupOpen, setDupOpen] = useState(false);
   const [dupName, setDupName] = useState("");
   const dupResolver = useRef<((c: DuplicateResolutionChoice) => void) | null>(null);
+
+  // Search & filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<DropboxEntry[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [filterText, setFilterText] = useState("");
 
   const duplicatePrompt = useCallback((fileName: string) => {
     setDupName(fileName);
@@ -285,12 +292,61 @@ function DropboxLiveBrowser() {
 
   const openFolder = (path: string) => {
     setPathHistory((prev) => [...prev, currentPath || "ROOT"]);
+    setFilterText("");
+    setIsSearchMode(false);
+    setSearchQuery("");
+    setSearchResults([]);
     browse(path);
+  };
+
+  const navigateToBreadcrumb = (i: number) => {
+    const targetPath = pathHistory[i + 1];
+    setPathHistory(pathHistory.slice(0, i + 1));
+    setFilterText("");
+    setIsSearchMode(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    if (!targetPath || targetPath === "ROOT") {
+      setCurrentPath(null);
+      setEntries([]);
+    } else {
+      browse(targetPath);
+    }
+  };
+
+  const doSearch = async (query: string) => {
+    if (!query.trim()) {
+      clearSearch();
+      return;
+    }
+    setIsSearchMode(true);
+    setSearchLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("dropbox-browse", {
+        body: { action: "search", query: query.trim(), path: currentPath || "" },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSearchResults(data.matches || []);
+    } catch (e: any) {
+      toast.error("Error al buscar: " + (e.message || "Error desconocido"));
+      setIsSearchMode(false);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setIsSearchMode(false);
+    setSearchQuery("");
+    setSearchResults([]);
   };
 
   const goBack = () => {
     const prev = pathHistory[pathHistory.length - 1];
     setPathHistory((p) => p.slice(0, -1));
+    setFilterText("");
+    clearSearch();
     if (!prev || prev === "ROOT") {
       setCurrentPath(null);
       setEntries([]);
@@ -303,6 +359,8 @@ function DropboxLiveBrowser() {
     setPathHistory([]);
     setCurrentPath(null);
     setEntries([]);
+    setFilterText("");
+    clearSearch();
   };
 
   const openFileLink = async (entry: DropboxEntry) => {
@@ -439,9 +497,9 @@ function DropboxLiveBrowser() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Header row: breadcrumbs + folder actions */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm min-w-0">
+        <div className="flex items-center gap-1 text-sm min-w-0 flex-wrap">
           {!isRoot && (
             <Button variant="ghost" size="sm" className="h-7 px-2 shrink-0" onClick={goBack}>
               <ChevronLeft className="h-4 w-4" />
@@ -457,9 +515,16 @@ function DropboxLiveBrowser() {
           {breadcrumbs.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1">
               <span className="text-muted-foreground">/</span>
-              <span className={i === breadcrumbs.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}>
-                {crumb}
-              </span>
+              {i < breadcrumbs.length - 1 ? (
+                <button
+                  className="text-muted-foreground hover:text-foreground hover:underline"
+                  onClick={() => navigateToBreadcrumb(i)}
+                >
+                  {crumb}
+                </button>
+              ) : (
+                <span className="font-medium text-foreground">{crumb}</span>
+              )}
             </span>
           ))}
         </div>
@@ -488,6 +553,46 @@ function DropboxLiveBrowser() {
           </div>
         )}
       </div>
+
+      {/* Search bar */}
+      {profileLoaded && (
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              className="pl-8 pr-8 h-8 text-sm"
+              placeholder={
+                isRoot
+                  ? "Buscar en Dropbox..."
+                  : `Buscar en ${breadcrumbs[breadcrumbs.length - 1] || "Dropbox"}...`
+              }
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") doSearch(searchQuery);
+                if (e.key === "Escape") clearSearch();
+              }}
+            />
+            {searchQuery && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={clearSearch}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="h-8 shrink-0"
+            onClick={() => doSearch(searchQuery)}
+            disabled={!searchQuery.trim() || searchLoading}
+          >
+            {searchLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Buscar"}
+          </Button>
+        </div>
+      )}
 
       {/* Folder Picker Dialog */}
       {showFolderPicker && (
@@ -528,7 +633,67 @@ function DropboxLiveBrowser() {
 
       {/* Content */}
       <div className="border rounded-lg divide-y">
-        {isRoot ? (
+        {isSearchMode ? (
+          /* ── Search results ── */
+          searchLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="text-center py-12 space-y-1">
+              <p className="text-sm font-medium">Sin resultados</p>
+              <p className="text-xs text-muted-foreground">No se encontraron archivos para "{searchQuery}"</p>
+            </div>
+          ) : (
+            <>
+              <div className="px-4 py-2 bg-muted/30 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  {searchResults.length} resultado(s) para "{searchQuery}"
+                  {!isRoot && ` en ${breadcrumbs[breadcrumbs.length - 1] || "esta carpeta"}`}
+                </span>
+                <button className="text-xs text-muted-foreground hover:text-foreground" onClick={clearSearch}>
+                  Ver carpeta
+                </button>
+              </div>
+              {searchResults.map((entry) => {
+                const parentPath = entry.path.split("/").slice(0, -1).join("/") || "/";
+                const displayParent = parentPath.replace(/^\/Kawiil Mx\/?/, "") || "Kawiil Mx";
+                return (
+                  <button
+                    key={entry.id}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
+                    onClick={() => openFileLink(entry)}
+                    disabled={linkLoading === entry.id}
+                  >
+                    <div className="shrink-0">
+                      {entry.type === "folder"
+                        ? <Folder className="h-4 w-4 text-primary" />
+                        : getFileIcon(entry.name)
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate font-medium">{entry.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{displayParent}</p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {entry.modified && (
+                        <span className="text-xs text-muted-foreground hidden sm:block">
+                          {new Date(entry.modified).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
+                      {linkLoading === entry.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      }
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          )
+        ) : isRoot ? (
+          /* ── Root view ── */
           <>
             <button
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
@@ -554,50 +719,89 @@ function DropboxLiveBrowser() {
         ) : entries.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-12">Carpeta vacía</p>
         ) : (
+          /* ── Folder contents ── */
           <>
-            {folders.map((entry) => (
-              <div
-                key={entry.id}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
-              >
-                <button
-                  className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                  onClick={() => openFolder(entry.path)}
-                >
-                  <Folder className="h-5 w-5 text-primary shrink-0" />
-                  <span className="text-sm font-medium truncate flex-1">{displayFolderName(entry.name)}</span>
-                </button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setRenameTarget(entry);
-                    setRenameName(entry.name);
-                  }}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
+            {entries.length > 8 && (
+              <div className="px-3 py-2 border-b bg-muted/20">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+                  <Input
+                    className="pl-7 h-7 text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    placeholder="Filtrar en esta carpeta..."
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                  />
+                  {filterText && (
+                    <button
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      onClick={() => setFilterText("")}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               </div>
-            ))}
-            {files.map((entry) => (
-              <button
-                key={entry.id}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
-                onClick={() => openFileLink(entry)}
-                disabled={linkLoading === entry.id}
-              >
-                <div className="shrink-0">{getFileIcon(entry.name)}</div>
-                <span className="text-sm truncate flex-1">{entry.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(entry.size)}</span>
-                {linkLoading === entry.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                ) : (
-                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
-                )}
-              </button>
-            ))}
+            )}
+            {folders
+              .filter((e) => !filterText || e.name.toLowerCase().includes(filterText.toLowerCase()))
+              .map((entry) => (
+                <div
+                  key={entry.id}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
+                >
+                  <button
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    onClick={() => openFolder(entry.path)}
+                  >
+                    <Folder className="h-5 w-5 text-primary shrink-0" />
+                    <span className="text-sm font-medium truncate flex-1">{displayFolderName(entry.name)}</span>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRenameTarget(entry);
+                      setRenameName(entry.name);
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            {files
+              .filter((e) => !filterText || e.name.toLowerCase().includes(filterText.toLowerCase()))
+              .map((entry) => (
+                <button
+                  key={entry.id}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left group"
+                  onClick={() => openFileLink(entry)}
+                  disabled={linkLoading === entry.id}
+                >
+                  <div className="shrink-0">{getFileIcon(entry.name)}</div>
+                  <span className="text-sm truncate flex-1">{entry.name}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {entry.modified && (
+                      <span className="text-xs text-muted-foreground hidden sm:block">
+                        {new Date(entry.modified).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
+                    {linkLoading === entry.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
+                </button>
+              ))}
+            {filterText && folders.filter((e) => e.name.toLowerCase().includes(filterText.toLowerCase())).length === 0 &&
+              files.filter((e) => e.name.toLowerCase().includes(filterText.toLowerCase())).length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-8">
+                Sin resultados para "{filterText}"
+              </p>
+            )}
           </>
         )}
       </div>
